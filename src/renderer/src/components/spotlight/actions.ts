@@ -61,8 +61,6 @@ export interface ActionContext {
   /** Publish after each chat turn. */
   autoDeploy: boolean
   migrationEnabled: boolean
-  /** The open app has the Goals tab (an experiment). */
-  goalsEnabled: boolean
   /** The open project's terminal is showing. */
   terminalOpen?: boolean
   /** The App gallery is showing. */
@@ -115,20 +113,6 @@ const VIEWS: {
     icon: 'shield',
     detail: (name) => `Check ${name} for problems before you share it`,
     keywords: ['review', 'issues', 'security', 'checks', 'quality']
-  },
-  {
-    view: 'goals',
-    title: 'Goals',
-    icon: 'target',
-    detail: (name) => `Check ${name} still does what it’s for`,
-    keywords: [
-      'purpose',
-      'evals',
-      'acceptance criteria',
-      'requirements',
-      'business goals',
-      'intent'
-    ]
   }
 ]
 
@@ -152,7 +136,6 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
 
   if (project && ctx.toolsReady) {
     for (const v of VIEWS) {
-      if (v.view === 'goals' && !ctx.goalsEnabled) continue
       add({
         id: `action:view-${v.view}`,
         title: v.title,

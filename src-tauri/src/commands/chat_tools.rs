@@ -139,7 +139,7 @@ pub fn tool_title(tool_name: &str, args: Option<&Value>) -> String {
   if let Some(patch) = args.as_str() {
     return patch_files(patch).into_iter().next().unwrap_or_else(|| tool_name.to_string());
   }
-  if matches!(lower(tool_name).as_str(), "fabricator_local_call" | "fabricator_goals_call") {
+  if lower(tool_name) == "fabricator_local_call" {
     return local_call_title(args);
   }
   // What the work log says it did: `load`, else `check`.
@@ -372,9 +372,6 @@ mod tests {
     assert_eq!(title(json!({"target":"connector","name":"sales","as":"developer"})), "the sales connector as you");
     assert_eq!(title(json!({"target":"connector-graphql","name":"warehouse","as":"user:ana@example.com"})), "the warehouse connector's data API as ana@example.com");
     assert_eq!(title(json!({"target":"function"})), "a function as you");
-    // A Goals run calls its copy of the app the same way.
-    let goals = json!({"target":"graphql","as":"user:bo@example.com"});
-    assert_eq!(tool_title("fabricator_goals_call", Some(&goals)), "the app's data API as bo@example.com");
     // The status takes no arguments, so its title stays the tool's name.
     assert_eq!(tool_title("fabricator_local_status", Some(&json!({}))), "fabricator_local_status");
     // The seed tool's title is what it does.

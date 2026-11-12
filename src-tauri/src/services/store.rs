@@ -40,7 +40,6 @@ fn default_flags() -> ExperimentFlags {
     team_workspaces: Some(false),
     report_migration: Some(false),
     work_iq: Some(false),
-    goals: Some(false),
     parallel_ui: Some(false),
   }
 }
@@ -187,13 +186,7 @@ fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: Experimen
   if let Some(v) = patch.team_workspaces { current.team_workspaces = Some(v); }
   if let Some(v) = patch.report_migration { current.report_migration = Some(v); }
   if let Some(v) = patch.work_iq { current.work_iq = Some(v); }
-  if let Some(v) = patch.goals { current.goals = Some(v); }
   if let Some(v) = patch.parallel_ui { current.parallel_ui = Some(v); }
-}
-
-/// The Goals experiment is on.
-pub fn goals_enabled() -> bool {
-  with_cache(|c| c.settings.experiments.as_ref().and_then(|f| f.goals).unwrap_or(false))
 }
 
 /// The Parallel UI builder experiment is on.
@@ -527,33 +520,23 @@ mod tests {
     );
   }
 
-  /// The App gallery, MCP servers and Export as an app were experiments until
-  /// they shipped to everyone; settings saved with their old flags still load,
-  /// and the flags are gone once they're saved.
+  /// Settings saved with flags for graduated or removed experiments still load,
+  /// and the obsolete flags are gone once they're saved.
   #[test]
-  fn graduated_experiment_flags_still_load_and_are_dropped() {
+  fn obsolete_experiment_flags_still_load_and_are_dropped() {
     let flags: ExperimentFlags = serde_json::from_value(serde_json::json!({
-      "appGallery":true,"mcpServers":true,"appExport":true,"workIq":true
+      "appGallery":true,"mcpServers":true,"appExport":true,"goals":true,"workIq":true
     })).unwrap();
     assert_eq!(serde_json::to_value(flags).unwrap(), serde_json::json!({"workIq":true}));
-  }
-
-  #[test]
-  fn goals_flag_merges_and_defaults_off() {
-    assert_eq!(default_settings().experiments.unwrap().goals, Some(false));
-    let mut flags: Option<ExperimentFlags> =
-      Some(serde_json::from_value(serde_json::json!({"workIq":true})).unwrap());
-    merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"goals":true})).unwrap());
-    assert_eq!(serde_json::to_value(flags.unwrap()).unwrap(), serde_json::json!({"workIq":true,"goals":true}));
   }
 
   #[test]
   fn parallel_ui_flag_merges_and_defaults_off() {
     assert_eq!(default_settings().experiments.unwrap().parallel_ui, Some(false));
     let mut flags: Option<ExperimentFlags> =
-      Some(serde_json::from_value(serde_json::json!({"goals":true})).unwrap());
+      Some(serde_json::from_value(serde_json::json!({"workIq":true})).unwrap());
     merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"parallelUi":true})).unwrap());
-    assert_eq!(serde_json::to_value(flags.unwrap()).unwrap(), serde_json::json!({"goals":true,"parallelUi":true}));
+    assert_eq!(serde_json::to_value(flags.unwrap()).unwrap(), serde_json::json!({"workIq":true,"parallelUi":true}));
   }
 
   #[test]

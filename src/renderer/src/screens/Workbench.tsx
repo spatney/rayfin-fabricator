@@ -90,9 +90,6 @@ import { AdvisorFixContext, type AdvisorFixLinks } from '../components/advisor/A
 import { useAdvisor } from '../advisor/store'
 import { fixOutcomes } from '../advisor/lifecycle'
 import { fixPrompt, isVersionFinding } from '../advisor/prompts'
-import GoalsView from '../components/goals/GoalsView'
-import { useGoals } from '../goals/store'
-import { failingNow, gapText, goalsGap, type GoalsGap } from '../goals/model'
 import BlueprintTab from '../components/blueprint/BlueprintTab'
 import MigrationCard from '../components/migrate/MigrationCard'
 import MigrateReportScreen, { describePick, type ReportPick } from '../components/migrate/MigrateReportScreen'
@@ -402,18 +399,6 @@ export default function Workbench({
   /** Lazy-mount the Advisor view on first visit, then keep it mounted (hidden when
    * inactive) so an in-flight review's live feed/timer/results survive tab switches. */
   const [advisorMounted, setAdvisorMounted] = useState(false)
-  /** Goals mounts on first visit the same way, so its editor and open checks survive tab switches. */
-  const [goalsMounted, setGoalsMounted] = useState(false)
-  /** A user publish paused because the app's goals haven't all passed on this version. */
-  const [goalsGate, setGoalsGate] = useState<{
-    projectId: string
-    workspace?: string
-    itemName?: string
-    /** A team app's Publish, through its pipeline, rather than a publish from this computer. */
-    team?: boolean
-    gap: GoalsGap
-    running: boolean
-  } | null>(null)
   /** When true, the projects launcher (HomeView) is shown ON TOP of the still-active
    * project — the project stays mounted in the background so any in-flight chat turn
    * or Advisor review keeps running. Cleared when the launcher is dismissed or a
@@ -667,9 +652,6 @@ export default function Workbench({
     versions: versionInfo,
     chatBusy: activeChatBusy
   })
-  /** Goals (an experiment) for the open app. */
-  const goalsOn = Boolean(settings?.experiments?.goals && active)
-  const goals = useGoals(active, { enabled: goalsOn, refreshKey: gitRefresh })
   /** The preview surface Touch Up can run on, reported by the PreviewPane. */
   const [pickSurface, setPickSurface] = useState<PickSurface | null>(null)
   /** Accounts opens at this section (Model providers, from a model picker). */
@@ -1190,47 +1172,12 @@ export default function Workbench({
     [executeDeploy]
   )
 
-  /** The open app's goals that haven't all passed on this version (null when they have, or Goals is off). */
-  const unmetGoals = useCallback(
-    async (projectId: string): Promise<{ gap: GoalsGap; running: boolean } | null> => {
-      if (!goalsOn || projectId !== activeIdRef.current) return null
-      const snapshot = await window.api.goals.load(projectId).catch(() => null)
-      const gap = snapshot ? goalsGap(snapshot) : null
-      if (!snapshot || !gap || projectId !== activeIdRef.current) return null
-      return { gap, running: snapshot.running }
-    },
-    [goalsOn]
-  )
   /**
    * User-initiated publish funnel: warn first when the remote has changes the
-   * user hasn't pulled (a fast, non-fetching divergence check), then offer to
-   * run the app's Goals checks when they haven't all passed on this version,
-   * otherwise publish straight away. Automatic publishes (post-turn) call
-   * runDeploy directly and skip these guards so they never stall on a modal.
+   * user hasn't pulled (a fast, non-fetching divergence check), otherwise
+   * publish straight away. Automatic publishes (post-turn) call runDeploy
+   * directly and skip this guard so they never stall on a modal.
    */
-  const deployPastGoals = useCallback(
-    async (projectId: string, workspace?: string, itemName?: string): Promise<void> => {
-      const unmet = await unmetGoals(projectId)
-      if (unmet) {
-        setGoalsGate({ projectId, workspace, itemName, ...unmet })
-        return
-      }
-      void runDeploy(projectId, workspace, itemName)
-    },
-    [runDeploy, unmetGoals]
-  )
-  /** A team app's Publish, which offers to run its Goals checks first the same way. */
-  const teamPublishPastGoals = useCallback(
-    async (projectId: string): Promise<void> => {
-      const unmet = await unmetGoals(projectId)
-      if (unmet) {
-        setGoalsGate({ projectId, team: true, ...unmet })
-        return
-      }
-      teamWorkRef.current.publish(projectId)
-    },
-    [unmetGoals]
-  )
   const requestUserDeploy = useCallback(
     async (projectId: string, workspace?: string, itemName?: string): Promise<void> => {
       // A chat turn holds the project's source until it finishes: publishing now could only fail.
@@ -1255,9 +1202,9 @@ export default function Workbench({
       } catch {
         /* divergence is best-effort — fall through and publish */
       }
-      await deployPastGoals(projectId, workspace, itemName)
+      void runDeploy(projectId, workspace, itemName)
     },
-    [deployPastGoals, isTeamProject, toast]
+    [runDeploy, isTeamProject, toast]
   )
 
   // Switch the active Fabric deployment, then reflect the new URL/status.
@@ -1815,14 +1762,6 @@ export default function Workbench({
     },
     [handOffFindings, versionInfo, requestRayfinUpdate]
   )
-  // Hand failed Goals checks to the Build chat, so Copilot can fix the app to meet them.
-  const fixGoals = useCallback((message: { display: string; prompt: string }): void => {
-    const id = activeIdRef.current
-    if (!id) return
-    setViewMode('build')
-    setFocusPane(null)
-    setChatOutbound({ id: `goals-fix-${Date.now()}`, projectId: id, ...message })
-  }, [])
   // A fix card's row opens its finding in the Advisor.
   const showAdvisorFinding = useCallback((findingId: string): void => {
     setAdvisorOpen({ id: findingId, nonce: Date.now() })
@@ -2079,16 +2018,6 @@ export default function Workbench({
   useEffect(() => {
     if (viewMode === 'advisor') setAdvisorMounted(true)
   }, [viewMode])
-  useEffect(() => {
-    if (viewMode === 'goals') setGoalsMounted(true)
-  }, [viewMode])
-  // Goals is an experiment: leave its tab when it goes away.
-  useEffect(() => {
-    if (goalsOn) return
-    setViewMode((view) => (view === 'goals' ? 'build' : view))
-    setGoalsMounted(false)
-    setGoalsGate(null)
-  }, [goalsOn])
 
   // Re-gate per project: opening a *different* project resets to the Build view,
   // unmounts Advisor until its tab is opened again (so the opt-in stale auto-run
@@ -2098,7 +2027,6 @@ export default function Workbench({
   useEffect(() => {
     setViewMode('build')
     setAdvisorMounted(false)
-    setGoalsMounted(false)
     setAdvisorOpen(null)
     setShowHome(false)
   }, [active?.id])
@@ -2918,7 +2846,6 @@ export default function Workbench({
       pending: active ? (pending[active.id] ?? undefined) : undefined,
       autoDeploy: !manualDeploy,
       migrationEnabled,
-      goalsEnabled: goalsOn,
       terminalOpen: shellShowing && onProjectScreen,
       inGallery: Boolean(gallery),
       teamWorkspaceName: activeTeamWorkspace?.name,
@@ -3133,7 +3060,6 @@ export default function Workbench({
                 view={viewMode}
                 onChange={setViewMode}
                 advisorBadge={advisor.derived.badge}
-                goals={goalsOn ? { failing: failingNow(goals.snapshot) } : undefined}
               />
             )}
           </div>
@@ -3145,7 +3071,7 @@ export default function Workbench({
                 status={activeTeamStatus}
                 runs={teamRuns}
                 syncing={teamWork.syncing(active.id)}
-                onPublish={() => void teamPublishPastGoals(active.id)}
+                onPublish={() => teamWork.publish(active.id)}
                 onUpdate={() => teamWork.update(active.id)}
                 onCombine={() => teamWork.combineWithCopilot(active.id, [])}
                 onDiscard={() => teamWork.discard(active.id)}
@@ -3555,21 +3481,6 @@ export default function Workbench({
                         onFix={fixFindings}
                         onOpenFile={openFileInCode}
                         openRequest={advisorOpen ?? undefined}
-                        onManageKeys={openModelProviders}
-                      />
-                    </div>
-                  )}
-                  {goalsMounted && goalsOn && (
-                    <div
-                      className={`advisor-host${viewMode === 'goals' ? '' : ' advisor-host--hidden'}`}
-                    >
-                      <GoalsView
-                        project={active}
-                        goals={goals}
-                        visible={viewMode === 'goals'}
-                        chatBusy={activeChatBusy}
-                        onFix={fixGoals}
-                        onOpenFile={openFileInCode}
                         onManageKeys={openModelProviders}
                       />
                     </div>
@@ -4019,14 +3930,14 @@ export default function Workbench({
                 return
               }
               setConfirmDeploy(null)
-              void deployPastGoals(c.projectId, c.workspace, c.itemName)
+              void runDeploy(c.projectId, c.workspace, c.itemName)
             })()
           }}
           onSecondary={() => {
             const c = confirmDeploy
             setConfirmDeploy(null)
             setDeployGuardError(null)
-            void deployPastGoals(c.projectId, c.workspace, c.itemName)
+            void runDeploy(c.projectId, c.workspace, c.itemName)
           }}
           onCancel={() => {
             setConfirmDeploy(null)
@@ -4043,47 +3954,6 @@ export default function Workbench({
               </p>
               {deployGuardError && <p className="confirm-error">{deployGuardError}</p>}
             </>
-          }
-        />
-      )}
-
-      {goalsGate && (
-        <ConfirmModal
-          title={
-            goalsGate.running
-              ? 'Your app’s checks are still running'
-              : goalsGate.gap.unchecked.length
-                ? 'Run your app’s checks first?'
-                : 'Your app’s checks didn’t all pass'
-          }
-          confirmLabel={
-            !goalsGate.running && goalsGate.gap.unchecked.length
-              ? `Run ${goalsGate.gap.unchecked.length} check${goalsGate.gap.unchecked.length === 1 ? '' : 's'}`
-              : 'See the checks'
-          }
-          secondaryLabel="Publish anyway"
-          cancelLabel="Cancel"
-          onConfirm={() => {
-            const gate = goalsGate
-            setGoalsGate(null)
-            if (gate.projectId !== activeIdRef.current) return
-            setViewMode('goals')
-            if (!gate.running && gate.gap.unchecked.length) goals.startRun(gate.gap.unchecked)
-          }}
-          onSecondary={() => {
-            const gate = goalsGate
-            setGoalsGate(null)
-            if (gate.team) teamWorkRef.current.publish(gate.projectId)
-            else void runDeploy(gate.projectId, gate.workspace, gate.itemName)
-          }}
-          onCancel={() => setGoalsGate(null)}
-          message={
-            <p>
-              {goalsGate.running
-                ? 'Fabricator is checking this version against what the app is for. '
-                : `${gapText(goalsGate.gap)} `}
-              Make sure this version still does what it’s for before people use it.
-            </p>
           }
         />
       )}

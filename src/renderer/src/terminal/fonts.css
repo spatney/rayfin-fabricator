@@ -1,0 +1,7 @@
+/* Nerd Fonts v3.5.1, Symbols Only (unmodified).
+   Source, icon credits and licenses ship alongside the font in public/fonts/nerd-fonts. */
+@font-face {
+  font-family: 'Fabricator Terminal Symbols';
+  src: url('/fonts/nerd-fonts/SymbolsNerdFontMono-Regular.ttf') format('truetype');
+  font-display: block;
+}

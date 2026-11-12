@@ -20,7 +20,7 @@ Everything here is a maintainer tool. It isn't part of the app or of CI.
 | `scrub.js` | Replaces personal details (names, emails, tenant, workspace and repo names, paths) in a page |
 | `capture-window.ps1` | Captures the app window, including the native preview webview a DevTools screenshot can't see |
 | `optimize.mjs` | Crops, resizes and converts a capture to WebP, and its light twin the same way (uses `sharp` from `website/node_modules`) |
-| `harness/` + `capture-harness.ps1` | Renders components with sample data (team overview, publish menu, deployment panel, account menu, Accounts, Create a team workspace dialog, Rayfin update popover, port-conflict dialog, plan card, Skills and Secrets views, setup, Help, Search, Blueprint, its Data model view with related entities and with loose access, its Data view of the sample app's local data, the local preview with the local backend's output (a stand-in without the app, left out of the default list: the docs capture is live), Point & Edit on the sample app (its dashboard in a frame over the preview, with the real in-page agent picking) and drawing on a screenshot of it, deploy screen, failed deploy, the chat's model picker, Accounts → Model providers, the chat's + menu, the chat's Plugins menu, the same menu with MCP servers, Add Fabric data, Fabric data chips in the composer, Settings and its Experiments, Chat defaults, MCP servers, Migrate a Power BI report, the Migration card, the Goals view after a run) and captures each in both themes with headless Edge. Its local backend runs the sample app with made-up users, rows, secrets and output |
+| `harness/` + `capture-harness.ps1` | Renders components with sample data (team overview, publish menu, deployment panel, account menu, Accounts, Create a team workspace dialog, Rayfin update popover, port-conflict dialog, plan card, Skills and Secrets views, setup, Help, Search, Blueprint, its Data model view with related entities and with loose access, its Data view of the sample app's local data, the local preview with the local backend's output (a stand-in without the app, left out of the default list: the docs capture is live), Point & Edit on the sample app (its dashboard in a frame over the preview, with the real in-page agent picking) and drawing on a screenshot of it, deploy screen, failed deploy, the chat's model picker, Accounts → Model providers, the chat's + menu, the chat's Plugins menu, the same menu with MCP servers, Add Fabric data, Fabric data chips in the composer, Settings and its Experiments, Chat defaults, MCP servers, Migrate a Power BI report, the Migration card) and captures each in both themes with headless Edge. Its local backend runs the sample app with made-up users, rows, secrets and output |
 
 ## Before you start
 
@@ -170,7 +170,7 @@ This copies `harness/` into the checkout's `src/renderer`, serves it with Vite o
 one), then removes the copied files. Add a shot by adding a case to
 `harness/docs-harness.tsx`. `setup` and `help` are framed in a shorter window (760 and 680
 px high), `settings-experiments` in a taller one (1000 px) so the dialog fits all of
-Experiments, and `goals` in a taller one still (1120 px) so the Goals view fits every check;
+Experiments;
 the script picks that height for them unless you pass `-Height`.
 
 ## 4. Optimize and place
@@ -211,7 +211,7 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `touch-up-draw` | harness | none |
 | `advisor-finding` | live | `99,191,857,534` |
 | `settings` | harness | `410,40,620,820` |
-| `settings-experiments` | harness, taller window (picked by the script) | `410,45,620,910` |
+| `settings-experiments` | harness, taller window (picked by the script) | `410,40,620,920` |
 | `chat-defaults` | harness | `410,74,620,752` |
 | `migrate-report` | harness | `340,12,760,716` |
 | `migration-card` | harness | `0,610,720,290` |
@@ -224,7 +224,6 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `local-data` | harness | `0,0,1440,580` |
 | `seed-offer` | harness | `270,170,900,86` |
 | `setup`, `help` | harness, shorter window (picked by the script) | none |
-| `goals` | harness, taller window (picked by the script) | none |
 | `search` | harness, over the `workbench` screenshot | `225,90,990,546` |
 | `team-create` | harness | `405,100,630,700` |
 | `team-publish` | harness | `1030,0,410,500` |

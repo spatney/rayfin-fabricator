@@ -20,8 +20,6 @@ import type {
   FileNode,
   GalleryApp,
   GalleryStatus,
-  GoalResult,
-  GoalsSnapshot,
   LocalColumn,
   LocalEntity,
   LocalIdentity,
@@ -85,9 +83,6 @@ import MigrateReportScreen from './components/migrate/MigrateReportScreen'
 import MigrationCard from './components/migrate/MigrationCard'
 import AppGalleryView from './components/gallery/AppGalleryView'
 import McpServersModal from './components/mcp/McpServersModal'
-import GoalsView from './components/goals/GoalsView'
-import type { GoalsController } from './goals/store'
-import { AUTO_SELECTION } from './modelSelection'
 import Spotlight from './components/spotlight/Spotlight'
 import { workbenchSearch } from './components/spotlight/workbenchSearch'
 import type { DataSource } from './fabricData'
@@ -1858,137 +1853,6 @@ function SettingsShot({ experiments = false }: { experiments?: boolean }): JSX.E
 }
 
 /**
- * The sample app's Goals tab after a run: three checks passed, one failed and one not proven.
- * The failed one is open on what Copilot found and the calls it made: Report allows anonymous
- * reads in the sample's data model, so signed out the app lists every report.
- */
-function GoalsShot(): JSX.Element {
-  const ranAt = new Date(Date.now() - 6 * 60_000).toISOString()
-  const checks = [
-    {
-      id: 'g1',
-      text: 'An employee can add an expense with an amount, date and category, then find it in their list.'
-    },
-    { id: 'g2', text: 'Someone who isn’t signed in can’t see any expenses, receipts or reports.' },
-    { id: 'g3', text: 'Employees see and change only their own expenses.' },
-    { id: 'g4', text: 'An employee can file an expense in a report, then find it there.' },
-    { id: 'g5', text: 'An employee can attach a photo of the receipt to an expense.' }
-  ]
-  const result = (
-    checkId: string,
-    status: GoalResult['status'],
-    summary: string,
-    evidence: string[] = [],
-    calls: string[] = []
-  ): GoalResult => ({
-    checkId,
-    check: checks.find((c) => c.id === checkId)?.text ?? '',
-    status,
-    summary,
-    calls,
-    evidence,
-    ranAt,
-    fingerprint: 'sample',
-    stale: false
-  })
-  const snapshot: GoalsSnapshot = {
-    exists: true,
-    purpose:
-      'Employees log what they spend for work, with a photo of each receipt, and file their expenses in reports such as October travel. Each employee sees and changes only their own expenses.',
-    checks,
-    results: [
-      result(
-        'g1',
-        'passed',
-        'Jordan added a $42.50 Meals expense for October 14, and it came back first in his list with its category.'
-      ),
-      result(
-        'g2',
-        'failed',
-        'Signed out, the app listed all 3 reports with their titles. Expenses and receipts were refused.',
-        [
-          'Signed out, reports returned October travel, Team offsite and Q4 software.',
-          "Report allows anonymous reads: @anonymous('read') in rayfin/data/Report.ts.",
-          'Expenses and receipts refused the same call: Not authorized.'
-        ],
-        [
-          'as anonymous (signed out): query { reports { items { title } } } → 200 {"data":{"reports":{"items":[{"title":"October travel"},{"title":"Team offsite"},{"title":"Q4 software"}]}}}',
-          'as anonymous (signed out): query { expenses { items { id amount } } } → 200 GraphQL error: Not authorized. (AUTH_NOT_AUTHORIZED)',
-          'as anonymous (signed out): query { receipts { items { id fileName } } } → 200 GraphQL error: Not authorized. (AUTH_NOT_AUTHORIZED)'
-        ]
-      ),
-      result(
-        'g3',
-        'passed',
-        'As Jordan, none of Avery’s expenses came back, and changing one of them by its ID was refused.'
-      ),
-      result(
-        'g4',
-        'passed',
-        'Jordan filed his expense in Team offsite, and it then came back with the report’s expenses.'
-      ),
-      result(
-        'g5',
-        'not-proven',
-        'Receipt photos go to the app’s file storage, which Copilot can’t reach by calling the app.'
-      )
-    ],
-    lastRun: {
-      ranAt,
-      durationMs: 228_000,
-      summary:
-        'Expenses stay with the employee who logged them, and adding and filing them works. Reports don’t: Report allows anonymous reads, so anyone with the app’s address can list every report’s title. Receipt photos go to file storage, which the calls can’t reach.',
-      checkIds: checks.map((c) => c.id),
-      all: true,
-      complete: true
-    },
-    allPassed: false,
-    running: false
-  }
-  const goals: GoalsController = {
-    projectId: 'p2',
-    loading: false,
-    loadError: null,
-    snapshot,
-    run: {
-      running: false,
-      adopted: false,
-      startedAt: 0,
-      checkIds: null,
-      phase: null,
-      activity: [],
-      results: [],
-      stopping: false
-    },
-    runError: null,
-    dismissRunError: noop,
-    draft: { running: false, activity: [] },
-    draftError: null,
-    dismissDraftError: noop,
-    selection: AUTO_SELECTION,
-    setSelection: noop,
-    reload: () => Promise.resolve(snapshot),
-    save: noopAsync,
-    startRun: noop,
-    cancelRun: noop,
-    startDraft: () => Promise.resolve(null),
-    cancelDraft: noop
-  }
-  return (
-    <Steps clicks={['.gl-check--failed .gl-check-btn']}>
-      <GoalsView
-        project={{ ...project, id: 'p2', name: 'Contoso Expenses', team: undefined }}
-        goals={goals}
-        visible
-        chatBusy={false}
-        onFix={noop}
-        onOpenFile={noop}
-      />
-    </Steps>
-  )
-}
-
-/**
  * Takes the focus off what a dialog focused as it opened: opened with the mouse, it draws no
  * focus ring, but a page nobody has touched yet does.
  */
@@ -2944,8 +2808,6 @@ function Shot({ id }: { id: string | null }): JSX.Element {
       return <SettingsShot />
     case 'settings-experiments':
       return <SettingsShot experiments />
-    case 'goals':
-      return <GoalsShot />
     case 'chat-defaults':
       // The sample user's new apps start on Claude Opus 5.5 with Fabric IQ and Charts on.
       return (

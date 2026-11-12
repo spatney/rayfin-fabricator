@@ -175,7 +175,7 @@ pub fn bring_forward(app: &AppHandle) {
 /// the configured window it starts hidden, and the renderer shows it once its
 /// first screen is painted (see `window_reveal`); should the page never get
 /// that far, it shows anyway after a few seconds. Closing it while app windows
-/// stay open stops the projects' local backends, dev servers, Goals runs and
+/// stay open stops the projects' local backends, dev servers and
 /// terminals, which nothing shows anymore.
 pub fn open_main_window(app: &AppHandle) -> tauri::Result<()> {
   use tauri::Manager;
@@ -194,9 +194,6 @@ pub fn open_main_window(app: &AppHandle) -> tauri::Result<()> {
       let handle = handle.clone();
       tauri::async_runtime::spawn(async move {
         crate::services::dev_server::kill_all(&handle);
-        if let Some(state) = handle.try_state::<crate::state::AppState>() {
-          state.cancel_all_goals();
-        }
         if let Some(terminals) = handle.try_state::<crate::services::terminal::Terminals>() {
           terminals.kill_all(None);
         }

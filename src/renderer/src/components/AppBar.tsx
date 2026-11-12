@@ -8,14 +8,13 @@ import { initials, markHue } from './gallery/model'
 import { displayPath } from './projectDisplay'
 
 /** The active project's content views, switched from the app bar's tabs. */
-export type ProjectView = 'build' | 'code' | 'blueprint' | 'advisor' | 'goals'
+export type ProjectView = 'build' | 'code' | 'blueprint' | 'advisor'
 
 const TABS: { id: ProjectView; label: string }[] = [
   { id: 'build', label: 'Build' },
   { id: 'code', label: 'Code' },
   { id: 'blueprint', label: 'Blueprint' },
-  { id: 'advisor', label: 'Advisor' },
-  { id: 'goals', label: 'Goals' }
+  { id: 'advisor', label: 'Advisor' }
 ]
 
 /** Other projects the switcher lists; Home lists every one. */
@@ -226,26 +225,17 @@ export function BackToProject({
 export function ProjectTabs({
   view,
   onChange,
-  advisorBadge,
-  goals
+  advisorBadge
 }: {
   view: ProjectView
   onChange: (view: ProjectView) => void
   /** Open high/medium Advisor issues, counted on the Advisor tab. */
   advisorBadge: DerivedAdvisor['badge']
-  /** The Goals tab (an experiment), shown when set: its checks failing on the app as it is now. */
-  goals?: { failing: number }
 }): JSX.Element {
   return (
     <div className="project-tabs" role="tablist" aria-label="Project views">
-      {TABS.filter((tab) => tab.id !== 'goals' || goals).map((tab) => {
-        const badge =
-          tab.id === 'advisor'
-            ? advisorBadge
-            : tab.id === 'goals' && goals?.failing
-              ? { count: goals.failing, severity: 'high' as const }
-              : null
-        const what = tab.id === 'goals' ? 'failing check' : 'open issue'
+      {TABS.map((tab) => {
+        const badge = tab.id === 'advisor' ? advisorBadge : null
         return (
           <button
             key={tab.id}
@@ -258,18 +248,14 @@ export function ProjectTabs({
                 ? badge
                   ? `Advisor — ${badge.count} open high or medium issue${badge.count === 1 ? '' : 's'}`
                   : 'Advisor'
-                : tab.id === 'goals'
-                  ? badge
-                    ? `Goals — ${badge.count} failing check${badge.count === 1 ? '' : 's'}`
-                    : 'Goals — what the app is for, checked before you publish'
-                  : undefined
+                : undefined
             }
           >
             {tab.label}
             {badge && (
               <span
                 className={`project-tab-badge project-tab-badge--${badge.severity}`}
-                aria-label={`${badge.count} ${what}${badge.count === 1 ? '' : 's'}`}
+                aria-label={`${badge.count} open issue${badge.count === 1 ? '' : 's'}`}
               >
                 {badge.count}
               </span>

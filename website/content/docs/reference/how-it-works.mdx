@@ -139,7 +139,7 @@ An app installed from a `.rayfin` file runs on the same bundled rayfin-local, bu
 
 ## What runs on your computer
 
-Fabricator stores settings, project lists, chat history, Advisor state, Goals results, logs, and diagnostics exports under the app data folder. Your Rayfin apps live in the workspace folder, which defaults to `RayfinProjects` in your home directory. The logs folder also keeps each project's local backend output, and each app's local data lives in its project's `.rayfin-local/` folder. See [Files and folders](/docs/reference/files).
+Fabricator stores settings, project lists, chat history, Advisor state, logs, and diagnostics exports under the app data folder. Your Rayfin apps live in the workspace folder, which defaults to `RayfinProjects` in your home directory. The logs folder also keeps each project's local backend output, and each app's local data lives in its project's `.rayfin-local/` folder. See [Files and folders](/docs/reference/files).
 
 The desktop app uses Tauri v2: a Rust core with a React renderer. On Windows, the embedded preview uses WebView2. On macOS, it uses the system web view. Your app's Vite dev server and its functions run with the Node.js that setup checks.
 
@@ -164,7 +164,7 @@ When you open Fabricator after setup has passed, it shows your work at once and 
 
 Fabricator and the tools it runs can contact these services:
 
-- GitHub Copilot for chat, model access, design options, deep Advisor reviews, security checks of project and app files, Goals drafts and runs, and team workspace diagnoses.
+- GitHub Copilot for chat, model access, design options, deep Advisor reviews, security checks of project and app files, and team workspace diagnoses.
 - Microsoft Fabric and Rayfin services when you sign in, publish, preview published apps, share apps, or inspect Fabric items.
 - GitHub for update checks, release downloads, cloning repositories, issue reporting, and team workspace repositories.
 - The npm registry when creating a project from the Rayfin CLI's template and when installing project dependencies. Fabricator also asks it for the newest Rayfin release the local backend runs.
@@ -174,7 +174,7 @@ Fabricator and the tools it runs can contact these services:
 - Fabric APIs, with the Azure CLI's sign-in, to list the Rayfin apps you can open in the **App gallery**, and each one's address and last publish. Fabricator finds the apps with Fabric's catalog search, which needs a permission only the Azure CLI's sign-in has, and scans your workspaces instead when the catalog can't search for them.
 - Microsoft's Fabric IQ and Work IQ MCP servers, from the Copilot engine with the tokens Fabricator gives it, and Microsoft's sign-in for Work IQ, when the **Fabric IQ** or **Work IQ** plugin is on in an app's chat. Each project's plugins are saved with it in `studio.json`. They're the chat session's own MCP servers, re-supplied every time it starts or resumes, never written to the project or your Copilot CLI settings. Fabricator lets chat call only their tools that read. Chat finds and reads Power BI data only with Fabric IQ. When a request needs it while it's off or needs an Azure sign-in, chat calls Fabricator's `fabricator_connect_fabric_iq` tool: Fabricator asks you on a question card, turns the plugin on or runs the Azure sign-in, and starts Fabric IQ in the running session.
 - The MCP servers you add, when a server is on in an app's chat. Each turn's session gets them like Fabric IQ and Work IQ, as its own servers, named by their ids, so their tools are `<id>-<tool>`. The engine starts a command server in the project folder and connects to a remote one over HTTPS (HTTP only on this computer). A chat session doesn't discover MCP servers by itself, so it never uses a project's `.mcp.json` or your Copilot CLI's MCP settings. Fabricator's permission policy lets chat call only a server's read-only tools when you set it to **Only tools that read**, and always in a team app. **Check** in **MCP servers** opens a session with that server alone, lists its tools, and ends it.
-- Anthropic, OpenAI, xAI and Google, when you add your own API keys: to check a key and list its models, and for chat, Advisor and Goals requests on a model you chose from them.
+- Anthropic, OpenAI, xAI and Google, when you add your own API keys: to check a key and list its models, and for chat and Advisor requests on a model you chose from them.
 
 ## What the Advisor can read
 
@@ -187,54 +187,3 @@ Quick checks run locally against the project snapshot. **Run deep review** start
 Fabricator's own checks then read the files the way npm, git and VS Code read them, whatever case their names are in: the scripts npm runs when it installs packages, and `binding.gyp` files; where each dependency and lockfile entry comes from; `.npmrc` settings that name a program or another settings file; git settings, `.gitmodules` entries, and `.git` and `commondir` files that run programs or send git to another folder; programs, by their first bytes; obfuscated code; text aimed at AI tools; and, for projects, git hooks, VS Code tasks that run when the folder opens, and MCP server configurations. A `package.json`, lockfile, `.npmrc` or git settings file it can't read, because it's too large or not plain text, is a finding of its own, and a serious one for settings that can name programs. These files get more room than others, so padding the file can't push them out.
 
 Then a separate Copilot session, on **Auto**, reviews the code. Its permission policy lets it read only that folder: it has no tools that edit files, run commands, fetch web pages or call MCP servers. The session takes nothing in the folder as its own setup: it loads none of its custom instructions, skills, hooks or MCP configurations, and runs no git operations and no memory. The prompt tells Copilot that the files are untrusted, and Copilot reports only through Fabricator's tools: each finding must quote lines that are in the file, its assessment can't rate one of Fabricator's findings below the level Fabricator set, and its verdict can only make the result stricter.
-
-## What a Goals run can do
-
-**Run checks**, in an app's **Goals** tab, copies the app into a folder of its own under Fabricator's cache folder (`%LOCALAPPDATA%\com.rayfin.fabricator\goals` on Windows, `~/Library/Caches/com.rayfin.fabricator/goals` on macOS). The copy leaves out git's data, the frontend's build and caches such as `.vite`, and links the app's npm packages instead of copying them. It can take up to 1 GB, not counting the packages. Of the app's `.rayfin-local` folder, the copy keeps only `state.json` and `secrets.json`, which holds the local values of the app's secrets, and leaves out its database, stored files and signing keys. While Fabricator makes the copy, it holds the project the way a chat turn or a publish does, so neither can start until the copy is made, and the copy is the code as the last turn left it.
-
-Fabricator then starts a rayfin-local of its own for the copy. It serves only the backend (`--no-frontend`), on a port from 48100 to 48999, with an empty database, and Fabricator loads the app's [seed data](/docs/reference/how-it-works#seed-data) into it, if the app has any. The copy's functions and connectors run with your sign-in, like the app's own [local backend](/docs/reference/how-it-works#the-local-backend). Copies don't count toward the two projects that run at once, and at most three apps' checks run at once. Their output goes to the logs folder's `goals` folder.
-
-A separate Copilot session, on the model chosen in the **Goals** tab, then checks the app. Fabricator tells it the app's entities and their fields, its functions, connectors and storage folders, and anything that doesn't work in the copy, such as functions that didn't build. It works through three tools of Fabricator's:
-
-- `fabricator_goals_call` calls the copy's backend the way the app's frontend does: its data API, a function, a connector, or a SQL connector's data API. It calls as you, signed out, or as a test user named by an email, who is created the first time. Fabricator numbers each call and keeps who made it, what it asked and how the copy answered. It refuses GraphQL mutations through a SQL connector's data API, which reaches the connector's real database.
-- `fabricator_goals_result` reports one check as passed, failed or not proven. Fabricator refuses a passed check that doesn't name calls from this run, and a failed one that neither names calls nor says what's missing. A result shows up to five of the calls it names, from Fabricator's own record.
-- `fabricator_goals_complete` ends the run with a summary. When checks are still without a result, Fabricator sends Copilot back once to report them.
-
-The prompt tells Copilot that reading the code never passes a check. It also tells Copilot to read a function's code before calling it, and never to make a call that sends a message or an email, posts to another system, charges money, or changes data outside the app, but to report the checks that need one as not proven.
-
-The session's permission policy lets it read only the copy's folder, and not its `.env` files, keys, certificates or `.rayfin-local` folder. It has no tools that edit files, run commands, fetch web pages or call MCP servers. Like a security check's session, it takes nothing in the folder as its own setup: it loads none of its custom instructions, skills, hooks or MCP configurations, and runs no git operations and no memory.
-
-The run gets 10 minutes, and a minute more for each check over six, up to 30. However it ends, Fabricator then stops the copy's backend and deletes the copy, and the next time it starts, it deletes any copy left behind. It saves the results in the app data folder's `goals` folder, with a signature of the code the copy was made from: the app's `package.json`, `rayfin-local.toml` and `rayfin` folder, its data model, functions and other packages, and its frontend's source. When that code changes, the results are out of date. `GOALS.md` and the app's docs aren't part of the signature.
-
-**Draft with Copilot** and **Improve with Copilot** start the same kind of session on the project folder itself, for up to five minutes. It has one tool, `fabricator_goals_propose`, which takes a purpose and up to 12 checks. Nothing is saved: the draft goes into the editor for you to change and save.
-
-### GOALS.md
-
-An app's goals are in `GOALS.md`, at the root of its project. Fabricator creates the file the first time you save goals, and writes it like this:
-
-```md title="GOALS.md"
-# Goals
-
-<!-- What this app is for, and the checks it must keep passing, in plain words. Fabricator's Goals tab runs the checks against a fresh copy of the app, as its users, before you publish. One check per bullet. -->
-
-## Purpose
-
-Contoso Expenses is where employees submit their expenses and their managers approve or reject them.
-
-## Checks
-
-- An employee can submit an expense with a date, amount, category and a short note.
-- Employees see only their own expenses.
-- A manager can approve or reject an expense from someone on their team.
-- Employees can't approve their own expenses.
-```
-
-Fabricator reads it like this:
-
-- `## Purpose`, `## What it's for` or `## What this app is for` starts the purpose, and `## Checks` or `## Goals` starts the checks, in any case, with or without a colon. Only `##` headings start sections.
-- Each check is a bullet: `-`, `*`, `+`, `1.` or `1)`, with or without a `[ ]` or `[x]` box. A line under a bullet, or indented under it, adds to its check, and so does a sub-bullet, after a `;`. In the checks, a paragraph that isn't under a bullet is a check of its own.
-- In a file without those headings, the bullets are checks and the other text is the purpose.
-- HTML comments are notes, never part of the purpose or a check.
-- A result belongs to its check's words. Changing their case, their spacing, or the full stop or exclamation mark at the end keeps the result. Rewording the check makes it a new check, with no result.
-
-When you save the goals, Fabricator writes the `# Goals` title and its comment, any text you had above the purpose, then the purpose and the checks, a bullet each. Other `##` sections follow the checks as you wrote them, comments included. Comments elsewhere aren't kept. A file with Windows line endings keeps them. The editor saves up to 40 checks of up to 500 characters each, and a purpose of up to 4,000 characters, and a run takes up to 40 checks.

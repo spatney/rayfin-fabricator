@@ -27,7 +27,6 @@ function context(overrides: Partial<ActionContext> = {}): ActionContext {
     chatBusy: false,
     autoDeploy: true,
     migrationEnabled: false,
-    goalsEnabled: false,
     inGallery: false,
     theme: 'dark',
     uiScale: 1,
@@ -131,15 +130,6 @@ describe('Search actions', () => {
     manage.run()
     expect(ctx.do.openMcpServers).toHaveBeenCalled()
     expect(rank(prepare(buildActions(ctx)), 'mcp')[0]?.item.id).toBe('action:mcp-servers')
-  })
-
-  it('offers the Goals view only when the open app has it', () => {
-    expect(ids(context())).not.toContain('action:view-goals')
-    const ctx = context({ goalsEnabled: true })
-    const goals = buildActions(ctx).find((a) => a.id === 'action:view-goals')!
-    goals.run()
-    expect(ctx.do.showView).toHaveBeenCalledWith('goals')
-    expect(rank(prepare(buildActions(ctx)), 'evals')[0]?.item.id).toBe('action:view-goals')
   })
 
   it('offers Fabric sign-in only once there’s a project to sign in with', () => {

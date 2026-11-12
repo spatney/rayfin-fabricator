@@ -22,6 +22,7 @@ import { filePaths, findFileLinks, projectRelative } from './links'
 import { newOutput, OUTPUT_LINES } from './output'
 import { DEFAULT_FONT_SIZE, terminalStore, type TerminalTab } from './store'
 import { isLightTheme, searchColors, terminalTheme } from './theme'
+import './fonts.css'
 
 // The terminals themselves: an xterm.js terminal per tab and the shell it runs
 // in a PTY (see services/terminal), and each app's read-only Output. They
@@ -38,7 +39,7 @@ const RESIZE_DELAY_MS = 60
 /** How long a project's file list serves its links before it's read again. */
 const FILES_TTL_MS = 15_000
 
-/** Cascadia first, as in Windows Terminal; Nerd Fonts after it, so a prompt's icons draw when one's installed. */
+/** Keep the system's text font, with bundled prompt symbols when no Nerd Font is installed. */
 const FONT_FAMILY = [
   "'Cascadia Mono'",
   "'Cascadia Code'",
@@ -55,6 +56,7 @@ const FONT_FAMILY = [
   'Menlo',
   'Monaco',
   "'DejaVu Sans Mono'",
+  "'Fabricator Terminal Symbols'",
   'monospace'
 ].join(', ')
 
@@ -218,6 +220,16 @@ export abstract class TerminalView {
     if (!this.opened) {
       this.term.open(this.host)
       this.opened = true
+      // Canvas renderers cache missing glyphs until their atlas is cleared.
+      void document.fonts.load('14px "Fabricator Terminal Symbols"').then(
+        () => {
+          if (this.disposed) return
+          this.term.clearTextureAtlas()
+          this.fit()
+          this.term.refresh(0, this.term.rows - 1)
+        },
+        (error: unknown) => console.warn('Could not load terminal prompt symbols', error)
+      )
     }
     this.visible = true
     this.useWebgl()

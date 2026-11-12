@@ -1,6 +1,6 @@
 [package]
 name = "rayfin-fabricator"
-version = "1.51.0"
+version = "1.52.0"
 description = "Fabricator — a desktop app for building Rayfin apps via chat, wrapping the GitHub Copilot CLI and the Rayfin CLI."
 authors = ["Fabricator"]
 license = "MIT"
@@ -89,8 +89,7 @@ portable-pty = "0.9"
 # tauri-plugin-single-instance: opening a .fabricator or .rayfin file, or an installed app's
 # shortcut, while Fabricator runs hands it to the running app instead of starting a second one
 # (lib.rs; release builds only). The shell features give an installed app its own taskbar button
-# and Start menu shortcut (services/apps/shell.rs). Win32_System_IO links a Goals run's copy of an
-# app to the original's packages with directory junctions (commands/goals/scratch.rs).
+# and Start menu shortcut (services/apps/shell.rs).
 [target.'cfg(windows)'.dependencies]
 tauri-plugin-single-instance = "2.5"
 webview2-com = "0.39"
@@ -104,7 +103,6 @@ windows = { version = "0.62", features = [
   "Win32_Storage_EnhancedStorage",
   "Win32_System_Com",
   "Win32_System_Com_StructuredStorage",
-  "Win32_System_IO",
   "Win32_System_Memory",
   "Win32_System_ProcessStatus",
   "Win32_System_Registry",

@@ -18,8 +18,6 @@ import type {
   ChatTurnResult,
   DeployResult,
   DevServerResult,
-  GoalResult,
-  GoalsSnapshot,
   LocalReady,
   LocalStatus,
   PortConflict,
@@ -40,7 +38,6 @@ import { DEPLOY_QUESTION } from '../components/help/parts'
 import type PreviewPane from '../components/PreviewPane'
 import type ChatPanel from '../components/ChatPanel'
 import type AdvisorView from '../components/advisor/AdvisorView'
-import type GoalsView from '../components/goals/GoalsView'
 import type DeploymentsControl from '../components/DeploymentsControl'
 import type MigrateReportScreen from '../components/migrate/MigrateReportScreen'
 import type AppGalleryView from '../components/gallery/AppGalleryView'
@@ -55,7 +52,6 @@ import Workbench from './Workbench'
 const chatProps = vi.hoisted(() => vi.fn<(props: ComponentProps<typeof ChatPanel>) => void>())
 const previewProps = vi.hoisted(() => vi.fn<(props: ComponentProps<typeof PreviewPane>) => void>())
 const advisorProps = vi.hoisted(() => vi.fn<(props: ComponentProps<typeof AdvisorView>) => void>())
-const goalsProps = vi.hoisted(() => vi.fn<(props: ComponentProps<typeof GoalsView>) => void>())
 const deploymentsProps = vi.hoisted(() =>
   vi.fn<(props: ComponentProps<typeof DeploymentsControl>) => void>()
 )
@@ -99,12 +95,6 @@ vi.mock('../components/advisor/AdvisorView', () => ({
 }))
 vi.mock('../advisor/store', () => ({
   useAdvisor: () => ({ derived: advisorMock.derived, handOff: advisorMock.handOff })
-}))
-vi.mock('../components/goals/GoalsView', () => ({
-  default: (props: ComponentProps<typeof GoalsView>) => {
-    goalsProps(props)
-    return null
-  }
 }))
 vi.mock('../components/GitControl', () => ({
   default: (props: ComponentProps<typeof GitControl>) => {
@@ -481,7 +471,6 @@ beforeEach(() => {
   chatProps.mockClear()
   previewProps.mockClear()
   advisorProps.mockClear()
-  goalsProps.mockClear()
   deploymentsProps.mockClear()
   helpProps.mockClear()
   searchProps.mockClear()
@@ -2324,80 +2313,6 @@ describe('Workbench Advisor fixes', () => {
   })
 })
 
-describe('Workbench Goals', () => {
-  const goalsSettings: AppSettings = { theme: 'system', experiments: { goals: true } }
-  const failed: GoalResult = {
-    checkId: 'a',
-    check: 'Approvers see only their team’s requests',
-    status: 'failed',
-    summary: 'An approver saw another team’s request.',
-    calls: [],
-    evidence: [],
-    ranAt: '2026-11-01T10:00:00Z',
-    fingerprint: 'f1',
-    stale: false
-  }
-  const goals: GoalsSnapshot = {
-    exists: true,
-    purpose: 'Expense approvals for Contoso',
-    checks: [
-      { id: 'a', text: 'Approvers see only their team’s requests' },
-      { id: 'b', text: 'Totals match the line items' }
-    ],
-    results: [failed],
-    lastRun: null,
-    allPassed: false,
-    running: false
-  }
-
-  function installGoals(api: ReturnType<typeof installApi>) {
-    const goalsApi = {
-      load: vi.fn<RayfinStudioApi['goals']['load']>().mockResolvedValue(goals),
-      run: vi.fn<RayfinStudioApi['goals']['run']>(() => new Promise(() => {})),
-      onEvent: vi.fn<RayfinStudioApi['goals']['onEvent']>(() => () => {}),
-      draftCancel: vi.fn<RayfinStudioApi['goals']['draftCancel']>().mockResolvedValue(false)
-    }
-    Object.assign(api, { goals: goalsApi })
-    return goalsApi
-  }
-
-  it('offers to run the checks this version hasn’t had before a publish', async () => {
-    const api = installApi(true)
-    const goalsApi = installGoals(api)
-    render(<Workbench {...makeProps({ settings: goalsSettings })} />, { wrapper: Wrapper })
-    const tab = await screen.findByRole('tab', { name: /^Goals/ })
-    expect(await within(tab).findByLabelText('1 failing check')).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Test deploy' }))
-    const gate = await screen.findByRole('dialog', { name: 'Run your app’s checks first?' })
-    expect(gate.textContent).toContain('1 check failed and 1 hasn’t run on the app as it is now.')
-    fireEvent.click(within(gate).getByRole('button', { name: 'Run 1 check' }))
-
-    expect(goalsApi.run).toHaveBeenCalledWith(
-      project.id,
-      expect.objectContaining({ checkIds: ['b'] })
-    )
-    expect(goalsProps.mock.lastCall?.[0].visible).toBe(true)
-    expect(api.deploy.run).not.toHaveBeenCalled()
-  })
-
-  it('publishes anyway when asked', async () => {
-    const api = installApi(true)
-    installGoals(api)
-    render(<Workbench {...makeProps({ settings: goalsSettings })} />, { wrapper: Wrapper })
-    await screen.findByLabelText('Chat draft')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Test deploy' }))
-    const gate = await screen.findByRole('dialog', { name: 'Run your app’s checks first?' })
-    fireEvent.click(within(gate).getByRole('button', { name: 'Publish anyway' }))
-
-    await waitFor(() =>
-      expect(api.deploy.run).toHaveBeenCalledWith(project.id, undefined, undefined)
-    )
-    expect(screen.queryByRole('dialog')).toBeNull()
-  })
-})
-
 describe('Workbench chat history', () => {
   it('keeps the Fabric data a message added when it saves the transcript', async () => {
     const api = installApi(true)
@@ -2645,44 +2560,6 @@ describe('Workbench team workspaces', () => {
     expect(team.publish).toHaveBeenCalledWith('t1', false)
     expect(api.deploy.run).not.toHaveBeenCalled()
     expect(await screen.findByRole('dialog', { name: 'Publish' })).toBeTruthy()
-  })
-
-  it('offers to run a team app’s Goals checks before it publishes', async () => {
-    const { api, team } = installTeamApi()
-    const goals: GoalsSnapshot = {
-      exists: true,
-      purpose: 'Sales pipeline for the team',
-      checks: [{ id: 'a', text: 'Reps see only their own deals' }],
-      results: [],
-      lastRun: null,
-      allPassed: false,
-      running: false
-    }
-    Object.assign(api, {
-      goals: {
-        load: vi.fn<RayfinStudioApi['goals']['load']>().mockResolvedValue(goals),
-        run: vi.fn<RayfinStudioApi['goals']['run']>(() => new Promise(() => {})),
-        onEvent: vi.fn<RayfinStudioApi['goals']['onEvent']>(() => () => {}),
-        draftCancel: vi.fn<RayfinStudioApi['goals']['draftCancel']>().mockResolvedValue(false)
-      }
-    })
-    const settings: AppSettings = {
-      theme: 'system',
-      experiments: { teamWorkspaces: true, goals: true }
-    }
-    const { container } = render(<Workbench {...makeProps({ settings })} />, { wrapper: Wrapper })
-    const bar = within(container.querySelector('header.app-bar') as HTMLElement)
-    await bar.findByText('2 unpublished')
-
-    await act(async () => {
-      fireEvent.click(bar.getByRole('button', { name: 'Publish' }))
-    })
-    const gate = await screen.findByRole('dialog', { name: 'Run your app’s checks first?' })
-    expect(team.publish).not.toHaveBeenCalled()
-
-    fireEvent.click(within(gate).getByRole('button', { name: 'Publish anyway' }))
-    await waitFor(() => expect(team.publish).toHaveBeenCalledWith('t1', false))
-    expect(api.deploy.run).not.toHaveBeenCalled()
   })
 })
 

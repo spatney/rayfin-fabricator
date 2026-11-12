@@ -1196,12 +1196,8 @@ pub(crate) async fn run_turn(
     let opts = match continuation {
       Some(prompt) => MessageOptions::new(prompt.to_string()),
       None => {
-        let text = match crate::commands::goals::chat_note(&project) {
-          Some(note) => format!("{note}\n\n{text}"),
-          None => text.clone(),
-        };
         // A Plan-mode message only plans, so it builds nothing to hand over.
-        let text = if parallel_ui && !plan_context { format!("{}\n\n{text}", ui_builder::TURN_NOTE) } else { text };
+        let text = if parallel_ui && !plan_context { format!("{}\n\n{text}", ui_builder::TURN_NOTE) } else { text.clone() };
         let opts = MessageOptions::new(turn_text(
           &project,
           &text,

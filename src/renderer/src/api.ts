@@ -50,8 +50,6 @@ import {
   type ExportOptions,
   type FileDropEvent,
   type GithubRepoRequest,
-  type GoalsEventEnvelope,
-  type GoalsRunRequest,
   type RayfinStudioApi,
   type SecurityEventEnvelope,
   type TeamCreateRequest,
@@ -746,23 +744,6 @@ export const api: RayfinStudioApi = {
     cancel: (checkId: string) => invoke('security_check_cancel', { checkId }),
     onEvent: (cb: (envelope: SecurityEventEnvelope) => void) =>
       subscribe<SecurityEventEnvelope>(IpcChannels.securityEvent, cb)
-  },
-
-  goals: {
-    load: (projectId: string) => invoke('goals_load', { projectId }),
-    save: (projectId: string, purpose: string, checks: string[]) =>
-      invoke('goals_save', { projectId, purpose, checks }),
-    run: (projectId: string, request: GoalsRunRequest) =>
-      invoke('goals_run', {
-        projectId,
-        request: { checkIds: request.checkIds, ...modelChoiceArgs(request) }
-      }),
-    cancel: (projectId: string) => invoke('goals_cancel', { projectId }),
-    draft: (projectId: string, purpose: string, checks: string[], choice?: AdvisorModelChoice) =>
-      invoke('goals_draft', { projectId, purpose, checks, ...modelChoiceArgs(choice) }),
-    draftCancel: (projectId: string) => invoke('goals_draft_cancel', { projectId }),
-    onEvent: (cb: (envelope: GoalsEventEnvelope) => void) =>
-      subscribe<GoalsEventEnvelope>(IpcChannels.goalsEvent, cb)
   },
 
   terminal: {

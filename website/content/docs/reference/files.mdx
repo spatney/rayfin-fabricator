@@ -1,6 +1,6 @@
 ---
 title: "Files and folders"
-description: "Where Fabricator keeps your projects, your apps' local data, app data, chat history, Advisor reports, Goals results, logs and caches on Windows and macOS."
+description: "Where Fabricator keeps your projects, your apps' local data, app data, chat history, Advisor reports, logs and caches on Windows and macOS."
 ---
 
 Fabricator keeps app state separate from your Rayfin project files. Project folders are the code you build. App data is Fabricator's local state, logs, cache, and saved UI data.
@@ -21,11 +21,9 @@ Fabricator creates this folder when it needs to save app-owned files.
 | `studio.json` | Settings, the workspace folder path, recent projects with when you last opened and whether you pinned each, the active project, the team workspace list, and the MCP servers you added: each one's name, command or URL, and the names of its environment variables or headers. | Yes, but Fabricator forgets settings and project lists. It does not delete the project folders. |
 | `chats/` | Saved chat history, one JSON file per project. | Yes, if you no longer need chat history. |
 | `advisor/` | Saved Advisor reports and Advisor UI state for projects. | Yes, if you are comfortable losing saved findings, dismissals, and baselines. |
-| `goals/` | The last Goals results, one JSON file per project. The goals themselves are in each app's `GOALS.md`. | Yes, but the checks then show as not run until you run them again. |
 | `suggestions/` | Cached starter suggestion sets for projects. | Yes. Fabricator can recreate suggestions. |
 | `logs/` | Diagnostics JSONL files, exported diagnostics bundles, and crash or hang logs. | Yes, if you no longer need them for bug reports. |
 | `logs/local-backend/` | Each project's recent local backend output, in files named for the project's ID, up to about 2 MB per project. | Yes. Fabricator starts new files as your apps run. |
-| `logs/goals/` | The output of the copies that Goals runs check, in files named for the project's ID, up to about 2 MB per project. | Yes. Fabricator starts new files as checks run. |
 | `fabric-accounts.json`, `fabric-accounts/` | The Fabric accounts you added after the first, each in its own Rayfin CLI config folder, and which one is in use. | Only to sign out of those accounts. Use **Accounts** instead; see [Manage your accounts](/docs/start/accounts). |
 
 Diagnostics files older than the retention window are pruned at startup. An exported diagnostics bundle includes the last lines of each project's local backend output, when there is any, with secrets, email addresses and your home folder masked.
@@ -82,17 +80,6 @@ While it checks a project or app file for security risks, Fabricator unpacks it 
 | macOS | `~/Library/Caches/com.rayfin.fabricator/checks` |
 
 It deletes each folder when its check ends, and anything left there the next time it starts. See [Check a project or app for security risks](/docs/build/security-check).
-
-## Copies of apps being checked against their goals
-
-When you run an app's Goals checks, Fabricator copies the app into a folder of its own in a cache folder that stays on this computer, and runs the copy there:
-
-| OS | Cache folder |
-| --- | --- |
-| Windows | `%LOCALAPPDATA%\com.rayfin.fabricator\goals` |
-| macOS | `~/Library/Caches/com.rayfin.fabricator/goals` |
-
-The copy holds the app's code and the local values of its secrets, but not its git history, its build or its local data. See [What a Goals run can do](/docs/reference/how-it-works#what-a-goals-run-can-do). Fabricator deletes each copy when its run ends, and anything left there the next time it starts. See [Check your app against its goals](/docs/ship/goals).
 
 ## Packages for new projects
 

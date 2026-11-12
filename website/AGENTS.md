@@ -184,11 +184,10 @@ in `.md`.
 | `share` | The share dialog | `/docs/ship/share` |
 | `advisor` | The Advisor: grade, check strip, summary and issues | `/docs/ship/advisor` |
 | `advisor-finding` | An open Advisor issue with its fix actions | `/docs/ship/advisor` |
-| `goals` | The sample app's **Goals** tab after a run: 3 passed, 1 failed and 1 not proven, with Copilot's summary, what the app is for, and the failed check open on what Copilot found and the calls it made (sample data) | `/docs/ship/goals` |
 | `rayfin-version` | The Rayfin version control with an update available | `/docs/ship/rayfin-versions` |
 | `settings` | The Settings dialog: General (with **API keys**, **MCP servers** and **Chat defaults**) and Appearance (sample data) | `/docs/reference/settings` |
 | `chat-defaults` | **Chat defaults**: Claude Opus 5.5 at High, with Fabric IQ and the Charts MCP server on, and Work IQ, Microsoft Learn and Issue tracker off (sample data) | `/docs/reference/settings` |
-| `settings-experiments` | Settings' Experiments section with **Team workspaces**, **Migrate Power BI reports**, **Work IQ**, **Goals** and **Parallel UI builder**, all off (sample data) | `/docs/team`, `/docs/build/migrate-power-bi`, `/docs/build/fabric-iq-and-work-iq`, `/docs/ship/goals` |
+| `settings-experiments` | Settings' Experiments section with **Team workspaces**, **Migrate Power BI reports**, **Work IQ** and **Parallel UI builder**, all off (sample data) | `/docs/team`, `/docs/build/migrate-power-bi`, `/docs/build/fabric-iq-and-work-iq` |
 | `migrate-report` | **Migrate a Power BI report** with a report picked: its workspace, semantic model, pages and the three checks, all passing (sample data) | `/docs/build/migrate-power-bi` |
 | `migration-card` | The Migration card above the chat composer after the first page, with **Migrate next page** and **Migrate the rest** (sample data) | `/docs/build/migrate-power-bi` |
 | `app-gallery` | The **App gallery** with the sample user's apps, and the sample app's details open beside them (sample data) | `/docs/build/app-gallery` |

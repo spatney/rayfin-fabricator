@@ -15,18 +15,17 @@ param(
   [Parameter(Mandatory)] [string] $Checkout,
   [Parameter(Mandatory)] [string] $Out,
   # preview-local is captured live (the harness renders it without the app): ask for it by name.
-  [string[]] $Shots = @('team-overview', 'team-publish', 'deployments', 'account-menu', 'accounts', 'team-create', 'rayfin-version', 'port-conflict', 'plan', 'skills', 'secrets', 'setup', 'help', 'search', 'deploy-progress', 'deploy-error', 'blueprint', 'model-relations', 'model-access', 'local-data', 'seed-offer', 'model-picker', 'model-providers', 'add-menu', 'plugins', 'mcp-plugins', 'connect-data', 'data-chips', 'settings', 'settings-experiments', 'chat-defaults', 'mcp-servers', 'migrate-report', 'migration-card', 'app-gallery', 'goals', 'touch-up', 'touch-up-draw'),
+  [string[]] $Shots = @('team-overview', 'team-publish', 'deployments', 'account-menu', 'accounts', 'team-create', 'rayfin-version', 'port-conflict', 'plan', 'skills', 'secrets', 'setup', 'help', 'search', 'deploy-progress', 'deploy-error', 'blueprint', 'model-relations', 'model-access', 'local-data', 'seed-offer', 'model-picker', 'model-providers', 'add-menu', 'plugins', 'mcp-plugins', 'connect-data', 'data-chips', 'settings', 'settings-experiments', 'chat-defaults', 'mcp-servers', 'migrate-report', 'migration-card', 'app-gallery', 'touch-up', 'touch-up-draw'),
   [ValidateSet('dark', 'light')] [string[]] $Themes = @('dark', 'light'),
   [int] $Port = 1437,
   [int] $Width = 1440,
   # Window height; 0 uses each shot's own (setup and help are framed in a shorter window,
-  # settings-experiments and goals in taller ones so the dialog fits all of Experiments and
-  # the Goals view fits every check).
+  # settings-experiments in a taller one so the dialog fits all of Experiments).
   [int] $Height = 0,
   [double] $Scale = 1.5
 )
 $ErrorActionPreference = 'Stop'
-$ShotHeights = @{ 'setup' = 760; 'help' = 680; 'settings-experiments' = 1000; 'goals' = 1120 }
+$ShotHeights = @{ 'setup' = 760; 'help' = 680; 'settings-experiments' = 1000 }
 $Checkout = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Checkout)
 $Out = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Out)
 $renderer = Join-Path $Checkout 'src\renderer'

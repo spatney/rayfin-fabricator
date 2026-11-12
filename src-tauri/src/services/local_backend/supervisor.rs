@@ -129,9 +129,7 @@ pub fn serve_args(dir: &Path, options: &LocalStartOptions) -> Vec<OsString> {
     args.push(who.into());
   }
   let serve = &options.serve;
-  if serve.no_frontend {
-    args.push("--no-frontend".into());
-  } else if serve.static_build {
+  if serve.static_build {
     args.push("--static".into());
     if serve.reuse_build {
       args.push("--reuse-build".into());
@@ -472,14 +470,6 @@ mod tests {
     assert!(!shown.contains(token.expose()), "{shown}");
     assert!(shown.contains("RAYFIN_LOCAL_CONTROL_TOKEN") && shown.contains("***"));
     assert!(spec.describe().contains("\"C:\\apps\\my notes\""));
-  }
-
-  #[test]
-  fn a_backend_only_serve_never_builds_the_frontend() {
-    let serve = crate::types::ServeMode { static_build: true, reuse_build: true, port: Some(48_100), no_frontend: true };
-    let options = LocalStartOptions { reset: true, serve, ..Default::default() };
-    let args: Vec<String> = serve_args(Path::new("C:\\goals\\app"), &options).iter().map(|a| a.to_string_lossy().into_owned()).collect();
-    assert_eq!(args, ["serve", "--json", "-C", "C:\\goals\\app", "--reset", "--no-frontend", "--port", "48100"]);
   }
 
   #[tokio::test]
