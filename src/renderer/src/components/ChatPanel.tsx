@@ -585,9 +585,10 @@ export default function ChatPanel({
   }
 
   // Coalesce high-frequency streamed events (text / reasoning deltas and live tool
-  // output). The SDK emits one IPC event per token; applying each individually
-  // re-rendered the active turn and re-parsed its markdown thousands of times per
-  // reply — the dominant cause of the VM/Parallels "hang". We buffer them per turn
+  // output). The backend already batches them (at most one per ~50 ms per turn,
+  // see services/emit.rs), but applying each individually still re-rendered the
+  // active turn and re-parsed its markdown many times per second — the dominant
+  // cause of the VM/Parallels "hang". We buffer them per turn
   // and flush on a fixed time budget (~FLUSH_INTERVAL_MS), not once per animation
   // frame: re-parsing the whole growing markdown bubble is the streaming hot path,
   // so flushing ~11×/s instead of ~60×/s cuts that work several-fold with no

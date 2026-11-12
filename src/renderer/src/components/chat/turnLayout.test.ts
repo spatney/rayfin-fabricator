@@ -88,6 +88,21 @@ describe('layoutTurn', () => {
     expect(kinds(m)).toEqual(['question', 'answer'])
   })
 
+  it('keeps an Autopilot run’s closing words as its answer when it marks the task complete', () => {
+    const m = turn(
+      [
+        { kind: 'tool', id: 'a' },
+        { kind: 'text', text: 'Your list now saves to Rayfin.' },
+        { kind: 'tool', id: 'done' }
+      ],
+      [tool('a', 'edit'), tool('done', 'task_complete', { title: 'task_complete' })]
+    )
+    const [work] = layoutTurn(m)
+    expect(kinds(m)).toEqual(['work', 'answer'])
+    expect(work.kind === 'work' && work.steps.map((s) => s.id)).toEqual(['a'])
+    expect(answerText(m)).toBe('Your list now saves to Rayfin.')
+  })
+
   it('puts a subagent’s steps under the step that started it, and counts them in the log', () => {
     const m = turn(
       [

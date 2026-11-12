@@ -150,10 +150,11 @@ async fn prepare_mcp(
   mcp::prepare(session, servers, &ui, &mcp::MEMORY, cancel, mcp::Waits::default()).await
 }
 
-/// Stderr signatures that indicate a transient, safe-to-retry failure.
+/// Stderr signatures that indicate a transient, safe-to-retry failure. Status
+/// codes count only as whole numbers: "15003 tokens" is no server error.
 static TRANSIENT_RE: Lazy<Regex> = Lazy::new(|| {
   Regex::new(
-    r"(?i)rate.?limit|too many requests|temporar|timeout|etimedout|econnreset|enotfound|socket hang up|network error|503|502|500|overloaded|service unavailable|try again",
+    r"(?i)rate.?limit|too many requests|temporar|timeout|etimedout|econnreset|enotfound|socket hang up|network error|\b50[023]\b|overloaded|service unavailable|try again",
   )
   .unwrap()
 });
@@ -297,11 +298,17 @@ struct ToolCallAcc {
   name: String,
   ok: Option<bool>,
   output: Option<String>,
+  /// The files the call writes, as it named them: the turn changed them once
+  /// it succeeds.
+  writes: Vec<String>,
 }
 
 /// Per-attempt accumulator for a single turn.
 struct TurnCtx {
+  /// The project files the turn changed, relative to `cwd`, each once.
   files_modified: Vec<String>,
+  /// The project's folder, which the agent's file paths are under.
+  cwd: String,
   ran_deploy: bool,
   /// Set once the session signalled turn end (`session.idle`).
   saw_result: bool,
@@ -319,6 +326,9 @@ struct TurnCtx {
   /// message mid-turn we insert a blank line, so consecutive messages don't run
   /// together (e.g. "…the implementation.Now let me…").
   cur_msg: Option<String>,
+  /// The main agent replied since its last step the work log shows, so the
+  /// chat already has the turn's answer (the prose after the last step).
+  answered: bool,
   /// When true, capture content (assistant text + tool output) for full
   /// diagnostics. Off by default — only cheap metadata is accumulated.
   capture_full: bool,
@@ -378,6 +388,7 @@ impl TurnCtx {
   fn new(capture_full: bool) -> Self {
     TurnCtx {
       files_modified: vec![],
+      cwd: String::new(),
       ran_deploy: false,
       saw_result: false,
       saw_activity: false,
@@ -386,6 +397,7 @@ impl TurnCtx {
       reasoning_streamed: HashMap::new(),
       live_output: HashMap::new(),
       cur_msg: None,
+      answered: false,
       capture_full,
       tool_calls: vec![],
       response: None,
@@ -414,13 +426,15 @@ impl TurnCtx {
     Some((name.clone(), tool.to_string()))
   }
 
-  /// Record the start of a tool call (metadata always; cheap).
-  fn tool_start(&mut self, id: &str, name: &str) {
+  /// Record the start of a tool call (metadata always; cheap), with the files
+  /// it writes.
+  fn tool_start(&mut self, id: &str, name: &str, writes: Vec<String>) {
     self.tool_calls.push(ToolCallAcc {
       id: id.to_string(),
       name: name.to_string(),
       ok: None,
       output: None,
+      writes,
     });
   }
 
@@ -429,14 +443,33 @@ impl TurnCtx {
     self.tool_calls.iter().rev().find(|t| t.id == id).map(|t| t.name.as_str())
   }
 
-  /// Record a tool call's outcome; capture its output only in full mode.
+  /// Record a tool call's outcome, and the files it changed when it
+  /// succeeded; capture its output only in full mode.
   fn tool_end(&mut self, id: &str, ok: bool, output: Option<&str>) {
     let full = self.capture_full;
+    let mut changed = Vec::new();
     if let Some(tc) = self.tool_calls.iter_mut().rev().find(|t| t.id == id) {
       tc.ok = Some(ok);
       if full {
         tc.output = output.map(|s| s.to_string());
       }
+      if ok {
+        changed = std::mem::take(&mut tc.writes);
+      }
+    }
+    for path in changed {
+      self.file_changed(&path);
+    }
+  }
+
+  /// Record a file the turn changed, by its path in the project. One outside
+  /// the project, such as Copilot's own plan file, isn't the app's.
+  fn file_changed(&mut self, path: &str) {
+    let Some(path) = chat_tools::project_relative(path, &self.cwd).filter(|p| !p.is_empty()) else {
+      return;
+    };
+    if !self.files_modified.contains(&path) {
+      self.files_modified.push(path);
     }
   }
 
@@ -475,6 +508,17 @@ fn ensure_separator(id: &str, sink: &mut dyn FnMut(ChatEvent), ctx: &mut TurnCtx
   ctx.cur_msg = Some(id.to_string());
 }
 
+/// Steps the work log doesn't show (the renderer's `HIDDEN_TOOLS`): they don't
+/// split the reply, so prose before one of them still reads as the answer.
+const HIDDEN_STEPS: [&str; 6] = [
+  "ask_user",
+  "exit_plan_mode",
+  "report_intent",
+  "task_complete",
+  crate::services::agent_tools::CONNECT_FABRIC_IQ_TOOL,
+  crate::services::agent_tools::FOLLOWED_INSTRUCTION_TOOL,
+];
+
 /// A step starting: shown as it runs, and, for a step a subagent took, under
 /// `group`, the main agent's step that started that agent.
 fn tool_started(data: &Value, group: Option<String>, sink: &mut dyn FnMut(ChatEvent), ctx: &mut TurnCtx) {
@@ -490,12 +534,18 @@ fn tool_started(data: &Value, group: Option<String>, sink: &mut dyn FnMut(ChatEv
     ctx.ran_deploy = true;
   }
   ctx.saw_activity = true;
+  // A step of the main agent that the work log shows ends the prose before it.
+  if group.is_none() && !HIDDEN_STEPS.iter().any(|hidden| hidden.eq_ignore_ascii_case(&tool_name)) {
+    ctx.answered = false;
+  }
   let id = data
     .get("toolCallId")
     .and_then(|v| v.as_str())
     .map(|s| s.to_string())
     .unwrap_or_else(|| Uuid::new_v4().to_string());
-  ctx.tool_start(&id, &tool_name);
+  let paths = chat_tools::tool_paths(&tool_name, args);
+  let writes = if chat_tools::is_mutating_tool(&tool_name) { paths.clone().unwrap_or_default() } else { Vec::new() };
+  ctx.tool_start(&id, &tool_name, writes);
   if let Some(group) = &group {
     ctx.agent_steps.insert(id.clone(), group.clone());
   }
@@ -503,7 +553,7 @@ fn tool_started(data: &Value, group: Option<String>, sink: &mut dyn FnMut(ChatEv
     tool: ChatToolCall {
       id,
       command: chat_tools::shell_command(&tool_name, args),
-      paths: chat_tools::tool_paths(&tool_name, args),
+      paths,
       name: tool_name,
       title,
       server,
@@ -589,6 +639,8 @@ fn agent_lifecycle(agent: Option<&str>, event_type: &str, data: &Value, sink: &m
 /// go under the step that started it, and its own messages and reasoning stay
 /// out of the reply: the main agent reads its result and reports what matters.
 fn route_event(agent: Option<&str>, event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ctx: &mut TurnCtx) -> Flow {
+  // An empty id is the main agent's, as the SDK reads it.
+  let agent = agent.filter(|a| !a.is_empty());
   if event_type.starts_with("subagent.") {
     agent_lifecycle(agent, event_type, data, sink, ctx);
     return Flow::Continue;
@@ -631,6 +683,7 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
       ctx.saw_activity = true;
       ensure_separator(&id, sink, ctx);
       *ctx.streamed.entry(id).or_insert(0) += text.chars().count();
+      ctx.answered |= !text.trim().is_empty();
       sink(ChatEvent::Delta { text: text.to_string() });
       ctx.push_response(text);
     }
@@ -644,6 +697,7 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
         ctx.saw_activity = true;
         ensure_separator(&id, sink, ctx);
         let rest: String = content.chars().skip(have).collect();
+        ctx.answered |= !rest.trim().is_empty();
         ctx.push_response(&rest);
         sink(ChatEvent::Delta { text: rest });
         ctx.streamed.insert(id, total);
@@ -700,15 +754,28 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
       });
     }
     "session.info" => {
-      // File mutations surface as info events; collect them for `filesModified`.
-      if let Some(info_type) = data.get("infoType").and_then(|v| v.as_str()) {
-        if info_type.starts_with("file_") {
-          if let Some(path) = data.get("message").and_then(|v| v.as_str()) {
-            if !ctx.files_modified.iter().any(|p| p == path) {
-              ctx.files_modified.push(path.to_string());
-            }
-          }
+      // The runtime reports the files it creates (`file_created`). Edits
+      // aren't reported: a successful edit is recorded as its step ends.
+      if data.get("infoType").and_then(|v| v.as_str()).is_some_and(|t| t.starts_with("file_")) {
+        if let Some(path) = data.get("message").and_then(|v| v.as_str()) {
+          ctx.file_changed(path);
         }
+      }
+    }
+    // In Autopilot the agent ends by calling `task_complete`, often with its
+    // summary only there. When it said nothing after its last step, that
+    // summary is the turn's answer. A completion the runtime turned down
+    // (more work remains) isn't.
+    "session.task_complete" => {
+      let summary = data.get("summary").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
+      let accepted = data.get("success").and_then(Value::as_bool) != Some(false)
+        && data.get("outcome").and_then(Value::as_str) != Some("continue");
+      if let Some(summary) = summary.filter(|_| accepted && !ctx.answered) {
+        ctx.saw_activity = true;
+        ensure_separator("task_complete", sink, ctx);
+        ctx.answered = true;
+        ctx.push_response(summary);
+        sink(ChatEvent::Delta { text: summary.to_string() });
       }
     }
     "exit_plan_mode.completed" => {
@@ -1132,6 +1199,7 @@ pub(crate) async fn run_turn(
 
   let new_ctx = || {
     let mut ctx = TurnCtx::new(full);
+    ctx.cwd = ctx_info.cwd.clone();
     ctx.provider = provider.clone();
     ctx.mcp_servers = mcp_servers.names();
     ctx
@@ -1471,13 +1539,16 @@ pub fn chat_cancel(state: State<'_, AppState>, project_id: String) {
 
 /// Abort is a request, not proof that source-writing tools have stopped. Wait
 /// for idle before releasing ownership; a wedged owned runtime is torn down.
+/// Only the main agent's idle counts: a subagent's says nothing of the session.
 async fn abort_turn_and_wait(state: &AppState, project_id: &str, session: &Arc<Session>) {
   let mut events = session.subscribe();
   let stopped = tokio::time::timeout(Duration::from_secs(30), async {
     session.abort().await.map_err(|_| ())?;
     loop {
       match events.recv().await {
-        Ok(event) if event.event_type == "session.idle" => return Ok::<(), ()>(()),
+        Ok(event) if event.event_type == "session.idle" && event.agent_id.as_deref().is_none_or(str::is_empty) => {
+          return Ok::<(), ()>(())
+        }
         Ok(_) => {}
         Err(_) => return Err(()),
       }
@@ -2231,6 +2302,91 @@ mod tests {
       ChatEvent::Delta { text } => assert_eq!(text, "Hello"),
       _ => panic!("expected delta"),
     }
+  }
+
+  /// The runtime reports only the files it creates, so the files a turn changed
+  /// also come from its edits and patches that succeeded, in the project, once each.
+  #[test]
+  fn successful_edits_and_patches_are_the_files_a_turn_changed() {
+    let mut ctx = TurnCtx::new(false);
+    ctx.cwd = "C:\\apps\\todo".to_string();
+    let start = |id: &str, tool: &str, args: Value| {
+      ("tool.execution_start", json!({"toolCallId": id, "toolName": tool, "arguments": args}))
+    };
+    let end = |id: &str, success: bool| ("tool.execution_complete", json!({"toolCallId": id, "success": success}));
+    let patch = "*** Begin Patch\n*** Update File: C:\\apps\\todo\\src\\App.tsx\n@@\n-a\n+b\n*** Add File: rayfin/rayfin.yml\n+x\n*** End Patch";
+    collect(
+      &[
+        start("e1", "edit", json!({"path": "C:\\apps\\todo\\src\\App.tsx", "old_str": "a", "new_str": "b"})),
+        end("e1", true),
+        start("e2", "edit", json!({"path": "C:\\apps\\todo\\src\\Broken.tsx", "old_str": "x", "new_str": "y"})),
+        end("e2", false),
+        start("v1", "view", json!({"path": "C:\\apps\\todo\\src\\Read.tsx"})),
+        end("v1", true),
+        start("p1", "apply_patch", json!(patch)),
+        end("p1", true),
+        start("c1", "create", json!({"path": "c:\\Apps\\Todo\\src\\theme.ts", "file_text": "x"})),
+        ("session.info", json!({"infoType": "file_created", "message": "C:\\apps\\todo\\src\\theme.ts"})),
+        end("c1", true),
+        // Copilot's own plan file isn't the app's.
+        ("session.info", json!({"infoType": "file_created", "message": "C:\\Users\\me\\.copilot\\session-state\\s\\plan.md"})),
+      ],
+      &mut ctx,
+    );
+    assert_eq!(ctx.files_modified, ["src/App.tsx", "rayfin/rayfin.yml", "src/theme.ts"]);
+  }
+
+  /// In Autopilot the agent ends with `task_complete`, often with its summary
+  /// only there: that summary is the answer when nothing was said after the
+  /// last step, and isn't when a reply already is or the runtime wants more.
+  #[test]
+  fn an_autopilot_summary_is_the_answer_only_when_the_turn_has_none() {
+    let reply = |events: &[ChatEvent]| -> String {
+      events.iter().map(|e| match e { ChatEvent::Delta { text } => text.as_str(), _ => "" }).collect()
+    };
+    let steps = |closing: &str| {
+      vec![
+        ("assistant.message", json!({"messageId": "m1", "content": "Starting now.", "toolRequests": [{"name": "create"}]})),
+        ("tool.execution_start", json!({"toolCallId": "c1", "toolName": "create", "arguments": {"path": "a.txt"}})),
+        ("tool.execution_complete", json!({"toolCallId": "c1", "success": true})),
+        ("assistant.message", json!({"messageId": "m2", "content": closing, "toolRequests": [{"name": "task_complete"}]})),
+        ("tool.execution_start", json!({"toolCallId": "t1", "toolName": "task_complete", "arguments": {"summary": "Created a.txt."}})),
+        ("tool.execution_complete", json!({"toolCallId": "t1", "success": true})),
+      ]
+    };
+    let done = json!({"summary": "Created a.txt.", "success": true, "outcome": "completed"});
+
+    let mut ctx = TurnCtx::new(false);
+    let mut events = steps("");
+    events.push(("session.task_complete", done.clone()));
+    assert_eq!(reply(&collect(&events, &mut ctx)), "Starting now.\n\nCreated a.txt.");
+
+    let mut ctx = TurnCtx::new(false);
+    let mut events = steps("Your file is ready.");
+    events.push(("session.task_complete", done));
+    assert_eq!(reply(&collect(&events, &mut ctx)), "Starting now.\n\nYour file is ready.");
+
+    let mut ctx = TurnCtx::new(false);
+    let mut events = steps("");
+    events.push(("session.task_complete", json!({"summary": "Created a.txt.", "success": false, "outcome": "continue"})));
+    assert_eq!(reply(&collect(&events, &mut ctx)), "Starting now.");
+  }
+
+  #[test]
+  fn an_event_with_an_empty_agent_id_is_the_main_agents() {
+    let mut ctx = TurnCtx::new(false);
+    let events = route(&[(Some(""), "assistant.message_delta", json!({"messageId": "m1", "deltaContent": "Done."}))], &mut ctx);
+    assert!(matches!(events.as_slice(), [ChatEvent::Delta { text }] if text == "Done."));
+    let flow = route_event(Some(""), "session.idle", &json!({}), &mut |_e: ChatEvent| {}, &mut ctx);
+    assert!(matches!(flow, Flow::Stop));
+  }
+
+  #[test]
+  fn only_whole_status_codes_read_as_transient() {
+    assert!(TRANSIENT_RE.is_match("HTTP 503 Service Unavailable"));
+    assert!(TRANSIENT_RE.is_match("the model returned 500"));
+    assert!(!TRANSIENT_RE.is_match("The request has 15003 tokens, more than this model takes."));
+    assert!(!TRANSIENT_RE.is_match("Error 5021: model not supported"));
   }
 
   #[test]

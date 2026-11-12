@@ -198,6 +198,33 @@ pub fn tool_paths(tool_name: &str, args: Option<&Value>) -> Option<Vec<String>> 
   Some(vec![path.to_string()])
 }
 
+/// `path` relative to the project folder `root`, with forward slashes, as the
+/// renderer's `projectRelative`: a relative path is taken as relative to the
+/// project already, and a path outside it (such as Copilot's own plan file) is
+/// `None`. Windows paths compare case-insensitively.
+pub fn project_relative(path: &str, root: &str) -> Option<String> {
+  let normalize = |p: &str| p.trim().replace('\\', "/").trim_end_matches('/').to_string();
+  let drive = |p: &str| p.len() >= 2 && p.as_bytes()[0].is_ascii_alphabetic() && p.as_bytes()[1] == b':';
+  let path = normalize(path);
+  if path.is_empty() {
+    return None;
+  }
+  if !((drive(&path) && path[2..].starts_with('/')) || path.starts_with('/')) {
+    return Some(path.strip_prefix("./").unwrap_or(&path).to_string());
+  }
+  let root = normalize(root);
+  if root.is_empty() {
+    return None;
+  }
+  let fold = drive(&root) || drive(&path);
+  let same = |a: &str, b: &str| if fold { a.eq_ignore_ascii_case(b) } else { a == b };
+  if same(&path, &root) {
+    return Some(String::new());
+  }
+  let inside = path.len() > root.len() + 1 && path.as_bytes()[root.len()] == b'/' && same(&path[..root.len()], &root);
+  inside.then(|| path[root.len() + 1..].to_string())
+}
+
 /// The command line a shell tool ran.
 pub fn shell_command(tool_name: &str, args: Option<&Value>) -> Option<String> {
   if !is_shell_tool(tool_name) {
@@ -407,6 +434,22 @@ mod tests {
     assert_eq!(shell_command("powershell", Some(&shell)).as_deref(), Some("npm run build"));
     assert_eq!(shell_command("edit", Some(&shell)), None);
     assert!(!is_shell_tool("fabricator_screenshot"));
+  }
+
+  #[test]
+  fn project_paths_are_relative_with_forward_slashes_and_others_are_left_out() {
+    let root = "C:\\Users\\me\\Apps\\todo\\";
+    assert_eq!(project_relative("C:\\Users\\me\\Apps\\todo\\src\\App.tsx", root).as_deref(), Some("src/App.tsx"));
+    assert_eq!(project_relative("c:/users/ME/apps/todo/src/App.tsx", root).as_deref(), Some("src/App.tsx"));
+    assert_eq!(project_relative("./rayfin/rayfin.yml", root).as_deref(), Some("rayfin/rayfin.yml"));
+    assert_eq!(project_relative("C:\\Users\\me\\Apps\\todo", root).as_deref(), Some(""));
+    // Copilot's own files, and a sibling folder that only shares the name's start.
+    assert_eq!(project_relative("C:\\Users\\me\\.copilot\\session-state\\s\\plan.md", root), None);
+    assert_eq!(project_relative("C:\\Users\\me\\Apps\\todo-old\\a.ts", root), None);
+    assert_eq!(project_relative("/Users/me/Apps/todo/src/main.ts", "/Users/me/Apps/todo").as_deref(), Some("src/main.ts"));
+    assert_eq!(project_relative("/Users/me/Apps/Todo/src/main.ts", "/Users/me/Apps/todo"), None);
+    assert_eq!(project_relative("C:\\elsewhere\\a.ts", ""), None);
+    assert_eq!(project_relative("  ", root), None);
   }
 
   #[test]
