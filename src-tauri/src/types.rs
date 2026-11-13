@@ -3512,12 +3512,31 @@ pub struct RayfinVersionInfo {
   pub latest: Option<String>,
   pub upgrade_available: bool,
   pub packages: Vec<RayfinPackageVersion>,
-  /// The newest stable release npm lists within the Rayfin versions the bundled
-  /// local backend runs (`rayfin-local.json` `sdk.supported`), for the headline
-  /// package: where a personal app's upgrades stop, so it keeps running on this
-  /// computer. Absent when npm couldn't list them or none is in the range.
+  /// Where Fabricator's updates go, for the headline package (Rayfin's packages
+  /// ship in lockstep): the newest stable release the bundled local backend
+  /// runs (`rayfin-local.json` `sdk.supported`) that isn't newer than npm's
+  /// `latest`, so the app keeps running on this computer. Absent when npm
+  /// couldn't list the releases or none is.
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub latest_supported_locally: Option<String>,
+  pub recommended: Option<String>,
+  /// A stable release newer than `recommended`, which Fabricator offers too,
+  /// with a warning. Absent when there's none.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub newer: Option<RayfinNewerRelease>,
+}
+
+/// A Rayfin release newer than the one Fabricator's updates go to: the newest
+/// on npm, whatever its dist-tag, such as a `preview` 2.0.0 while `latest` is
+/// 1.36.2.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RayfinNewerRelease {
+  pub version: String,
+  /// Whether it's npm's `latest`. One that isn't might be unstable.
+  pub is_latest: bool,
+  /// Whether the bundled local backend runs it. With one it doesn't, some
+  /// things might not work as expected on this computer.
+  pub runs_locally: bool,
 }
 
 /// The newest Rayfin releases, for Home: it offers an update on the projects
@@ -3525,12 +3544,12 @@ pub struct RayfinVersionInfo {
 #[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RayfinLatest {
-  /// The newest stable release on npm.
+  /// The newest stable release on npm: its `latest` dist-tag.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub latest: Option<String>,
-  /// The newest release the bundled local backend runs (every app's upgrades go here).
+  /// Where every app's updates go, as [`RayfinVersionInfo::recommended`].
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub latest_supported_locally: Option<String>,
+  pub recommended: Option<String>,
 }
 
 /* ----------------------------- skills ----------------------------- */

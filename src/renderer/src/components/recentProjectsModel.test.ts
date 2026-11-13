@@ -67,10 +67,8 @@ describe('a recent project’s links and updates', () => {
     const project = makeProject('p', { rayfinVersion: '1.35.1' })
     expect(rayfinUpdate(project, null)).toBeNull()
     expect(rayfinUpdate(project, { latest: '1.37.0' })).toBeNull()
-    expect(rayfinUpdate(makeProject('p'), { latestSupportedLocally: '1.36.2' })).toBeNull()
-    expect(
-      rayfinUpdate({ ...project, missing: true }, { latestSupportedLocally: '1.36.2' })
-    ).toBeNull()
+    expect(rayfinUpdate(makeProject('p'), { recommended: '1.36.2' })).toBeNull()
+    expect(rayfinUpdate({ ...project, missing: true }, { recommended: '1.36.2' })).toBeNull()
   })
 })
 

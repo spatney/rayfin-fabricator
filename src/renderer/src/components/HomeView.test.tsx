@@ -155,7 +155,7 @@ describe('HomeView project launcher', () => {
   })
 
   it('offers a Rayfin update only on projects behind the newest release, and hands it on', async () => {
-    installHomeApi({ latest: { latest: '1.37.0', latestSupportedLocally: '1.36.2' } })
+    installHomeApi({ latest: { latest: '1.37.0', recommended: '1.36.2' } })
     const props = baseProps()
     const behind = makeProject('p1', { name: 'Sales', rayfinVersion: '1.35.1' })
     props.projects = [

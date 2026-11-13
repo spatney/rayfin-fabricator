@@ -4,7 +4,7 @@
  * Publishing a personal app to Microsoft Fabric is the user's choice; a team
  * app's pipeline publishes it when the user publishes.
  */
-import type { AppSettings, RayfinVersionInfo } from '@shared/ipc'
+import type { AppSettings, RayfinNewerRelease, RayfinVersionInfo } from '@shared/ipc'
 
 /**
  * Whether chat turns publish personal apps as they finish: the published apps
@@ -32,22 +32,63 @@ export function newerRelease(version: string, than: string): boolean {
 }
 
 /**
- * An app's Rayfin versions: its upgrades stop at the newest release the
- * bundled local backend runs (`latestSupportedLocally`), so the app keeps
- * running on this computer. Rayfin's packages ship in lockstep, so that's every
- * package's target. Nothing is offered while it isn't known.
+ * `info` with every package's update going to `target`, or to nothing while
+ * it isn't known. Rayfin's packages ship in lockstep, so it's every package's.
  */
-export function upgradesWithinLocalRange(info: RayfinVersionInfo): RayfinVersionInfo {
-  const target = info.latestSupportedLocally ?? null
+export function updatesTo(
+  info: RayfinVersionInfo,
+  target: string | null | undefined
+): RayfinVersionInfo {
+  const to = target ?? null
   const packages = info.packages.map((pkg) => ({
     ...pkg,
-    latest: target,
-    upgradable: Boolean(target && pkg.installed && newerRelease(target, pkg.installed))
+    latest: to,
+    upgradable: Boolean(to && pkg.installed && newerRelease(to, pkg.installed))
   }))
   return {
     ...info,
-    latest: target,
+    latest: to,
     upgradeAvailable: packages.some((pkg) => pkg.upgradable),
     packages
   }
+}
+
+/**
+ * An app's Rayfin versions as Fabricator offers updates: to the release it
+ * recommends (`recommended`), the newest the bundled local backend runs that
+ * isn't newer than Rayfin's latest, so the app keeps running on this computer
+ * (a team app too). A newer release is offered on its own, with a warning:
+ * see {@link newerRayfin}.
+ */
+export function recommendedUpdates(info: RayfinVersionInfo): RayfinVersionInfo {
+  return updatesTo(info, info.recommended)
+}
+
+/**
+ * The release newer than the recommended one that the app can update to,
+ * with a warning ({@link newerRayfinWarnings}); `null` when there's none, or
+ * the app is on it or past it.
+ */
+export function newerRayfin(info: RayfinVersionInfo | null | undefined): RayfinNewerRelease | null {
+  const newer = info?.newer
+  if (!newer || !info?.version) return null
+  return newerRelease(newer.version, info.version) ? newer : null
+}
+
+/**
+ * Why an update to `newer` needs care, as sentences: it might be unstable
+ * while it isn't Rayfin's latest release, and some things might not work on
+ * this computer while the local backend doesn't run it.
+ */
+export function newerRayfinWarnings(newer: RayfinNewerRelease): string[] {
+  const warnings: string[] = []
+  if (!newer.isLatest) {
+    warnings.push('It isn’t Rayfin’s latest release yet, so it might be unstable.')
+  }
+  if (!newer.runsLocally) {
+    warnings.push(
+      'Fabricator doesn’t run it on this computer yet, so some things might not work as expected here.'
+    )
+  }
+  return warnings
 }

@@ -56,13 +56,24 @@ describe('npm ranges', () => {
     expect(span('latest')).toBeNull()
   })
 
-  it('names the line of releases the local backend runs and its pin', () => {
-    expect(localSdkOf('>=1.36.0 <1.37.0')).toMatchObject({ label: '1.36.x', pin: '~1.36.0' })
+  it('names the lines of releases the local backend runs and their pins', () => {
+    expect(localSdkOf('>=1.36.0 <1.37.0')).toMatchObject({
+      label: '1.36.x',
+      lines: [{ label: '1.36.x', pin: '~1.36.0' }]
+    })
+    expect(localSdkOf('>=2.0.0-0 <2.1.0 || >=1.36.0-0 <1.37.0')).toMatchObject({
+      label: '1.36.x and 2.0.x',
+      lines: [
+        { span: { lo: [1, 36, 0], hi: [1, 37, 0] }, pin: '~1.36.0' },
+        { span: { lo: [2, 0, 0], hi: [2, 1, 0] }, pin: '~2.0.0' }
+      ]
+    })
     expect(localSdkOf('>=1.36.2 <1.38.0')).toMatchObject({
       label: '>=1.36.2 <1.38.0',
-      pin: '~1.36.2'
+      lines: [{ pin: '~1.36.2' }]
     })
     expect(localSdkOf(undefined)).toBeNull()
+    expect(localSdkOf('>=1.36.0 || latest')).toBeNull()
   })
 })
 
@@ -622,7 +633,7 @@ describe('platform rules', () => {
     const loose = caret.finding('platform/sdk-local-range')!
     expect(loose.severity).toBe('low')
     expect(loose.detail).toBe(
-      '`@microsoft/rayfin-core` is declared as `^1.36.0`, so the next install can move it past Rayfin 1.36.x, the releases Fabricator runs on this computer. Pin it to `~1.36.0`.'
+      '`@microsoft/rayfin-core` is declared as `^1.36.0`, so the next install can move it past Rayfin 1.36.x, to a release Fabricator may not run on this computer. Pin it to `~1.36.0`.'
     )
     expect(loose.line).toBe(
       manifest.split('\n').findIndex((l) => l.includes('"@microsoft/rayfin-core"')) + 1
@@ -637,7 +648,7 @@ describe('platform rules', () => {
     const both = outside.finding('platform/sdk-local-range')!
     expect(both.severity).toBe('medium')
     expect(both.detail).toBe(
-      "These Rayfin packages aren't on Rayfin 1.36.x, the releases Fabricator runs on this computer: rayfin-client ~1.35.0, rayfin-core latest. Pin them to `~1.36.0`, and reinstall."
+      "These Rayfin packages aren't pinned to the Rayfin releases Fabricator runs on this computer (1.36.x and 2.0.x): rayfin-client ~1.35.0, rayfin-core latest. Pin them to `~1.36.0`, and reinstall."
     )
 
     // Installed outside the line, though declared right: reinstall.
@@ -666,6 +677,50 @@ describe('platform rules', () => {
         'platform/sdk-local-range'
       )
     ).toBe('na')
+  })
+
+  it('accepts every line the local backend runs, and leaves newer releases to the user', async () => {
+    const pkg = JSON.parse(GOOD_PROJECT['package.json'])
+    const rayfinAt = (deps: Record<string, string> = {}, range: string) =>
+      Object.fromEntries(
+        Object.entries(deps).map(([name, spec]) => [
+          name,
+          name.startsWith('@microsoft/rayfin-') ? range : spec
+        ])
+      )
+    const app = (range: string, installed: string) =>
+      check(
+        {
+          'package.json': JSON.stringify({
+            ...pkg,
+            dependencies: rayfinAt(pkg.dependencies, range),
+            devDependencies: rayfinAt(pkg.devDependencies, range)
+          })
+        },
+        {
+          packages: ['@microsoft/rayfin-cli', '@microsoft/rayfin-core'].map((name) => ({
+            name,
+            installed,
+            declared: range
+          }))
+        }
+      )
+    expect((await app('~2.0.0', '2.0.0')).status('platform/sdk-local-range')).toBe('pass')
+    expect((await app('2.0.0', '2.0.0')).status('platform/sdk-local-range')).toBe('pass')
+    // A caret range on 2.0 can move past it, so it's pinned to 2.0.
+    const caret = (await app('^2.0.0', '2.0.0')).finding('platform/sdk-local-range')!
+    expect(caret.severity).toBe('low')
+    expect(caret.detail).toContain('Pin them to `~2.0.0`')
+    // A newer release than the local backend runs, chosen on purpose, runs with
+    // the preview's warning: nothing to pin back.
+    expect((await app('~2.1.0', '2.1.0')).status('platform/sdk-local-range')).toBe('pass')
+    expect(
+      (await app('~1.37.0-alpha', '1.37.0-alpha.2159')).status('platform/sdk-local-range')
+    ).toBe('pass')
+    // An older one can't run here properly.
+    expect((await app('~1.35.0', '1.35.1')).finding('platform/sdk-local-range')!.severity).toBe(
+      'medium'
+    )
   })
 
   it('accepts `~` pins for connector packages but not caret ranges', async () => {

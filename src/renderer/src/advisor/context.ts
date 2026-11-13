@@ -18,7 +18,13 @@ import {
   SINGLE_PACKAGE_LAYOUT,
   type ProjectLayout
 } from '../model/projectLayout'
-import { npmRangeSpan, sourceFile, type SourceFile, type VersionSpan } from './source'
+import {
+  compareSemver,
+  npmRangeSpan,
+  sourceFile,
+  type SourceFile,
+  type VersionSpan
+} from './source'
 
 const CODE_FILE = /\.(tsx?|jsx?|mts|cts|mjs|cjs)$/i
 const TEST_FILE = /(\.test\.|\.spec\.|(^|\/)__tests__\/|(^|\/)tests?\/)/i
@@ -34,15 +40,23 @@ export interface PackageJsonInfo {
   scripts: Record<string, string>
 }
 
-/** The line of Rayfin releases Fabricator's local backend runs. */
-export interface LocalSdk {
-  /** The npm range, such as `>=1.36.0 <1.37.0`. */
-  range: string
+/** One line of Rayfin releases Fabricator's local backend runs, such as 1.36.x. */
+export interface LocalSdkLine {
   span: VersionSpan
   /** As people read it: `1.36.x`, or the range itself. */
   label: string
   /** The `~` range that keeps a package on the line, such as `~1.36.0`. */
   pin: string | null
+}
+
+/** The lines of Rayfin releases Fabricator's local backend runs. */
+export interface LocalSdk {
+  /** The npm range, such as `>=1.36.0-0 <1.37.0 || >=2.0.0-0 <2.1.0`. */
+  range: string
+  /** One per `||` alternative, oldest first. */
+  lines: LocalSdkLine[]
+  /** As people read them: `1.36.x and 2.0.x`. */
+  label: string
 }
 
 export interface QuickContext {
@@ -90,23 +104,36 @@ export interface QuickContext {
   localSdk: LocalSdk | null
 }
 
-/** The line of releases an npm range such as `>=1.36.0 <1.37.0` describes. */
+/**
+ * The lines of releases an npm range such as
+ * `>=1.36.0-0 <1.37.0 || >=2.0.0-0 <2.1.0` describes, one per `||` alternative.
+ */
 export function localSdkOf(range: string | undefined): LocalSdk | null {
-  const span = range ? npmRangeSpan(range) : null
-  if (!range || !span) return null
-  const [major, minor, patch] = span.lo
-  const oneMinor =
-    patch === 0 &&
-    span.hi !== null &&
-    span.hi[0] === major &&
-    span.hi[1] === minor + 1 &&
-    span.hi[2] === 0
-  return {
-    range,
-    span,
-    label: oneMinor ? `${major}.${minor}.x` : range,
-    pin: span.lo.some((n) => n > 0) ? `~${span.lo.join('.')}` : null
+  if (!range) return null
+  const lines: LocalSdkLine[] = []
+  for (const alternative of range.split('||')) {
+    const span = npmRangeSpan(alternative)
+    if (!span) return null
+    const [major, minor, patch] = span.lo
+    const oneMinor =
+      patch === 0 &&
+      span.hi !== null &&
+      span.hi[0] === major &&
+      span.hi[1] === minor + 1 &&
+      span.hi[2] === 0
+    lines.push({
+      span,
+      label: oneMinor ? `${major}.${minor}.x` : alternative.trim(),
+      pin: span.lo.some((n) => n > 0) ? `~${span.lo.join('.')}` : null
+    })
   }
+  lines.sort((a, b) => compareSemver(a.span.lo, b.span.lo))
+  const labels = lines.map((line) => line.label)
+  const label =
+    labels.length > 1
+      ? `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
+      : labels[0]
+  return { range, lines, label }
 }
 
 function asObj(value: unknown): Obj | undefined {

@@ -1,7 +1,7 @@
 //! Project scaffolding/registration (ported from `src/main/services/projects.ts`).
 //! Handles listing templates, creating a project via `npm create
 //! @microsoft/rayfin` (the official scaffolder, streaming live output on the
-//! `create:project` proc channel) on the Rayfin release the local backend runs,
+//! `create:project` proc channel) on the Rayfin release new projects start on,
 //! opening an existing project, renaming, and removing.
 
 use std::collections::HashMap;
@@ -510,8 +510,8 @@ fn scaffold_failure(init: &RunResult, dir: &Path, request: &ScaffoldRequest) -> 
   })
 }
 
-/// Run the Rayfin scaffolder into `<root>/<folder>` on the release the local
-/// backend runs, pin the project's Rayfin packages to it, install them, and add
+/// Run the Rayfin scaffolder into `<root>/<folder>` on the release new projects
+/// start on, pin the project's Rayfin packages to its line, install them, and add
 /// Fabricator's agent instructions. Doesn't touch git. Returns the project dir.
 /// Every new project gets this, personal or team.
 pub(crate) async fn scaffold_project(
@@ -539,8 +539,8 @@ pub(crate) async fn scaffold_project(
     return Err(error);
   }
 
-  // A community template that asks for Rayfin releases the local backend can't
-  // run keeps them; the built-in templates always take the pin.
+  // A community template that asks for Rayfin releases outside the line new
+  // projects start on keeps them; the built-in templates always take the pin.
   let pinned = match rayfin_sdk::pin_project(&dir, &sdk, request.is_url) {
     Ok(Pinning::Pinned { range, files }) => {
       if files > 0 {
@@ -552,7 +552,9 @@ pub(crate) async fn scaffold_project(
       say(
         on,
         &format!(
-          "\nThe template asks for {name} {spec}, outside the Rayfin releases Fabricator runs locally ({}), so it keeps its versions.\n",
+          "\nThe template asks for {name} {spec}, not Rayfin {}.{}.x, so it keeps its versions. Fabricator runs Rayfin {} on this computer: on other releases, some things might not work as expected.\n",
+          sdk.version.major,
+          sdk.version.minor,
           rayfin_sdk::supported_range()
         ),
       );

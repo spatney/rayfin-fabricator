@@ -1,7 +1,8 @@
 //! Reports a project's local Rayfin toolchain version — the `@microsoft/rayfin-*`
 //! CLI and SDK packages pinned in its package.json — whether a newer stable
-//! release is available on npm, and the newest one the bundled local backend
-//! runs, where a personal app's upgrades stop.
+//! release is available on npm, the one Fabricator's updates go to (the newest
+//! the bundled local backend runs that isn't newer than npm's `latest`), and a
+//! newer one it offers with a warning.
 //!
 //! The app never upgrades these itself: when an update exists, Fabricator
 //! hands a prepared prompt to the Copilot agent (which edits package.json and runs
@@ -17,8 +18,9 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 
 use crate::services::exec::{self, RunOptions};
-use crate::services::{rayfin_sdk, store};
-use crate::types::{RayfinLatest, RayfinPackageVersion, RayfinVersionInfo};
+use crate::services::rayfin_sdk::{self, Published};
+use crate::services::store;
+use crate::types::{RayfinLatest, RayfinNewerRelease, RayfinPackageVersion, RayfinVersionInfo};
 
 /// The canonical CLI package; every other `@microsoft/rayfin-*` is treated as SDK.
 const CLI_PACKAGE: &str = "@microsoft/rayfin-cli";
@@ -29,8 +31,8 @@ const LATEST_TTL: Duration = Duration::from_millis(30 * 60_000);
 static LATEST_CACHE: Lazy<std::sync::Mutex<HashMap<String, (Option<String>, Instant)>>> =
   Lazy::new(|| std::sync::Mutex::new(HashMap::new()));
 
-/// The newest release the local backend runs, per package, cached like `latest`.
-static SUPPORTED_CACHE: Lazy<std::sync::Mutex<HashMap<String, (Option<String>, Instant)>>> =
+/// What npm lists for a package, its releases and dist-tags, cached like `latest`.
+static RELEASES_CACHE: Lazy<std::sync::Mutex<HashMap<String, (Option<Published>, Instant)>>> =
   Lazy::new(|| std::sync::Mutex::new(HashMap::new()));
 
 #[derive(Deserialize)]
@@ -104,20 +106,31 @@ async fn latest_version(pkg: &str) -> Option<String> {
   version
 }
 
-/// The newest stable release of a package within the Rayfin versions the bundled
-/// local backend runs, cached; None when npm is unreachable or none is in range.
-async fn latest_supported_locally(pkg: &str) -> Option<String> {
-  if let Some((version, at)) = SUPPORTED_CACHE.lock().unwrap().get(pkg) {
+/// What npm lists for a package, cached; None when npm is unreachable.
+async fn releases(pkg: &str) -> Option<Published> {
+  if let Some((published, at)) = RELEASES_CACHE.lock().unwrap().get(pkg) {
     if at.elapsed() < LATEST_TTL {
-      return version.clone();
+      return published.clone();
     }
   }
-  let version = rayfin_sdk::published_versions(pkg, None)
-    .await
-    .and_then(|published| rayfin_sdk::newest_supported(&published))
-    .map(|v| v.to_string());
-  SUPPORTED_CACHE.lock().unwrap().insert(pkg.to_string(), (version.clone(), Instant::now()));
-  version
+  let published = rayfin_sdk::published(pkg, None).await;
+  RELEASES_CACHE.lock().unwrap().insert(pkg.to_string(), (published.clone(), Instant::now()));
+  published
+}
+
+/// Where updates go, from npm's releases of the headline package: the release
+/// Fabricator recommends, and a newer one it offers with a warning.
+fn update_targets(published: Option<&Published>) -> (Option<String>, Option<RayfinNewerRelease>) {
+  let Some(published) = published else {
+    return (None, None);
+  };
+  let targets = rayfin_sdk::update_targets(published);
+  let newer = targets.newer.map(|version| RayfinNewerRelease {
+    is_latest: published.latest.as_deref().is_some_and(|latest| latest.trim() == version.to_string()),
+    runs_locally: rayfin_sdk::runs_locally(&version),
+    version: version.to_string(),
+  });
+  (targets.recommended.map(|v| v.to_string()), newer)
 }
 
 /// Parse the `x.y.z` core of a semver string (ignoring any prerelease/build).
@@ -147,7 +160,8 @@ fn empty() -> RayfinVersionInfo {
     latest: None,
     upgrade_available: false,
     packages: vec![],
-    latest_supported_locally: None,
+    recommended: None,
+    newer: None,
   }
 }
 
@@ -187,31 +201,32 @@ pub async fn rayfin_versions(id: String) -> RayfinVersionInfo {
     .or_else(|| packages.first());
   let version = headline.and_then(|p| p.installed.clone());
   let latest = headline.and_then(|p| p.latest.clone());
-  // Rayfin's packages ship in lockstep, so the headline's newest supported
-  // release is every package's.
-  let latest_supported_locally = match headline.map(|p| p.name.clone()) {
-    Some(name) => latest_supported_locally(&name).await,
+  // Rayfin's packages ship in lockstep, so the headline's update targets are
+  // every package's.
+  let published = match headline.map(|p| p.name.clone()) {
+    Some(name) => releases(&name).await,
     None => None,
   };
+  let (recommended, newer) = update_targets(published.as_ref());
 
   RayfinVersionInfo {
     version,
     latest,
     upgrade_available: packages.iter().any(|p| p.upgradable),
     packages,
-    latest_supported_locally,
+    recommended,
+    newer,
   }
 }
 
-/// The newest Rayfin releases: on npm, and within what the bundled local
-/// backend runs. Rayfin's packages ship in lockstep, so the CLI's are every
-/// package's. Cached like [`rayfin_versions`]' lookups; absent when npm is
-/// unreachable.
+/// The newest Rayfin release on npm, and the one every app's updates go to.
+/// Rayfin's packages ship in lockstep, so the CLI's are every package's.
+/// Cached like [`rayfin_versions`]' lookups; absent when npm is unreachable.
 #[tauri::command]
 pub async fn rayfin_latest() -> RayfinLatest {
-  let (latest, latest_supported_locally) =
-    tokio::join!(latest_version(CLI_PACKAGE), latest_supported_locally(CLI_PACKAGE));
-  RayfinLatest { latest, latest_supported_locally }
+  let published = releases(CLI_PACKAGE).await;
+  let (recommended, _) = update_targets(published.as_ref());
+  RayfinLatest { latest: published.and_then(|p| p.latest), recommended }
 }
 
 #[cfg(test)]
@@ -260,6 +275,17 @@ mod tests {
     // Unreachable/unknown sides never report an upgrade.
     assert!(!is_newer(None, Some("1.33.2")));
     assert!(!is_newer(Some("1.34.0"), None));
+  }
+
+  #[test]
+  fn a_newer_release_says_whether_it_is_latest_and_runs_here() {
+    let npm = |latest: &str| Published { versions: vec!["0.0.1".into(), "999.0.0".into()], latest: Some(latest.into()) };
+    let (recommended, preview) = update_targets(Some(&npm("0.0.1")));
+    assert_eq!(recommended, None, "the local backend runs neither");
+    assert_eq!(preview, Some(RayfinNewerRelease { version: "999.0.0".into(), is_latest: false, runs_locally: false }));
+    let (_, latest) = update_targets(Some(&npm("999.0.0")));
+    assert_eq!(latest.map(|newer| newer.is_latest), Some(true));
+    assert_eq!(update_targets(None), (None, None));
   }
 
   #[test]

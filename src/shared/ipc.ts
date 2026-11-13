@@ -2753,21 +2753,36 @@ export interface RayfinVersionInfo {
   /** Per-package detail, used to build the upgrade prompt + popover. */
   packages: RayfinPackageVersion[]
   /**
-   * The newest stable release within the Rayfin versions the bundled local
-   * backend runs (`rayfin-local.json` `sdk.supported`), for the headline
-   * package; Rayfin's packages ship in lockstep. Every app's upgrades stop
-   * here, a team app's too. Absent when npm couldn't list the releases or none
-   * is in the range.
+   * Where Fabricator's updates go, for the headline package (Rayfin's packages
+   * ship in lockstep): the newest stable release the bundled local backend
+   * runs (`rayfin-local.json` `sdk.supported`) that isn't newer than npm's
+   * `latest`, so the app keeps running on this computer. Absent when npm
+   * couldn't list the releases or none is.
    */
-  latestSupportedLocally?: string
+  recommended?: string
+  /** A stable release newer than {@link recommended}, which Fabricator offers too, with a warning. */
+  newer?: RayfinNewerRelease
+}
+
+/**
+ * A Rayfin release newer than the one Fabricator's updates go to: the newest
+ * on npm, whatever its dist-tag, such as a `preview` 2.0.0 while `latest` is
+ * 1.36.2.
+ */
+export interface RayfinNewerRelease {
+  version: string
+  /** Whether it's npm's `latest`. One that isn't might be unstable. */
+  isLatest: boolean
+  /** Whether the bundled local backend runs it; with one it doesn't, some things might not work as expected here. */
+  runsLocally: boolean
 }
 
 /** The newest Rayfin releases, for Home's update offers (`rayfin.latest`). */
 export interface RayfinLatest {
-  /** The newest stable release on npm. */
+  /** The newest stable release on npm: its `latest` dist-tag. */
   latest?: string
-  /** The newest release the bundled local backend runs: where every app's upgrades go. */
-  latestSupportedLocally?: string
+  /** Where every app's updates go, as {@link RayfinVersionInfo.recommended}. */
+  recommended?: string
 }
 
 /* ------------------------------------------------------------------ *

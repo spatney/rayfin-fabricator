@@ -1094,9 +1094,9 @@
       "engine": "quick",
       "severity": "medium",
       "title": "Rayfin packages aren't pinned to a release Fabricator runs locally",
-      "summary": "Rayfin packages stay on the line of releases Fabricator runs on this computer",
-      "why": "Fabricator's local backend runs one line of Rayfin releases, such as 1.36.x, so new projects pin every `@microsoft/rayfin-*` package to it with a `~` range (`~1.36.0`). On another release, parts of the app can misbehave on this computer, and a published app previews on its published backend instead. A `^` range, or a tag such as `latest`, lets the next install move the app to a newer release before Fabricator runs it.",
-      "fix": "Set every `@microsoft/rayfin-*` package in package.json to the `~` range of the line Fabricator runs, such as `~1.36.0`, and run `npm install` so they all resolve to that line. Don't upgrade past it until Fabricator supports a newer one.",
+      "summary": "Rayfin packages stay on a line of releases Fabricator runs on this computer",
+      "why": "Fabricator's local backend runs some lines of Rayfin releases, such as 1.36.x and 2.0.x, and new projects pin every `@microsoft/rayfin-*` package to one of them with a `~` range (`~1.36.0`). On an older release, parts of the app can misbehave on this computer, and a published app previews on its published backend instead. A `^` range, or a tag such as `latest`, lets the next install move the app to another release that nobody chose. A newer release that you choose still runs on this computer, and the preview says that some things might not work as expected.",
+      "fix": "Set every `@microsoft/rayfin-*` package in package.json to the `~` range of a line Fabricator runs, such as `~1.36.0` or `~2.0.0`, and run `npm install` so they all resolve to it.",
       "docs": [
         { "title": "SDK versions (rayfin-local)", "url": "https://github.com/spatney/rayfin-local/blob/main/docs/differences.md#platform" },
         { "title": "SDK version notes", "url": "https://rayfin.ai/docs/reference/sdk#version-notes" }
