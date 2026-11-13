@@ -2,7 +2,13 @@ import type { AdvisorSeverity } from '@shared/ipc'
 import { severityRank } from '@shared/advisor/catalog'
 import { parseClasses } from '../../model/parseSchema'
 import { isUnder } from '../../model/projectLayout'
-import { matchesWorkspace, workspacePatterns, type QuickContext } from '../context'
+import {
+  matchesWorkspace,
+  workspacePatterns,
+  type LocalSdk,
+  type LocalSdkLine,
+  type QuickContext
+} from '../context'
 import type { QuickHit, QuickRuleImpl } from '../quick'
 import { listLabels } from '../quick'
 import {
@@ -18,7 +24,8 @@ import {
   spanIncludes,
   yamlKeyLine,
   type SemverCore,
-  type SourceFile
+  type SourceFile,
+  type VersionSpan
 } from '../source'
 import { CODE_FILE, code, lineContaining, packageLine, regexHits } from './util'
 
@@ -88,10 +95,40 @@ function outdatedSeverity(installed: SemverCore, latest: SemverCore): AdvisorSev
   return 'low'
 }
 
-/** A release newer than the local backend runs: no update for an app it runs, until Fabricator supports it. */
+/** The line of releases the local backend runs that `version` is on, if any. */
+function localLineOf(local: LocalSdk, version: SemverCore): LocalSdkLine | undefined {
+  return local.lines.find((line) => spanIncludes(line.span, version))
+}
+
+/** A release the local backend doesn't run: no update to it for an app it runs. */
 function beyondLocal(ctx: QuickContext, version: SemverCore): boolean {
-  const hi = ctx.localSdk?.span.hi
-  return Boolean(hi && compareSemver(version, hi) >= 0)
+  return Boolean(ctx.localSdk && !localLineOf(ctx.localSdk, version))
+}
+
+/**
+ * A release the local backend doesn't run that's newer than one it does, such
+ * as 1.37 or 2.1 while it runs 1.36 and 2.0. It runs the app anyway, and the
+ * preview says some things might not work, so that's the user's choice.
+ */
+function newerThanLocal(local: LocalSdk, version: SemverCore): boolean {
+  return !localLineOf(local, version) && compareSemver(version, local.lines[0].span.lo) > 0
+}
+
+/** The line the app's Rayfin (core, else CLI) is on, else the oldest one the local backend runs. */
+function appLine(ctx: QuickContext, local: LocalSdk): LocalSdkLine {
+  const core = semverCore(
+    ctx.packages.find((p) => p.name === '@microsoft/rayfin-core')?.installed ??
+      ctx.packages.find((p) => p.name === CLI)?.installed
+  )
+  return (core && localLineOf(local, core)) || local.lines[0]
+}
+
+/** Whether two spans share a release. */
+function overlaps(a: VersionSpan, b: VersionSpan): boolean {
+  return (
+    (a.hi === null || compareSemver(b.lo, a.hi) < 0) &&
+    (b.hi === null || compareSemver(a.lo, b.hi) < 0)
+  )
 }
 
 /** Whether a dependency spec asks the registry for a version, not a file, link, git or alias source. */
@@ -247,21 +284,29 @@ export const platformRules: QuickRuleImpl[] = [
       if (declared.length === 0 && installed.length === 0) return 'na'
       const local = ctx.localSdk
       if (!local) return 'skipped'
-      const { span } = local
-      const runs = `Rayfin ${local.label}, the releases Fabricator runs on this computer`
-      const pinIt = local.pin ? ` Pin it to ${code(local.pin)}.` : ''
-      const classify = (spec: string): 'ok' | 'outside' | 'newer' => {
+      const runs = `the Rayfin releases Fabricator runs on this computer (${local.label})`
+      const home = appLine(ctx, local)
+      const pinIt = (line: LocalSdkLine): string =>
+        line.pin ? ` Pin it to ${code(line.pin)}.` : ''
+      /**
+       * `ok`: it stays on one line the local backend runs. `loose`: a tag, or a
+       * range that reaches past the line it's on (`line`), so npm installs the
+       * newest release it allows. `older`: it can't install a line, and is
+       * older. `newer`: it's past them, which the user chose: the app runs
+       * anyway, and the preview says some things might not work.
+       */
+      const classify = (
+        spec: string
+      ): { kind: 'ok' | 'loose' | 'older' | 'newer'; line: LocalSdkLine } => {
         const s = npmRangeSpan(spec)
-        if (
-          s &&
-          ((s.hi !== null && compareSemver(s.hi, span.lo) <= 0) ||
-            (span.hi !== null && compareSemver(s.lo, span.hi) >= 0))
-        ) {
-          return 'outside'
-        }
-        // A tag, or a range that reaches past the line: npm installs the newest release it allows.
-        if (span.hi === null) return 'ok'
-        return !s || s.hi === null || compareSemver(s.hi, span.hi) > 0 ? 'newer' : 'ok'
+        if (!s) return { kind: 'loose', line: home }
+        const on = local.lines.filter((line) => overlaps(s, line.span))
+        if (on.length === 0)
+          return { kind: newerThanLocal(local, s.lo) ? 'newer' : 'older', line: home }
+        const line = on[on.length - 1]
+        const past =
+          s.hi === null || (line.span.hi !== null && compareSemver(s.hi, line.span.hi) > 0)
+        return { kind: past ? 'loose' : 'ok', line }
       }
       // One hit per package: its most severe problem, the declaration's on a tie.
       const worst = new Map<string, QuickHit>()
@@ -271,24 +316,25 @@ export const platformRules: QuickRuleImpl[] = [
         worst.set(name, hit)
       }
       for (const d of declared) {
-        const problem = classify(d.spec)
-        if (problem === 'ok') continue
+        const { kind, line } = classify(d.spec)
+        if (kind === 'ok' || kind === 'newer') continue
         add(d.name, {
           file: d.file,
           line: jsonKeyLine(ctx.file(d.file)?.text ?? '', d.name),
           label: `${short(d.name)} ${d.spec}`,
-          severity: problem === 'outside' ? 'medium' : 'low',
+          severity: kind === 'older' ? 'medium' : 'low',
           message:
-            problem === 'outside'
-              ? `${code(d.name)} is declared as ${code(d.spec)}, which can't install ${runs}.${pinIt}`
-              : `${code(d.name)} is declared as ${code(d.spec)}, so the next install can move it past ${runs}.${pinIt}`
+            kind === 'older'
+              ? `${code(d.name)} is declared as ${code(d.spec)}, which can't install ${runs}.${pinIt(line)}`
+              : `${code(d.name)} is declared as ${code(d.spec)}, so the next install can move it past Rayfin ${line.label}, to a release Fabricator may not run on this computer.${pinIt(line)}`
         })
       }
       for (const p of installed) {
         const core = semverCore(p.installed)
-        if (!core || spanIncludes(span, core)) continue
+        if (!core || localLineOf(local, core)) continue
         const specs = declared.filter((d) => d.name === p.name)
-        const pinned = specs.length > 0 && specs.every((d) => classify(d.spec) === 'ok')
+        const pinned = specs.length > 0 && specs.every((d) => classify(d.spec).kind === 'ok')
+        if (!pinned && newerThanLocal(local, core)) continue
         add(p.name, {
           file: specs[0]?.file ?? 'package.json',
           line: specs[0] ? jsonKeyLine(ctx.file(specs[0].file)?.text ?? '', p.name) : undefined,
@@ -296,15 +342,16 @@ export const platformRules: QuickRuleImpl[] = [
           severity: 'medium',
           message: pinned
             ? `${code(p.name)} is installed at ${p.installed}, outside ${runs}, although it's declared as ${code(specs[0].spec)}. Run ${code('npm install')} to bring it back.`
-            : `${code(p.name)} is installed at ${p.installed}, outside ${runs}.${pinIt}`
+            : `${code(p.name)} is installed at ${p.installed}, outside ${runs}.${pinIt(home)}`
         })
       }
       return [...worst.values()]
     },
     summarize: (hits, ctx) => {
       const local = ctx.localSdk
-      const pin = local?.pin ? ` Pin them to ${code(local.pin)}, and reinstall.` : ''
-      return `These Rayfin packages aren't on Rayfin ${local?.label ?? ''}, the releases Fabricator runs on this computer: ${listLabels(hits)}.${pin}`
+      const pin = local ? appLine(ctx, local).pin : null
+      const pinThem = pin ? ` Pin them to ${code(pin)}, and reinstall.` : ''
+      return `These Rayfin packages aren't pinned to the Rayfin releases Fabricator runs on this computer (${local?.label ?? ''}): ${listLabels(hits)}.${pinThem}`
     }
   },
   {

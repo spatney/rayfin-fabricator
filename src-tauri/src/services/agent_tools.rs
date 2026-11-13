@@ -1249,9 +1249,9 @@ fn advice(status: &LocalStatus, output: &[LocalLogEvent]) -> Vec<String> {
       "connector-unsupported" => format!("The {name} connector runs only on Microsoft Fabric, so you can't call it here."),
       "sdk-unsupported" if !seen.contains(&"sdk-unsupported") && status.newer_sdk => {
         "The app's Rayfin packages are newer than the versions the local backend implements (`sdk.newer`). It runs \
-         the app anyway, but some things may not work as expected here. Don't upgrade them further. If something \
-         fails here, tell the user it may be the newer Rayfin version, and move every `@microsoft/rayfin-*` package \
-         back to one `~` range the local backend runs only if they agree."
+         the app anyway, but some things may not work as expected here. If something fails here, tell the user it \
+         may be the newer Rayfin version, and move every `@microsoft/rayfin-*` package back to one `~` range the \
+         local backend runs only if they agree."
           .to_string()
       }
       "sdk-unsupported" if !seen.contains(&"sdk-unsupported") => {
@@ -1942,7 +1942,9 @@ mod tests {
     let report: Value = serde_json::from_str(&status_report(&status, &[], &[])).unwrap();
     assert_eq!(report["sdk"]["newer"], true);
     let advice = report["advice"].to_string();
-    assert!(advice.contains("runs the app anyway") && advice.contains("Don't upgrade them further"), "{advice}");
+    // A newer release is the user's to choose: the advice warns, and doesn't hold it back.
+    assert!(advice.contains("runs the app anyway") && advice.contains("only if they agree"), "{advice}");
+    assert!(!advice.contains("Don't upgrade"), "{advice}");
 
     status.newer_sdk = false;
     let report: Value = serde_json::from_str(&status_report(&status, &[], &[])).unwrap();

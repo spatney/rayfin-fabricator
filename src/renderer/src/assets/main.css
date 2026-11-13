@@ -1144,6 +1144,41 @@ code {
 .ver-update {
   width: 100%;
 }
+/* A release newer than the recommended one, such as a preview: offered with why it needs care. */
+.ver-newer {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.ver-newer--below {
+  padding-top: 11px;
+  border-top: 1px solid var(--border);
+}
+.ver-warnings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ver-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.ver-warning::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--pending);
+}
 .ver-note {
   margin: 0;
   font-size: 11px;

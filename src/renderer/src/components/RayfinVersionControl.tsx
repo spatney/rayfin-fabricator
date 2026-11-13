@@ -1,16 +1,25 @@
 import { useEffect, useState, type JSX } from 'react'
-import type { RayfinVersionInfo } from '@shared/ipc'
+import type { RayfinNewerRelease, RayfinVersionInfo } from '@shared/ipc'
+import { newerRayfinWarnings } from '../localDevelopment'
 import { useSuppressPreview } from '../overlay'
 
 interface Props {
   /**
-   * Local Rayfin version report for the active project (null while loading).
-   * An app's upgrades stop at the newest release the local backend runs (the
-   * workbench caps them, see `upgradesWithinLocalRange`).
+   * Local Rayfin version report for the active project (null while loading),
+   * with its updates going to the release Fabricator recommends (the
+   * workbench sets them, see `recommendedUpdates`).
    */
   info: RayfinVersionInfo | null
-  /** Hand the upgrade off to the Copilot agent (parent builds + sends the prompt). */
-  onUpdate: (info: RayfinVersionInfo) => void
+  /**
+   * A release newer than the recommended one, such as a preview, offered too,
+   * with a warning (see `newerRayfin`).
+   */
+  newer?: RayfinNewerRelease | null
+  /**
+   * Hand the upgrade off to the Copilot agent (parent builds + sends the
+   * prompt): to the recommended release, or to `newer`.
+   */
+  onUpdate: (info: RayfinVersionInfo, newer?: RayfinNewerRelease) => void
   /** Chat turns publish the app as they finish, so the update reaches Fabric with its turn. */
   publishes?: boolean
 }
@@ -44,13 +53,15 @@ function summarize(info: RayfinVersionInfo): SummaryRow[] {
 
 /**
  * Status-bar item for the project's local Rayfin (CLI + SDK) version, shown only
- * when a newer release is on npm — an up-to-date version is nothing to act on.
- * Opening it shows the from → to versions and hands the upgrade to Copilot on
- * click. The app never runs the install itself — the agent edits package.json +
- * runs npm install.
+ * when there's a newer release to update to — an up-to-date version is nothing
+ * to act on. Opening it shows the from → to versions and hands the upgrade to
+ * Copilot on click. A release newer than the one Fabricator recommends, such
+ * as a preview, is offered below it (or alone), with why it needs care. The app
+ * never runs the install itself — the agent edits package.json + runs npm install.
  */
 export default function RayfinVersionControl({
   info,
+  newer = null,
   onUpdate,
   publishes = false
 }: Props): JSX.Element | null {
@@ -67,51 +78,86 @@ export default function RayfinVersionControl({
     return () => window.removeEventListener('click', close)
   }, [open])
 
-  if (!info || !info.upgradeAvailable) return null
+  if (!info || (!info.upgradeAvailable && !newer)) return null
 
   const version = info.version
+  const update = info.upgradeAvailable
   const rows = summarize(info)
 
   return (
     <div className="ver-control" onClick={(e) => e.stopPropagation()}>
       <button
         className="ver-btn"
-        title={`Rayfin ${version} — update to ${info.latest} available`}
+        title={
+          update
+            ? `Rayfin ${version} — update to ${info.latest} available`
+            : `Rayfin ${version} — Rayfin ${newer?.version} is available`
+        }
         onClick={() => setOpen((o) => !o)}
       >
         Rayfin v{version}
-        <span className="ver-badge">↑ {info.latest}</span>
+        {update && <span className="ver-badge">↑ {info.latest}</span>}
       </button>
 
       {open && (
         <div className="ver-pop" role="dialog">
-          <div className="ver-pop-head">
-            <span className="ver-pop-title">Update available</span>
-            <span className="ver-pop-sub">A newer version of Rayfin is ready.</span>
-          </div>
-          <ul className="ver-rows">
-            {rows.map((r) => (
-              <li key={r.label} className="ver-row">
-                <span className="ver-row-label">{r.label}</span>
-                <span className="ver-row-vers">
-                  <span className="ver-from">{r.from ?? '—'}</span>
-                  <span className="ver-arrow">→</span>
-                  <span className={`ver-to${r.upgradable ? ' ver-to--new' : ''}`}>
-                    {r.to ?? '—'}
-                  </span>
+          {update && (
+            <>
+              <div className="ver-pop-head">
+                <span className="ver-pop-title">Update available</span>
+                <span className="ver-pop-sub">A newer version of Rayfin is ready.</span>
+              </div>
+              <ul className="ver-rows">
+                {rows.map((r) => (
+                  <li key={r.label} className="ver-row">
+                    <span className="ver-row-label">{r.label}</span>
+                    <span className="ver-row-vers">
+                      <span className="ver-from">{r.from ?? '—'}</span>
+                      <span className="ver-arrow">→</span>
+                      <span className={`ver-to${r.upgradable ? ' ver-to--new' : ''}`}>
+                        {r.to ?? '—'}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <button
+                className="btn btn--sm btn--primary ver-update"
+                onClick={() => {
+                  onUpdate(info)
+                  setOpen(false)
+                }}
+              >
+                Update with Copilot
+              </button>
+            </>
+          )}
+          {newer && (
+            <div className={`ver-newer${update ? ' ver-newer--below' : ''}`}>
+              <div className="ver-pop-head">
+                <span className="ver-pop-title">
+                  Rayfin {newer.version} is available{update ? ' too' : ''}
                 </span>
-              </li>
-            ))}
-          </ul>
-          <button
-            className="btn btn--sm btn--primary ver-update"
-            onClick={() => {
-              onUpdate(info)
-              setOpen(false)
-            }}
-          >
-            Update with Copilot
-          </button>
+                {!update && <span className="ver-pop-sub">This app is on Rayfin {version}.</span>}
+              </div>
+              <ul className="ver-warnings">
+                {newerRayfinWarnings(newer).map((warning) => (
+                  <li key={warning} className="ver-warning">
+                    {warning}
+                  </li>
+                ))}
+              </ul>
+              <button
+                className="btn btn--sm ver-update"
+                onClick={() => {
+                  onUpdate(info, newer)
+                  setOpen(false)
+                }}
+              >
+                Update to {newer.version} with Copilot
+              </button>
+            </div>
+          )}
           <p className="ver-note">
             {publishes
               ? 'Copilot updates the packages and fixes any changes. They reach Fabric when Fabricator publishes the app after the turn.'

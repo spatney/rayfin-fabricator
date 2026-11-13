@@ -24,6 +24,7 @@ import {
   type PendingChanges,
   type PortConflict,
   type ProjectsState,
+  type RayfinNewerRelease,
   type RayfinVersionInfo,
   type StudioProject,
   type UnsupportedWorkspace
@@ -74,7 +75,7 @@ import {
   useLocalBackend
 } from '../localBackend'
 import DeploymentsControl from '../components/DeploymentsControl'
-import { publishesAfterTurn, upgradesWithinLocalRange } from '../localDevelopment'
+import { newerRayfin, publishesAfterTurn, recommendedUpdates, updatesTo } from '../localDevelopment'
 import GitControl from '../components/GitControl'
 import TeamPublishControl from '../components/team/TeamPublishControl'
 import TeamMapView from '../components/team/map/TeamMapView'
@@ -286,6 +287,26 @@ function upgradeDelivery(project: StudioProject | undefined, turnsPublish: boole
   return turnsPublish && project?.lastDeploy?.url
     ? `${dont}: Fabricator runs it on this computer, and publishes it once this turn finishes.`
     : `${dont}: Fabricator runs it on this computer, and the user publishes it when they choose.`
+}
+
+/**
+ * What an update to a Rayfin release newer than the recommended one tells
+ * Copilot: why it needs care, which the user saw before choosing it.
+ */
+function newerUpdateNote(newer: RayfinNewerRelease): string {
+  const notes: string[] = []
+  if (!newer.isLatest) {
+    notes.push(
+      `Rayfin ${newer.version} isn't Rayfin's latest release yet (npm's \`latest\` tag), so it might be unstable.`
+    )
+  }
+  if (!newer.runsLocally) {
+    notes.push(
+      `Fabricator's local backend doesn't run Rayfin ${newer.version} yet, so some things might not work as expected on this computer.`
+    )
+  }
+  notes.push('I chose it anyway: make the change, and remind me of this in your summary.')
+  return notes.join(' ')
 }
 
 interface Props {
@@ -641,14 +662,17 @@ export default function Workbench({
   const activeChatBusy = Boolean(
     active && (chats[active.id] ?? []).some((m) => m.role === 'assistant' && m.pending)
   )
-  /** The open app's Rayfin versions as the app offers them: upgrades stop at
-   *  the newest release the local backend runs, so the app keeps running on
-   *  this computer (a team app too). */
-  const capVersions = Boolean(active)
+  /** The open app's Rayfin versions as the app offers them: updates go to the
+   *  release Fabricator recommends, the newest the local backend runs that
+   *  isn't newer than Rayfin's latest, so the app keeps running on this
+   *  computer (a team app too). */
+  const projectOpen = Boolean(active)
   const versionInfo = useMemo(
-    () => (rayfinVer && capVersions ? upgradesWithinLocalRange(rayfinVer) : rayfinVer),
-    [rayfinVer, capVersions]
+    () => (rayfinVer && projectOpen ? recommendedUpdates(rayfinVer) : rayfinVer),
+    [rayfinVer, projectOpen]
   )
+  /** A newer release than that, such as a preview, offered too, with a warning. */
+  const newerVersion = useMemo(() => newerRayfin(rayfinVer), [rayfinVer])
   /** Advisor state for the active project — owned here so the tab badge stays current. */
   const advisor = useAdvisor(active, {
     refreshKey: gitRefresh,
@@ -1701,39 +1725,46 @@ export default function Workbench({
 
   // Hand a Rayfin upgrade to the Copilot agent: build a precise "from X → to Y"
   // prompt and queue it into the chat (the agent edits package.json + installs).
+  // To the recommended release, or to `newer`, with why it needs care.
   // Returns false when there's nothing to upgrade.
-  const requestRayfinUpdate = useCallback((info: RayfinVersionInfo): boolean => {
-    const id = activeIdRef.current
-    if (!id) return false
-    // Connector packages version with the CLI; npm's `latest` tag for them lags.
-    const ups = info.packages.filter(
-      (p) => p.upgradable && p.installed && p.latest && !/^@microsoft\/rayfin-connector/.test(p.name)
-    )
-    if (ups.length === 0) return false
-    const project = projectsRef.current?.projects.find((p) => p.id === id)
-    const lines = ups.map((p) => `- ${p.name}: ${p.installed} → ${p.latest}`).join('\n')
-    const to = info.latest ?? ups[0].latest
-    const prompt =
-      "Please upgrade this app's Rayfin packages to the newest version Fabricator runs on this computer.\n\n" +
-      'Set these exact versions in package.json, then run `npm install`:\n' +
-      `${lines}\n\n` +
-      'Keep every Rayfin SDK package (`@microsoft/rayfin-core`, `-client`, `-data`, `-auth`, ' +
-      '`-auth-provider-fabric`, `-lib`, `-functions`, `-local-dev`) on the same version — they ship in lockstep. ' +
-      'If the app uses Rayfin connector packages (`@microsoft/rayfin-connector*`), pin them to the ' +
-      "new CLI version exactly (they ship in lockstep with the CLI; npm's `latest` tag lags).\n\n" +
-      'After installing, check `node_modules/@microsoft/rayfin-guide/assets/docs/deprecations.md` ' +
-      'and `known-limitations.md` for changes between these versions and update the app code so it ' +
-      `still builds and runs. ${upgradeDelivery(project, !manualDeployRef.current)}`
-    setViewMode('build')
-    setFocusPane(null)
-    setChatOutbound({
-      id: `rayfin-up-${Date.now()}`,
-      projectId: id,
-      display: `Update Rayfin to ${to}`,
-      prompt
-    })
-    return true
-  }, [])
+  const requestRayfinUpdate = useCallback(
+    (info: RayfinVersionInfo, newer?: RayfinNewerRelease): boolean => {
+      const id = activeIdRef.current
+      if (!id) return false
+      const offer = newer ? updatesTo(info, newer.version) : info
+      // Connector packages version with the CLI; npm's `latest` tag for them lags.
+      const ups = offer.packages.filter(
+        (p) =>
+          p.upgradable && p.installed && p.latest && !/^@microsoft\/rayfin-connector/.test(p.name)
+      )
+      if (ups.length === 0) return false
+      const project = projectsRef.current?.projects.find((p) => p.id === id)
+      const lines = ups.map((p) => `- ${p.name}: ${p.installed} → ${p.latest}`).join('\n')
+      const to = offer.latest ?? ups[0].latest
+      const prompt =
+        `Please upgrade this app's Rayfin packages to Rayfin ${to}.\n\n` +
+        (newer ? `${newerUpdateNote(newer)}\n\n` : '') +
+        'Set these exact versions in package.json, then run `npm install`:\n' +
+        `${lines}\n\n` +
+        'Keep every Rayfin SDK package (`@microsoft/rayfin-core`, `-client`, `-data`, `-auth`, ' +
+        '`-auth-provider-fabric`, `-lib`, `-functions`, `-local-dev`) on the same version — they ship in lockstep. ' +
+        'If the app uses Rayfin connector packages (`@microsoft/rayfin-connector*`), pin them to the ' +
+        "new CLI version exactly (they ship in lockstep with the CLI; npm's `latest` tag lags).\n\n" +
+        'After installing, check `node_modules/@microsoft/rayfin-guide/assets/docs/deprecations.md` ' +
+        'and `known-limitations.md` for changes between these versions and update the app code so it ' +
+        `still builds and runs. ${upgradeDelivery(project, !manualDeployRef.current)}`
+      setViewMode('build')
+      setFocusPane(null)
+      setChatOutbound({
+        id: `rayfin-up-${Date.now()}`,
+        projectId: id,
+        display: `Update Rayfin to ${to}`,
+        prompt
+      })
+      return true
+    },
+    []
+  )
 
   // A Rayfin update asked for on Home goes to Copilot once the project is open
   // and its versions have been read.
@@ -3628,6 +3659,7 @@ export default function Workbench({
             )}
             <RayfinVersionControl
               info={versionInfo}
+              newer={newerVersion}
               onUpdate={requestRayfinUpdate}
               publishes={!manualDeploy && !active.team && Boolean(active.lastDeploy?.url)}
             />

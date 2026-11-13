@@ -7,7 +7,7 @@ Fabricator wraps the tools you would otherwise run by hand. You describe the app
 
 ## The loop
 
-1. You create, open, or clone a Rayfin project. A new project starts on the newest Rayfin release the local backend runs, with its `@microsoft/rayfin-*` packages pinned to that minor version, such as `~1.36.0`.
+1. You create, open, or clone a Rayfin project. A new project starts on the newest release of the Rayfin line Fabricator starts new projects on (`sdk.newProjects` in its `rayfin-local.json`), one of the lines the local backend runs, with its `@microsoft/rayfin-*` packages pinned to that minor version, such as `~1.36.0`.
 2. When a project opens, Fabricator starts its local backend: the bundled rayfin-local runs the app's data API, sign-in, functions, connectors and storage, and starts the app's own Vite dev server.
 3. You type a request in chat.
 4. The bundled Copilot engine reads and edits files in the project folder. It follows Fabricator's own guidance and your [custom instructions](/docs/reference/settings#custom-instructions), which Fabricator gives each chat from its app data rather than the project. It doesn't run or publish the app: Fabricator runs it, and publishing is your choice.
@@ -105,7 +105,7 @@ flowchart TD
 
 ## The local backend
 
-rayfin-local is a local Rayfin backend: it answers the same requests as an app's backend in Fabric, so the app and its Rayfin SDK run unchanged. Fabricator bundles it next to its own executable, signed like Fabricator, and pins the version each Fabricator release uses. Setup's **Local backend** item checks that it runs. Its source and its full list of [differences from Fabric](https://github.com/spatney/rayfin-local/blob/main/docs/differences.md) are in the [rayfin-local repository](https://github.com/spatney/rayfin-local).
+rayfin-local is a local Rayfin backend: it answers the same requests as an app's backend in Fabric, so the app and its Rayfin SDK run unchanged. It runs some lines of Rayfin releases, such as 1.36.x and 2.0.x; on another release, it runs the app anyway and warns that some things may not work as expected. Fabricator bundles it next to its own executable, signed like Fabricator, and pins the version each Fabricator release uses. Setup's **Local backend** item checks that it runs. Its source and its full list of [differences from Fabric](https://github.com/spatney/rayfin-local/blob/main/docs/differences.md) are in the [rayfin-local repository](https://github.com/spatney/rayfin-local).
 
 - **One per project.** For each project, team apps included, Fabricator runs `rayfin-local serve --json` in the project folder, with no console window. It reads the backend's events to show its state, keeps its output for **Help** and diagnostics, and restarts it after a crash, up to three times in two minutes. At most two projects run at once: the one you have open and the one before it. When Fabricator exits or installs an update, it stops them all.
 - **On this computer only.** The backend listens on `localhost`, by default on port 7171 and the app's Vite dev server on port 5173, and moves to the next free port when one is busy. Fabricator controls it through a control API that answers only on this computer, and only to a secret that changes every time the backend starts.
@@ -167,7 +167,7 @@ Fabricator and the tools it runs can contact these services:
 - GitHub Copilot for chat, model access, design options, deep Advisor reviews, security checks of project and app files, and team workspace diagnoses.
 - Microsoft Fabric and Rayfin services when you sign in, publish, preview published apps, share apps, or inspect Fabric items.
 - GitHub for update checks, release downloads, cloning repositories, issue reporting, and team workspace repositories.
-- The npm registry when creating a project from the Rayfin CLI's template and when installing project dependencies. Fabricator also asks it for the newest Rayfin release the local backend runs.
+- The npm registry when creating a project from the Rayfin CLI's template and when installing project dependencies. Fabricator also asks it for Rayfin's releases and which one is its latest, for the release new projects start on and the updates it offers.
 - Power BI, Fabric SQL databases, warehouses and SQL analytics endpoints (over TCP port 1433), and the Azure and Fabric APIs your app's functions call, from the local backend with your own sign-in. The local backend itself listens only on this computer.
 - Azure and GitHub APIs for team workspace setup and **Diagnose with Copilot** when the **Team workspaces** experiment is enabled.
 - Power BI and Fabric APIs, with the Azure CLI's sign-in, to find and read a Power BI report when the **Migrate Power BI reports** experiment is enabled.
