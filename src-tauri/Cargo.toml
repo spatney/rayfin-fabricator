@@ -87,8 +87,8 @@ portable-pty = "0.9"
 # webview2-com / windows versions are pinned to what the vendored wry (and tauri) resolve to,
 # so Cargo unifies them rather than pulling a second copy. See services/preview.rs.
 # tauri-plugin-single-instance: opening a .fabricator or .rayfin file, or an installed app's
-# shortcut, while Fabricator runs hands it to the running app instead of starting a second one
-# (lib.rs; release builds only). The shell features give an installed app its own taskbar button
+# shortcut, while Fabricator runs hands it to the running app. Plain launches open independent
+# instances (lib.rs; release builds only). The shell features give an installed app its own taskbar button
 # and Start menu shortcut (services/apps/shell.rs).
 [target.'cfg(windows)'.dependencies]
 tauri-plugin-single-instance = "2.5"

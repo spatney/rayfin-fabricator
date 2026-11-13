@@ -59,6 +59,47 @@ fn open_requested(app: &tauri::AppHandle, opened: Vec<Opened>, asked: bool) {
   }
 }
 
+#[cfg(any(all(windows, not(debug_assertions)), test))]
+const INDEPENDENT_INSTANCE_FLAG: &str = "--fabricator-independent-instance";
+
+#[cfg(any(all(windows, not(debug_assertions)), test))]
+#[derive(Debug, PartialEq, Eq)]
+enum WindowsLaunch {
+  Independent,
+  NewInstance,
+  Open(Vec<Opened>),
+}
+
+#[cfg(any(all(windows, not(debug_assertions)), test))]
+fn windows_launch<A: Into<std::ffi::OsString>>(
+  args: impl IntoIterator<Item = A>,
+  cwd: Option<&std::path::Path>,
+) -> WindowsLaunch {
+  let args: Vec<std::ffi::OsString> = args.into_iter().map(Into::into).collect();
+  if args.len() == 1 && args[0] == INDEPENDENT_INSTANCE_FLAG {
+    return WindowsLaunch::Independent;
+  }
+  let opened = services::apps::opened_in(args, cwd);
+  if opened.is_empty() {
+    WindowsLaunch::NewInstance
+  } else {
+    WindowsLaunch::Open(opened)
+  }
+}
+
+#[cfg(all(windows, not(debug_assertions)))]
+fn spawn_independent_instance(cwd: &std::path::Path) -> std::io::Result<()> {
+  use std::process::{Command, Stdio};
+  Command::new(std::env::current_exe()?)
+    .arg(INDEPENDENT_INSTANCE_FLAG)
+    .current_dir(cwd)
+    .stdin(Stdio::null())
+    .stdout(Stdio::null())
+    .stderr(Stdio::null())
+    .spawn()?;
+  Ok(())
+}
+
 /// Read the bundled telemetry connection string (App Insights) if present.
 /// Mirrors the Electron build, which injects `resources/telemetry.json` at
 /// package time. Absent in dev → telemetry is a no-op.
@@ -145,15 +186,34 @@ pub fn run() {
   services::npm_env::configure_env();
 
   let builder = tauri::Builder::default();
-  // One Fabricator at a time on Windows, where opening a .fabricator or .rayfin
-  // file, or an installed app's shortcut, starts the app again with it: that
-  // launch hands it to the running app and exits. Release builds only, so a
-  // development build still runs beside the installed app.
+  // Keep file/app handoff on Windows. A plain second launch starts an independent
+  // process, whose private flag skips this plugin so it isn't forwarded again.
+  // Development builds still run beside the installed app.
   #[cfg(all(windows, not(debug_assertions)))]
-  let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
-    let opened = services::apps::opened_in(args.into_iter().skip(1), Some(std::path::Path::new(&cwd)));
-    open_requested(app, opened, true);
-  }));
+  let builder = {
+    let cwd = std::env::current_dir().ok();
+    if matches!(windows_launch(std::env::args_os().skip(1), cwd.as_deref()), WindowsLaunch::Independent) {
+      builder
+    } else {
+      builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+        let cwd = std::path::Path::new(&cwd);
+        match windows_launch(args.into_iter().skip(1), Some(cwd)) {
+          WindowsLaunch::Open(opened) => open_requested(app, opened, true),
+          WindowsLaunch::NewInstance | WindowsLaunch::Independent => {
+            if let Err(error) = spawn_independent_instance(cwd) {
+              use tauri_plugin_dialog::DialogExt;
+              log::error!("could not open another Fabricator window: {error}");
+              app
+                .dialog()
+                .message(format!("Couldn't open another Fabricator window: {error}"))
+                .kind(tauri_plugin_dialog::MessageDialogKind::Error)
+                .show(|_| {});
+            }
+          }
+        }
+      }))
+    }
+  };
 
   builder
     .plugin(tauri_plugin_dialog::init())
@@ -633,6 +693,43 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn windows_plain_launches_open_independent_instances_without_forwarding_again() {
+    assert_eq!(windows_launch(Vec::<String>::new(), None), WindowsLaunch::NewInstance);
+    assert_eq!(windows_launch([INDEPENDENT_INSTANCE_FLAG], None), WindowsLaunch::Independent);
+    assert_eq!(windows_launch(["--unknown"], None), WindowsLaunch::NewInstance);
+  }
+
+  #[test]
+  fn windows_file_launches_keep_the_handoff_and_the_launchers_working_directory() {
+    let dir = std::env::temp_dir().join(format!("fab-windows-launch-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for file in ["My project.FABRICATOR", "Notes.rayfin"] {
+      std::fs::write(dir.join(file), "zip").unwrap();
+    }
+    assert_eq!(
+      windows_launch(["My project.FABRICATOR", "Notes.rayfin"], Some(&dir)),
+      WindowsLaunch::Open(vec![
+        Opened::Project(dir.join("My project.FABRICATOR")),
+        Opened::AppFile(dir.join("Notes.rayfin")),
+      ])
+    );
+    assert_eq!(
+      windows_launch([INDEPENDENT_INSTANCE_FLAG, "My project.FABRICATOR"], Some(&dir)),
+      WindowsLaunch::Open(vec![Opened::Project(dir.join("My project.FABRICATOR"))])
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+  }
+
+  #[test]
+  fn windows_installed_app_shortcuts_still_use_the_handoff() {
+    assert_eq!(
+      windows_launch(["--app", "notes-1a2b3c4d"], None),
+      WindowsLaunch::Open(vec![Opened::App("notes-1a2b3c4d".into())])
+    );
+    assert_eq!(windows_launch(["--app"], None), WindowsLaunch::NewInstance);
+  }
 
   #[test]
   fn defaults_rayfin_encryption_fallback_on_when_unset() {
