@@ -1,5 +1,6 @@
 import { useMemo, useState, type JSX } from 'react'
 import type { ChatToolCall } from '@shared/ipc'
+import { useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { Spinner, StepIcon } from './parts'
 
@@ -18,16 +19,17 @@ export interface HelpWorkLogProps {
  * shows exactly which files were consulted.
  */
 export function HelpWorkLog({ tools, working }: HelpWorkLogProps): JSX.Element {
+  const { t } = useTranslation('help')
   const [open, setOpen] = useState(false)
 
   const summary = useMemo(() => {
-    const failed = tools.filter((t) => t.state === 'error').length
-    const done = tools.filter((t) => t.state !== 'running').length
-    if (working && done < tools.length) return `looking at ${tools.length} things`
+    const failed = tools.filter((tool) => tool.state === 'error').length
+    const done = tools.filter((tool) => tool.state !== 'running').length
+    if (working && done < tools.length) return t('workLog.looking', { count: tools.length })
     return failed > 0
-      ? `checked ${tools.length} things · ${failed} unreadable`
-      : `checked ${tools.length} thing${tools.length === 1 ? '' : 's'}`
-  }, [tools, working])
+      ? t('workLog.checkedFailed', { count: tools.length, failed })
+      : t('workLog.checked', { count: tools.length })
+  }, [tools, working, t])
 
   return (
     <div className={`help-log ${open ? 'is-open' : ''}`}>
@@ -50,7 +52,7 @@ export function HelpWorkLog({ tools, working }: HelpWorkLogProps): JSX.Element {
               {tool.state === 'running' && <span className="help-step-state">…</span>}
               {tool.state === 'error' && (
                 <span className="help-step-state" title={tool.output ?? undefined}>
-                  couldn&apos;t read
+                  {t('workLog.unreadable')}
                 </span>
               )}
             </li>

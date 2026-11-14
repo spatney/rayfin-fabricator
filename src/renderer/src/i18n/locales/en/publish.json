@@ -1,0 +1,368 @@
+{
+  "button": {
+    "publish": "Publish",
+    "publishing": "Publishing…"
+  },
+  "progress": {
+    "label": "Publish progress",
+    "publishing": "Publishing",
+    "position": "step {{step}} of {{steps}}",
+    "starting": "Starting to publish…",
+    "watch": "Watch",
+    "waitingForSignIn": "Waiting for you to sign in to Fabric in your browser",
+    "retrying": "Fabric is busy, trying again"
+  },
+  "logs": {
+    "show": "View logs",
+    "hide": "Hide logs",
+    "short": "Logs"
+  },
+  "findOutWhy": "Find out why",
+  "region": {
+    "chooseAnother": "Choose another workspace",
+    "availability": "Region availability",
+    "availabilityTitle": "See which regions have Fabric apps (opens learn.microsoft.com)"
+  },
+  "signIn": {
+    "fabric": "Sign in to Fabric",
+    "busy": "Signing in…",
+    "failed": "Sign-in failed",
+    "incomplete": "Fabric sign-in did not complete. Please try again.",
+    "notCompleted": "Sign-in did not complete. Please try again."
+  },
+  "copy": {
+    "link": "Copy link",
+    "itemId": "Copy item ID",
+    "failed": "Copy failed",
+    "linkFailed": "Could not copy the link.",
+    "itemFailed": "Could not copy the item ID."
+  },
+  "deploySteps": {
+    "packages": "Installing packages",
+    "connect": "Connecting to Fabric",
+    "capacity": "Getting Fabric capacity ready",
+    "workspace": "Finding your workspace",
+    "item": "Setting up your app in Fabric",
+    "settings": "Applying settings",
+    "data": "Updating your database",
+    "storage": "Setting up file storage",
+    "connectors": "Connecting your data sources",
+    "build": "Building and uploading your app",
+    "functions": "Publishing your functions",
+    "live": "Going live",
+    "prepare": "Preparing to publish",
+    "buildOnly": "Building your app",
+    "package": "Packaging assets",
+    "upload": "Uploading to Fabric"
+  },
+  "dataKinds": {
+    "semanticmodel": {
+      "label": "Semantic model",
+      "plural": "Semantic models",
+      "hint": "Query Power BI data with DAX"
+    },
+    "warehouse": {
+      "label": "Warehouse",
+      "plural": "Warehouses",
+      "hint": "Read and write its tables"
+    },
+    "sqldatabase": {
+      "label": "SQL database",
+      "plural": "SQL databases",
+      "hint": "Read and write its tables"
+    },
+    "lakehouse": {
+      "label": "Lakehouse",
+      "plural": "Lakehouses",
+      "hint": "Read its tables"
+    }
+  },
+  "workspaceStatus": {
+    "title": "Fabric workspace",
+    "openItem": "Open the published app in the Fabric portal, in workspace “{{name}}”",
+    "openWorkspace": "Open workspace “{{name}}” in the Fabric portal"
+  },
+  "strip": {
+    "publishingTo": "Publishing to {{target}}",
+    "starting": "Starting to publish",
+    "watchTitle": "Show the publish screen"
+  },
+  "stage": {
+    "unnamed": "Your app",
+    "unnamedPublishing": "your app",
+    "published": "Published",
+    "fabricating": "Fabricating",
+    "live": "<b>{{app}}</b> is live",
+    "publishing": "Publishing <b>{{app}}</b>",
+    "steps": "Publish steps",
+    "back": "Back to your app"
+  },
+  "failedNotice": {
+    "label": "Couldn’t publish",
+    "ray": "Ray, the Fabricator stingray. Select him to find out why publishing failed.",
+    "plain": {
+      "failed": "Couldn’t publish this app. Help can find out why.",
+      "signin": "Fabric needs you to sign in again before you can publish this app.",
+      "stopped": "Publishing was stopped before it finished.",
+      "unsupported": "Fabric apps aren’t available in this workspace’s region. Choose a workspace in another region.",
+      "unsupportedRegion": "This workspace’s capacity is in {{region}}, where Fabric apps aren’t available yet. Choose a workspace in another region."
+    },
+    "refreshAuth": "Refresh Fabric authentication",
+    "diagnoseTitle": "Open Help, which reads what happened and explains it",
+    "showDetails": "Show details",
+    "hideDetails": "Hide details",
+    "dismissTitle": "Dismiss — it comes back if publishing fails again"
+  },
+  "rayfinVersion": {
+    "updateTitle": "Rayfin {{version}} — update to {{latest}} available",
+    "newerTitle": "Rayfin {{version}} — Rayfin {{newer}} is available",
+    "updateAvailable": "Update available",
+    "newerReady": "A newer version of Rayfin is ready.",
+    "updateWithCopilot": "Update with Copilot",
+    "newerAvailable": "Rayfin {{version}} is available",
+    "newerAvailableToo": "Rayfin {{version}} is available too",
+    "current": "This app is on Rayfin {{version}}.",
+    "updateToNewer": "Update to {{version}} with Copilot",
+    "notePublishes": "Copilot updates the packages and fixes any changes. They reach Fabric when Fabricator publishes the app after the turn.",
+    "note": "Copilot updates the packages and fixes any changes. They reach Fabric the next time you publish."
+  },
+  "create": {
+    "unknownSku": "Capacity",
+    "unknownSkuTitle": "On a dedicated capacity, but its SKU isn’t visible to you (you don’t administer it) — verified when you publish",
+    "otherCapacitySku": "Capacity ({{sku}}) isn’t Fabric (F-SKU) or Premium (P-SKU)",
+    "otherCapacity": "Capacity isn’t Fabric (F-SKU) or Premium (P-SKU)",
+    "noCapacity": "No Fabric/Premium capacity assigned",
+    "refusal": {
+      "workspace": "Fabric apps weren’t available in {{workspace}} when you published to it earlier, so publishing here will likely fail.",
+      "capacity": "Fabric apps weren’t available on this workspace’s capacity when you published earlier, so publishing here will likely fail.",
+      "region": "Fabric apps weren’t available in {{region}} when you published earlier, so publishing here will likely fail."
+    },
+    "refusedNote": {
+      "regions": "Fabric apps weren’t available in {{regions}}, so workspaces there are marked. If no region works, your Fabric admin may need to turn on Fabric Apps.",
+      "region": "Fabric apps weren’t available in {{region}}, so workspaces there are marked. Choose one on a capacity in another region.",
+      "capacity": "Fabric apps weren’t available in a workspace you published to, so workspaces on its capacity are marked. Choose one on a capacity in another region."
+    },
+    "errors": {
+      "capacities": "Could not load capacities. Please try again.",
+      "createWorkspace": "Could not create the workspace.",
+      "createWorkspaceRetry": "Could not create the workspace. Please try again."
+    },
+    "unavailableIn": "{{region}} · Fabric apps unavailable",
+    "unavailable": "Fabric apps unavailable",
+    "name": "Name",
+    "optional": "optional",
+    "namePlaceholder": "e.g. Production",
+    "workspace": "Publish to workspace",
+    "newWorkspace": "+ New workspace",
+    "newWorkspaceTitle": "Create a new Fabric workspace on a capacity you have access to",
+    "refresh": "Refresh workspaces",
+    "newWorkspaceName": "New workspace name",
+    "loadingCapacities": "Loading capacities…",
+    "noCapacities": "No eligible capacities available.",
+    "creating": "Creating…",
+    "createWorkspace": "Create workspace",
+    "reauthenticating": "Re-authenticating…",
+    "loading": "Loading your workspaces…",
+    "search": "Search {{total}} workspaces…",
+    "clearSearch": "Clear search",
+    "noEligible": {
+      "title": "No eligible workspaces",
+      "body_one": "Rayfin apps need a workspace on a Fabric (<strong>F-SKU</strong>) or Power BI Premium (<strong>P-SKU</strong>) capacity. None of your {{count}} workspace qualify — they’re listed below so you can see why. Start a free Fabric trial or add a capacity, then refresh.",
+      "body_other": "Rayfin apps need a workspace on a Fabric (<strong>F-SKU</strong>) or Power BI Premium (<strong>P-SKU</strong>) capacity. None of your {{count}} workspaces qualify — they’re listed below so you can see why. Start a free Fabric trial or add a capacity, then refresh."
+    },
+    "trial": "Start a free trial",
+    "buy": "Buy a capacity",
+    "recent": "Recent",
+    "others": "Other workspaces",
+    "checking": "Checking {{workspace}} for an app with the same name…",
+    "willReplace": "Publishing will replace the app “{{app}}” in {{workspace}}.",
+    "conflict": "{{workspace}} already has an app named “{{app}}”. Publishing here would replace it, so pick another workspace.",
+    "replaceAnyway": "Replace it anyway",
+    "app": "App",
+    "sameName": "{{app}} (same name as this app)",
+    "newAppNamed": "A new app named “{{name}}”",
+    "newApp": "A new app",
+    "replaces": "Publishing replaces the app “{{app}}” in {{workspace}} with this one.",
+    "publishAnyway": "Publish here anyway",
+    "notEligible": "Not eligible",
+    "ineligibleHint": "These need a Fabric (<strong>F-SKU</strong>) or Power BI Premium (<strong>P-SKU</strong>) capacity.",
+    "noMatch": "No workspaces match “{{query}}”.",
+    "noWorkspaces": {
+      "title": "No workspaces found",
+      "body": "We couldn’t find any Fabric workspaces for your account. Start a free Fabric trial or add a capacity, then refresh."
+    },
+    "signInPrompt": "Sign in to Microsoft Fabric to list your workspaces.",
+    "loadFailedWith": "Couldn’t load workspaces: {{error}}",
+    "loadFailed": "Couldn’t load workspaces."
+  },
+  "share": {
+    "title": "Share app",
+    "intro": "Grant people in your tenant access to <strong>{{app}}</strong>. Each recipient gets the <strong>Contributor</strong> role on its workspace.",
+    "introBuild_one": "Grant people in your tenant access to <strong>{{app}}</strong>. Each recipient gets the <strong>Contributor</strong> role on its workspace and <strong>Build</strong> access to the semantic model it uses.",
+    "introBuild_other": "Grant people in your tenant access to <strong>{{app}}</strong>. Each recipient gets the <strong>Contributor</strong> role on its workspace and <strong>Build</strong> access to the semantic models it uses.",
+    "people": "People or groups",
+    "placeholder": "Search by name or email",
+    "remove": "Remove {{name}}",
+    "searching": "Searching…",
+    "add": "Add “{{email}}”",
+    "noMatches": "No matches",
+    "invalid": "Not a valid email: {{emails}}",
+    "searchSignIn": {
+      "azure": "Sign in to Azure to search",
+      "fabric": "Sign in to Fabric to search"
+    },
+    "directory": {
+      "signInAzure": "Sign in to Azure to search the directory.",
+      "signInFabric": "Sign in to Fabric to search the directory.",
+      "failed": "Could not search the directory. You can still enter an email."
+    },
+    "contributor": "Contributor",
+    "build": "Build",
+    "covered": "Covered by workspace",
+    "checkingModels": "Checking semantic models…",
+    "modelCheck": {
+      "failed": "Could not check the app’s semantic models.",
+      "title": "Model check failed"
+    },
+    "expired": "Your Fabric session expired. Sign in to finish sharing.",
+    "signInRetry": "Sign in & retry",
+    "azRequired": "Azure CLI sign-in is required to look up recipients in your directory.",
+    "azRetry": "Sign in to Azure & retry",
+    "app": "App",
+    "model": "Model",
+    "status": {
+      "failed": "Failed",
+      "skipped": "Already had access",
+      "shared": "Shared"
+    },
+    "share": "Share",
+    "sharing": "Sharing…",
+    "again": "Share again",
+    "shared_one": "Shared with {{count}} recipient.",
+    "shared_other": "Shared with {{count}} recipients.",
+    "sharedTitle": "App shared",
+    "failed": "Could not share the app. Please retry.",
+    "linkCopied": "App link copied to clipboard."
+  },
+  "control": {
+    "panel": "Published apps",
+    "yourApp": "your app",
+    "notPublished": "Not published",
+    "notPublishedYet": "Not published yet",
+    "checkingForApp": "Checking for a published app…",
+    "errors": {
+      "loadApps": "Could not load your published apps. Please retry.",
+      "appCheck": "Published app check failed",
+      "loadWorkspaces": "Could not load workspaces. Please retry.",
+      "workspaceCheck": "Workspace check failed"
+    },
+    "held": {
+      "publish": "Copilot is working on this app. Publishing waits until the turn finishes.",
+      "deleting": "Deleting a published app. Publishing waits until it’s done.",
+      "deleteWhilePublishing": "Publishing. Deleting waits until it’s done.",
+      "delete": "Copilot is working on this app. Deleting waits until the turn finishes."
+    },
+    "next": {
+      "publishingPercent": "Publishing… {{percent}}%",
+      "publishingTitle": "See how publishing is going",
+      "publishTitle": "Publish this app to a Fabric workspace",
+      "chooseWorkspace": "Choose workspace",
+      "chooseWorkspaceTitle": "Fabric apps aren’t available in this workspace. Choose another workspace to publish to.",
+      "again": "Publish {{name}} again",
+      "publishChanges_one": "Publish {{count}} change",
+      "publishChanges_other": "Publish {{count}} changes",
+      "publishSomeChanges": "Publish changes",
+      "filesChanged_one": "{{count}} file changed since {{name}} was published",
+      "filesChanged_other": "{{count}} files changed since {{name}} was published",
+      "changesWaiting": "Your latest changes aren't on {{name}} yet",
+      "upToDate": "{{name}} is up to date. Publish it again anyway."
+    },
+    "chip": {
+      "label": "Published app:",
+      "failedNote": "Failed",
+      "auto": "Auto",
+      "publishing": "Publishing to {{name}}…",
+      "none": "Not published yet. Click to choose a workspace.",
+      "failed": "Couldn't publish to {{name}}. Click for details.",
+      "liveIn": "{{name}} is live in {{workspace}}. Click for details, or to switch or add a published app.",
+      "live": "{{name}} is live. Click for details, or to switch or add a published app.",
+      "autoOn": "Publish after each chat turn is on: chat changes publish as each turn finishes.",
+      "autoOff": "Publish after each chat turn is off: chat changes wait for you to publish them."
+    },
+    "status": {
+      "failed": "Couldn't publish",
+      "published": "Published",
+      "publishedWhen": "Published {{when}}"
+    },
+    "switchError": {
+      "signIn": "Sign in to Fabric before switching published apps.",
+      "failed": "Could not switch published apps. Please retry.",
+      "title": "Switch failed"
+    },
+    "delete": {
+      "title": "Delete this published app",
+      "named": "Delete {{name}}",
+      "confirm": "Delete <strong>{{name}}</strong> and all its data in {{workspace}}?",
+      "detail": "It’s gone for everyone who uses it, and this can’t be undone. {{after}}",
+      "keep": "Your app on this computer stays as it is.",
+      "keepThen": "Your app on this computer stays, and publishes to {{name}} from then on.",
+      "keepUnpublished": "Your app on this computer stays, unpublished.",
+      "done": "Deleted {{name}} and its data in Fabric.",
+      "failed": "Couldn’t delete {{name}}. Please try again.",
+      "failedTitle": "Delete failed"
+    },
+    "share": {
+      "title": "Share this app with people in your tenant",
+      "opening": "Opening the share dialog…",
+      "nothing": "Publish this app to a workspace before sharing.",
+      "nothingTitle": "Nothing to share yet",
+      "loadFailed": "Could not load the published app to share. Please retry."
+    },
+    "rename": "Rename this published app",
+    "renameNamed": "Rename {{name}}",
+    "renameLabel": "Published app name",
+    "create": {
+      "first": "Publish to a Fabric workspace",
+      "another": "Publish to another workspace",
+      "firstButton": "Publish to a Fabric workspace…",
+      "anotherButton": "Publish to another workspace…"
+    },
+    "publishesAs": "Publishes as <strong>{{user}}</strong>",
+    "yourAccountInSentence": "your Fabric account",
+    "change": "Change",
+    "turnedDown": {
+      "named": "Couldn't publish to “{{name}}”.",
+      "unnamed": "Couldn't publish to that workspace.",
+      "region": "Fabric apps aren’t available in {{region}}, where its capacity is. Choose a workspace on a capacity in another region.",
+      "noRegion": "Fabric apps aren’t available in its region. Choose a workspace on a capacity in another region."
+    },
+    "failedCallout": "Publishing didn't finish.",
+    "waiting": {
+      "files_one": "<strong>{{count}} file</strong> changed since {{name}} was published.",
+      "files_other": "<strong>{{count}} files</strong> changed since {{name}} was published.",
+      "changes": "Your latest changes aren't on {{name}} yet."
+    },
+    "seeChanges": "See what changed",
+    "facts": {
+      "app": "App",
+      "item": "Item",
+      "workspace": "Workspace",
+      "account": "Account"
+    },
+    "openInBrowser": "Open in your browser",
+    "openInFabric": "Open in Fabric",
+    "openWorkspace": "Open the workspace in Fabric",
+    "yourAccount": "Your Fabric account",
+    "notSignedIn": "Not signed in to Fabric",
+    "others": "Other published apps",
+    "publishedAgo": "published {{when}}",
+    "switchTitle": "Preview and publish to {{name}}",
+    "switch": "Switch",
+    "switching": "Switching…",
+    "auto": {
+      "title": "Publish after each chat turn",
+      "on": "When a turn changes your app, it publishes as the turn finishes.",
+      "off": "Changes stay on this computer, showing in the preview, until you publish them."
+    }
+  }
+}

@@ -104,7 +104,7 @@ pub async fn github_accounts() -> GithubAccountsResult {
     Err(e) => GithubAccountsResult {
       gh_installed: !e.missing_cli,
       accounts: Vec::new(),
-      error: (!e.missing_cli).then(|| e.describe("Couldn't list your GitHub accounts")),
+      error: (!e.missing_cli).then(|| e.describe(&t!("commands.github.cantListAccounts"))),
     },
   }
 }
@@ -135,7 +135,7 @@ pub async fn github_add_account() -> ProcResult {
     return ProcResult {
       ok: false,
       exit_code: None,
-      error: Some("The GitHub CLI (gh) isn't installed. Install it from setup, then try again.".into()),
+      error: Some(t!("commands.github.ghMissingSetup")),
     };
   }
   let active = gh::accounts()
@@ -150,7 +150,7 @@ pub async fn github_add_account() -> ProcResult {
   ProcResult {
     ok,
     exit_code: None,
-    error: (!ok).then(|| format!("Couldn't open a terminal. Run `{cmd}` yourself, then come back.")),
+    error: (!ok).then(|| t!("commands.github.cantOpenTerminal", command = cmd)),
   }
 }
 
@@ -159,7 +159,7 @@ fn checked_login(login: &str) -> Result<&str, ProcResult> {
   if gh::is_login(login) {
     Ok(login)
   } else {
-    Err(ProcResult { ok: false, exit_code: None, error: Some(format!("{login} isn't a GitHub account name.")) })
+    Err(ProcResult { ok: false, exit_code: None, error: Some(t!("commands.github.notAccountName", login = login)) })
   }
 }
 
@@ -181,7 +181,7 @@ pub async fn github_switch_account(login: String) -> ProcResult {
   ProcResult {
     ok: res.ok,
     exit_code: res.exit_code,
-    error: (!res.ok).then(|| command_error(&format!("Couldn't switch to {login}"), &res)),
+    error: (!res.ok).then(|| command_error(&t!("commands.github.cantSwitch", login = login), &res)),
   }
 }
 
@@ -202,7 +202,7 @@ pub async fn github_sign_out_account(login: String) -> ProcResult {
   ProcResult {
     ok: res.ok,
     exit_code: res.exit_code,
-    error: (!res.ok).then(|| command_error(&format!("Couldn't sign out of {login}"), &res)),
+    error: (!res.ok).then(|| command_error(&t!("commands.github.cantSignOut", login = login), &res)),
   }
 }
 
@@ -227,14 +227,14 @@ pub fn github_login() -> ProcResult {
     return ProcResult {
       ok: false,
       exit_code: None,
-      error: Some("The GitHub CLI (gh) is not installed or not on PATH.".into()),
+      error: Some(t!("commands.github.ghMissingPath")),
     };
   }
   let ok = launch_login_terminal();
   ProcResult {
     ok,
     exit_code: None,
-    error: (!ok).then(|| "Could not open a terminal for GitHub sign-in. Run `gh auth login --hostname github.com` in your terminal.".into()),
+    error: (!ok).then(|| t!("commands.github.cantOpenLoginTerminal")),
   }
 }
 
@@ -284,14 +284,11 @@ static AUTH_FAILURE_RE: Lazy<Regex> = Lazy::new(|| {
 
 fn command_error(operation: &str, res: &exec::RunResult) -> String {
   if res.exit_code == Some(4) || AUTH_FAILURE_RE.is_match(&res.stderr) {
-    return format!("{operation}: GitHub authentication is required or has expired. Sign in to github.com again.");
+    return t!("commands.github.authExpired", operation = operation);
   }
   let detail = res.stderr.trim();
   if detail.is_empty() {
-    format!(
-      "{operation} (exit {}).",
-      res.exit_code.map(|code| code.to_string()).unwrap_or_else(|| "unknown".into())
-    )
+    t!("commands.github.exitCode", operation = operation, code = res.exit_code.map(|code| code.to_string()).unwrap_or_else(|| t!("commands.shared.unknown")))
   } else {
     format!("{operation}: {detail}")
   }
@@ -328,7 +325,7 @@ struct RawRepo {
 /// `{name}` object) is flattened to its name.
 fn parse_repos_json(stdout: &str) -> Result<Vec<GithubRepo>, String> {
   let raw: Vec<RawRepo> = serde_json::from_str(stdout.trim())
-    .map_err(|e| format!("Could not read the repository list: {e}"))?;
+    .map_err(|e| t!("commands.github.cantReadRepoList", error = e))?;
   Ok(
     raw
       .into_iter()
@@ -359,14 +356,14 @@ pub async fn github_list_repos() -> GithubReposResult {
   if res.not_found {
     return GithubReposResult {
       ok: false,
-      error: Some("GitHub CLI (gh) was not found. Install it to browse repositories.".into()),
+      error: Some(t!("commands.github.ghMissingBrowse")),
       repos: vec![],
     };
   }
   if !res.ok {
     return GithubReposResult {
       ok: false,
-      error: Some(command_error("Could not list your repositories", &res)),
+      error: Some(command_error(&t!("commands.github.cantListRepos"), &res)),
       repos: vec![],
     };
   }
@@ -429,20 +426,18 @@ pub async fn github_clone(app: AppHandle, input: String) -> ProjectActionResult 
   let on = proc_streamer(&app, CLONE_CHANNEL);
 
   let Some((repository, target_name)) = clone_target(&input) else {
-    return err("Enter a repository as owner/name or a GitHub URL.");
+    return err(t!("commands.github.enterRepository"));
   };
 
   let root = store::get_state().workspace_root;
   if !Path::new(&root).exists() {
     if let Err(e) = std::fs::create_dir_all(&root) {
-      return err(format!("Could not create workspace folder: {e}"));
+      return err(t!("commands.github.cantCreateWorkspaceFolder", error = e));
     }
   }
   let dir = Path::new(&root).join(&target_name);
   if dir.exists() {
-    return err(format!(
-      "A folder named \"{target_name}\" already exists in your workspace."
-    ));
+    return err(t!("commands.github.folderExists", name = target_name));
   }
   let dir_str = dir.to_string_lossy().to_string();
 
@@ -459,19 +454,19 @@ pub async fn github_clone(app: AppHandle, input: String) -> ProjectActionResult 
   .await;
 
   if res.not_found {
-    return err("GitHub CLI (gh) was not found. Install it, then try cloning again.");
+    return err(t!("commands.github.ghMissingClone"));
   }
   if !res.ok {
     // Remove any partial checkout so a retry starts clean (dir didn't exist before).
     let _ = std::fs::remove_dir_all(&dir);
-    return err(command_error("Clone failed", &res));
+    return err(command_error(&t!("commands.github.cloneFailed"), &res));
   }
 
   say(&on, "\nVerifying Rayfin project…\n");
   if !is_rayfin_project(&dir_str) {
     // Not a Rayfin app — discard the fresh clone and report it.
     let _ = std::fs::remove_dir_all(&dir);
-    return err("That repository isn't a Rayfin project (no rayfin/rayfin.yml).");
+    return err(t!("commands.github.notRayfin"));
   }
 
   // A fresh clone has no node_modules; install deps now so preview/deploy work.
@@ -488,30 +483,24 @@ pub async fn github_clone(app: AppHandle, input: String) -> ProjectActionResult 
   .await;
   if install.not_found {
     // Keep the clone: this is a missing prerequisite (Node/npm), not a bad repo.
-    return err(format!(
-      "Cloned to {dir_str}, but npm was not found on PATH. Install Node.js (which includes npm), \
-       run \"npm install\" in that folder, then use Open existing → Browse folder to open it."
-    ));
+    return err(t!("commands.github.npmMissing", path = dir_str));
   }
   if !install.ok {
     // Keep the clone: the checkout is valid and re-cloning is wasteful (a dep
     // failure is often a transient registry/policy issue). Point the user at
     // finishing the install manually, then opening the folder.
-    let why = exec::npm_error_summary(&install)
-      .map(|cause| format!(": {}", cause.trim_end_matches('.')))
-      .unwrap_or_else(|| {
-        let code = install.exit_code.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into());
-        format!(" (npm install exited {code})")
-      });
-    return err(format!(
-      "Cloned to {dir_str}, but installing dependencies failed{why}. \
-       See details below, then run \"npm install\" in that folder and use Open existing → Browse folder to open it."
-    ));
+    return err(match exec::npm_error_summary(&install) {
+      Some(cause) => t!("commands.github.installFailed", path = dir_str, cause = cause.trim_end_matches('.')),
+      None => {
+        let code = install.exit_code.map(|c| c.to_string()).unwrap_or_else(|| t!("commands.shared.unknown"));
+        t!("commands.github.installExited", path = dir_str, code = code)
+      }
+    });
   }
   // The functions folder may have its own packages that the root install skips.
   // Opening the app tries again, so a failure here doesn't stop it.
   if let Err(e) = crate::commands::projects_impl::ensure_functions_dependencies(&dir, Some(on.clone())).await {
-    say(&on, &format!("\n⚠️ {e}\nFabricator tries again when the app opens.\n"));
+    say(&on, &format!("\n⚠️ {e}\n{}\n", t!("commands.shared.retryOnOpen")));
   }
 
   say(&on, "\n✅ Cloned and dependencies installed. Opening…\n");

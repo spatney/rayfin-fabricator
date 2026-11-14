@@ -21,6 +21,12 @@ import { HELP_STOPPED } from '@shared/ipc'
 import { errorMessage, reportError, reportThrown } from '../../errorReport'
 import { fromSaved, toSaved } from './history'
 
+/**
+ * The error kept for a question Help couldn't answer and gave no reason for.
+ * Stored and reported in English; the transcript shows it in the user's language.
+ */
+export const HELP_FAILED = 'Help could not answer.'
+
 /** One exchange in the transcript. */
 export interface Exchange {
   id: string
@@ -319,7 +325,7 @@ export function createHelpConversation(): HelpConversation {
           })
           patchExchange(id, (prev) => applyAnswer(prev, answer))
         } catch (reason) {
-          const message = errorMessage(reason, 'Help could not answer.')
+          const message = errorMessage(reason, HELP_FAILED)
           if (message === HELP_STOPPED) {
             // The user's own doing, not a failure: don't record it, or it crowds
             // real errors out of the window the next question is primed with.

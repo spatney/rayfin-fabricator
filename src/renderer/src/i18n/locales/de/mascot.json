@@ -1,0 +1,203 @@
+{
+  "ui": {
+    "ray": "Ray, der Stachelrochen von Fabricator. Wähle ihn aus, um ihn zu streicheln.",
+    "sendAway": "Ray vorerst wegschicken",
+    "another": "Klicken für noch einen"
+  },
+  "labels": {
+    "rayfin": "Rayfin-Fakt",
+    "tip": "Fabricator-Tipp",
+    "ray": "Ray-Fakt"
+  },
+  "facts": {
+    "rayfin": {
+      "classes": "Rayfin macht aus TypeScript-Klassen eine Datenbank, APIs und einen typsicheren Client.",
+      "decorators": "Dein Datenmodell ist einfaches TypeScript. Dekoratoren wie @text, @int und @date beschreiben jedes Feld.",
+      "rayfinUp": "Ein einziger Befehl, rayfin up, veröffentlicht die ganze App in Microsoft Fabric.",
+      "boundary": "Rayfin-Apps laufen in Microsoft Fabric, innerhalb der Grenzen deiner Organisation.",
+      "signIn": "Die Anmeldung ist schon eingebaut: Rayfin-Apps melden Leute mit Microsoft Entra ID an.",
+      "rowLevelSecurity": "Eine Richtlinie auf @authenticated kann jeder Person nur ihre eigenen Zeilen zeigen. Sicherheit auf Zeilenebene, in einer Zeile.",
+      "relations": "@one und @many verknüpfen Entitäten, so kann ein Kunde viele Bestellungen haben.",
+      "queries": "Rayfin-Abfragen sind typsichere Ketten: select, where, orderBy, dann execute.",
+      "aggregates": "Brauchst du Gesamtwerte? groupBy() und aggregate() liefern Summen, Mittelwerte und Anzahlen.",
+      "validators": "Rayfin kann aus einer Entität einen Validator erzeugen, damit ein Formular Eingaben vor dem Speichern prüfen kann.",
+      "connectors": "Konnektoren lesen Daten, die schon in Fabric liegen: Warehouses, SQL-Datenbanken, semantische Modelle und KQL-Datenbanken.",
+      "dax": "Mit einem Konnektor kann deine App DAX auf einem semantischen Modell in Fabric ausführen.",
+      "functions": "Funktionen führen serverseitiges TypeScript direkt bei deinen Daten aus. Achtung: Es gibt sie noch nicht in jeder Fabric-Region.",
+      "secrets": "Funktionen können externe APIs mit Schlüsseln aufrufen, die als Geheimnisse hinterlegt sind. So stehen die Schlüssel nie in deinem Code.",
+      "versions": "Alle Pakete unter @microsoft/rayfin-* haben dieselbe Versionsnummer, Upgrades laufen also im Gleichschritt.",
+      "universalApp": "Neue Apps starten mit der Universal App von Rayfin. Sie fängt klein an und wächst zu dem, was du beschreibst.",
+      "hosting": "Rayfin hostet auch dein Frontend. Die gebaute App wird aus Fabric ausgeliefert, direkt neben ihren Daten.",
+      "files": "Rayfin-Apps können auch Dateien wie Fotos und Belege in ihrem eigenen Dateispeicher ablegen.",
+      "typeScript": "Rayfin ist TypeScript bis auf den Grund: Datenmodell, Clientcode und App-Logik.",
+      "docs": "Die Rayfin-Doku ist auch für Agents geschrieben. Häng .md an eine beliebige Seite auf rayfin.ai an, und du bekommst sie als Markdown."
+    },
+    "tip": {
+      "describe": "Beschreib in einfachen Worten, was du willst. Copilot schreibt den Code, und ich feuere dich an.",
+      "design": "In der Vorschau kannst du mit „Design“ auf alles zeigen und um eine Änderung bitten.",
+      "history": "Jede Änderung bleibt erhalten. Unter „Code“ → „Verlauf“ kannst du eine frühere Version wiederherstellen.",
+      "advisor": "Der Berater bewertet den Zustand deiner App, und zu jedem Befund gibt es eine Korrektur per Klick.",
+      "blueprint": "Blueprint zeigt, wie deine App aufgebaut ist, samt Datenmodell.",
+      "secrets": "Ein API-Schlüssel für eine Funktion? Füg ihn unter „Code“ → „Geheimnisse“ hinzu, dann steht er nie in deinem Code.",
+      "publish": "Beim Veröffentlichen kommt deine App in Microsoft Fabric, wo Leute in deiner Organisation sie öffnen können.",
+      "autoPublish": "„Nach jedem Chat-Durchgang veröffentlichen“ legt fest, ob jede Änderung sofort zu Fabric geht.",
+      "share": "Sobald deine App veröffentlicht ist, gibst du sie mit „Teilen“ für Leute in deiner Organisation frei.",
+      "help": "Kommst du später nicht weiter? Wähle „Hilfe“ in der Statusleiste, dann tauche ich mit dir in die Protokolle ab."
+    },
+    "ray": {
+      "cartilage": "Rochen sind Cousins der Haie. Unser Skelett ist aus Knorpel, nicht aus Knochen.",
+      "rayFinned": "Plot-Twist: Ich strahle zwar, aber ein Strahlenflosser bin ich nicht. Rochen sind näher mit Haien verwandt.",
+      "eyes": "Ein Stachelrochen hat die Augen oben und das Maul unten, so kann er beim Fressen Ausschau halten.",
+      "electric": "Rochen spüren die schwachen elektrischen Felder von Beutetieren, die sich im Sand verstecken.",
+      "fever": "Auf Englisch heißt eine Gruppe Stachelrochen „fever“, also Fieber. Das denk ich mir nicht aus.",
+      "mantaBrain": "Mantas haben das größte Gehirn aller Fische.",
+      "mantaSpan": "Der Riesenmanta kann von Flügelspitze zu Flügelspitze rund 7 Meter messen."
+    },
+    "quip": {
+      "school": "Viele Fische sind ein Schwarm. Viele Pakete sind node_modules.",
+      "spots": "Ich wollte die Pakete von npm an meinen Flecken abzählen. Die Flecken haben nicht gereicht.",
+      "wings": "Ich würd ja mit anpacken, aber ich hab nur Flossen.",
+      "blink": "Die meisten Fische können nicht blinzeln. Ich hab geübt."
+    }
+  },
+  "install": {
+    "intro": "Hallo, ich bin Ray! Während npm deine Pakete holt, erzähl ich dir was über Rayfin.",
+    "introPrepare": "Hallo, ich bin Ray! Während diese App ihre Pakete bekommt, erzähl ich dir was über Rayfin.",
+    "hello": {
+      "create": "Oh, eine neue App! Ich erzähl dir was über Rayfin, während npm sein Ding macht.",
+      "createBack": "Willkommen zurück! Neue App, neue Pakete. Ich leiste dir Gesellschaft.",
+      "clone": "Klonen, schön. Ich leiste dir Gesellschaft, bis die Pakete da sind.",
+      "cloneBack": "Willkommen zurück! Ich erzähl dir was über Rayfin, während das hier installiert wird.",
+      "prepare": "Diese App braucht erst ihre Pakete. Ich leiste dir Gesellschaft.",
+      "prepareBack": "Willkommen zurück! Kurz installieren, dann geht’s los."
+    },
+    "success": {
+      "create": "Deine App ist fertig! Sie läuft direkt hier auf deinem Computer. Los geht’s.",
+      "team": "Deine App ist fertig! Die Team-Pipeline stellt gerade deine erste Vorschau bereit.",
+      "ready": "Alles bereit! Deine App ist fertig."
+    },
+    "error": {
+      "prepare": "Oh nein, das hat nicht geklappt. Die Meldung sagt, warum. Wähle „Wiederholen“ oder lass die Hilfe nachforschen.",
+      "details": "Oh nein, das hat nicht geklappt. Die Details zeigen, warum, und die Hilfe kann nachforschen."
+    },
+    "retry": "Runde zwei. Ich glaub an dich.",
+    "resume": "Oh! Noch mehr zu installieren. Ich bleib da.",
+    "slow": "npm ist heute besonders gründlich.",
+    "bye": "Okay, bis später! Ich bin in der Hilfe, wenn du mich brauchst."
+  },
+  "play": {
+    "pet": {
+      "hehe": "Hihi!",
+      "tickles": "Das kitzelt!",
+      "again": "Nochmal! Nochmal!",
+      "favorite": "Du bist mein Lieblingsmensch.",
+      "likeYou": "Ich mag dich auch.",
+      "wiggle": "Freudenwackeln!"
+    },
+    "dizzy": {
+      "spinning": "Huch… alles dreht sich.",
+      "tooMany": "Zu… viele… Streicheleinheiten…"
+    },
+    "lift": "Huiii!",
+    "drop": {
+      "thanks": "Danke fürs Mitnehmen!",
+      "niceSpot": "Oh, schönes Plätzchen.",
+      "canFly": "Ich kann fliegen, weißt du. Unter Wasser. Aber danke."
+    },
+    "hover": {
+      "hi": "Oh, hallo!",
+      "hello": "Na, hallo.",
+      "psst": "Psst. Du darfst mich streicheln."
+    },
+    "wake": {
+      "up": "Hm? Bin wach! Bin wach.",
+      "resting": "Ich hab nicht geschlafen. Ich hab nur meine Flügel ausgeruht."
+    }
+  },
+  "help": {
+    "hello": {
+      "morning": "Guten Morgen! Ich bin Ray.",
+      "afternoon": "Guten Tag! Ich bin Ray.",
+      "evening": "Guten Abend! Ich bin Ray.",
+      "late": "Noch wach? Ich auch. Ich bin Ray."
+    },
+    "working": {
+      "logs": "sieht deine Protokolle durch",
+      "clues": "fischt nach Hinweisen",
+      "docs": "gleitet durch die Doku",
+      "source": "liest den Quellcode",
+      "trail": "folgt der Spur",
+      "sand": "siebt den Sand durch",
+      "dots": "zählt eins und eins zusammen",
+      "answer": "zieht eine Antwort an Land"
+    }
+  },
+  "splash": {
+    "intro": "Hallo, ich bin Ray! Machen wir dich startklar.",
+    "hello": "Willkommen zurück! Ich bereite alles vor.",
+    "launch": {
+      "welcomeBack": "Willkommen zurück!",
+      "hey": "Hey, willkommen zurück!",
+      "build": "Willkommen zurück! Lass uns loslegen.",
+      "morning": "Morgen! Willkommen zurück.",
+      "evening": "Abend! Willkommen zurück.",
+      "late": "Noch wach? Willkommen zurück."
+    },
+    "tools": {
+      "toolbox": "Wühle im Werkzeugkasten…",
+      "fins": "Flossen? Da. Schwanz? Auch da. Ich such weiter…"
+    },
+    "accounts": {
+      "knocking": "Klopfe an ein paar Türen…",
+      "knuckles": "Klopfe immer noch. Flossen sind miese Fingerknöchel."
+    },
+    "ready": "Alles bereit! Lass uns was Großartiges bauen.",
+    "setup": "Erst ein paar Dinge einrichten. Ich zeig dir alles!",
+    "error": "Hm, da hat sich was im Seetang verheddert. Schauen wir mal."
+  },
+  "deploy": {
+    "hello": "Ich bringe deine neuesten Änderungen zu Fabric!",
+    "helloFirst": "{{name}} reist zum ersten Mal zu Fabric! Ich schwimm’s rüber.",
+    "live": "{{name}} ist live! Schau mal rein.",
+    "trouble": {
+      "failed": "Deine App hat es nicht bis zu Fabric geschafft. Soll ich herausfinden, warum?",
+      "signin": "Fabric möchte, dass du dich erneut anmeldest, bevor du diese App veröffentlichen kannst.",
+      "stopped": "Die Veröffentlichung wurde gestoppt, bevor sie fertig war.",
+      "unsupported": "Fabric-Apps sind in der Region dieses Arbeitsbereichs noch nicht verfügbar. Wählen wir einen Arbeitsbereich in einer anderen Region.",
+      "unsupportedRegion": "Die Kapazität dieses Arbeitsbereichs liegt in {{region}}, und dort gibt es noch keine Fabric-Apps. Wählen wir einen Arbeitsbereich in einer anderen Region."
+    },
+    "steps": {
+      "packages": "Packe noch ein paar Pakete ein, bevor wir in See stechen…",
+      "suitcase": "npm packt den Koffer…",
+      "hiFabric": "Sage Fabric Hallo…",
+      "knock": "Klopf, klopf, Fabric. Ich bin’s, Ray.",
+      "id": "Fabric will einen Ausweis sehen. Schau in deinen Browser!",
+      "room": "Suche deiner App Platz zum Schwimmen…",
+      "pond": "Mache Platz im Teich…",
+      "swimOver": "Schwimme rüber zu deinem Arbeitsbereich…",
+      "workspaceRoom": "Prüfe, ob dein Arbeitsbereich Platz hat…",
+      "spot": "Reserviere deiner App einen Platz in Fabric…",
+      "welcomeMat": "Rolle den roten Teppich aus…",
+      "knobs": "Drehe an ein paar Reglern…",
+      "guestList": "Schaue, wer auf der Gästeliste steht…",
+      "tables": "Räume deine Tabellen auf…",
+      "tricks": "Bringe deiner Datenbank neue Tricks bei…",
+      "files": "Schaffe Platz für deine Dateien…",
+      "shelves": "Staube ein paar Regale ab…",
+      "plugging": "Stecke deine Datenverbindungen ein…",
+      "cables": "Entwirre ein paar Kabel…",
+      "building": "Baue deine App. Flossen drücken!",
+      "bundling": "Schnüre alles schön ordentlich zusammen…",
+      "current": "Schicke sie mit der Strömung zu Fabric…",
+      "waking": "Wecke deine Funktionen…",
+      "riseAndShine": "Funktionen, raus aus den Federn!",
+      "ready": "Bereite alles in Fabric vor…",
+      "bow": "Binde noch eine Schleife drum…",
+      "almost": "Fast geschafft. Schwimm, Ray, schwimm!",
+      "magic": "Zaubere ein bisschen mit Fabric…",
+      "new": "Etwas Neues! Ich schau genau hin…",
+      "busy": "Fabric ist gerade etwas beschäftigt. Ich versuch’s noch mal…",
+      "live": "Deine App ist live! Schau mal rein."
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import type { JSX } from 'react'
 import type { ChatDataRef, ChatMigrationRef } from '@shared/ipc'
 import { kindOfItem, type DataSource } from '@renderer/fabricData'
+import { translator, useTranslation } from '../../i18n'
 import { CloseIcon, Codicon } from '../icons'
 
 /**
@@ -17,9 +18,10 @@ export function DataTray({
   onOpen: () => void
   onRemove: (itemId: string) => void
 }): JSX.Element | null {
+  const { t } = useTranslation('chat')
   if (sources.length === 0) return null
   return (
-    <ul className="data-tray" aria-label="Fabric data to connect">
+    <ul className="data-tray" aria-label={t('dataTray.toConnect')}>
       {sources.map((s) => {
         const kind = kindOfItem(s.item.type)
         return (
@@ -28,7 +30,10 @@ export function DataTray({
               type="button"
               className="data-chip-main"
               onClick={onOpen}
-              title={`${kind?.label ?? 'Data'} in ${s.workspaceName}. Copilot connects it when you send. Click to change the data.`}
+              title={t('dataTray.chipTitle', {
+                kind: kind?.label ?? t('dataTray.data'),
+                workspace: s.workspaceName
+              })}
             >
               <Codicon name={kind?.icon ?? 'database'} className="data-chip-ico" />
               <span className="data-chip-name">{s.item.name}</span>
@@ -38,8 +43,8 @@ export function DataTray({
               type="button"
               className="data-chip-x"
               onClick={() => onRemove(s.item.id)}
-              aria-label={`Remove ${s.item.name}`}
-              title="Remove"
+              aria-label={t('tray.removeItem', { name: s.item.name })}
+              title={t('actions.remove')}
             >
               <CloseIcon />
             </button>
@@ -52,12 +57,20 @@ export function DataTray({
 
 /** The Fabric data a sent message asked Copilot to connect, as chips in the transcript. */
 export function SentData({ data }: { data: readonly ChatDataRef[] }): JSX.Element {
+  const { t } = useTranslation('chat')
   return (
-    <ul className="msg-data" aria-label="Fabric data">
+    <ul className="msg-data" aria-label={t('dataTray.sent')}>
       {data.map((d, i) => {
         const kind = kindOfItem(d.type)
         return (
-          <li key={i} className="data-chip data-chip--sent" title={`${kind?.label ?? 'Data'} in ${d.workspace}`}>
+          <li
+            key={i}
+            className="data-chip data-chip--sent"
+            title={t('dataTray.sentTitle', {
+              kind: kind?.label ?? t('dataTray.data'),
+              workspace: d.workspace
+            })}
+          >
             <Codicon name={kind?.icon ?? 'database'} className="data-chip-ico" />
             <span className="data-chip-name">{d.name}</span>
             <span className="data-chip-ws">{d.workspace}</span>
@@ -70,17 +83,22 @@ export function SentData({ data }: { data: readonly ChatDataRef[] }): JSX.Elemen
 
 /** "Page 2 of 5: Regional sales", or "Setup and page 1 of 5: Overview" for the first turn. */
 export function migrationChipLabel(migration: ChatMigrationRef): string {
+  const t = translator('chat')
   const page = migration.page
-  if (!page) return migration.foundation ? 'Setup' : 'Wrap-up'
-  const where = `page ${page.index + 1} of ${page.count}: ${page.name}`
-  return migration.foundation ? `Setup and ${where}` : where.charAt(0).toUpperCase() + where.slice(1)
+  if (!page) return migration.foundation ? t('dataTray.setup') : t('dataTray.wrapUp')
+  const where = { index: page.index + 1, total: page.count, name: page.name }
+  return migration.foundation ? t('dataTray.setupAndPage', where) : t('dataTray.page', where)
 }
 
 /** The report-migration page a sent message asked Copilot to build, as a chip in the transcript. */
 export function SentMigration({ migration }: { migration: ChatMigrationRef }): JSX.Element {
+  const { t } = useTranslation('chat')
   return (
-    <ul className="msg-data" aria-label="Power BI migration">
-      <li className="data-chip data-chip--sent" title={`Migrating “${migration.reportName}” from Power BI`}>
+    <ul className="msg-data" aria-label={t('dataTray.migration')}>
+      <li
+        className="data-chip data-chip--sent"
+        title={t('dataTray.migrating', { report: migration.reportName })}
+      >
         <Codicon name="graph" className="data-chip-ico" />
         <span className="data-chip-name">{migration.reportName}</span>
         <span className="data-chip-ws">{migrationChipLabel(migration)}</span>

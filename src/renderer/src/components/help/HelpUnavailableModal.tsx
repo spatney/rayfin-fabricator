@@ -1,4 +1,5 @@
 import { useEffect, useId, type JSX } from 'react'
+import { useTranslation } from '../../i18n'
 import { useSuppressPreview } from '../../overlay'
 import { useModalFocus } from '../../modalFocus'
 import { BookIcon, Codicon, InfoIcon } from '../icons'
@@ -33,6 +34,7 @@ export default function HelpUnavailableModal({
   onClose
 }: HelpUnavailableModalProps): JSX.Element {
   useSuppressPreview()
+  const { t } = useTranslation('help')
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
 
@@ -55,20 +57,17 @@ export default function HelpUnavailableModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>Help</h2>
+          <h2 id={titleId}>{t('title')}</h2>
         </div>
         <div className="modal-body">
-          <p className="help-offline-lead">
-            Help answers questions about what went wrong using your own error history. It needs
-            GitHub Copilot, and you&apos;re not signed in right now.
-          </p>
+          <p className="help-offline-lead">{t('unavailable.lead')}</p>
           <ul className="help-offline-list">
             <li>
               <button className="help-offline-item is-primary" onClick={onSignIn} autoFocus>
                 <Codicon name="key" className="help-offline-icon" />
                 <span className="help-offline-text">
-                  <span className="help-offline-title">Sign in to GitHub Copilot</span>
-                  <span className="help-offline-sub">Then Help can look into it for you</span>
+                  <span className="help-offline-title">{t('unavailable.signIn')}</span>
+                  <span className="help-offline-sub">{t('unavailable.signInSub')}</span>
                 </span>
                 <Codicon name="arrow-right" className="help-offline-go" />
               </button>
@@ -77,8 +76,8 @@ export default function HelpUnavailableModal({
               <button className="help-offline-item" onClick={onDocs}>
                 <BookIcon />
                 <span className="help-offline-text">
-                  <span className="help-offline-title">Browse the documentation</span>
-                  <span className="help-offline-sub">Setup, publishing, and troubleshooting</span>
+                  <span className="help-offline-title">{t('unavailable.docs')}</span>
+                  <span className="help-offline-sub">{t('unavailable.docsSub')}</span>
                 </span>
                 <Codicon name="link-external" className="help-offline-go" />
               </button>
@@ -87,10 +86,8 @@ export default function HelpUnavailableModal({
               <button className="help-offline-item" onClick={onReportIssue}>
                 <InfoIcon />
                 <span className="help-offline-text">
-                  <span className="help-offline-title">Report an issue</span>
-                  <span className="help-offline-sub">
-                    Opens a bug report with your version and a diagnostics file
-                  </span>
+                  <span className="help-offline-title">{t('unavailable.report')}</span>
+                  <span className="help-offline-sub">{t('unavailable.reportSub')}</span>
                 </span>
                 <Codicon name="link-external" className="help-offline-go" />
               </button>
@@ -99,7 +96,7 @@ export default function HelpUnavailableModal({
         </div>
         <div className="modal-footer">
           <button className="btn btn--ghost" onClick={onClose}>
-            Close
+            {t('actions.close')}
           </button>
         </div>
       </div>

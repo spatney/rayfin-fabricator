@@ -94,7 +94,7 @@ pub(crate) async fn run_transient(
     .copilot
     .transient_session_with(cwd, ModelChoice::of(model, effort), options)
     .await
-    .map_err(|_| "Couldn't reach the model.".to_string())?;
+    .map_err(|_| t!("commands.transient.cantReach"))?;
 
   let mut st = GenState::default();
   let mut sub = session.subscribe();
@@ -137,7 +137,7 @@ pub(crate) async fn run_transient(
   }
   let _ = session.disconnect().await;
   if !sent {
-    return Err("Couldn't send the request to the model.".into());
+    return Err(t!("commands.transient.cantSend"));
   }
   if st.assistant.trim().is_empty() {
     if let (Some(model), Some(raw)) = (&provider_model, &st.error) {

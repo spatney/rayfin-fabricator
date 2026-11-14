@@ -158,7 +158,7 @@ export const SCRIPT = {
     },
     {
       id: 'stinger',
-      // From RAY_FACTS (src/renderer/src/components/mascot/lines.ts). The intro used the fever,
+      // From RAY_FACTS (facts.ray in src/renderer/src/i18n/locales/en/mascot.json). The intro used the fever,
       // lesson 1 the cartilage, and lesson 2 the eyes on top.
       beats: [{ id: 'fact', text: "[whispers] Psst… rays can sense the faint electric fields of prey hiding in the sand. [giggles] So hidden files can't hide from me!" }],
     },

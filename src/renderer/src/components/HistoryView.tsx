@@ -18,6 +18,7 @@ import type {
   StudioProject
 } from '@shared/ipc'
 import { GIT_WORKING_REF } from '@shared/ipc'
+import { Trans, currentLanguage, formatLocale, useTranslation } from '../i18n'
 import { monacoLanguage } from '../monaco'
 import { ChatIcon, CompareIcon, CopyIcon, HistoryIcon, SearchIcon } from './icons'
 import ConfirmModal from './ConfirmModal'
@@ -43,33 +44,61 @@ interface Props {
 }
 
 /** Friendly, non-coder-facing labels for each kind of change. */
-const STATUS_LABEL: Record<GitChangeStatus, string> = {
-  added: 'Added',
-  modified: 'Edited',
-  deleted: 'Deleted',
-  renamed: 'Renamed'
-}
+const STATUS_LABEL = {
+  added: 'history.change.added',
+  modified: 'history.change.modified',
+  deleted: 'history.change.deleted',
+  renamed: 'history.change.renamed'
+} as const satisfies Record<GitChangeStatus, string>
 
 function splitPath(p: string): { name: string; dir: string } {
   const i = p.lastIndexOf('/')
   return i === -1 ? { name: p, dir: '' } : { name: p.slice(i + 1), dir: p.slice(0, i) }
 }
 
-function plural(n: number, one: string): string {
-  return `${n} ${one}${n === 1 ? '' : 's'}`
-}
+type When = 'today' | 'yesterday' | 'thisWeek' | 'thisMonth' | 'older' | 'earlier'
+
+const WHEN = {
+  today: 'history.when.today',
+  yesterday: 'history.when.yesterday',
+  thisWeek: 'history.when.thisWeek',
+  thisMonth: 'history.when.thisMonth',
+  older: 'history.when.older',
+  earlier: 'history.when.earlier'
+} as const satisfies Record<When, string>
 
 /** Bucket a commit into a friendly time group for the timeline headers. */
-function dateBucket(iso: string): string {
+function dateBucket(iso: string): When {
   const t = Date.parse(iso)
-  if (Number.isNaN(t)) return 'Earlier'
+  if (Number.isNaN(t)) return 'earlier'
   const sod = (x: Date): number => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
   const days = Math.round((sod(new Date()) - sod(new Date(t))) / 86_400_000)
-  if (days <= 0) return 'Today'
-  if (days === 1) return 'Yesterday'
-  if (days < 7) return 'Earlier this week'
-  if (days < 30) return 'Earlier this month'
-  return 'Older'
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 7) return 'thisWeek'
+  if (days < 30) return 'thisMonth'
+  return 'older'
+}
+
+/**
+ * How long ago a commit was: git's own "3 days ago" in English, else about the
+ * same span, rounded as git rounds it, in the interface's language.
+ */
+function ago(c: GitCommitSummary): string {
+  const then = Date.parse(c.isoDate)
+  if (currentLanguage() === 'en' || Number.isNaN(then)) return c.relativeDate
+  const rtf = new Intl.RelativeTimeFormat(formatLocale())
+  const seconds = Math.max(0, Math.round((Date.now() - then) / 1000))
+  if (seconds < 90) return rtf.format(-seconds, 'second')
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 90) return rtf.format(-minutes, 'minute')
+  const hours = Math.round(minutes / 60)
+  if (hours < 36) return rtf.format(-hours, 'hour')
+  const days = Math.round(hours / 24)
+  if (days < 14) return rtf.format(-days, 'day')
+  if (days < 70) return rtf.format(-Math.round(days / 7), 'week')
+  if (days < 365) return rtf.format(-Math.round(days / 30), 'month')
+  return rtf.format(-Math.round(days / 365), 'year')
 }
 
 /** A short, human list of changed file paths for an agent prompt. */
@@ -193,6 +222,7 @@ export default function HistoryView({
   onRequestDeploy,
   onSendToChat
 }: Props): JSX.Element {
+  const { t } = useTranslation('git')
   const [history, setHistory] = useState<GitHistory | null>(null)
   const [ref, setRef] = useState<string | null>(null)
   const [changes, setChanges] = useState<GitChange[] | null>(null)
@@ -350,7 +380,7 @@ export default function HistoryView({
     try {
       const res = await window.api.projects.git.revert(project.id, confirmRevert.hash)
       if (!res.ok) {
-        setRevertError(res.error ?? 'Could not restore that version.')
+        setRevertError(res.error ?? t('history.restoreFailed'))
         return
       }
       setConfirmRevert(null)
@@ -360,7 +390,7 @@ export default function HistoryView({
     } finally {
       setReverting(false)
     }
-  }, [confirmRevert, project.id, project.team, onRequestDeploy])
+  }, [confirmRevert, project.id, project.team, onRequestDeploy, t])
 
   const copySha = useCallback((hash: string): void => {
     void navigator.clipboard.writeText(hash)
@@ -423,8 +453,8 @@ export default function HistoryView({
   }, [commits, query])
 
   const groups = useMemo(() => {
-    const out: { label: string; items: GitCommitSummary[] }[] = []
-    let cur: { label: string; items: GitCommitSummary[] } | null = null
+    const out: { label: When; items: GitCommitSummary[] }[] = []
+    let cur: { label: When; items: GitCommitSummary[] } | null = null
     for (const c of filtered) {
       const label = dateBucket(c.isoDate)
       if (!cur || cur.label !== label) {
@@ -465,48 +495,45 @@ export default function HistoryView({
     if (compareMode) {
       if (!baseCommit || !targetCommit) return
       onSendToChat(
-        `Compare ${baseCommit.shortHash}→${targetCommit.shortHash}`,
+        t('history.discussComparison', {
+          base: baseCommit.shortHash,
+          target: targetCommit.shortHash
+        }),
         comparePrompt(baseCommit, targetCommit, changes)
       )
     } else if (ref === GIT_WORKING_REF) {
-      onSendToChat('Discuss uncommitted changes', workingPrompt(changes))
+      onSendToChat(t('history.discussUncommitted'), workingPrompt(changes))
     } else if (selectedCommit) {
-      onSendToChat(`Discuss snapshot ${selectedCommit.shortHash}`, commitPrompt(selectedCommit, changes))
+      onSendToChat(
+        t('history.discussSnapshot', { hash: selectedCommit.shortHash }),
+        commitPrompt(selectedCommit, changes)
+      )
     }
-  }, [onSendToChat, compareMode, baseCommit, targetCommit, changes, ref, selectedCommit])
+  }, [onSendToChat, compareMode, baseCommit, targetCommit, changes, ref, selectedCommit, t])
 
   const sendFile = useCallback((): void => {
     if (!onSendToChat || !file) return
+    const display = t('history.discussFile', { file: splitPath(file.path).name })
     if (compareMode) {
       if (!baseCommit || !targetCommit) return
-      onSendToChat(
-        `Discuss ${splitPath(file.path).name}`,
-        comparePrompt(baseCommit, targetCommit, [file])
-      )
+      onSendToChat(display, comparePrompt(baseCommit, targetCommit, [file]))
     } else if (ref) {
-      onSendToChat(`Discuss ${splitPath(file.path).name}`, filePrompt(file, ref, selectedCommit ?? null))
+      onSendToChat(display, filePrompt(file, ref, selectedCommit ?? null))
     }
-  }, [onSendToChat, file, compareMode, baseCommit, targetCommit, ref, selectedCommit])
+  }, [onSendToChat, file, compareMode, baseCommit, targetCommit, ref, selectedCommit, t])
 
   const canSendChanges =
     Boolean(onSendToChat) &&
     (compareMode ? Boolean(baseCommit && targetCommit) : Boolean(selectedCommit) || ref === GIT_WORKING_REF)
 
   if (history && !history.isRepo) {
-    return (
-      <div className="code-empty">
-        This project isn’t tracked by git yet, so there’s no history to show.
-      </div>
-    )
+    return <div className="code-empty">{t('history.notTracked')}</div>
   }
   if (history && history.commits.length === 0 && working === 0) {
     return (
       <div className="hist-empty">
-        <div className="hist-empty-title">No history yet</div>
-        <div className="hist-empty-sub">
-          Every time you publish or save, Fabricator records a snapshot here so you can see exactly
-          what changed.
-        </div>
+        <div className="hist-empty-title">{t('history.emptyTitle')}</div>
+        <div className="hist-empty-sub">{t('history.emptyBody')}</div>
       </div>
     )
   }
@@ -514,21 +541,24 @@ export default function HistoryView({
   const filesTitle = compareMode
     ? baseCommit && targetCommit
       ? `${baseCommit.shortHash} → ${targetCommit.shortHash}`
-      : 'Pick two snapshots'
+      : t('history.pickTwo')
     : ref === GIT_WORKING_REF
-      ? 'Uncommitted changes'
-      : selectedCommit?.subject ?? 'Changes'
+      ? t('history.uncommitted')
+      : (selectedCommit?.subject ?? t('history.changes'))
+  const restoreNote = project.team
+    ? t('history.restore.team')
+    : project.lastDeploy?.url
+      ? t('history.restore.personal')
+      : null
 
   return (
     <div className="hist-shell">
       {drift && (
         <div className="hist-drift">
-          <span className="hist-drift-text">
-            Your published app doesn’t match your current code.
-          </span>
+          <span className="hist-drift-text">{t('history.drift')}</span>
           {onRequestDeploy && (
             <button className="btn btn--xs btn--primary" onClick={onRequestDeploy} disabled={reverting}>
-              Publish current version
+              {t('history.publishCurrent')}
             </button>
           )}
         </div>
@@ -537,7 +567,7 @@ export default function HistoryView({
       <div className="hist">
         <div className="hist-rail">
           <div className="hist-rail-head">
-            <span>Timeline</span>
+            <span>{t('history.timeline')}</span>
             <button
               className={`hist-cmp-toggle${compareMode ? ' hist-cmp-toggle--on' : ''}`}
               onClick={() => {
@@ -545,10 +575,10 @@ export default function HistoryView({
                 setFile(null)
                 setDiff(null)
               }}
-              title="Compare any two snapshots"
+              title={t('history.compareTitle')}
             >
               <CompareIcon className="btn-ico" />
-              Compare
+              {t('history.compare')}
             </button>
           </div>
 
@@ -557,13 +587,17 @@ export default function HistoryView({
               <SearchIcon className="hist-search-ico" />
               <input
                 className="hist-search-input"
-                placeholder="Search by message, author, or hash…"
+                placeholder={t('history.search')}
                 value={query}
                 spellCheck={false}
                 onChange={(e) => setQuery(e.target.value)}
               />
               {query && (
-                <button className="hist-search-x" onClick={() => setQuery('')} aria-label="Clear search">
+                <button
+                  className="hist-search-x"
+                  onClick={() => setQuery('')}
+                  aria-label={t('history.clearSearch')}
+                >
                   ×
                 </button>
               )}
@@ -573,7 +607,7 @@ export default function HistoryView({
           {compareMode && (
             <div className="hist-cmp">
               <label className="hist-cmp-row">
-                <span className="hist-cmp-label">Base</span>
+                <span className="hist-cmp-label">{t('history.base')}</span>
                 <select
                   className="hist-cmp-sel"
                   value={base ?? ''}
@@ -588,7 +622,7 @@ export default function HistoryView({
               </label>
               <div className="hist-cmp-arrow">↓</div>
               <label className="hist-cmp-row">
-                <span className="hist-cmp-label">Target</span>
+                <span className="hist-cmp-label">{t('history.target')}</span>
                 <select
                   className="hist-cmp-sel"
                   value={target ?? ''}
@@ -608,7 +642,7 @@ export default function HistoryView({
             className="hist-rail-body"
             tabIndex={0}
             role="listbox"
-            aria-label="Timeline"
+            aria-label={t('history.timeline')}
             onKeyDown={onRailKey}
           >
             {history === null ? (
@@ -622,20 +656,20 @@ export default function HistoryView({
                   >
                     <span className="hist-commit-dot hist-commit-dot--working" />
                     <span className="hist-commit-main">
-                      <span className="hist-commit-msg">Uncommitted changes</span>
+                      <span className="hist-commit-msg">{t('history.uncommitted')}</span>
                       <span className="hist-commit-meta">
-                        {plural(working, 'file')} changed · not published yet
+                        {t('history.workingFiles', { count: working })}
                       </span>
                     </span>
                   </button>
                 )}
 
                 {groups.length === 0 && !showWorking ? (
-                  <div className="code-tree-empty">No matches.</div>
+                  <div className="code-tree-empty">{t('history.noMatches')}</div>
                 ) : (
                   groups.map((group) => (
                     <div key={group.label} className="hist-group-wrap">
-                      <div className="hist-group">{group.label}</div>
+                      <div className="hist-group">{t(WHEN[group.label])}</div>
                       {group.items.map((c) => {
                         const isBase = compareMode && c.hash === base
                         const isTarget = compareMode && c.hash === target
@@ -653,21 +687,25 @@ export default function HistoryView({
                             key={c.hash}
                             className={cls}
                             onClick={() => (compareMode ? setTarget(c.hash) : selectRef(c.hash))}
-                            title={`${c.shortHash} · ${new Date(c.isoDate).toLocaleString()}`}
+                            title={`${c.shortHash} · ${new Date(c.isoDate).toLocaleString(formatLocale())}`}
                           >
                             <span className="hist-commit-dot" />
                             <span className="hist-commit-main">
                               <span className="hist-commit-msg">{c.subject}</span>
                               <span className="hist-commit-meta">
-                                {c.relativeDate}
+                                {ago(c)}
                                 {c.author ? ` · ${c.author}` : ''}
                               </span>
                             </span>
-                            {isBase && <span className="hist-cmp-tag">Base</span>}
-                            {isTarget && <span className="hist-cmp-tag hist-cmp-tag--target">Target</span>}
+                            {isBase && <span className="hist-cmp-tag">{t('history.base')}</span>}
+                            {isTarget && (
+                              <span className="hist-cmp-tag hist-cmp-tag--target">
+                                {t('history.target')}
+                              </span>
+                            )}
                             {c.hash === liveCommit && (
-                              <span className="hist-live" title="This is the version that's live right now">
-                                Live
+                              <span className="hist-live" title={t('history.liveTitle')}>
+                                {t('history.live')}
                               </span>
                             )}
                             {c.filesChanged > 0 && <span className="hist-commit-count">{c.filesChanged}</span>}
@@ -692,10 +730,10 @@ export default function HistoryView({
               <button
                 className="btn btn--xs btn--ghost hist-send"
                 onClick={sendCommit}
-                title="Use this in the chat — we’ll add it as context for your next message"
+                title={t('history.sendTitle')}
               >
                 <ChatIcon className="btn-ico" />
-                {compareMode ? 'Send comparison' : 'Send to chat'}
+                {compareMode ? t('history.sendComparison') : t('history.sendToChat')}
               </button>
             )}
             {canRestore && selectedCommit && (
@@ -705,9 +743,9 @@ export default function HistoryView({
                   setRevertError(null)
                   setConfirmRevert(selectedCommit)
                 }}
-                title="Take your app back to how it was at this point"
+                title={t('history.restoreTitle')}
               >
-                Restore this version
+                {t('history.restoreVersion')}
               </button>
             )}
           </div>
@@ -717,14 +755,14 @@ export default function HistoryView({
               <button
                 className="hist-detail-sha"
                 onClick={() => copySha(selectedCommit.hash)}
-                title="Copy the full version id"
+                title={t('history.copyHash')}
               >
                 <CopyIcon className="btn-ico" />
-                {copiedSha ? 'Copied' : selectedCommit.shortHash}
+                {copiedSha ? t('actions.copied') : selectedCommit.shortHash}
               </button>
               <span className="hist-detail-meta">
                 {selectedCommit.author ? `${selectedCommit.author} · ` : ''}
-                {new Date(selectedCommit.isoDate).toLocaleString()}
+                {new Date(selectedCommit.isoDate).toLocaleString(formatLocale())}
               </span>
             </div>
           )}
@@ -735,14 +773,16 @@ export default function HistoryView({
             ) : !changes || changes.length === 0 ? (
               <div className="code-tree-empty">
                 {compareMode
-                  ? 'No differences between these two snapshots.'
+                  ? t('history.noDifferences')
                   : ref === GIT_WORKING_REF
-                    ? 'Nothing changed since the last snapshot.'
-                    : 'No file changes.'}
+                    ? t('history.nothingChanged')
+                    : t('history.noFileChanges')}
               </div>
             ) : (
               <>
-                <div className="hist-files-count">{plural(changes.length, 'file')} changed</div>
+                <div className="hist-files-count">
+                  {t('history.filesChanged', { count: changes.length })}
+                </div>
                 {changes.map((f) => {
                   const { name, dir } = splitPath(f.path)
                   const selected = file?.path === f.path
@@ -754,12 +794,12 @@ export default function HistoryView({
                       title={f.path}
                     >
                       <span className={`hist-file-badge hist-file-badge--${f.status}`}>
-                        {STATUS_LABEL[f.status]}
+                        {t(STATUS_LABEL[f.status])}
                       </span>
                       <span className="hist-file-name">{name}</span>
                       {dir && <span className="hist-file-dir">{dir}</span>}
                       {f.binary ? (
-                        <span className="hist-file-binary">binary</span>
+                        <span className="hist-file-binary">{t('history.binary')}</span>
                       ) : (
                         <ChangeStat ins={f.insertions} del={f.deletions} />
                       )}
@@ -786,29 +826,29 @@ export default function HistoryView({
                 <button
                   className="hist-diff-tool"
                   onClick={(e) => void openFileHistory(e)}
-                  title="See every change to this file"
+                  title={t('history.fileHistoryTitle')}
                 >
                   <HistoryIcon className="btn-ico" />
                 </button>
                 {showFileLog && (
                   <div className="hist-filelog-pop">
-                    <div className="hist-filelog-title">History of this file</div>
+                    <div className="hist-filelog-title">{t('history.fileHistory')}</div>
                     <div className="hist-filelog-body">
                       {fileLogLoading ? (
                         <Skeleton rows={3} avatar />
                       ) : !fileLog || fileLog.length === 0 ? (
-                        <div className="code-tree-empty">No earlier versions found.</div>
+                        <div className="code-tree-empty">{t('history.noEarlierVersions')}</div>
                       ) : (
                         fileLog.map((c) => (
                           <button
                             key={c.hash}
                             className={`hist-filelog-row${!compareMode && ref === c.hash ? ' hist-filelog-row--sel' : ''}`}
                             onClick={() => jumpToVersion(c.hash)}
-                            title={new Date(c.isoDate).toLocaleString()}
+                            title={new Date(c.isoDate).toLocaleString(formatLocale())}
                           >
                             <span className="hist-filelog-msg">{c.subject}</span>
                             <span className="hist-filelog-meta">
-                              {c.shortHash} · {c.relativeDate}
+                              {c.shortHash} · {ago(c)}
                             </span>
                           </button>
                         ))
@@ -819,51 +859,59 @@ export default function HistoryView({
               </div>
 
               {onSendToChat && (
-                <button className="hist-diff-tool" onClick={sendFile} title="Send this file's change to chat">
+                <button className="hist-diff-tool" onClick={sendFile} title={t('history.sendFile')}>
                   <ChatIcon className="btn-ico" />
                 </button>
               )}
               {diff && !diff.error && !diff.binary && !diff.tooLarge && (
-                <button className="hist-diff-tool" onClick={copyContents} title="Copy this version's contents">
-                  {copiedDiff ? <span className="hist-diff-copied">Copied</span> : <CopyIcon className="btn-ico" />}
+                <button
+                  className="hist-diff-tool"
+                  onClick={copyContents}
+                  title={t('history.copyContents')}
+                >
+                  {copiedDiff ? (
+                    <span className="hist-diff-copied">{t('actions.copied')}</span>
+                  ) : (
+                    <CopyIcon className="btn-ico" />
+                  )}
                 </button>
               )}
 
               <span className="hist-diff-divider" />
-              <div className="hist-seg" role="tablist" aria-label="Diff layout">
+              <div className="hist-seg" role="tablist" aria-label={t('history.diffLayout')}>
                 <button
                   className={`hist-seg-btn${sideBySide ? ' hist-seg-btn--on' : ''}`}
                   onClick={() => setSideBySide(true)}
                 >
-                  Side by side
+                  {t('history.sideBySide')}
                 </button>
                 <button
                   className={`hist-seg-btn${sideBySide ? '' : ' hist-seg-btn--on'}`}
                   onClick={() => setSideBySide(false)}
                 >
-                  Unified
+                  {t('history.unified')}
                 </button>
               </div>
               <button
                 className={`hist-diff-tool${wrap ? ' hist-diff-tool--on' : ''}`}
                 onClick={() => setWrap((w) => !w)}
-                title="Wrap long lines"
+                title={t('history.wrapTitle')}
               >
-                Wrap
+                {t('history.wrap')}
               </button>
             </div>
           )}
           <div className="hist-diff-body">
             {!file ? (
-              <div className="code-empty">Select a file to see what changed.</div>
+              <div className="code-empty">{t('history.selectFile')}</div>
             ) : file.binary || (!diffLoading && diff?.binary) ? (
-              <div className="code-empty">This is an image or binary file — no text diff to show.</div>
+              <div className="code-empty">{t('history.binaryFile')}</div>
             ) : diffLoading ? (
-              <div className="code-empty">Loading…</div>
+              <div className="code-empty">{t('status.loading')}</div>
             ) : diff?.error ? (
               <div className="code-empty code-empty--err">{diff.error}</div>
             ) : diff?.tooLarge ? (
-              <div className="code-empty">This file is too large to show a diff.</div>
+              <div className="code-empty">{t('history.tooLarge')}</div>
             ) : diff ? (
               <DiffEditor
                 key={`${compareMode ? `${base}:${target}` : ref}:${file.path}`}
@@ -872,7 +920,7 @@ export default function HistoryView({
                 language={monacoLanguage(file.path)}
                 original={diff.before}
                 modified={diff.after}
-                loading={<div className="code-empty">Loading editor…</div>}
+                loading={<div className="code-empty">{t('history.loadingEditor')}</div>}
                 options={{
                   ...DIFF_OPTIONS,
                   renderSideBySide: sideBySide,
@@ -887,8 +935,8 @@ export default function HistoryView({
 
       {confirmRevert && (
         <ConfirmModal
-          title="Restore this version?"
-          confirmLabel="Restore"
+          title={t('history.restore.title')}
+          confirmLabel={t('history.restore.confirm')}
           busy={reverting}
           onCancel={() => {
             if (!reverting) setConfirmRevert(null)
@@ -897,16 +945,17 @@ export default function HistoryView({
           message={
             <>
               <p>
-                Your app will go back to how it was at{' '}
-                <strong>“{confirmRevert.subject}”</strong>.
+                <Trans
+                  t={t}
+                  i18nKey="history.restore.goBack"
+                  values={{ subject: confirmRevert.subject }}
+                  components={{ b: <strong /> }}
+                />
               </p>
               <p>
-                Your current version stays saved in this timeline, so you can switch back anytime.
-                {project.team
-                  ? ' Fabricator then saves it to your working copy on GitHub. The published app doesn’t change until you publish.'
-                  : project.lastDeploy?.url
-                    ? ' Your published app doesn’t change until you publish.'
-                    : null}
+                {restoreNote
+                  ? t('sentences', { first: t('history.restore.staysSaved'), second: restoreNote })
+                  : t('history.restore.staysSaved')}
               </p>
               {revertError && <p className="confirm-error">{revertError}</p>}
             </>

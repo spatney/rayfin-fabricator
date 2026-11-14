@@ -59,54 +59,132 @@ pub fn parse(line: &str) -> Result<Event, serde_json::Error> {
 /// A line for the output log that says what an event reported, as
 /// `(level, text)`. `None` for events that are output themselves.
 pub fn describe(event: &Event) -> Option<(&'static str, String)> {
-  let with = |text: &str, detail: &Option<String>| match detail.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
-    Some(detail) => format!("{text}: {detail}"),
-    None => format!("{text}."),
-  };
   Some(match event {
     Event::Starting(e) => {
-      let name = e.project.as_ref().map(|p| p.name.as_str()).filter(|n| !n.is_empty()).unwrap_or("the app");
-      let version = e.version.as_deref().map(|v| format!(" {v}")).unwrap_or_default();
-      ("info", format!("rayfin-local{version} is starting {name}."))
+      let name = e.project.as_ref().map(|p| p.name.as_str()).filter(|n| !n.is_empty());
+      let text = match (e.version.as_deref(), name) {
+        (Some(version), Some(name)) => t!("services.localEvents.startingVersion", version = version, name = name),
+        (Some(version), None) => t!("services.localEvents.startingAppVersion", version = version),
+        (None, Some(name)) => t!("services.localEvents.starting", name = name),
+        (None, None) => t!("services.localEvents.startingApp"),
+      };
+      ("info", text)
     }
     Event::Analysis(a) if a.ok => {
-      let sdk = a.sdk.as_ref().and_then(|s| s.version.as_deref()).map(|v| format!(" (Rayfin {v})")).unwrap_or_default();
-      ("info", format!("Analyzed the app{sdk}: {}.", count(a.entities.len(), "entity", "entities")))
+      let count = a.entities.len();
+      let text = match a.sdk.as_ref().and_then(|s| s.version.as_deref()) {
+        Some(version) => t!("services.localEvents.analyzedSdk", version = version, count = count),
+        None => t!("services.localEvents.analyzed", count = count),
+      };
+      ("info", text)
     }
-    Event::Analysis(a) => ("error", with("The app model couldn't be analyzed", &a.message)),
+    Event::Analysis(a) => (
+      "error",
+      with(
+        &a.message,
+        || t!("services.localEvents.analysisFailed"),
+        |detail| t!("services.localEvents.analysisFailedWhy", detail = detail),
+      ),
+    ),
     Event::Schema(s) => match s.result.as_str() {
-      "applied" if s.losses.is_empty() => ("info", format!("Updated the database: {}.", s.changes.join(", "))),
-      "applied" => ("warn", format!("Updated the database: {}. Lost: {}.", s.changes.join(", "), s.losses.join(", "))),
-      "refused" => ("warn", format!("Didn't update the database, because that would lose data: {}.", s.losses.join(", "))),
-      "failed" => ("error", with("Couldn't update the database", &s.message)),
-      _ => ("info", "The database is up to date.".into()),
+      "applied" if s.losses.is_empty() => ("info", t!("services.localEvents.schemaApplied", changes = s.changes.join(", "))),
+      "applied" => (
+        "warn",
+        t!("services.localEvents.schemaAppliedLost", changes = s.changes.join(", "), losses = s.losses.join(", ")),
+      ),
+      "refused" => ("warn", t!("services.localEvents.schemaRefused", losses = s.losses.join(", "))),
+      "failed" => (
+        "error",
+        with(
+          &s.message,
+          || t!("services.localEvents.schemaFailed"),
+          |detail| t!("services.localEvents.schemaFailedWhy", detail = detail),
+        ),
+      ),
+      _ => ("info", t!("services.localEvents.schemaCurrent")),
     },
     Event::Functions(f) => match f.state.as_str() {
-      "building" => ("info", "Building the functions…".into()),
-      "ready" => ("info", format!("Functions ready: {}.", list_or_none(&f.names))),
-      "failed" => ("error", format!("The functions' build failed: {}", f.errors.join(" | "))),
-      _ => ("info", with("The functions are off", &f.message)),
+      "building" => ("info", t!("services.localEvents.functionsBuilding")),
+      "ready" if f.names.is_empty() => ("info", t!("services.localEvents.functionsReadyNone")),
+      "ready" => ("info", t!("services.localEvents.functionsReady", names = f.names.join(", "))),
+      "failed" => ("error", t!("services.localEvents.functionsFailed", errors = f.errors.join(" | "))),
+      _ => (
+        "info",
+        with(
+          &f.message,
+          || t!("services.localEvents.functionsOff"),
+          |detail| t!("services.localEvents.functionsOffWhy", detail = detail),
+        ),
+      ),
     },
     Event::Vite(v) => match v.state.as_str() {
-      "ready" => ("info", format!("Vite is serving {}.", v.url.as_deref().unwrap_or("the app"))),
-      "restarting" => ("warn", with("Vite stopped and is starting again", &v.message)),
-      "exited" => ("warn", with("Vite stopped", &v.message)),
-      _ => ("error", with("Vite couldn't start", &v.message)),
+      "ready" => (
+        "info",
+        match v.url.as_deref() {
+          Some(url) => t!("services.localEvents.viteServing", url = url),
+          None => t!("services.localEvents.viteServingApp"),
+        },
+      ),
+      "restarting" => (
+        "warn",
+        with(
+          &v.message,
+          || t!("services.localEvents.viteRestarting"),
+          |detail| t!("services.localEvents.viteRestartingWhy", detail = detail),
+        ),
+      ),
+      "exited" => (
+        "warn",
+        with(
+          &v.message,
+          || t!("services.localEvents.viteStopped"),
+          |detail| t!("services.localEvents.viteStoppedWhy", detail = detail),
+        ),
+      ),
+      _ => (
+        "error",
+        with(
+          &v.message,
+          || t!("services.localEvents.viteFailed"),
+          |detail| t!("services.localEvents.viteFailedWhy", detail = detail),
+        ),
+      ),
     },
-    Event::Ready(r) => {
-      let app = r.app_url.as_deref().map(|url| format!("the app at {url}, ")).unwrap_or_default();
-      ("info", format!("Ready: {app}the backend at {}.", r.api_url))
-    }
-    Event::ConfigChanged(c) if c.restart_required => ("info", with("The configuration changed and needs a restart", &c.message)),
-    Event::ConfigChanged(c) => ("info", format!("Applied a configuration change ({}).", c.what.join(", "))),
+    Event::Ready(r) => (
+      "info",
+      match r.app_url.as_deref() {
+        Some(app) => t!("services.localEvents.readyApp", app = app, api = r.api_url),
+        None => t!("services.localEvents.ready", api = r.api_url),
+      },
+    ),
+    Event::ConfigChanged(c) if c.restart_required => (
+      "info",
+      with(
+        &c.message,
+        || t!("services.localEvents.configRestart"),
+        |detail| t!("services.localEvents.configRestartWhy", detail = detail),
+      ),
+    ),
+    Event::ConfigChanged(c) => ("info", t!("services.localEvents.configApplied", what = c.what.join(", "))),
     Event::Warning(p) => ("warn", problem_line(p)),
     Event::Error(p) => ("error", problem_line(p)),
-    Event::Stopped(s) => {
-      let code = s.exit_code.map(|c| format!(", exit code {c}")).unwrap_or_default();
-      ("info", format!("Stopped ({}{code}).", s.reason))
-    }
+    Event::Stopped(s) => (
+      "info",
+      match s.exit_code {
+        Some(code) => t!("services.localEvents.stoppedCode", reason = s.reason, code = code),
+        None => t!("services.localEvents.stopped", reason = s.reason),
+      },
+    ),
     Event::Log(_) | Event::Unknown => return None,
   })
+}
+
+/// `plain()` without a detail, else `why(detail)`.
+fn with(detail: &Option<String>, plain: impl FnOnce() -> String, why: impl FnOnce(&str) -> String) -> String {
+  match detail.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+    Some(detail) => why(detail),
+    None => plain(),
+  }
 }
 
 fn problem_line(problem: &LocalProblem) -> String {
@@ -114,14 +192,6 @@ fn problem_line(problem: &LocalProblem) -> String {
     Some(hint) => format!("{} {hint}", problem.message),
     None => problem.message.clone(),
   }
-}
-
-fn count(n: usize, one: &str, many: &str) -> String {
-  format!("{n} {}", if n == 1 { one } else { many })
-}
-
-fn list_or_none(names: &[String]) -> String {
-  if names.is_empty() { "none".into() } else { names.join(", ") }
 }
 
 #[cfg(test)]

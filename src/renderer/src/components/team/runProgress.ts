@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { TeamRunStatus, TeamRunStep } from '@shared/ipc'
+import { translator } from '../../i18n'
 
 export interface RunProgress {
   done: number
@@ -22,10 +23,11 @@ export function runProgress(steps: TeamRunStep[]): RunProgress {
 
 /** The pipeline's step names, in plain words. */
 export function friendlyStep(name: string): string {
-  if (/^Run actions\/checkout@/i.test(name)) return 'Get the code'
-  if (/^Run actions\/setup-node@/i.test(name)) return 'Set up Node.js'
-  if (/^Run azure\/login@/i.test(name)) return 'Sign in to Fabric'
-  if (/^Run actions\/github-script@/i.test(name)) return 'Record the deployment'
+  const t = translator('team')
+  if (/^Run actions\/checkout@/i.test(name)) return t('progress.step.checkout')
+  if (/^Run actions\/setup-node@/i.test(name)) return t('progress.step.setupNode')
+  if (/^Run azure\/login@/i.test(name)) return t('progress.step.signIn')
+  if (/^Run actions\/github-script@/i.test(name)) return t('progress.step.record')
   return name.replace(/^Run /, '')
 }
 
@@ -41,7 +43,8 @@ export function waitingForRunner(run: TeamRunStatus, now: number): boolean {
 /** What a run that hasn't started is waiting for; `undefined` once it runs. */
 export function waitingStep(run: TeamRunStatus, now: number): string | undefined {
   if (run.status !== 'queued' && run.status !== 'waiting') return undefined
-  return waitingForRunner(run, now) ? 'Still waiting for a runner' : 'Waiting for the pipeline to start'
+  const t = translator('team')
+  return waitingForRunner(run, now) ? t('progress.stillWaitingForRunner') : t('progress.waitingToStart')
 }
 
 /** "42s", "3:07" — time since an ISO timestamp. */
@@ -50,7 +53,9 @@ export function elapsed(since: string | undefined, now: number): string {
   const ms = now - Date.parse(since)
   if (!Number.isFinite(ms) || ms < 0) return ''
   const s = Math.floor(ms / 1000)
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+  return s < 60
+    ? translator('team')('progress.seconds', { seconds: s })
+    : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
 /** "just now", "5 min ago", "3 h ago", "2 d ago". */
@@ -58,12 +63,13 @@ export function timeAgo(iso: string | undefined, now: number): string {
   if (!iso) return ''
   const ms = now - Date.parse(iso)
   if (!Number.isFinite(ms)) return ''
+  const t = translator('team')
   const min = Math.floor(ms / 60_000)
-  if (min < 1) return 'just now'
-  if (min < 60) return `${min} min ago`
+  if (min < 1) return t('progress.justNow')
+  if (min < 60) return t('progress.minutesAgo', { count: min })
   const h = Math.floor(min / 60)
-  if (h < 24) return `${h} h ago`
-  return `${Math.floor(h / 24)} d ago`
+  if (h < 24) return t('progress.hoursAgo', { count: h })
+  return t('progress.daysAgo', { count: Math.floor(h / 24) })
 }
 
 /** The current time, updated every `intervalMs` while `active`. */

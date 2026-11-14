@@ -361,8 +361,8 @@ impl TextAcc {
           .and_then(Value::as_str)
           .map(str::trim)
           .filter(|s| !s.is_empty())
-          .unwrap_or("Copilot reported an error.");
-        self.errored = Some(msg.to_string());
+          .map_or_else(|| t!("assist.common.copilotError"), str::to_string);
+        self.errored = Some(msg);
         None
       }
       _ => None,
@@ -545,7 +545,7 @@ fn failed_report(summary: String) -> AdvisorReport {
 #[tauri::command]
 pub async fn advisor_collect(project_id: String) -> Result<AdvisorProjectSnapshot, String> {
   let Some(project) = store::find_project(&project_id) else {
-    return Err("Project not found.".into());
+    return Err(t!("assist.advisor.projectNotFound"));
   };
   Ok(collect::collect(&project.path).await)
 }
@@ -570,14 +570,14 @@ pub async fn advisor_load(project_id: String) -> Result<AdvisorLoadResult, Strin
 #[tauri::command]
 pub async fn advisor_save_state(project_id: String, state: Value) -> Result<(), String> {
   if store::find_project(&project_id).is_none() {
-    return Err("Project not found.".into());
+    return Err(t!("assist.advisor.projectNotFound"));
   }
   if !state.is_object() {
-    return Err("Invalid Advisor state.".into());
+    return Err(t!("assist.advisor.invalidState"));
   }
   let text = serde_json::to_string(&state).map_err(|e| e.to_string())?;
   if text.len() > MAX_STATE_BYTES {
-    return Err("Advisor state is too large to save.".into());
+    return Err(t!("assist.advisor.stateTooLarge"));
   }
   write_atomic(&paths::advisor_state_file(&project_id), &text)
 }
@@ -599,18 +599,19 @@ fn finalize_review(
     }
   }
   if !reported {
-    let detail = if let Some(e) = &text.errored {
-      e.clone()
+    let summary = if let Some(e) = &text.errored {
+      t!("assist.advisor.reviewIncomplete", detail = e)
     } else if matches!(end, DrainEnd::TimedOut) {
-      "the review timed out after 10 minutes.".to_string()
+      t!("assist.advisor.reviewTimedOut")
     } else if !text.text.trim().is_empty() {
-      text.text.trim().chars().take(600).collect()
+      let detail: String = text.text.trim().chars().take(600).collect();
+      t!("assist.advisor.reviewIncomplete", detail = detail)
     } else {
-      "Copilot ended without reporting any results.".to_string()
+      t!("assist.advisor.reviewNoResults")
     };
     return AdvisorReport {
       ok: false,
-      summary: format!("Couldn't complete the review: {detail}"),
+      summary,
       findings: vec![],
       rules: None,
     };
@@ -626,7 +627,7 @@ fn finalize_review(
           AdvisorRuleResult {
             rule_id: r.id.clone(),
             status: "skipped".into(),
-            note: Some("Not evaluated in this review.".into()),
+            note: Some(t!("assist.advisor.notEvaluated")),
           }
         }
       })
@@ -634,20 +635,16 @@ fn finalize_review(
     .collect();
 
   let count = findings.iter().filter(|f| f.severity != "note").count();
-  let mut summary = log.summary.clone().unwrap_or_else(|| match count {
-    0 => "No issues found in the rules Copilot reviewed.".to_string(),
-    1 => "Copilot found 1 issue.".to_string(),
-    n => format!("Copilot found {n} issues."),
+  let summary = log.summary.clone().unwrap_or_else(|| match count {
+    0 => t!("assist.advisor.noIssues"),
+    n => t!("assist.advisor.foundIssues", count = n),
   });
-  let stopped = match end {
-    DrainEnd::TimedOut => Some("it timed out"),
-    _ if text.errored.is_some() => Some("Copilot reported an error"),
-    DrainEnd::Closed if !log.completed => Some("the session ended"),
-    _ => None,
+  let summary = match end {
+    DrainEnd::TimedOut => t!("assist.advisor.stoppedTimedOut", summary = summary),
+    _ if text.errored.is_some() => t!("assist.advisor.stoppedError", summary = summary),
+    DrainEnd::Closed if !log.completed => t!("assist.advisor.stoppedClosed", summary = summary),
+    _ => summary,
   };
-  if let Some(reason) = stopped {
-    summary = format!("{summary} The review stopped early ({reason}), so some rules may not have been checked.");
-  }
   AdvisorReport { ok: true, summary, findings, rules: Some(results) }
 }
 
@@ -740,7 +737,7 @@ pub(crate) fn incomplete_detail(text: &TextAcc, end: &DrainEnd, fallback: &str) 
   if let Some(e) = &text.errored {
     e.clone()
   } else if matches!(end, DrainEnd::TimedOut) {
-    "It timed out.".to_string()
+    t!("assist.advisor.timedOut")
   } else {
     fallback.to_string()
   }
@@ -776,7 +773,7 @@ async fn review(run: &RunCtx<'_>, request: &AdvisorRunRequest, emit: Emit) -> Ad
   })
   .await;
   match end {
-    Err(e) => failed_report(format!("Couldn't start the review. {e}")),
+    Err(e) => failed_report(t!("assist.advisor.cantStartReview", error = e)),
     Ok(DrainEnd::Cancelled) => failed_report("Review cancelled.".into()),
     Ok(end) => finalize_review(&log.lock().unwrap(), &rules, &text, &end),
   }
@@ -802,14 +799,14 @@ async fn explain(
     is_terminal(event_type)
   })
   .await
-  .map_err(|e| format!("Couldn't start the explanation. {e}"))?;
+  .map_err(|e| t!("assist.advisor.cantStartExplanation", error = e))?;
   if matches!(end, DrainEnd::Cancelled) {
     return Err("Explanation cancelled.".into());
   }
   let answer = text.answer();
   if answer.is_empty() {
-    let detail = incomplete_detail(&text, &end, "Copilot ended without an explanation.");
-    return Err(format!("Couldn't complete the explanation. {detail}"));
+    let detail = incomplete_detail(&text, &end, &t!("assist.advisor.noExplanation"));
+    return Err(t!("assist.advisor.explanationIncomplete", detail = detail));
   }
   Ok(answer)
 }
@@ -838,14 +835,14 @@ async fn verify(
     is_terminal(event_type)
   })
   .await
-  .map_err(|e| format!("Couldn't start the verification. {e}"))?;
+  .map_err(|e| t!("assist.advisor.cantStartVerification", error = e))?;
   if matches!(end, DrainEnd::Cancelled) {
     return Err("Verification cancelled.".into());
   }
   let verdicts = verdicts.lock().unwrap().clone();
   if verdicts.is_empty() {
-    let detail = incomplete_detail(&text, &end, "Copilot ended without a verdict.");
-    return Err(format!("Couldn't complete the verification. {detail}"));
+    let detail = incomplete_detail(&text, &end, &t!("assist.advisor.noVerdict"));
+    return Err(t!("assist.advisor.verificationIncomplete", detail = detail));
   }
   Ok(verdicts)
 }
@@ -863,10 +860,10 @@ pub async fn advisor_run(
   request: AdvisorRunRequest,
 ) -> Result<AdvisorSnapshot, String> {
   let Some(project) = store::find_project(&project_id) else {
-    return Err("Project not found.".into());
+    return Err(t!("assist.advisor.projectNotFound"));
   };
   let Some(token) = state.try_begin_advisor(&project_id) else {
-    return Err("A review is already running for this project.".into());
+    return Err(t!("assist.advisor.reviewRunning"));
   };
   let started = Instant::now();
   let emit = emitter(&app, &project_id);
@@ -938,10 +935,10 @@ pub async fn advisor_explain(
   context_tier: Option<String>,
 ) -> Result<String, String> {
   let Some(project) = store::find_project(&project_id) else {
-    return Err("Project not found.".into());
+    return Err(t!("assist.advisor.projectNotFound"));
   };
   let Some(token) = state.try_begin_explain(&project_id) else {
-    return Err("An explanation is already being generated for this project.".into());
+    return Err(t!("assist.advisor.explanationRunning"));
   };
   let emit = emitter(&app, &project_id);
   let choice = ModelChoice::new(model, effort, auto_tier, context_tier);
@@ -984,7 +981,7 @@ pub async fn advisor_verify(
   context_tier: Option<String>,
 ) -> Result<Vec<AdvisorVerdict>, String> {
   let Some(project) = store::find_project(&project_id) else {
-    return Err("Project not found.".into());
+    return Err(t!("assist.advisor.projectNotFound"));
   };
   let findings: Vec<AdvisorFinding> = findings.into_iter().take(MAX_VERIFY_FINDINGS).collect();
   let emit = emitter(&app, &project_id);
@@ -993,7 +990,7 @@ pub async fn advisor_verify(
     return Ok(vec![]);
   }
   let Some(token) = state.try_begin_verify(&project_id) else {
-    return Err("A verification is already running for this project.".into());
+    return Err(t!("assist.advisor.verificationRunning"));
   };
   let choice = ModelChoice::new(model, effort, auto_tier, context_tier);
   let run = RunCtx {

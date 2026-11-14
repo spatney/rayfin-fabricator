@@ -1,4 +1,5 @@
 import type { LocalColumn, LocalFile } from '@shared/ipc'
+import { formatList, formatLocale, translator } from '../../i18n'
 import type { DataModel } from '../../model/parseSchema'
 
 /** Rows the Data explorer reads at a time (the control API allows up to 500). */
@@ -20,11 +21,24 @@ const ID_TYPE = /^(uuid|uniqueidentifier|guid)$/i
 const JSON_TYPE = /^jsonb?$/i
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
 
-const DATE_FORMAT = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' })
-const DATE_TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short'
-})
+/** The date and date-time formatters, per locale. */
+const DATE_FORMATS = new Map<string, Intl.DateTimeFormat>()
+
+function dateFormat(dateOnly: boolean): Intl.DateTimeFormat {
+  const locale = formatLocale()
+  const key = `${dateOnly ? 'date' : 'time'} ${locale}`
+  let format = DATE_FORMATS.get(key)
+  if (!format) {
+    format = new Intl.DateTimeFormat(
+      locale,
+      dateOnly
+        ? { dateStyle: 'medium', timeZone: 'UTC' }
+        : { dateStyle: 'medium', timeStyle: 'short' }
+    )
+    DATE_FORMATS.set(key, format)
+  }
+  return format
+}
 
 export type CellKind = 'null' | 'empty' | 'boolean' | 'number' | 'date' | 'json' | 'id' | 'text'
 
@@ -39,11 +53,11 @@ function clip(text: string): string {
   return text.length > MAX_CELL_TEXT ? `${text.slice(0, MAX_CELL_TEXT)}…` : text
 }
 
-/** A date-time in the local time zone; a date alone as written. */
+/** A date-time in the local time zone; a date alone as written. In the interface's language. */
 export function formatDate(text: string): string | null {
   const time = Date.parse(text)
   if (Number.isNaN(time)) return null
-  return (DATE_ONLY.test(text) ? DATE_FORMAT : DATE_TIME_FORMAT).format(time)
+  return dateFormat(DATE_ONLY.test(text)).format(time)
 }
 
 function json(value: unknown): CellView {
@@ -75,7 +89,7 @@ export function formatCell(value: unknown, column?: Pick<LocalColumn, 'type'>): 
   }
   if (typeof value === 'object') return json(value)
   const text = String(value)
-  if (text === '') return { kind: 'empty', text: '""', title: 'Empty text' }
+  if (text === '') return { kind: 'empty', text: '""', title: translator('data')('cell.emptyText') }
   if (DATE_TYPE.test(type)) {
     const date = formatDate(text)
     if (date) return { kind: 'date', text: date, title: text }
@@ -99,30 +113,35 @@ export function isNumberColumn(column: Pick<LocalColumn, 'type'>): boolean {
   return NUMBER_TYPE.test(column.type.trim())
 }
 
-/** `1 row`, `1,204 rows`. */
+/** `1 row`, `1,204 rows`, in English (for telemetry and callers' English words). */
 export function plural(count: number, one: string, many = `${one}s`): string {
   return `${count.toLocaleString('en-US')} ${count === 1 ? one : many}`
 }
 
-/** `A`, `A and B`, `A, B and C`. */
+/** `A`, `A and B`, `A, B and C`, in the interface's language. */
 export function listNames(names: string[]): string {
-  if (names.length <= 1) return names.join('')
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  return formatList(names)
 }
 
-const BYTE_UNITS = ['KB', 'MB', 'GB']
+const BYTE_UNITS = ['size.kilobytes', 'size.megabytes', 'size.gigabytes'] as const
 
-/** `512 bytes`, `1.5 KB`, `12 MB`: a file's size, in 1,024s. */
+/** `512 bytes`, `1.5 KB`, `12 MB`: a file's size, in 1,024s, in the interface's language. */
 export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return bytes === 1 ? '1 byte' : `${bytes.toLocaleString('en-US')} bytes`
+  const t = translator('data')
+  if (bytes < 1024) return t('size.bytes', { count: bytes })
   let value = bytes
-  let unit = ''
+  let unit: (typeof BYTE_UNITS)[number] = BYTE_UNITS[0]
   for (const next of BYTE_UNITS) {
     value /= 1024
     unit = next
     if (value < 1024) break
   }
-  return `${value < 10 ? value.toFixed(1).replace(/\.0$/, '') : Math.round(value)} ${unit}`
+  // One decimal under 10 (`1.5 KB`, `2 KB`), whole numbers from there (`12 MB`, `2048 GB`).
+  const size = value.toLocaleString(formatLocale(), {
+    maximumFractionDigits: value < 10 ? 1 : 0,
+    useGrouping: false
+  })
+  return t(unit, { size })
 }
 
 /** How a stored file previews. */

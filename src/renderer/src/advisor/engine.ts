@@ -11,6 +11,7 @@ import type {
   RayfinVersionInfo
 } from '@shared/ipc'
 import { QUICK_RULES, ruleApplies } from '@shared/advisor/catalog'
+import { translator } from '../i18n'
 import { buildQuickContext, type QuickContext } from './context'
 import { toFinding } from './quick'
 import { QUICK_IMPLS } from './rules'
@@ -28,6 +29,7 @@ export interface QuickCheckResult {
 }
 
 export function runQuickRules(ctx: QuickContext): { findings: AdvisorFinding[]; results: AdvisorRuleResult[] } {
+  const t = translator('advisor')
   const findings: AdvisorFinding[] = []
   const results: AdvisorRuleResult[] = []
   for (const rule of QUICK_RULES) {
@@ -37,14 +39,18 @@ export function runQuickRules(ctx: QuickContext): { findings: AdvisorFinding[]; 
     }
     const impl = QUICK_IMPLS.get(rule.id)
     if (!impl) {
-      results.push({ ruleId: rule.id, status: 'skipped', note: 'No quick check is available.' })
+      results.push({ ruleId: rule.id, status: 'skipped', note: t('engine.noQuickCheck') })
       continue
     }
     let out: ReturnType<typeof impl.run>
     try {
       out = impl.run(ctx)
     } catch (err) {
-      results.push({ ruleId: rule.id, status: 'skipped', note: `The check failed: ${String(err)}` })
+      results.push({
+        ruleId: rule.id,
+        status: 'skipped',
+        note: t('engine.checkFailed', { error: String(err) })
+      })
       continue
     }
     if (out === 'na' || out === 'skipped') {

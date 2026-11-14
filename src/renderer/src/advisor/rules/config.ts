@@ -1,6 +1,7 @@
 import { isUnder, relativeTo } from '../../model/projectLayout'
 import type { QuickContext } from '../context'
 import type { QuickHit, QuickRuleImpl } from '../quick'
+import { say } from '../quick'
 import {
   firstLine,
   importsOf,
@@ -36,22 +37,26 @@ function importsDataModel(ctx: QuickContext, fromFile: string, spec: string): bo
   return Boolean(pkg && (spec === pkg || spec.startsWith(`${pkg}/`)))
 }
 
+/** A frontend import that pulls entity classes (not just types) into the bundle. */
+interface EntityImport {
+  file: string
+  line: number
+  label: string
+  /** The module it imports. */
+  from: string
+}
+
 /** Frontend imports that pull entity classes (not just types) into the bundle. */
-function runtimeEntityImports(ctx: QuickContext): QuickHit[] {
-  const hits: QuickHit[] = []
+function runtimeEntityImports(ctx: QuickContext): EntityImport[] {
+  const found: EntityImport[] = []
   for (const src of ctx.frontend) {
     for (const stmt of importsOf(src.masked)) {
       if (!importsDataModel(ctx, src.path, stmt.from) || !importsValues(stmt)) continue
       const line = lineOf(src, stmt.index)
-      hits.push({
-        file: src.path,
-        line,
-        label: `${src.path}:${line}`,
-        message: `${code(src.path)} imports ${code(stmt.from)} as a value, which bundles decorated entity classes into the browser build.`
-      })
+      found.push({ file: src.path, line, label: `${src.path}:${line}`, from: stmt.from })
     }
   }
-  return hits
+  return found
 }
 
 function compilerOptions(json: unknown): Obj | undefined {
@@ -94,7 +99,9 @@ export const configRules: QuickRuleImpl[] = [
           file: ctx.yml!.path,
           line: yamlKeyLine(ctx.yml!.text, ['services']) ?? 1,
           label: `services.${k}`,
-          message: `rayfin.yml doesn't declare ${code(`services.${k}`)}.`
+          ...say((w) =>
+            w.t('config/missing-service-blocks.hit', { service: code(`services.${k}`) })
+          )
         }))
     }
   },
@@ -111,10 +118,18 @@ export const configRules: QuickRuleImpl[] = [
             yamlKeyLine(ctx.yml.text, ['services', 'data', 'dialect']) ??
             yamlKeyLine(ctx.yml.text, ['services', 'data']),
           label: 'services.data',
-          message:
+          ...say((w) =>
             dialect === undefined
-              ? `${code('services.data')} is enabled but doesn't set ${code('dialect')}.`
-              : `${code('services.data.dialect')} is ${code(String(dialect))}; Fabric apps support only ${code('mssql')}.`
+              ? w.t('config/data-dialect.noDialect', {
+                  service: code('services.data'),
+                  dialect: code('dialect')
+                })
+              : w.t('config/data-dialect.wrongDialect', {
+                  setting: code('services.data.dialect'),
+                  value: code(String(dialect)),
+                  mssql: code('mssql')
+                })
+          )
         }
       ]
     }
@@ -131,7 +146,12 @@ export const configRules: QuickRuleImpl[] = [
             file: src.path,
             line: jsonKeyLine(src.text, key),
             label: `${src.path} ${key}`,
-            message: `${code(src.path)} sets ${code(`${key}: true`)}.`
+            ...say((w) =>
+              w.t('config/experimental-decorators.hit', {
+                file: code(src.path),
+                option: code(`${key}: true`)
+              })
+            )
           })
         }
       }
@@ -153,9 +173,16 @@ export const configRules: QuickRuleImpl[] = [
           file: found.path,
           line: jsonKeyLine(src.text, found.lib ? 'lib' : 'compilerOptions'),
           label: found.path,
-          message: found.lib
-            ? `${code(found.path)}'s ${code('lib')} doesn't include ${code('ESNext.Decorators')}.`
-            : `${code(found.path)} doesn't set ${code('lib')}, so ${code('ESNext.Decorators')} isn't included.`
+          ...say((w) => {
+            const values = {
+              file: code(found.path),
+              lib: code('lib'),
+              decorators: code('ESNext.Decorators')
+            }
+            return found.lib
+              ? w.t('config/decorators-lib.libMissing', values)
+              : w.t('config/decorators-lib.noLib', values)
+          })
         }
       ]
     }
@@ -165,9 +192,15 @@ export const configRules: QuickRuleImpl[] = [
     run: (ctx) => {
       const vite = viteConfig(ctx)
       if (!vite || !/plugin-react-swc/.test(vite.masked)) return []
-      return runtimeEntityImports(ctx).map((h) => ({
-        ...h,
-        message: `${h.message} This project builds with ${code('@vitejs/plugin-react-swc')}, which can't parse those decorators.`
+      return runtimeEntityImports(ctx).map(({ from, ...where }) => ({
+        ...where,
+        ...say((w) =>
+          w.t('config/swc-with-runtime-entities.hit', {
+            file: code(where.file),
+            module: code(from),
+            plugin: code('@vitejs/plugin-react-swc')
+          })
+        )
       }))
     }
   },
@@ -183,7 +216,9 @@ export const configRules: QuickRuleImpl[] = [
           file: vite.path,
           line: firstLine(vite.masked, /\bbuild\s*:/) ?? 1,
           label: vite.path,
-          message: `${code(vite.path)} doesn't target ES2022 or later, but the bundle includes entity classes (for example ${imports[0].label}).`
+          ...say((w) =>
+            w.t('config/vite-target.hit', { file: code(vite.path), example: imports[0].label })
+          )
         }
       ]
     }
@@ -206,7 +241,13 @@ export const configRules: QuickRuleImpl[] = [
           file: ctx.yml.path,
           line: yamlKeyLine(ctx.yml.text, ['services', 'staticHosting', 'folder']),
           label: 'services.staticHosting.folder',
-          message: `${code('staticHosting.folder')} is ${code(folder)}, but Vite writes the build to ${code(outDir)}.`
+          ...say((w) =>
+            w.t('config/static-hosting-folder.hit', {
+              setting: code('staticHosting.folder'),
+              folder: code(folder),
+              outDir: code(outDir)
+            })
+          )
         }
       ]
     }
@@ -222,14 +263,18 @@ export const configRules: QuickRuleImpl[] = [
           file: yml.path,
           line: yamlKeyLine(yml.text, [k]),
           label: k,
-          message: `rayfin.yml still has the deprecated top-level ${code(`${k}:`)} key.`
+          ...say((w) => w.t('config/deprecated-yml-keys.topLevelKey', { key: code(`${k}:`) }))
         }))
       if (ctx.service('connectors') && 'enabled' in (ctx.service('connectors') as Obj)) {
         hits.push({
           file: yml.path,
           line: yamlKeyLine(yml.text, ['services', 'connectors', 'enabled']),
           label: 'services.connectors.enabled',
-          message: `${code('services.connectors.enabled')} does nothing since Rayfin 1.36; connectors are always on.`
+          ...say((w) =>
+            w.t('config/deprecated-yml-keys.connectorsEnabled', {
+              setting: code('services.connectors.enabled')
+            })
+          )
         })
       }
       if (ctx.service('staticHosting') && 'anonymousAccess' in (ctx.service('staticHosting') as Obj)) {
@@ -237,7 +282,12 @@ export const configRules: QuickRuleImpl[] = [
           file: yml.path,
           line: yamlKeyLine(yml.text, ['services', 'staticHosting', 'anonymousAccess']),
           label: 'services.staticHosting.anonymousAccess',
-          message: `${code('services.staticHosting.anonymousAccess')} was replaced by ${code('assetAccess')} in Rayfin 1.35.1.`
+          ...say((w) =>
+            w.t('config/deprecated-yml-keys.anonymousAccess', {
+              setting: code('services.staticHosting.anonymousAccess'),
+              replacement: code('assetAccess')
+            })
+          )
         })
       }
       return hits
@@ -257,10 +307,18 @@ export const configRules: QuickRuleImpl[] = [
             yamlKeyLine(ctx.yml.text, ['services', 'functions', 'auth']) ??
             yamlKeyLine(ctx.yml.text, ['services', 'functions']),
           label: 'services.functions.auth',
-          message:
+          ...say((w) =>
             type === undefined
-              ? `${code('services.functions')} is enabled but doesn't set ${code('auth.type: application')}.`
-              : `${code('services.functions.auth.type')} is ${code(String(type))}; enabled Functions need ${code('application')}.`
+              ? w.t('config/functions-auth.noAuth', {
+                  service: code('services.functions'),
+                  setting: code('auth.type: application')
+                })
+              : w.t('config/functions-auth.wrongType', {
+                  setting: code('services.functions.auth.type'),
+                  value: code(String(type)),
+                  application: code('application')
+                })
+          )
         }
       ]
     }
@@ -279,10 +337,19 @@ export const configRules: QuickRuleImpl[] = [
             yamlKeyLine(ctx.yml.text, ['services', 'staticHosting', 'assetAccess']) ??
             yamlKeyLine(ctx.yml.text, ['services', 'staticHosting']),
           label: 'services.staticHosting.assetAccess',
-          message:
+          ...say((w) =>
             access === undefined
-              ? `${code('services.staticHosting')} doesn't set ${code('assetAccess')}.`
-              : `${code('services.staticHosting.assetAccess')} is ${code(String(access))}; use ${code('protected')} or ${code('public')}.`
+              ? w.t('config/static-hosting-posture.noAccess', {
+                  service: code('services.staticHosting'),
+                  setting: code('assetAccess')
+                })
+              : w.t('config/static-hosting-posture.wrongAccess', {
+                  setting: code('services.staticHosting.assetAccess'),
+                  value: code(String(access)),
+                  protected: code('protected'),
+                  public: code('public')
+                })
+          )
         }
       ]
     }
@@ -299,7 +366,13 @@ export const configRules: QuickRuleImpl[] = [
           file: ctx.yml.path,
           line: yamlKeyLine(ctx.yml.text, ['services', 'staticHosting', 'assetAccess']),
           label: 'services.staticHosting',
-          message: `${code('services.staticHosting')} sets ${code('assetAccess: public')} together with ${code('embedded.only: true')}.`
+          ...say((w) =>
+            w.t('config/embedded-public-conflict.hit', {
+              service: code('services.staticHosting'),
+              public: code('assetAccess: public'),
+              embedded: code('embedded.only: true')
+            })
+          )
         }
       ]
     }
@@ -319,6 +392,7 @@ export const configRules: QuickRuleImpl[] = [
             .map((f) => f.trim().toLowerCase())
             .filter((f) => f === 'functions' || f === 'connectors')
           if (stale.length === 0) continue
+          const flags = [...new Set(stale)]
           const line = lineOf(src, m.index)
           hits.push({
             file: src.path,
@@ -326,7 +400,14 @@ export const configRules: QuickRuleImpl[] = [
             label: src.path,
             // Only the flag's own line: env files can hold secrets on neighboring lines.
             excerpt: { text: src.text.split(/\r?\n/)[line - 1] ?? '', start: line },
-            message: `${code(src.path)} lists ${[...new Set(stale)].map(code).join(' and ')} in ${code('RAYFIN_FEATURE_FLAGS')}, which no longer need a flag.`
+            ...say((w) =>
+              w.t('config/stale-feature-flags.hit', {
+                file: code(src.path),
+                flags: w.list(flags.map(code)),
+                variable: code('RAYFIN_FEATURE_FLAGS'),
+                count: flags.length
+              })
+            )
           })
         }
       }
@@ -345,7 +426,13 @@ export const configRules: QuickRuleImpl[] = [
           file: ctx.yml.path,
           line: yamlKeyLine(ctx.yml.text, ['connectors']),
           label: names.join(', ') || 'connectors',
-          message: `${code('connectors:')} in rayfin.yml is a map keyed by connector name (${names.map(code).join(', ')}) instead of a list of ${code('- name:')} entries.`
+          ...say((w) =>
+            w.t('config/connectors-list-shape.hit', {
+              key: code('connectors:'),
+              names: w.join(names.map(code)),
+              entry: code('- name:')
+            })
+          )
         }
       ]
     }

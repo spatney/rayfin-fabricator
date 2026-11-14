@@ -10,9 +10,10 @@ import {
   type PointerEvent as ReactPointerEvent
 } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from '../../i18n'
 import { useModalFocus } from '../../modalFocus'
 import { useSuppressPreview } from '../../overlay'
-import { isMac } from '../../platform'
+import { isMac, modKey } from '../../platform'
 import { Codicon } from '../icons'
 import { loadImage } from './images'
 import {
@@ -100,6 +101,7 @@ interface Props {
  * Marks are drawn in the picture's own pixels and saved at its full size.
  */
 export function ImageMarkup({ src, loadFull, label, onDone, onCancel }: Props): JSX.Element {
+  const { t } = useTranslation('chat')
   useSuppressPreview()
   const dialogRef = useModalFocus<HTMLDivElement>()
   const titleId = useId()
@@ -133,7 +135,7 @@ export function ImageMarkup({ src, loadFull, label, onDone, onCancel }: Props): 
   const draft = useRef<{ mark: Mark; origin: Point } | null>(null)
   const frame = useRef(0)
   const mac = isMac()
-  const mod = mac ? '⌘' : 'Ctrl'
+  const mod = modKey()
 
   // The full-size picture, falling back to the copy we were given.
   const loadRef = useRef(loadFull)
@@ -372,21 +374,21 @@ export function ImageMarkup({ src, loadFull, label, onDone, onCancel }: Props): 
         <header className="markup-head">
           <div className="markup-title">
             <h2 id={titleId}>{label}</h2>
-            <p>Draw on it to show Copilot what you mean</p>
+            <p>{t('imageMarkup.hint')}</p>
           </div>
           <button
             type="button"
             className="markup-icon-btn"
             onClick={onCancel}
-            aria-label="Cancel"
-            title="Cancel (Esc)"
+            aria-label={t('actions.cancel')}
+            title={t('imageMarkup.cancelTitle')}
           >
             <Codicon name="close" />
           </button>
         </header>
         <div className="markup-stage" ref={stageRef}>
           {failed ? (
-            <p className="markup-note">This picture couldn’t be opened.</p>
+            <p className="markup-note">{t('imageMarkup.failed')}</p>
           ) : image && shown ? (
             <div className="markup-sheet" style={{ width: shown.w, height: shown.h }}>
               <img src={image.url} alt={label} draggable={false} />
@@ -394,7 +396,7 @@ export function ImageMarkup({ src, loadFull, label, onDone, onCancel }: Props): 
                 ref={canvasRef}
                 className={`markup-ink${drawing ? ' markup-ink--drawing' : ''}`}
                 style={{ cursor: inkCursor(tool, color) }}
-                aria-label={`Drawing area: draw with the ${tool}`}
+                aria-label={t(`imageMarkup.area.${tool}`)}
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
@@ -404,33 +406,33 @@ export function ImageMarkup({ src, loadFull, label, onDone, onCancel }: Props): 
           ) : (
             <span className="markup-note" role="status">
               <span className="step-spin" aria-hidden="true" />
-              Opening the picture…
+              {t('imageMarkup.opening')}
             </span>
           )}
           {discarding && (
             <p className="markup-toast" role="status">
-              Press Esc again to throw the drawing away
+              {t('imageMarkup.discard')}
             </p>
           )}
         </div>
-        <div className="markup-tools" role="toolbar" aria-label="Drawing tools">
-          <div className="markup-group" role="group" aria-label="Tool">
-            {MARK_TOOLS.map((t) => (
+        <div className="markup-tools" role="toolbar" aria-label={t('imageMarkup.tools')}>
+          <div className="markup-group" role="group" aria-label={t('imageMarkup.tool')}>
+            {MARK_TOOLS.map((item) => (
               <button
-                key={t.id}
+                key={item.id}
                 type="button"
-                className={`markup-icon-btn markup-tool${tool === t.id ? ' is-on' : ''}`}
-                aria-pressed={tool === t.id}
-                aria-label={t.label}
-                title={`${t.label} (${t.key})`}
-                onClick={() => setTool(t.id)}
+                className={`markup-icon-btn markup-tool${tool === item.id ? ' is-on' : ''}`}
+                aria-pressed={tool === item.id}
+                aria-label={item.label}
+                title={t('imageMarkup.withKey', { label: item.label, key: item.key })}
+                onClick={() => setTool(item.id)}
               >
-                {TOOL_ICONS[t.id]}
+                {TOOL_ICONS[item.id]}
               </button>
             ))}
           </div>
           <span className="markup-sep" aria-hidden="true" />
-          <div className="markup-group" role="group" aria-label="Color">
+          <div className="markup-group" role="group" aria-label={t('imageMarkup.color')}>
             {MARK_COLORS.map((c, i) => (
               <button
                 key={c.value}
@@ -439,7 +441,7 @@ export function ImageMarkup({ src, loadFull, label, onDone, onCancel }: Props): 
                 style={{ '--swatch': c.value } as CSSProperties}
                 aria-pressed={color === c.value}
                 aria-label={c.label}
-                title={`${c.label} (${i + 1})`}
+                title={t('imageMarkup.withKey', { label: c.label, key: i + 1 })}
                 onClick={() => setColor(c.value)}
               />
             ))}
@@ -451,8 +453,8 @@ export function ImageMarkup({ src, loadFull, label, onDone, onCancel }: Props): 
               className="markup-icon-btn"
               onClick={() => setHistory(undo)}
               disabled={history.past.length === 0}
-              aria-label="Undo"
-              title={`Undo (${mod}+Z)`}
+              aria-label={t('actions.undo')}
+              title={t('imageMarkup.undoTitle', { mod })}
             >
               <Codicon name="discard" />
             </button>
@@ -461,8 +463,8 @@ export function ImageMarkup({ src, loadFull, label, onDone, onCancel }: Props): 
               className="markup-icon-btn"
               onClick={() => setHistory(redo)}
               disabled={history.future.length === 0}
-              aria-label="Redo"
-              title={`Redo (${mod}+Shift+Z)`}
+              aria-label={t('imageMarkup.redo')}
+              title={t('imageMarkup.redoTitle', { mod })}
             >
               <Codicon name="redo" />
             </button>
@@ -471,24 +473,24 @@ export function ImageMarkup({ src, loadFull, label, onDone, onCancel }: Props): 
               className="markup-icon-btn"
               onClick={() => setHistory((h) => commit(h, []))}
               disabled={!marked}
-              aria-label="Clear the drawing"
-              title="Clear the drawing"
+              aria-label={t('imageMarkup.clear')}
+              title={t('imageMarkup.clear')}
             >
               <Codicon name="trash" />
             </button>
           </div>
           <span className="markup-spacer" />
           <button type="button" className="btn btn--ghost" onClick={onCancel}>
-            Cancel
+            {t('actions.cancel')}
           </button>
           <button
             type="button"
             className="btn btn--primary"
             onClick={finish}
-            title={marked ? 'Keep the drawing (Enter)' : 'Close (Enter)'}
+            title={marked ? t('imageMarkup.keepTitle') : t('imageMarkup.closeTitle')}
             autoFocus
           >
-            Done
+            {t('actions.done')}
           </button>
         </div>
       </div>

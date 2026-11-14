@@ -455,7 +455,8 @@ static CATALOG: &[SkillDef] = &[
 /// The CLI-managed (locked) skills Fabricator knows, in display order.
 const MANAGED_ORDER: &[&str] = &["rayfin", "rayfin-functions", "rayfin-connectors", "rayfin-storage"];
 
-/// Friendly presentation for known CLI-managed (locked) skills found on disk.
+/// Friendly presentation for known CLI-managed (locked) skills found on disk, in
+/// English (the list shows [`card_text`]).
 fn managed_presentation(id: &str) -> Option<(&'static str, &'static str, &'static str)> {
   match id {
     "rayfin" => Some((
@@ -472,6 +473,76 @@ fn managed_presentation(id: &str) -> Option<(&'static str, &'static str, &'stati
     "rayfin-storage" => Some(("Rayfin Storage", "File storage for your app. Experimental.", "▤")),
     _ => None,
   }
+}
+
+/// A catalog or known Rayfin skill's card title and description in the current
+/// language. The English in [`CATALOG`] and [`managed_presentation`] is what
+/// SKILL.md files and History's commit messages use.
+fn card_text(id: &str) -> Option<(String, String)> {
+  let text = match id {
+    "polished-ui" => (
+      t!("commands.skills.cards.polishedUi.title"),
+      t!("commands.skills.cards.polishedUi.description"),
+    ),
+    "buttery-animations" => (
+      t!("commands.skills.cards.butteryAnimations.title"),
+      t!("commands.skills.cards.butteryAnimations.description"),
+    ),
+    "responsive-layout" => (
+      t!("commands.skills.cards.responsiveLayout.title"),
+      t!("commands.skills.cards.responsiveLayout.description"),
+    ),
+    "easy-navigation" => (
+      t!("commands.skills.cards.easyNavigation.title"),
+      t!("commands.skills.cards.easyNavigation.description"),
+    ),
+    "clear-copy" => (
+      t!("commands.skills.cards.clearCopy.title"),
+      t!("commands.skills.cards.clearCopy.description"),
+    ),
+    "loading-empty-states" => (
+      t!("commands.skills.cards.loadingEmptyStates.title"),
+      t!("commands.skills.cards.loadingEmptyStates.description"),
+    ),
+    "friendly-forms" => (
+      t!("commands.skills.cards.friendlyForms.title"),
+      t!("commands.skills.cards.friendlyForms.description"),
+    ),
+    "data-modeling" => (
+      t!("commands.skills.cards.dataModeling.title"),
+      t!("commands.skills.cards.dataModeling.description"),
+    ),
+    "search-and-filter" => (
+      t!("commands.skills.cards.searchAndFilter.title"),
+      t!("commands.skills.cards.searchAndFilter.description"),
+    ),
+    "data-viz" => (
+      t!("commands.skills.cards.dataViz.title"),
+      t!("commands.skills.cards.dataViz.description"),
+    ),
+    "accessibility" => (
+      t!("commands.skills.cards.accessibility.title"),
+      t!("commands.skills.cards.accessibility.description"),
+    ),
+    "secure-by-default" => (
+      t!("commands.skills.cards.secureByDefault.title"),
+      t!("commands.skills.cards.secureByDefault.description"),
+    ),
+    "performance" => (
+      t!("commands.skills.cards.performance.title"),
+      t!("commands.skills.cards.performance.description"),
+    ),
+    "rayfin" => (
+      t!("commands.skills.cards.rayfin.title"),
+      t!("commands.skills.cards.rayfin.description"),
+    ),
+    // Rayfin's feature names are the same in every language.
+    "rayfin-functions" => ("Rayfin Functions".into(), t!("commands.skills.cards.rayfinFunctions.description")),
+    "rayfin-connectors" => ("Rayfin Connectors".into(), t!("commands.skills.cards.rayfinConnectors.description")),
+    "rayfin-storage" => ("Rayfin Storage".into(), t!("commands.skills.cards.rayfinStorage.description")),
+    _ => return None,
+  };
+  Some(text)
 }
 
 /// The Fabricator operating contract written to `.github/copilot-instructions.md`.
@@ -736,12 +807,17 @@ pub(crate) fn title_case(id: &str) -> String {
 /// Card presentation (title, description, icon) for a skill installed in the
 /// project that isn't a catalog copy: its `meta.json` (skills added through
 /// Fabricator), a known Rayfin presentation, else what its `SKILL.md` says.
-fn installed_presentation(dir: &str, id: &str, disk: Option<&OnDisk>) -> (String, String, String) {
+/// `localized` gives a known Rayfin skill's card in the current language.
+fn installed_presentation(dir: &str, id: &str, disk: Option<&OnDisk>, localized: bool) -> (String, String, String) {
   if let Some(presentation) = crate::commands::custom_skills::project_skill_presentation(dir, id) {
     return presentation;
   }
   if let Some((t, d, i)) = managed_presentation(id) {
-    return (t.to_string(), d.to_string(), i.to_string());
+    let (title, description) = match localized.then(|| card_text(id)).flatten() {
+      Some(card) => card,
+      None => (t.to_string(), d.to_string()),
+    };
+    return (title, description, i.to_string());
   }
   let title = disk
     .and_then(|d| d.heading.as_deref())
@@ -750,7 +826,7 @@ fn installed_presentation(dir: &str, id: &str, disk: Option<&OnDisk>) -> (String
   let description = disk
     .and_then(|d| d.description.as_deref())
     .and_then(summary)
-    .unwrap_or_else(|| "A skill in this app.".to_string());
+    .unwrap_or_else(|| t!("commands.skills.inThisApp"));
   (title, description, "🧩".to_string())
 }
 
@@ -763,7 +839,7 @@ fn display_title(dir: &str, id: &str, disk: Option<&OnDisk>, def: Option<&SkillD
   if let Some(title) = crate::commands::custom_skills::library_title(id) {
     return title;
   }
-  installed_presentation(dir, id, disk).0
+  installed_presentation(dir, id, disk, false).0
 }
 
 /// The built-in skill `id` refers to in this app, if any. What's installed decides:
@@ -803,7 +879,7 @@ fn build_list_with(dir: &str, library: Vec<CustomSkillInfo>) -> Vec<SkillInfo> {
       .map(|(id, _)| id),
   );
   for id in managed_ids {
-    let (title, description, icon) = installed_presentation(dir, id, installed.get(id));
+    let (title, description, icon) = installed_presentation(dir, id, installed.get(id), true);
     list.push(SkillInfo {
       id: id.clone(),
       title,
@@ -832,10 +908,12 @@ fn build_list_with(dir: &str, library: Vec<CustomSkillInfo>) -> Vec<SkillInfo> {
       continue;
     }
     let outdated = on_disk.is_some_and(|d| version_lt(d.version.as_deref().unwrap_or("0"), def.version));
+    let (title, description) =
+      card_text(def.id).unwrap_or_else(|| (def.title.to_string(), def.description.to_string()));
     list.push(SkillInfo {
       id: def.id.to_string(),
-      title: def.title.to_string(),
-      description: def.description.to_string(),
+      title,
+      description,
       icon: def.icon.to_string(),
       category: Some(def.category.to_string()),
       base: false,
@@ -881,7 +959,7 @@ fn build_list_with(dir: &str, library: Vec<CustomSkillInfo>) -> Vec<SkillInfo> {
     if used.contains(id) || d.managed {
       continue;
     }
-    let (title, description, icon) = installed_presentation(dir, id, Some(d));
+    let (title, description, icon) = installed_presentation(dir, id, Some(d), true);
     list.push(SkillInfo {
       id: id.clone(),
       title,
@@ -1016,7 +1094,7 @@ pub fn skills_source(id: String, skill_id: String) -> SkillSource {
         ok: false,
         installed: false,
         content: None,
-        error: Some("Project not found.".to_string()),
+        error: Some(t!("commands.shared.projectNotFound")),
       }
     }
   };
@@ -1048,7 +1126,7 @@ pub fn skills_source(id: String, skill_id: String) -> SkillSource {
           ok: false,
           installed: false,
           content: None,
-          error: Some("This skill has no preview.".to_string()),
+          error: Some(t!("commands.skills.noPreview")),
         },
       },
     },
@@ -1065,7 +1143,7 @@ pub async fn skills_set(id: String, skill_id: String, active: bool) -> SkillActi
       return SkillActionResult {
         ok: false,
         skills: vec![],
-        error: Some("Project not found.".to_string()),
+        error: Some(t!("commands.shared.projectNotFound")),
       }
     }
   };
@@ -1081,21 +1159,21 @@ pub async fn skills_set(id: String, skill_id: String, active: bool) -> SkillActi
     if def.is_none() && !is_library {
       // Never overwrite a different skill that uses a built-in skill's folder name.
       let error = if catalog_by_id(&skill_id).is_some() && on_disk.is_some() {
-        "This app already has its own skill with that name."
+        t!("commands.skills.nameTaken")
       } else {
-        "Unknown skill."
+        t!("commands.skills.unknown")
       };
       return SkillActionResult {
         ok: false,
         skills: build_list(&dir),
-        error: Some(error.to_string()),
+        error: Some(error),
       };
     }
     if on_disk.as_ref().map(|d| d.managed).unwrap_or(false) {
       return SkillActionResult {
         ok: false,
         skills: build_list(&dir),
-        error: Some("That skill is managed by Rayfin.".to_string()),
+        error: Some(t!("commands.skills.managed")),
       };
     }
   } else {
@@ -1103,7 +1181,7 @@ pub async fn skills_set(id: String, skill_id: String, active: bool) -> SkillActi
       return SkillActionResult {
         ok: false,
         skills: build_list(&dir),
-        error: Some("That skill is managed by Rayfin and can't be removed.".to_string()),
+        error: Some(t!("commands.skills.managedCantRemove")),
       };
     }
     if on_disk.is_none() {
@@ -1137,7 +1215,7 @@ pub async fn skills_set(id: String, skill_id: String, active: bool) -> SkillActi
     return SkillActionResult {
       ok: false,
       skills: build_list(&dir),
-      error: Some(format!("Could not update skills: {err}")),
+      error: Some(t!("commands.skills.cantUpdate", error = err)),
     };
   }
 

@@ -1,8 +1,9 @@
 import { useState, type CSSProperties, type JSX } from 'react'
+import { formatLocale, useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { hueOf } from '../team/map/parts'
 import { GalleryMenu } from './GalleryMenu'
-import { ago, count, splitWorkspaceName, workspaceTitle, type GalleryWorkspace } from './model'
+import { ago, splitWorkspaceName, workspaceTitle, type GalleryWorkspace } from './model'
 
 /** Recent workspaces listed before the others. */
 const RECENT_SHOWN = 5
@@ -56,6 +57,7 @@ function WorkspaceRow({
   selected: boolean
   onPick: (id: string) => void
 }): JSX.Element {
+  const { t } = useTranslation('gallery')
   const { title, detail } = workspaceTitle(w.name)
   const sub = (recent && usedWhen(w.usedAt)) || detail
   return (
@@ -84,7 +86,7 @@ function WorkspaceRow({
         <span className="gallery-ws-name">{title}</span>
         {sub && <span className="gallery-ws-sub">{sub}</span>}
       </span>
-      <span className="gallery-ws-apps">{count(w.count, 'app')}</span>
+      <span className="gallery-ws-apps">{t('count.apps', { count: w.count })}</span>
       {selected && <Codicon name="check" className="gallery-ws-check" />}
     </button>
   )
@@ -103,6 +105,7 @@ function WorkspaceList({
   value: string | null
   onPick: (id: string | null) => void
 }): JSX.Element {
+  const { t } = useTranslation('gallery')
   const [query, setQuery] = useState('')
   const q = query.trim().toLowerCase()
   const matches = (w: GalleryWorkspace): boolean =>
@@ -128,15 +131,15 @@ function WorkspaceList({
   return (
     <>
       <div className="gallery-ws-head">
-        <span className="gallery-ws-title">Workspaces</span>
-        <span className="gallery-ws-badge">{all.toLocaleString('en')}</span>
+        <span className="gallery-ws-title">{t('workspaces.title')}</span>
+        <span className="gallery-ws-badge">{all.toLocaleString(formatLocale())}</span>
       </div>
       <label className="gallery-ws-search">
         <Codicon name="search" />
         <input
           type="text"
-          placeholder="Search workspaces…"
-          aria-label="Search workspaces"
+          placeholder={t('workspaces.searchPlaceholder')}
+          aria-label={t('workspaces.search')}
           autoComplete="off"
           spellCheck={false}
           value={query}
@@ -157,18 +160,18 @@ function WorkspaceList({
                 <AllIcon />
               </span>
               <span className="gallery-ws-text">
-                <span className="gallery-ws-name">All workspaces</span>
+                <span className="gallery-ws-name">{t('workspaces.all')}</span>
               </span>
-              <span className="gallery-ws-apps">{count(total, 'app')}</span>
+              <span className="gallery-ws-apps">{t('count.apps', { count: total })}</span>
               {value === null && <Codicon name="check" className="gallery-ws-check" />}
             </button>
             {found > 0 && <div className="gallery-ws-sep" role="separator" />}
           </>
         )}
         {recentShown.length > 0 && (
-          <div role="group" aria-label="Recent">
+          <div role="group" aria-label={t('workspaces.recent')}>
             <div className="gallery-ws-heading" aria-hidden="true">
-              Recent
+              {t('workspaces.recent')}
             </div>
             {recentShown.map((w) => row(w, true))}
           </div>
@@ -177,32 +180,33 @@ function WorkspaceList({
           <div className="gallery-ws-sep" role="separator" />
         )}
         {restShown.length > 0 && (
-          <div role="group" aria-label={recentShown.length > 0 ? 'Other workspaces' : 'Workspaces'}>
+          <div
+            role="group"
+            aria-label={recentShown.length > 0 ? t('workspaces.others') : t('workspaces.title')}
+          >
             {recentShown.length > 0 && (
               <div className="gallery-ws-heading" aria-hidden="true">
-                Other workspaces
+                {t('workspaces.others')}
               </div>
             )}
             {restShown.map((w) => row(w, false))}
           </div>
         )}
         {q && found === 0 && (
-          <div className="gallery-ws-empty">No workspace matches “{query.trim()}”.</div>
+          <div className="gallery-ws-empty">{t('workspaces.noMatch', { query: query.trim() })}</div>
         )}
       </div>
       <div className="gallery-ws-foot">
         <span>
-          {q
-            ? `${found.toLocaleString('en')} of ${count(all, 'workspace')}`
-            : count(all, 'workspace')}
+          {q ? t('workspaces.found', { found, count: all }) : t('count.workspaces', { count: all })}
         </span>
         <span className="gallery-ws-keys" aria-hidden="true">
           <kbd>↑</kbd>
           <kbd>↓</kbd>
-          <span>Navigate</span>
+          <span>{t('workspaces.navigate')}</span>
           <span className="gallery-ws-keys-sep" />
           <kbd>↵</kbd>
-          <span>Select</span>
+          <span>{t('workspaces.select')}</span>
         </span>
       </div>
     </>
@@ -229,13 +233,14 @@ export function WorkspacePicker({
   value: string | null
   onChange: (id: string | null) => void
 }): JSX.Element {
+  const { t } = useTranslation('gallery')
   const current = value ? [...recent, ...others].find((w) => w.id === value) : undefined
   return (
     <GalleryMenu
       icon={current ? workspaceIcon(current.name) : 'folder-library'}
-      label={current ? workspaceTitle(current.name).title : 'All workspaces'}
-      value={current?.name ?? 'All workspaces'}
-      name="Workspace"
+      label={current ? workspaceTitle(current.name).title : t('workspaces.all')}
+      value={current?.name ?? t('workspaces.all')}
+      name={t('workspaces.menu')}
       width={400}
       panelClassName="gallery-ws-panel"
     >

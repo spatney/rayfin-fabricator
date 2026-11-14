@@ -5,13 +5,25 @@
 // they might be in the wrong place. Every string here answers the question they
 // are actually asking: what is this, and why do I need it?
 
+import { translator } from '../i18n'
+
 /** One line saying what a tool is for, keyed by the doctor's tool id. */
-const PURPOSE: Record<string, string> = {
-  node: 'Runs your app on this computer while you build it',
-  npm: 'Fetches the building blocks your app is made from',
-  git: 'Keeps a history of your app so you can always go back',
-  az: 'Lets Fabricator sign you in to Azure',
-  gh: 'Lets Fabricator work with your code on GitHub'
+function purpose(id: string): string | undefined {
+  const t = translator('setup')
+  switch (id) {
+    case 'node':
+      return t('tools.purpose.node')
+    case 'npm':
+      return t('tools.purpose.npm')
+    case 'git':
+      return t('tools.purpose.git')
+    case 'az':
+      return t('tools.purpose.az')
+    case 'gh':
+      return t('tools.purpose.gh')
+    default:
+      return undefined
+  }
 }
 
 /**
@@ -19,7 +31,7 @@ const PURPOSE: Record<string, string> = {
  * but written for developers, rather than inventing something.
  */
 export function toolPurpose(id: string, fallback?: string | null): string {
-  return PURPOSE[id] ?? fallback ?? 'Used by Fabricator behind the scenes'
+  return purpose(id) ?? fallback ?? translator('setup')('tools.purpose.fallback')
 }
 
 /**
@@ -36,10 +48,16 @@ export function toolLine(tool: {
   installHint?: string | null
   required: boolean
 }): string {
-  if (tool.satisfied) return tool.version ?? 'Ready'
+  const t = translator('setup')
+  if (tool.satisfied) return tool.version ?? t('tools.state.ready')
   if (tool.found) {
-    const target = tool.minVersion ? ` ${tool.minVersion} or newer` : ''
-    return `Version ${tool.version ?? 'unknown'} — Fabricator needs${target || ' a newer version'}`
+    const { version, minVersion: min } = tool
+    if (version === null || version === undefined) {
+      return min ? t('tools.unknownVersionNeedsMin', { min }) : t('tools.unknownVersionNeedsNewer')
+    }
+    return min
+      ? t('tools.versionNeedsMin', { version, min })
+      : t('tools.versionNeedsNewer', { version })
   }
   return toolPurpose(tool.id, tool.installHint)
 }
@@ -49,17 +67,19 @@ export function toolState(tool: { satisfied: boolean; found: boolean; required: 
   word: string
   tone: 'ok' | 'warn' | 'bad' | 'muted'
 } {
-  if (tool.satisfied) return { word: 'Ready', tone: 'ok' }
-  if (tool.found) return { word: 'Needs updating', tone: 'warn' }
-  if (!tool.required) return { word: 'Optional', tone: 'muted' }
-  return { word: 'Missing', tone: 'bad' }
+  const t = translator('setup')
+  if (tool.satisfied) return { word: t('tools.state.ready'), tone: 'ok' }
+  if (tool.found) return { word: t('tools.state.needsUpdating'), tone: 'warn' }
+  if (!tool.required) return { word: t('tools.state.optional'), tone: 'muted' }
+  return { word: t('tools.state.missing'), tone: 'bad' }
 }
 
 /** The headline above the checklist, which doubles as the progress summary. */
 export function progressLine(done: number, total: number, checking: boolean): string {
-  if (checking) return 'Checking what you already have…'
-  if (total > 0 && done === total) return "Everything's ready. You can start building."
+  const t = translator('setup')
+  if (checking) return t('progress.checking')
+  if (total > 0 && done === total) return t('progress.ready')
   const left = total - done
-  if (done === 0) return "Let's get Fabricator set up. This usually takes a minute."
-  return `${left} ${left === 1 ? 'thing' : 'things'} left to set up.`
+  if (done === 0) return t('progress.start')
+  return t('progress.left', { count: left })
 }

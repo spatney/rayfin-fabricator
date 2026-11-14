@@ -1,14 +1,20 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type JSX } from 'react'
 import { createPortal } from 'react-dom'
 import { PickIcon } from '../components/icons'
+import { translator, useTranslation } from '../i18n'
 import { isMac } from '../platform'
 import './pick.css'
 
 /** How long the pointer rests on the button before its shortcuts show. */
 const TIP_DELAY_MS = 350
 
-/** What the switch is called on screen: what you do with it. */
+/** What the switch is called, in English; {@link touchUpLabel} in the interface's language. */
 export const LABEL = 'Point & Edit'
+
+/** What the switch is called on screen: what you do with it. */
+export function touchUpLabel(): string {
+  return translator('app')('touchUp.label')
+}
 
 /**
  * Where the shortcuts show: one row beside the button, centred on the toolbar.
@@ -44,11 +50,14 @@ export function TouchUpButton({
   disabledReason?: string
   onToggle: () => void
 }): JSX.Element {
+  const { t } = useTranslation('app')
   const ref = useRef<HTMLSpanElement>(null)
   const timer = useRef(0)
   const [tip, setTip] = useState<CSSProperties | null>(null)
   const tipId = useId()
   const mac = isMac()
+  const label = t('touchUp.label')
+  const shortcut = mac ? ['⌘', '⇧', 'C'] : [t('keys.ctrl'), t('touchUp.shiftKey'), 'C']
 
   useEffect(() => () => window.clearTimeout(timer.current), [])
   // Toggling hides the shortcuts: they've done their job.
@@ -76,7 +85,7 @@ export function TouchUpButton({
       <button
         type="button"
         className={`seg-btn pick-btn${on ? ' seg-btn--on' : ''}`}
-        aria-label={count > 0 ? `${LABEL}, ${count} picked` : LABEL}
+        aria-label={count > 0 ? t('touchUp.labelPicked', { label, count }) : label}
         aria-pressed={on}
         aria-keyshortcuts={mac ? 'Meta+Shift+C' : 'Control+Shift+C'}
         aria-describedby={tip ? tipId : undefined}
@@ -91,7 +100,7 @@ export function TouchUpButton({
         onBlur={hide}
       >
         <PickIcon />
-        <span className="seg-btn-label">{LABEL}</span>
+        <span className="seg-btn-label">{label}</span>
         {count > 0 && (
           <span className="pick-btn-count" aria-hidden="true">
             {count}
@@ -106,20 +115,20 @@ export function TouchUpButton({
             ) : (
               <>
                 <span className="pick-tip-item">
-                  {on ? 'Turn off' : 'Turn on'}
+                  {on ? t('touchUp.turnOff') : t('touchUp.turnOn')}
                   <span className="pick-keys">
-                    {(mac ? ['⌘', '⇧', 'C'] : ['Ctrl', 'Shift', 'C']).map((key) => (
+                    {shortcut.map((key) => (
                       <kbd key={key}>{key}</kbd>
                     ))}
                   </span>
                 </span>
                 <span className="pick-tip-sep" aria-hidden="true" />
                 <span className="pick-tip-item">
-                  Clip a screenshot
+                  {t('touchUp.clip')}
                   <span className="pick-keys">
-                    <kbd>{mac ? '⇧' : 'Shift'}</kbd>
+                    <kbd>{mac ? '⇧' : t('touchUp.shiftKey')}</kbd>
                     <span className="pick-keys-plus">+</span>
-                    <span className="pick-keys-click">drag</span>
+                    <span className="pick-keys-click">{t('touchUp.drag')}</span>
                   </span>
                 </span>
               </>

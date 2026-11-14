@@ -1,0 +1,255 @@
+{
+  "view": {
+    "title": "Data explorer",
+    "localData": "Local data",
+    "summary": "{{entities}} · {{rows}}",
+    "backend": "Local backend",
+    "reading": "Reading local data…",
+    "readError": "Couldn’t read the local data",
+    "oldBackend": "This version of the local backend doesn’t share its data with Fabricator.",
+    "oldBackendHint": "Update Fabricator, then try again.",
+    "noEntitiesTitle": "No entities yet",
+    "noEntitiesSub": "Once the app’s data model has entities, their rows show up here."
+  },
+  "backend": {
+    "unreachable": "Couldn’t reach the local backend",
+    "unsupported": "This version of Fabricator can’t read local data.",
+    "checking": "Checking the local backend…",
+    "stoppedTitle": "The local backend isn’t running",
+    "stoppedMessage": "Start it to see the app’s local data.",
+    "starting": "The local backend is starting",
+    "restarting": "The local backend is starting again",
+    "startingMessage": "The app’s local data shows here once it’s running.",
+    "start": "Start",
+    "startBusy": "Starting…"
+  },
+  "side": {
+    "entities": "Entities",
+    "noEntities": "No entities",
+    "entityItem_one": "{{name}}, {{count, number}} row",
+    "entityItem_other": "{{name}}, {{count, number}} rows",
+    "storage": "Storage",
+    "storageError": "Couldn’t read the stored files",
+    "noFolders": "No storage folders",
+    "folderItem_one": "{{name}}, {{count, number}} file",
+    "folderItem_other": "{{name}}, {{count, number}} files"
+  },
+  "toolbar": {
+    "note": "Local data on this computer. Publishing doesn’t copy it to Fabric.",
+    "notePublished": "Local data on this computer, separate from the published app’s data.",
+    "refreshTitle": "Read the local data again",
+    "loadSeedTitle": "Replace the local data with the seed data in rayfin/seed",
+    "noSeedTitle": "This app has no seed data in rayfin/seed yet. Save the local data as seed data, or ask Copilot to add some.",
+    "saveSeedTitle": "Save the local data to rayfin/seed, for anyone who opens the project to load",
+    "reset": "Reset local data"
+  },
+  "seed": {
+    "load": "Load seed data",
+    "save": "Save as seed data",
+    "loaded": "Loaded the seed data: {{amount}}.",
+    "saved": "Saved {{amount}} to rayfin/seed.",
+    "savedSkipped_one": "Saved {{amount}} to rayfin/seed. {{count, number}} stored file couldn’t be saved: {{files}}",
+    "savedSkipped_other": "Saved {{amount}} to rayfin/seed. {{count, number}} stored files couldn’t be saved: {{files}}",
+    "rowsIn_one": "{{count, number}} row in {{entities}}",
+    "rowsIn_other": "{{count, number}} rows in {{entities}}",
+    "nothing": "no rows or files"
+  },
+  "notices": {
+    "fallback": "{{reason}} The Data explorer shows local data only.",
+    "unreadLabel": "Data model change not read",
+    "unread": "The app’s latest data model change couldn’t be read, so its local backend still uses the previous data model.",
+    "unreadNoEntities": "No entities show because the app’s latest data model change couldn’t be read. Its local backend still uses the previous data model, which has none."
+  },
+  "seedProblems": {
+    "title_one": "The seed data has {{count, number}} problem",
+    "title_other": "The seed data has {{count, number}} problems",
+    "intro": "Nothing was loaded, so the local data is as it was. Fix these, then load it again:",
+    "fix": "Fix with Copilot",
+    "fixRequest": "Fix the seed data’s problems"
+  },
+  "rows": {
+    "reading": "Reading rows…",
+    "readError": "Couldn’t read the rows",
+    "clearSorting": "Clear sorting",
+    "emptyTitle": "No rows yet",
+    "emptySub": "The app’s own pages add data. Use the app in the preview, then refresh.",
+    "sortBy": "Sort by {{column}}",
+    "keyType": "{{type}} · key",
+    "clear": "Clear rows"
+  },
+  "users": {
+    "title": "Local users",
+    "readError": "Couldn’t read the local users",
+    "notListed": "The local backend didn’t list them.",
+    "emptyTitle": "No local users yet",
+    "emptySub": "Local users show up here once someone signs in to the app on this computer.",
+    "username": "Username",
+    "email": "Email",
+    "signsInWith": "Signs in with",
+    "created": "Created",
+    "developer": "Developer",
+    "password": "Password",
+    "fabricatorOnly": "Fabricator only",
+    "deleteLabel": "Delete {{username}}"
+  },
+  "files": {
+    "reading": "Reading files…",
+    "readError": "Couldn’t read the files",
+    "emptyTitle": "No files yet",
+    "emptySub": "Files the app stores in this folder show up here. Use the app in the preview, then refresh.",
+    "regionLabel": "{{folder}} files",
+    "folderNameTitle": "The folder’s name in the app’s code",
+    "orphan": "Not in the app",
+    "orphanTitle": "The app no longer has this storage folder. Its files stay here until you clear them.",
+    "meta_one": "{{count, number}} file · {{size}}",
+    "meta_other": "{{count, number}} files · {{size}}",
+    "clear": "Clear files",
+    "previewLabel": "Preview {{path}}",
+    "deleteLabel": "Delete {{path}}",
+    "signedOutUpload": "Uploaded while signed out",
+    "anonymous": "Anonymous"
+  },
+  "fields": {
+    "name": "Name",
+    "path": "Path",
+    "type": "Type",
+    "size": "Size",
+    "owner": "Owner",
+    "uploaded": "Uploaded",
+    "updated": "Updated",
+    "actions": "Actions"
+  },
+  "preview": {
+    "label": "Preview of {{path}}",
+    "save": "Save a copy",
+    "saveTitle": "Save a copy of the file on this computer",
+    "saved": "Saved a copy of {{name}} to {{where}}.",
+    "saveError": "Couldn’t save a copy",
+    "close": "Close the preview",
+    "error": "Couldn’t preview the file",
+    "pdfError": "Couldn’t draw this PDF: {{reason}}",
+    "noneTitle": "No preview",
+    "noneSub": "Fabricator can’t show {{type}} files. Save a copy to open it in another app.",
+    "drawingPdf": "Drawing the PDF…",
+    "reading": "Reading the file…",
+    "textClipped": "Showing the first {{size}}. Save a copy to see all of it.",
+    "pdfClipped": "Showing the first {{shown}} of {{total}} pages. Save a copy to see them all.",
+    "page": "Page {{page}} of {{name}}",
+    "fieldTitle": "A field the app stores with the file"
+  },
+  "confirm": {
+    "cantUndo": "This can’t be undone.",
+    "cantUndoPublished": "The published app’s data isn’t affected. This can’t be undone.",
+    "clearing": "Clearing…",
+    "resetting": "Resetting…",
+    "refused": "Other rows still refer to these rows, so they can’t be cleared on their own. Clear those first, or reset all local data.",
+    "refusedNamed": "Rows of {{names}} still refer to these rows, so they can’t be cleared on their own. Clear {{names}} first, or reset all local data.",
+    "clear": {
+      "title": "Clear all {{entity}} rows?",
+      "message_one": "This deletes the only row of {{entity}} from the app’s local data on this computer. Other entities, the local users and stored files stay.",
+      "message_other": "This deletes all {{count, number}} rows of {{entity}} from the app’s local data on this computer. Other entities, the local users and stored files stay."
+    },
+    "reset": {
+      "title": "Reset local data?",
+      "intro": "This deletes the app’s local data on this computer:",
+      "allRows_one": "All {{count, number}} row of {{entities}}",
+      "allRows_other": "All {{count, number}} rows of {{entities}}",
+      "itsEntities_one": "its {{count, number}} entity",
+      "itsEntities_other": "its {{count, number}} entities",
+      "everyRowOf": "Every row of {{entities}}",
+      "everyRow": "Every row of every entity",
+      "users_one": "Its {{count, number}} local user and their sessions",
+      "users_other": "Its {{count, number}} local users and their sessions",
+      "usersAny": "Its local users and their sessions",
+      "files_one": "Its {{count, number}} stored file",
+      "files_other": "Its {{count, number}} stored files",
+      "filesAny": "The files it stored",
+      "schemaWaiting": "Then the data model change waiting for your decision applies."
+    },
+    "clearFiles": {
+      "title": "Delete all {{folder}} files?",
+      "message_one": "This deletes the only file in the {{folder}} storage folder from the app’s local data on this computer. The entities’ rows, the local users and other folders’ files stay.",
+      "message_other": "This deletes all {{count, number}} files in the {{folder}} storage folder from the app’s local data on this computer. The entities’ rows, the local users and other folders’ files stay."
+    },
+    "deleteFile": {
+      "title": "Delete {{name}}?",
+      "message": "This deletes {{path}} from the {{folder}} storage folder of the app’s local data on this computer.",
+      "action": "Delete file"
+    },
+    "loadSeed": {
+      "title": "Load seed data?",
+      "intro": "This replaces the app’s local data on this computer with the seed data in rayfin/seed:",
+      "noRows": "No rows",
+      "deletesAll": "The app’s current rows and stored files are deleted. The local users stay, and the users the seed data names are added.",
+      "deletesRows": "The app’s current rows are deleted. The local users stay, and the users the seed data names are added."
+    },
+    "saveSeed": {
+      "title": "Save local data as seed data?",
+      "intro": "This saves the app’s local data to rayfin/seed in the project, in place of the seed data there:",
+      "rows_one": "{{count, number}} row of {{entities}}, in rayfin/seed/data",
+      "rows_other": "{{count, number}} rows of {{entities}}, in rayfin/seed/data",
+      "files_one": "{{count, number}} stored file, in rayfin/seed/storage",
+      "files_other": "{{count, number}} stored files, in rayfin/seed/storage",
+      "ids": "Anyone who opens the project can load it. User ids become <code>{{developer}}</code> (you) and <code>{{user}}</code> (the local users). Fabricator saves the change as a version in History."
+    },
+    "deleteUser": {
+      "title": "Delete {{username}}?",
+      "message": "This deletes {{username}} from the app’s local users and signs them out of the app on this computer.",
+      "action": "Delete user"
+    }
+  },
+  "pager": {
+    "range": "{{first, number}}–{{last, number}} of {{total, number}}",
+    "previous": "Previous",
+    "previousPage": "Previous page",
+    "nextPage": "Next page"
+  },
+  "cell": {
+    "emptyText": "Empty text"
+  },
+  "size": {
+    "bytes_one": "{{count, number}} byte",
+    "bytes_other": "{{count, number}} bytes",
+    "kilobytes": "{{size}} KB",
+    "megabytes": "{{size}} MB",
+    "gigabytes": "{{size}} GB"
+  },
+  "counts": {
+    "rows_one": "{{count, number}} row",
+    "rows_other": "{{count, number}} rows",
+    "entities_one": "{{count, number}} entity",
+    "entities_other": "{{count, number}} entities",
+    "files_one": "{{count, number}} file",
+    "files_other": "{{count, number}} files",
+    "storedFiles_one": "{{count, number}} stored file",
+    "storedFiles_other": "{{count, number}} stored files",
+    "users_one": "{{count, number}} user",
+    "users_other": "{{count, number}} users"
+  },
+  "access": {
+    "anySignedIn": "Any signed-in user",
+    "public": "Public",
+    "scoped": "Row-scoped policy",
+    "mixed": "Mixed policy",
+    "defaultDetail": "No access decorator, so this entity falls back to the Rayfin default of `authenticated: *` — every signed-in user can read and write every row.",
+    "publicDetail": "An `@anonymous` grant exposes rows to unauthenticated callers (actions: {{actions}}).",
+    "scopedDetail": "Access is narrowed by a row-level `policy` callback for signed-in users.",
+    "mixedDetail": "Some signed-in grants are row-scoped by a policy and some are not.",
+    "authenticatedDetail": "Any signed-in user can access every row (no row-level `policy`).",
+    "customDetail": "Custom role grants: {{grants}}."
+  },
+  "schema": {
+    "noImport": "Entity \"{{name}}\" is listed in {{schema}} but has no import.",
+    "notAFile": "Entity \"{{name}}\" is imported from \"{{module}}\", which isn't a file in this app.",
+    "unreadable": "Could not read entity file {{file}} for \"{{name}}\".",
+    "noEntityClass": "No @entity class found in {{file}} for \"{{name}}\".",
+    "noEntities": "{{schema}} declares no entities yet."
+  },
+  "sqlSource": {
+    "notDiscovered": "{{file}} reads the table {{table}}, which isn’t in the discovered tables.",
+    "notDiscoveredAny": "{{file}} reads a table, which isn’t in the discovered tables.",
+    "unreadable": "Couldn’t read {{name}}.",
+    "wrongShape": "{{name}} isn’t in the shape Rayfin writes, so it was skipped.",
+    "grantWithPolicy": "{{role}}: {{actions}} (row policy)"
+  }
+}

@@ -1,4 +1,5 @@
 import { memo, useMemo, useState, type JSX } from 'react'
+import { useTranslation } from '../../i18n'
 import { highlightLines, langFromPath } from '../../syntax'
 import { Codicon } from '../icons'
 import { parseUnifiedDiff, type DiffFile, type DiffHunk, type DiffLine } from './diff'
@@ -7,10 +8,13 @@ import { displayPath } from './paths'
 /** Lines shown before "Show all" when a diff is long. */
 const PREVIEW_LINES = 60
 
-const STATUS_LABEL: Record<DiffFile['status'], string | null> = {
-  added: 'New file',
-  deleted: 'Deleted',
-  renamed: 'Renamed',
+const STATUS_LABEL: Record<
+  DiffFile['status'],
+  'diffView.added' | 'diffView.deleted' | 'diffView.renamed' | null
+> = {
+  added: 'diffView.added',
+  deleted: 'diffView.deleted',
+  renamed: 'diffView.renamed',
   modified: null
 }
 
@@ -50,6 +54,7 @@ function HunkRows({
   lang?: string
   limit: number
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   const html = useHunkHtml(hunk, lang)
   const lines = hunk.lines.slice(0, limit)
   return (
@@ -58,7 +63,7 @@ function HunkRows({
         <td className="diff-no" aria-hidden="true" />
         <td className="diff-no" aria-hidden="true" />
         <td className="diff-code">
-          ⋯ Line {hunk.newStart}
+          {t('diffView.line', { line: hunk.newStart })}
           {hunk.section ? <span className="diff-hunk-section"> · {hunk.section}</span> : null}
         </td>
       </tr>
@@ -107,6 +112,7 @@ export const DiffView = memo(function DiffView({
   projectPath,
   onOpenFile
 }: DiffViewProps): JSX.Element {
+  const { t } = useTranslation('chat')
   const files = useMemo(() => parseUnifiedDiff(diff), [diff])
   const [showAll, setShowAll] = useState(false)
   const [wrap, setWrap] = useState(false)
@@ -125,7 +131,7 @@ export const DiffView = memo(function DiffView({
           <div key={fi} className="diff-file">
             <div className="diff-file-head">
               {status && (
-                <span className={`diff-status diff-status--${file.status}`}>{status}</span>
+                <span className={`diff-status diff-status--${file.status}`}>{t(status)}</span>
               )}
               <span className="diff-path" title={shown.full}>
                 {shown.dir && <span className="diff-dir">{shown.dir}</span>}
@@ -140,9 +146,9 @@ export const DiffView = memo(function DiffView({
                   type="button"
                   className="diff-open"
                   onClick={() => onOpenFile?.(shown.rel as string)}
-                  title={`Open ${shown.rel} in the Code tab`}
+                  title={t('files.openInCode', { path: shown.rel })}
                 >
-                  <Codicon name="go-to-file" /> Open
+                  <Codicon name="go-to-file" /> {t('actions.open')}
                 </button>
               )}
             </div>
@@ -166,22 +172,22 @@ export const DiffView = memo(function DiffView({
       <div className="diff-foot">
         {!showAll && total > PREVIEW_LINES && (
           <button type="button" className="diff-more" onClick={() => setShowAll(true)}>
-            Show all {total} lines
+            {t('code.showAll', { count: total })}
           </button>
         )}
         {note ? (
           <span className="diff-note">{note}</span>
         ) : truncated ? (
-          <span className="diff-note">Diff shortened — open the file to see everything.</span>
+          <span className="diff-note">{t('diffView.shortened')}</span>
         ) : null}
         <button
           type="button"
           className={`diff-wrap-toggle${wrap ? ' is-on' : ''}`}
           onClick={() => setWrap((w) => !w)}
           aria-pressed={wrap}
-          title={wrap ? 'Don’t wrap long lines' : 'Wrap long lines'}
+          title={wrap ? t('code.noWrapLines') : t('code.wrapLines')}
         >
-          <Codicon name="word-wrap" /> Wrap
+          <Codicon name="word-wrap" /> {t('code.wrap')}
         </button>
       </div>
     </div>

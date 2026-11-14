@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { StudioProject, Suggestion } from '@shared/ipc'
+import { translator } from '../../i18n'
 
 /** Words to drop when guessing what an app is "about" from its name. */
 export const STOP_WORDS = new Set([
@@ -79,18 +80,20 @@ export function deriveThings(project: StudioProject): { thing: string; things: s
  * Build the empty-state starter prompts. These intentionally only cover what
  * Rayfin natively provides — data (lists/forms/search/charts), authentication,
  * file storage and design — never anything needing an external service (e.g.
- * payments or email).
+ * payments or email). They read in your language; the thing they're about is
+ * a word from the app's name.
  */
 export function suggestionsFor(project: StudioProject): Suggestion[] {
+  const t = translator('chat')
   const { thing, things } = deriveThings(project)
   const cards = {
-    list: { icon: '📋', text: `Show all my ${things} on a clean page` },
-    create: { icon: '✏️', text: `Add a form to create and edit a ${thing}` },
-    search: { icon: '🔍', text: `Add search and filters to my ${things}` },
-    chart: { icon: '📊', text: `Add a dashboard that charts my ${things}` },
-    auth: { icon: '🔒', text: `Require sign-in so everyone gets their own ${things}` },
-    photo: { icon: '🖼️', text: `Let me attach a photo to each ${thing}` },
-    design: { icon: '🎨', text: 'Give the whole app a fresh, modern look' }
+    list: { icon: '📋', text: t('suggestions.list', { things }) },
+    create: { icon: '✏️', text: t('suggestions.create', { thing }) },
+    search: { icon: '🔍', text: t('suggestions.search', { things }) },
+    chart: { icon: '📊', text: t('suggestions.chart', { things }) },
+    auth: { icon: '🔒', text: t('suggestions.auth', { things }) },
+    photo: { icon: '🖼️', text: t('suggestions.photo', { thing }) },
+    design: { icon: '🎨', text: t('suggestions.design') }
   }
   const tpl = (project.template ?? '').toLowerCase()
   let order: (keyof typeof cards)[]

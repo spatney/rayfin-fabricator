@@ -280,15 +280,19 @@ impl Runtime {
     let status = self.snapshot();
     match next {
       Next::Restart(delay) if status.error.as_ref().is_some_and(|e| e.code == "exited") => {
-        let code = exit_code.map(|c| format!(" (exit code {c})")).unwrap_or_default();
-        self.log("fabricator", "warn", &format!("The local backend stopped unexpectedly{code}. Starting it again in {} s.", delay.as_secs_f32()), None);
+        let seconds = delay.as_secs_f32();
+        let line = match exit_code {
+          Some(code) => t!("services.localBackend.restartingInCode", code = code, seconds = seconds),
+          None => t!("services.localBackend.restartingIn", seconds = seconds),
+        };
+        self.log("fabricator", "warn", &line, None);
       }
       Next::Fail if status.error.as_ref().is_some_and(|e| e.code == "crashed") => {
         let message = status.error.map(|e| e.message).unwrap_or_default();
         self.log("fabricator", "error", &message, None);
         self.milestone(Level::Error, "local.crashed", message, Some("crashed"));
       }
-      Next::Stop => self.log("fabricator", "info", "The local backend stopped.", None),
+      Next::Stop => self.log("fabricator", "info", &t!("services.localBackend.stopped"), None),
       _ => {}
     }
   }
@@ -598,7 +602,7 @@ impl LocalBackends {
     live.sort_by_key(|rt| rt.last_used());
     let excess = live.len() + 1 - max;
     for rt in live.into_iter().take(excess) {
-      rt.log("fabricator", "info", &format!("Stopping this app's local backend: Fabricator keeps the {max} most recently used running."), None);
+      rt.log("fabricator", "info", &t!("services.localBackend.evicting", count = max), None);
       let me = self.clone();
       tokio::spawn(async move {
         let _lifecycle = rt.lifecycle.lock().await;
@@ -663,12 +667,12 @@ impl LocalBackends {
       .and_then(|dir| folder_within(project, &dir));
     let (dir, installed) = match reported {
       Some(dir) => {
-        rt.log("fabricator", "info", &format!("Installing the npm packages in {}…", dir.display()), None);
+        rt.log("fabricator", "info", &t!("services.localBackend.installingIn", dir = dir.display()), None);
         let installed = npm("install", &dir, output.clone()).await;
         (dir, installed)
       }
       None => {
-        rt.log("fabricator", "info", "Installing the app's npm packages…", None);
+        rt.log("fabricator", "info", &t!("services.localBackend.installing"), None);
         let installed = match crate::services::exec::ensure_project_dependencies(project, Some(output.clone())).await {
           Ok(()) => crate::commands::projects_impl::ensure_functions_dependencies(project, Some(output.clone())).await,
           Err(message) => Err(message),
@@ -682,12 +686,12 @@ impl LocalBackends {
     };
     match result {
       Ok(()) => {
-        rt.log("fabricator", "info", "Installed the npm packages.", None);
+        rt.log("fabricator", "info", &t!("services.localBackend.installed"), None);
         Ok(())
       }
       Err(message) => {
         rt.log("fabricator", "error", &message, None);
-        Err(error("install-failed", message, Some("Check the output for npm's messages, then try again.")))
+        Err(error("install-failed", message, Some(&t!("services.localBackend.installHint"))))
       }
     }
   }
@@ -706,7 +710,7 @@ impl LocalBackends {
       self.stop(project_id).await;
     }
     let output = install_output(rt.clone());
-    rt.log("fabricator", "info", "The app's packages changed. Installing them again…", None);
+    rt.log("fabricator", "info", &t!("services.localBackend.reinstalling"), None);
     let mut installed = npm("install", project, output.clone()).await;
     if installed.is_ok() {
       if let Some(functions) = crate::services::rayfin_sdk::separate_functions_dir(project) {
@@ -718,13 +722,13 @@ impl LocalBackends {
       Err(message) => Err(message),
     };
     match &result {
-      Ok(()) => rt.log("fabricator", "info", "Installed the npm packages.", None),
+      Ok(()) => rt.log("fabricator", "info", &t!("services.localBackend.installed"), None),
       Err(message) => rt.log("fabricator", "error", message, None),
     }
     if was_live && !self.closing() {
       self.start(project_id, project.to_path_buf(), LocalStartOptions::default()).await;
     }
-    result.map_err(|message| error("install-failed", message, Some("Check the output for npm's messages, then try again.")))
+    result.map_err(|message| error("install-failed", message, Some(&t!("services.localBackend.installHint"))))
   }
 
   /// A client for the project's control API, while its backend runs.
@@ -769,16 +773,20 @@ impl LocalBackends {
   /// one), after checking that it is one.
   pub async fn stop_external(&self, project_id: &str, pid: u32) -> Result<(), LocalCommandError> {
     if self.owned_pids().contains(&pid) {
-      return Err(error("invalid", "Fabricator runs that local backend itself. Stop it from its app.", None));
+      return Err(error("invalid", t!("services.localBackend.ownBackend"), None));
     }
     if pid <= 4 || pid == std::process::id() {
-      return Err(error("invalid", "Fabricator won't stop that process.", None));
+      return Err(error("invalid", t!("services.localBackend.wontStop"), None));
     }
     let grace = self.policy().stop_grace;
     let result = tokio::task::spawn_blocking(move || {
       let Some(path) = process::image_path(pid) else {
         return if process::is_alive(pid) {
-          Err(error("not-rayfin-local", format!("Fabricator can't tell which program process {pid} runs, so it won't stop it."), Some("Stop it where it runs.")))
+          Err(error(
+            "not-rayfin-local",
+            t!("services.localBackend.unknownProgram", pid = pid),
+            Some(&t!("services.localBackend.unknownProgramHint")),
+          ))
         } else {
           Ok(())
         };
@@ -786,16 +794,16 @@ impl LocalBackends {
       if !process::is_rayfin_local(&path) {
         return Err(error(
           "not-rayfin-local",
-          format!("Process {pid} is {}, not rayfin-local, so Fabricator won't stop it.", path.display()),
+          t!("services.localBackend.notRayfinLocal", pid = pid, program = path.display()),
           None,
         ));
       }
       process::terminate(pid, grace).map_err(|message| error("stop-failed", message, None))
     })
     .await
-    .map_err(|e| error("stop-failed", format!("Stopping the process failed: {e}"), None))?;
+    .map_err(|e| error("stop-failed", t!("services.localBackend.stopTaskFailed", error = e), None))?;
     if result.is_ok() {
-      self.runtime(project_id).log("fabricator", "info", &format!("Stopped the other rayfin-local (process {pid})."), None);
+      self.runtime(project_id).log("fabricator", "info", &t!("services.localBackend.stoppedOther", pid = pid), None);
     }
     result
   }
@@ -810,7 +818,7 @@ impl LocalBackends {
     let output = self.cli(dir, &["secret", "list", "--json"], None).await?;
     serde_json::from_str::<List>(output.trim())
       .map(|list| list.secrets)
-      .map_err(|e| error("bad-response", format!("rayfin-local listed the secrets in a way Fabricator couldn't read: {e}"), None))
+      .map_err(|e| error("bad-response", t!("services.localBackend.secretsUnreadable", error = e), None))
   }
 
   /// `secret set NAME`, the value piped to its stdin: never an argument.
@@ -838,7 +846,7 @@ impl LocalBackends {
     let said = said.strip_prefix("error:").map(str::trim).unwrap_or(&said);
     Err(error(
       "cli-failed",
-      if said.is_empty() { format!("rayfin-local {} failed.", args.join(" ")) } else { said.to_string() },
+      if said.is_empty() { t!("services.localBackend.cliFailed", command = args.join(" ")) } else { said.to_string() },
       None,
     ))
   }
@@ -872,21 +880,21 @@ fn not_running(status: &LocalStatus) -> LocalCommandError {
   match status.state {
     State::Starting | State::Restarting => error(
       "not-running",
-      "The local backend is still starting.",
-      Some("Try again once it's running."),
+      t!("services.localBackend.stillStarting"),
+      Some(&t!("services.localBackend.stillStartingHint")),
     ),
     State::Error => LocalCommandError {
       hint: status.error.as_ref().and_then(|e| e.hint.clone()),
       ..error(
         "not-running",
-        format!(
-          "The local backend isn't running: {}",
-          status.error.as_ref().map(|e| e.message.as_str()).unwrap_or("it stopped after an error.")
-        ),
+        match status.error.as_ref() {
+          Some(problem) => t!("services.localBackend.notRunningWhy", detail = problem.message),
+          None => t!("services.localBackend.notRunningError"),
+        },
         None,
       )
     },
-    _ => error("not-running", "The local backend isn't running.", Some("Start it first.")),
+    _ => error("not-running", t!("services.localBackend.notRunning"), Some(&t!("services.localBackend.notRunningHint"))),
   }
 }
 
@@ -926,7 +934,7 @@ async fn npm(command: &str, dir: &Path, output: crate::services::exec::OnData) -
     return Ok(());
   }
   if result.not_found {
-    return Err("npm wasn't found. Install Node.js, which includes npm, then try again.".into());
+    return Err(t!("services.localBackend.npmMissing"));
   }
   Err(crate::services::exec::npm_failure(command, &result, Some(&dir.display().to_string())))
 }
@@ -948,15 +956,10 @@ async fn hoist_rayfin_core(
   if rayfin_core_found(project) {
     return Ok(());
   }
-  rt.log(
-    "fabricator",
-    "info",
-    "npm left @microsoft/rayfin-core where your app's backend can't find it. Moving it up with npm dedupe…",
-    None,
-  );
+  rt.log("fabricator", "info", &t!("services.localBackend.dedupe"), None);
   npm("dedupe", dir, output).await?;
   if !rayfin_core_found(project) {
-    rt.log("fabricator", "warn", "@microsoft/rayfin-core still isn't where your app's backend looks for it.", None);
+    rt.log("fabricator", "warn", &t!("services.localBackend.coreStillMissing"), None);
   }
   Ok(())
 }
@@ -995,14 +998,19 @@ pub fn sign_in_flag(identity: &LocalIdentity, requested_user: Option<&str>) -> O
 
 /// The folder of a project Fabricator knows.
 pub fn project_dir(project_id: &str) -> Result<PathBuf, LocalCommandError> {
-  let project = store::find_project(project_id)
-    .ok_or_else(|| error("project-not-found", "Fabricator doesn't know that project anymore.", Some("Open it again from Home.")))?;
+  let project = store::find_project(project_id).ok_or_else(|| {
+    error(
+      "project-not-found",
+      t!("services.localBackend.unknownProject"),
+      Some(&t!("services.localBackend.unknownProjectHint")),
+    )
+  })?;
   let dir = PathBuf::from(&project.path);
   if !dir.is_dir() {
     return Err(error(
       "project-not-found",
-      format!("The project's folder {} isn't there anymore.", dir.display()),
-      Some("Move it back, or open the project again from where it is now."),
+      t!("services.localBackend.folderGone", path = dir.display()),
+      Some(&t!("services.localBackend.folderGoneHint")),
     ));
   }
   Ok(dir)

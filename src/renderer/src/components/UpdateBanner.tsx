@@ -1,11 +1,17 @@
 import { useUpdates } from '../update'
+import { formatLocale, useTranslation } from '../i18n'
 
 import type { JSX } from 'react'
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+  const mb = new Intl.NumberFormat(formatLocale(), {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+    useGrouping: false
+  }).format(n / (1024 * 1024))
+  return `${mb} MB`
 }
 
 /**
@@ -14,6 +20,7 @@ function formatBytes(n: number): string {
  */
 export default function UpdateBanner(): JSX.Element | null {
   const { status, info, progress, blocking, modalOpen, install, dismiss } = useUpdates()
+  const { t } = useTranslation('app')
 
   // The mandatory full-screen ForcedUpdateScreen takes over while blocking, and
   // the optional startup UpdateModal takes over while it's open — avoid showing
@@ -32,13 +39,16 @@ export default function UpdateBanner(): JSX.Element | null {
   let title: string
   let meta: string | null = null
   if (status === 'downloading') {
-    title = `Downloading update${info ? ` ${info.version}` : ''}…`
-    meta = pct !== null ? `${pct}%` : progress ? formatBytes(progress.downloaded) : 'Starting…'
+    title = info
+      ? t('update.downloadingVersion', { version: info.version })
+      : t('update.downloading')
+    meta =
+      pct !== null ? `${pct}%` : progress ? formatBytes(progress.downloaded) : t('update.starting')
   } else if (status === 'ready') {
-    title = `Update ${info?.version ?? ''} is ready to install`.replace('  ', ' ')
-    meta = 'Fabricator will restart to apply it.'
+    title = info?.version ? t('update.readyVersion', { version: info.version }) : t('update.ready')
+    meta = t('update.restartToApply')
   } else {
-    title = 'Installing update…'
+    title = t('update.installing')
   }
 
   return (
@@ -52,10 +62,10 @@ export default function UpdateBanner(): JSX.Element | null {
         {status === 'ready' && (
           <div className="update-banner__actions">
             <button className="btn btn--sm btn--ghost" onClick={dismiss}>
-              Later
+              {t('update.later')}
             </button>
             <button className="btn btn--sm btn--primary" onClick={() => void install()}>
-              Restart &amp; update
+              {t('update.restartAndUpdate')}
             </button>
           </div>
         )}

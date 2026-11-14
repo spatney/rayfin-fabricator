@@ -1,0 +1,126 @@
+{
+  "effort": {
+    "none": {
+      "label": "なし",
+      "hint": "追加の思考なしで回答します。"
+    },
+    "low": {
+      "label": "低",
+      "hint": "高速です。小さく明確な変更に適しています。"
+    },
+    "medium": {
+      "label": "中",
+      "hint": "速度と丁寧さのバランスを取ります。"
+    },
+    "high": {
+      "label": "高",
+      "hint": "長く考えます。難しい変更に適しています。"
+    },
+    "xhigh": {
+      "label": "超高",
+      "hint": "難しい問題について、さらに長く考えます。"
+    },
+    "max": {
+      "label": "最大",
+      "hint": "最も深く考えます。最も時間がかかり、最も難しい作業に向いています。"
+    }
+  },
+  "context": {
+    "standard": "標準",
+    "long": "ロング"
+  },
+  "picker": {
+    "model": "モデル",
+    "auto": "自動",
+    "autoHint": "Copilot がリクエストごとにモデルを選択します。",
+    "autoHintFusion": "Copilot がリクエストごとに使用するモデルを選択します。",
+    "effort": "思考レベル",
+    "optimizedFor": "最適化の対象",
+    "contextWindow": "コンテキスト ウィンドウ",
+    "default": "既定",
+    "models": "モデル",
+    "search": "モデルの検索",
+    "missing": "利用できなくなりました。別のモデルを選択してください。",
+    "runsOnKey": "{{provider}} の API キーで実行されます",
+    "fast": "高速",
+    "yourKeys": "自分の API キー",
+    "addKeyModels": "API キーでモデルを追加…",
+    "more": "その他のモデル",
+    "loading": "モデルを読み込んでいます…",
+    "loadFailed": "モデルを読み込めませんでした。もう一度試すには、いったん閉じてから開き直してください。",
+    "noMatch": "「{{query}}」に一致するモデルはありません",
+    "tokens": "{{tokens}} トークン",
+    "longWindow": "ウィンドウが長いほど、アプリと会話のより多くの部分を考慮できます。",
+    "fusionNote": "High と Max では、あるモデルの作業を別のモデルがレビューするなど、複数のモデルを使用できます。そのため、リクエストに時間がかかり、コストが高くなる場合があります。",
+    "fusionDocs": "Copilot Fusion の詳細",
+    "busy": "アシスタントの作業中はモデルを変更できません",
+    "pill": "{{label}}: {{choice}}",
+    "pillOnKey": "{{label}}: {{choice}} — {{provider}} の API キーを使用",
+    "manageKeys": "API キーの管理…"
+  },
+  "providers": {
+    "state": {
+      "ok": "キー保存済み",
+      "off": "キーなし",
+      "error": "要対応"
+    },
+    "errors": {
+      "read": "モデル プロバイダーを読み取れませんでした。",
+      "generic": "うまくいきませんでした。もう一度お試しください。",
+      "saveModels": "モデルの選択を保存できませんでした。"
+    },
+    "title": "モデル プロバイダー",
+    "sub": "[作成] のチャット、アドバイザー、デザインで、これらのプロバイダーのモデルを自分の API キーで使用できます。料金はプロバイダーから請求されます。会話は引き続き Copilot が実行するため、GitHub Copilot にはサインインしたままにしてください。",
+    "unsupported": "このオペレーティング システムでは、Fabricator はまだ API キーを安全に保管できません。",
+    "purpose": "{{description}}。料金は {{name}} アカウントに請求されます。",
+    "addKeyLabel": "{{name}} の API キーを追加",
+    "addKey": "キーの追加",
+    "apiKey": "API キー",
+    "savedIn": "{{store}}に保存済み",
+    "confirmRemove": "{{name}} のキーを削除しますか?",
+    "checkTitle": "{{name}} でキーをもう一度確認し、モデルを更新します",
+    "checkAgain": "再確認",
+    "replace": "置き換え",
+    "removeLabel": "{{name}} の API キーを削除",
+    "removing": "削除しています…",
+    "inPickers": "モデル ピッカーに表示",
+    "enabledCount": "{{enabled}}/{{total}}",
+    "pickerList": "モデル ピッカーに表示する {{name}} のモデル",
+    "images": "画像",
+    "recommended": "おすすめ",
+    "retiringTitle": "{{name}} はこのモデルの提供を終了する予定です",
+    "retiring": "提供終了予定",
+    "showAll": "{{total}} 個のモデルをすべて表示",
+    "keyLabel": "{{name}} の API キー",
+    "newKeyLabel": "{{name}} の新しい API キー",
+    "keyHint": "Fabricator は {{name}} でキーを確認してから、このコンピューターの {{store}}に保存します。",
+    "getKey": "キーの取得",
+    "replaceKey": "キーの置き換え",
+    "saveKey": "キーの保存"
+  },
+  "chatDefaults": {
+    "title": "チャットの既定値",
+    "close": "チャットの既定値を閉じる",
+    "sub": "新しいプロジェクトのチャットは、これらの設定で開始されます。その後は、各プロジェクトのチャットが独自の設定を保持し、チャット内で変更できます。",
+    "model": "モデル",
+    "modelHint": "[自動] では、Copilot がリクエストごとにモデルを選択します。",
+    "defaultModel": "既定のモデル",
+    "plugins": "プラグイン",
+    "mcpServers": "MCP サーバー",
+    "noServers": "MCP サーバーはまだありません",
+    "noServersHint": "チャットで使用できる MCP サーバーを追加してから、新しいチャットで最初に使うサーバーを選択してください。",
+    "manageServers": "MCP サーバーの管理"
+  },
+  "instructions": {
+    "title": "カスタム指示",
+    "close": "カスタム指示を閉じる",
+    "sub": "テーマ、言葉遣い、レイアウトなど、作成するすべてのアプリに求めることを Copilot に伝えます。各アプリのチャットは次のメッセージからこの指示に従いますが、チャットでの依頼が優先されます。指示は Fabricator 内にとどまり、アプリには保存されません。",
+    "label": "指示",
+    "hint": "短くまとめてください。Copilot はメッセージごとに指示を読み取ります。",
+    "examples": {
+      "theme": "既定では、システムのライト テーマまたはダーク テーマを使用してください。",
+      "case": "見出し、ラベル、ボタンには簡潔な表現を使用してください。",
+      "dates": "日付は 2026 年 3 月 5 日のように表示してください。"
+    }
+  }
+}

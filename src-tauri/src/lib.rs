@@ -4,6 +4,9 @@
 //! wires up plugins + managed state, and registers every `#[tauri::command]`
 //! that backs the renderer's `window.api` surface (see `src/shared/ipc.ts`).
 
+// First, so every module can use its `t!`.
+#[macro_use]
+mod i18n;
 mod commands;
 mod error;
 mod services;
@@ -186,6 +189,8 @@ pub fn run() {
             .build(),
         )?;
       }
+      // The core's text in the language Settings asks for, before it shows any.
+      i18n::set_preference(services::store::get_settings().language.as_deref());
       let version = app.package_info().version.to_string();
       services::telemetry::init(telemetry_connection_string(app), version);
 
@@ -265,6 +270,7 @@ pub fn run() {
       // settings
       commands::settings::settings_get,
       commands::settings::settings_set,
+      commands::settings::settings_system_language,
       // your own API keys
       commands::byok::byok_status,
       commands::byok::byok_set_key,

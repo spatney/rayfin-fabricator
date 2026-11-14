@@ -1,0 +1,383 @@
+{
+  "tab": {
+    "views": "Blueprint-Ansichten",
+    "architecture": "Architektur",
+    "dataModel": "Datenmodell",
+    "fabricConnections": "Fabric-Verbindungen",
+    "dataExplorer": "Daten-Explorer",
+    "reading": "Deine App wird gelesen…",
+    "cantDraw": "Die App konnte nicht dargestellt werden",
+    "openYml": "rayfin.yml öffnen",
+    "metadataTooLarge": "metadata.json ist zu groß zum Lesen.",
+    "firstFiles": "Die ersten {{max}} von {{total}} Dateien in {{dir}}/ wurden gelesen."
+  },
+  "identity": {
+    "user": "Benutzeridentität",
+    "app": "App-Identität",
+    "key": "Ein Schlüssel"
+  },
+  "port": {
+    "user": "Verwendet die Benutzeridentität",
+    "app": "Verwendet die App-Identität",
+    "key": "Verwendet einen Schlüssel"
+  },
+  "portAria": {
+    "user": "{{part}}, verwendet die Benutzeridentität",
+    "app": "{{part}}, verwendet die App-Identität",
+    "key": "{{part}}, verwendet einen Schlüssel"
+  },
+  "appIdentity": {
+    "firstPublisher": "Das Konto, das sie zuerst veröffentlicht hat",
+    "nextPublisher": "Wer sie zuerst veröffentlicht"
+  },
+  "model": {
+    "cantRead": "Fabricator konnte rayfin/rayfin.yml nicht lesen.",
+    "invalidYaml": "rayfin/rayfin.yml ist kein gültiges YAML, daher können die Teile der App nicht angezeigt werden.",
+    "people": {
+      "signInOff": "Die Anmeldung ist deaktiviert, daher kann die App Personen nicht unterscheiden.",
+      "publicPages": "Die Seiten der App werden vor der Anmeldung geladen, daher kann jeder mit dem Link ihr HTML, JavaScript und CSS herunterladen. Für ihre Daten ist weiterhin eine Anmeldung nötig.",
+      "entraThroughFabric": "Microsoft Entra ID, über Fabric",
+      "entra": "Microsoft Entra ID",
+      "noSignIn": "Keine Anmeldung"
+    },
+    "website": {
+      "title": "Website",
+      "summary": "In Fabric gehostet",
+      "assetAccessUnset": "`assetAccess` ist nicht festgelegt. Wähle vor dem Veröffentlichen `protected` oder `public`.",
+      "public": "Seiten werden vor der Anmeldung geladen",
+      "protected": "Seiten werden nach der Anmeldung geladen",
+      "unset": "Seitenzugriff nicht festgelegt",
+      "embeddedOnly": "Wird nur in Fabric geöffnet"
+    },
+    "signin": {
+      "title": "Anmeldung",
+      "externalEntra": "Akzeptiert auch Entra-Token anderer Apps",
+      "addresses_one": "Erlaubt die Anmeldung von {{count}} Adresse",
+      "addresses_other": "Erlaubt die Anmeldung von {{count}} Adressen",
+      "off": "Die Anmeldung ist deaktiviert."
+    },
+    "database": {
+      "title": "Datenbank",
+      "tables_one": "{{count}} Tabelle",
+      "tables_other": "{{count}} Tabellen",
+      "relationships_one": "{{count}} Beziehung",
+      "relationships_other": "{{count}} Beziehungen",
+      "noTables": "Noch keine Tabellen",
+      "scoped_one": "{{count}} zeilenbezogen",
+      "scoped_other": "{{count}} zeilenbezogen",
+      "signedIn_one": "{{count}} für alle Angemeldeten",
+      "signedIn_other": "{{count}} für alle Angemeldeten",
+      "public_one": "{{count}} öffentlich",
+      "public_other": "{{count}} öffentlich",
+      "readable_one": "{{count}} Tabelle ist ohne Anmeldung lesbar.",
+      "readable_other": "{{count}} Tabellen sind ohne Anmeldung lesbar."
+    },
+    "storage": {
+      "title": "Dateispeicher",
+      "summary": "Hochgeladene Dateien · experimentell",
+      "needsDatabase": "Der Speicher hängt von der Datenbank ab, die deaktiviert ist."
+    },
+    "functions": {
+      "authType": "`services.functions.auth.type` ist `{{authType}}`; Rayfin 1.36 erfordert `application`.",
+      "noAuthType": "Funktionen sind aktiviert, legen aber nicht `services.functions.auth.type: application` fest, was Rayfin 1.36 erfordert.",
+      "turnedOff": "Funktionen sind geschrieben, aber in rayfin.yml deaktiviert.",
+      "unsupportedAudience": "`AudienceType.{{audience}}` ist in Rayfin 1.36.2 keine öffentliche Zielgruppe.",
+      "title": "Funktionen",
+      "count_one": "{{count}} serverseitige Funktion",
+      "count_other": "{{count}} serverseitige Funktionen",
+      "none": "Noch keine Funktionen",
+      "reaches": "Erreicht {{list}}"
+    },
+    "secrets": {
+      "undeclared_one": "{{names}} wird als `ctx.Secrets` gelesen, ist aber nicht in rayfin.yml deklariert, was ein TypeScript-Fehler ist. Füge es unter „Code → Geheimnisse“ hinzu; dort wird es in rayfin.yml deklariert.",
+      "undeclared_other": "{{names}} werden als `ctx.Secrets` gelesen, sind aber nicht in rayfin.yml deklariert, was ein TypeScript-Fehler ist. Füge sie unter „Code → Geheimnisse“ hinzu; dort werden sie in rayfin.yml deklariert.",
+      "legacy_one": "{{names}} wird mit `ctx.getSecret()` gelesen, das in Rayfin 1.36 veraltet ist. Lies es stattdessen mit `ctx.Secrets.<NAME>`.",
+      "legacy_other": "{{names}} werden mit `ctx.getSecret()` gelesen, das in Rayfin 1.36 veraltet ist. Lies sie stattdessen mit `ctx.Secrets.<NAME>`.",
+      "functionsOff": "Nur Funktionen lesen Geheimnisse, und Funktionen sind in rayfin.yml deaktiviert.",
+      "title": "Geheimnisse",
+      "summary_one": "{{count}} Geheimnis, mit der App gespeichert",
+      "summary_other": "{{count}} Geheimnisse, mit der App gespeichert"
+    },
+    "connectors": {
+      "title": "Connectors",
+      "summary_one": "{{count}} Connector zu Fabric-Daten",
+      "summary_other": "{{count}} Connectors zu Fabric-Daten",
+      "kinds_one": "{{count}} Art von Quelle",
+      "kinds_other": "{{count}} Arten von Quellen"
+    },
+    "kinds": {
+      "warehouse": "Warehouse",
+      "sqlDatabase": "SQL-Datenbank",
+      "sqlEndpoint": "SQL-Endpunkt des Lakehouse",
+      "semanticModel": "Semantisches Modell",
+      "kqlDatabase": "KQL-Datenbank"
+    },
+    "kindsInList": {
+      "warehouse": "Warehouse",
+      "sqlDatabase": "SQL-Datenbank",
+      "sqlEndpoint": "SQL-Endpunkt des Lakehouse",
+      "semanticModel": "semantisches Modell",
+      "kqlDatabase": "KQL-Datenbank"
+    },
+    "functionConnection": "Funktionsverbindung",
+    "hostTypes": {
+      "webApi": "Web-API",
+      "storage": "Speicher",
+      "sql": "SQL",
+      "aiService": "KI-Dienst",
+      "database": "Datenbank"
+    },
+    "abilities": {
+      "readsAndWrites": "Liest und schreibt",
+      "kqlCommands": "KQL-Abfragen und -Befehle",
+      "daxQueries": "DAX-Abfragen",
+      "kqlQueries": "KQL-Abfragen",
+      "queries": "Abfragen",
+      "readOnly": "Nur Lesezugriff",
+      "connected": "Verbunden"
+    },
+    "auth": {
+      "missing": "`auth.type` fehlt. Rayfin 1.36 erfordert `delegated` oder `application`.",
+      "invalid": "`auth.type: {{value}}` ist ungültig. Verwende `delegated` oder `application`.",
+      "lowercase": "`auth.type` muss kleingeschrieben `{{lower}}` sein; `rayfin up` lehnt `{{raw}}` ab.",
+      "delegatedOnly": "Connectors vom Typ „{{kind}}“ erlauben nur `delegated`; `rayfin up` lehnt `application` ab."
+    },
+    "audiences": {
+      "sql": {
+        "detail": "Lakehouses, Warehouses, SQL-Datenbanken und Azure SQL",
+        "grant": "Zugriff auf jede abgefragte Datenbank, z. B. eine Arbeitsbereichsrolle oder eine SQL-Rolle."
+      },
+      "storage": {
+        "detail": "OneLake-Dateien und Azure Blob-, Table- oder Queue-Speicher",
+        "grant": "Eine Arbeitsbereichsrolle für OneLake oder eine Storage-Datenrolle wie Storage Blob Data Reader."
+      },
+      "fabric": {
+        "detail": "REST-APIs von Microsoft Fabric",
+        "grant": "Eine Rolle für die aufgerufenen Arbeitsbereiche und Elemente. Prüfe, ob jede API App-Identitäten unterstützt."
+      },
+      "azureAi": {
+        "detail": "Endpunkte von Azure AI Foundry und Azure OpenAI",
+        "grant": "Die Rolle, die die Azure AI-Ressource erfordert, z. B. Cognitive Services User."
+      },
+      "ado": {
+        "detail": "REST-APIs von Azure DevOps",
+        "grant": "Zugriff auf die aufgerufene Azure DevOps-Organisation und das Projekt."
+      },
+      "other": {
+        "detail": "Aus Funktionen erreichbar",
+        "grant": "Zugriff auf die aufgerufene Ressource."
+      }
+    },
+    "hardcoded_one": "Ein Schlüssel scheint direkt im Code zu stehen: {{where}}. Jeder, der den Code lesen kann, kann ihn verwenden. Speichere ihn als Geheimnis unter „Code → Geheimnisse“, und lies ihn aus `ctx.Secrets`.",
+    "hardcoded_other": "{{count}} Schlüssel scheinen direkt im Code zu stehen: {{where}}. Jeder, der den Code lesen kann, kann sie verwenden. Speichere sie als Geheimnisse unter „Code → Geheimnisse“, und lies sie aus `ctx.Secrets`.",
+    "hardcodedIn": "{{names}} in `{{file}}`"
+  },
+  "view": {
+    "zone": {
+      "appWorkspace": "Arbeitsbereich dieser App",
+      "fabricWorkspace": "Fabric-Arbeitsbereich",
+      "id": "ID {{id}}…",
+      "webApis": "Web-APIs",
+      "calledFromFunctions": "Aus Funktionen aufgerufen"
+    },
+    "search": "App und Verbindungen durchsuchen",
+    "clearSearch": "Suche löschen",
+    "openApp": "App öffnen",
+    "openInPortal": "App im Fabric-Portal öffnen",
+    "openInFabric": "In Fabric öffnen",
+    "zoom": "Zoom",
+    "zoomOut": "Verkleinern",
+    "zoomIn": "Vergrößern",
+    "fit": "An Ansicht anpassen",
+    "people": {
+      "aria": "Personen, die die App verwenden",
+      "title": "Personen",
+      "subtitle": "die die App verwenden",
+      "signIn": "Anmeldung mit Microsoft Entra ID",
+      "signInOff": "Anmeldung deaktiviert"
+    },
+    "app": {
+      "aria": "{{name}}, die Fabric-App",
+      "inWorkspace": "Fabric-App in {{workspace}}",
+      "fabricApp": "Fabric-App"
+    },
+    "appIdentityAria": "App-Identität: {{who}}",
+    "serviceAria": "{{title}}: {{summary}}",
+    "sourceAria": "{{name}}, {{type}}",
+    "ghost": {
+      "title": "Noch keine externen Daten",
+      "body": "Binde ein Fabric-Warehouse, eine SQL-Datenbank, ein Lakehouse oder ein semantisches Modell ein, oder rufe Azure-Dienste aus Funktionen auf.",
+      "add": "Fabric-Daten hinzufügen…"
+    },
+    "connections_one": "{{count}} Verbindung",
+    "connections_other": "{{count}} Verbindungen",
+    "calledBy": "Aufgerufen von {{functions}}"
+  },
+  "inspector": {
+    "panelAria": "Details zu {{title}}",
+    "close": "Details schließen",
+    "closeTitle": "Schließen (Esc)",
+    "signs": {
+      "user": "Delegiert: Wird als die angemeldete Person ausgeführt, mit deren eigenem Fabric-Zugriff.",
+      "app": "Anwendung: Wird für alle gleich als {{who}} ausgeführt.",
+      "key": "Ein Schlüssel oder Token, den die Funktion selbst sendet, keine Fabric-Anmeldung."
+    },
+    "who": {
+      "servicePrincipal": "Dienstprinzipal {{who}}",
+      "owner": "Besitzer der Fabric-App"
+    },
+    "nothingYet": "Noch nichts",
+    "grantFabric": "Eine Rolle im Fabric-Arbeitsbereich oder eine Berechtigung für das Element.",
+    "secretCount_one": "{{count}} Geheimnis",
+    "secretCount_other": "{{count}} Geheimnisse",
+    "notSetYet": "Noch nicht festgelegt",
+    "notSet": "nicht festgelegt",
+    "opensEverywhere": "Unter eigener Adresse und in Fabric",
+    "moveKeys": "Schlüssel in Geheimnisse verschieben",
+    "fixWithCopilot": "Mit Copilot beheben",
+    "facts": {
+      "signIn": "Anmeldung",
+      "pages": "Seiten",
+      "opens": "Öffnet sich",
+      "address": "Adresse",
+      "workspace": "Arbeitsbereich",
+      "lastPublished": "Zuletzt veröffentlicht",
+      "project": "Projekt",
+      "clientId": "Client-ID",
+      "setting": "Einstellung",
+      "buildOutput": "Build-Ausgabe",
+      "provider": "Anbieter",
+      "externalTokens": "Entra-Token anderer Apps",
+      "access": "Zugriff",
+      "usedBy": "Verwendet von",
+      "addresses_one": "Adresse",
+      "addresses_other": "Adressen",
+      "capacity": "Kapazität",
+      "model": "Modell",
+      "modelOwner": "Modellbesitzer",
+      "workspaceId": "Arbeitsbereichs-ID",
+      "itemId": "Element-ID",
+      "connector": "Connector",
+      "type": "Typ"
+    },
+    "docs": {
+      "signInPeople": "So melden sich Personen an",
+      "secrets": "Geheimnisse in Funktionen",
+      "identities": "Delegierter und Anwendungszugriff",
+      "hosting": "Statisches Hosting",
+      "permissions": "Berechtigungen und Sicherheit auf Zeilenebene",
+      "storage": "Speicher",
+      "connections": "Funktionsverbindungen",
+      "connectorAuth": "Connector-Authentifizierung"
+    },
+    "people": {
+      "kicker": "Wer sie verwendet",
+      "lead": "Personen öffnen die App unter ihrer Adresse oder in Fabric und melden sich mit ihrem Geschäftskonto an. Um jemandem Zugriff zu geben, wähle in der App-Leiste <strong>Teilen</strong> aus.",
+      "loadBefore": "Werden vor der Anmeldung geladen",
+      "loadAfter": "Werden nach der Anmeldung geladen",
+      "onlyInPortal": "Nur im Fabric-Portal"
+    },
+    "app": {
+      "lead": "Rayfin führt die App als ein einziges Fabric-App-Element aus: ihre Seiten, Anmeldung, Datenbank und Funktionen, eingerichtet über <code>rayfin/rayfin.yml</code>.",
+      "notPublished": "Noch nicht veröffentlicht",
+      "parts": "Bestandteile"
+    },
+    "identity": {
+      "kicker": "Identität",
+      "keyLead": "Diese Aufrufe verwenden keine Fabric-Anmeldung. Die Funktion sendet ihren eigenen Schlüssel oder ihr eigenes Token (oder keins, bei einer öffentlichen API). Daher hat jeder, der diesen Schlüssel besitzt, denselben Zugriff, egal wer die App verwendet.",
+      "reachedWithKey": "Mit einem Schlüssel erreicht",
+      "secretsUsed": "Von den Funktionen verwendete Geheimnisse",
+      "noSecrets": "Keine. Füge Schlüssel unter Code → <strong>Geheimnisse</strong> hinzu, und lies sie aus <code>ctx.Secrets</code>, damit sie nie im Code stehen.",
+      "userLead": "Diese Verbindungen sind <strong>delegiert</strong>: Jede Abfrage wird über einen On-Behalf-Of-Tokenaustausch als die Person ausgeführt, die die App verwendet. Fabric prüft deren eigene Berechtigungen, sodass jede Person nur sieht, was sie sehen darf.",
+      "everyoneNeeds": "Alle, die die App verwenden, benötigen Zugriff auf",
+      "userNote": "Gib Personen oder einer Gruppe, der sie angehören, eine Rolle in jedem Arbeitsbereich oder eine Berechtigung für jedes Element. Andernfalls erhalten sie einen Autorisierungsfehler.",
+      "askGrant": "Copilot fragen, was zu gewähren ist",
+      "appLeadVia": "Diese Verbindungen verwenden <strong>Anwendungszugriff</strong>: eine einzige gemeinsame Identität, die des Besitzers des Fabric-App-Elements. Dort sehen alle dieselben Daten, und Regeln pro Person können Personen nicht unterscheiden.",
+      "appLead": "Verbindungen, die die App-Identität verwenden, haben <strong>Anwendungszugriff</strong>: eine einzige gemeinsame Identität, die des Besitzers des Fabric-App-Elements. Dort sehen alle dieselben Daten, und Regeln pro Person können Personen nicht unterscheiden.",
+      "whose": "Verwendete Anmeldeinformationen",
+      "whoServicePrincipal": "Dienstprinzipal, der die App veröffentlicht",
+      "whoAccount": "Dein Fabric-Konto, das diese App veröffentlicht",
+      "whoOwner": "Besitzer des Fabric-App-Elements",
+      "previews": "Vorschauen werden von <strong>{{who}}</strong> aus Pull Requests bereitgestellt und als diese Identität ausgeführt.",
+      "ownerNote": "Der Besitzer ist das Konto, das die App durch die erste Veröffentlichung erstellt hat. Wenn jemand anderes sie zuerst veröffentlicht hat, wird sie als diese Person ausgeführt.",
+      "grantTo": "Zugriff gewähren auf",
+      "localNote": "Wenn die App auf deinem Computer läuft, verwenden Funktionen stattdessen deine eigene Anmeldung. Ein Aufruf, der dort funktioniert, kann daher nach dem Veröffentlichen der App trotzdem fehlschlagen."
+    },
+    "website": {
+      "lead": "Die Seiten der App: das aus ihrem Code erstellte HTML, JavaScript und CSS, bereitgestellt von der Fabric-App.",
+      "pagesLoad": "Seiten laden",
+      "before": "Vor der Anmeldung",
+      "after": "Nach der Anmeldung",
+      "onlyInFabric": "Nur in Fabric",
+      "publicNote": "Jeder mit dem Link kann die Seitendateien herunterladen, aber nicht die Daten der App: Dafür ist weiterhin eine Anmeldung nötig, und Entitätsregeln bestimmen, was jede Person sieht. Das ist bei Web-Apps üblich. Um die Seiten erst nach einer Fabric-Anmeldung zu laden, lege <code>assetAccess: protected</code> fest.",
+      "protectedNote": "Die Seitendateien werden nur für Personen geladen, die bei Fabric angemeldet sind.",
+      "readsInBrowser": "Liest im Browser"
+    },
+    "signin": {
+      "lead": "Personen melden sich mit ihrem Microsoft Entra ID-Geschäftskonto an. Die App erhält eine Sitzung, die angibt, wer sie sind.",
+      "accepted": "Akzeptiert",
+      "notAccepted": "Nicht akzeptiert",
+      "addresses": "Anmeldeadressen",
+      "more_one": "und {{count}} weitere",
+      "more_other": "und {{count}} weitere"
+    },
+    "database": {
+      "lead": "Die eigenen Tabellen der App in ihrer Fabric-SQL-Datenbank. Lese- und Schreibvorgänge verwenden die <strong>Benutzeridentität</strong>, und die Regeln jeder Tabelle bestimmen, welche Zeilen die Person sehen und ändern kann.",
+      "tables_one": "{{count}} Tabelle",
+      "tables_other": "{{count}} Tabellen",
+      "harden": "Zugriff absichern",
+      "openModel": "Datenmodell öffnen"
+    },
+    "storage": {
+      "lead": "Blobspeicher für Dateien, die Personen hochladen. Er ist experimentell und nicht in jeder Fabric-Region verfügbar."
+    },
+    "functions": {
+      "lead": "Serverseitiger Code. Aufrufe externer Dienste verwenden die <strong>App-Identität</strong>; beim Lesen der eigenen Daten der App wird weiterhin die Identität der Person verwendet, die die Funktion aufgerufen hat.",
+      "count_one": "{{count}} Funktion",
+      "count_other": "{{count}} Funktionen",
+      "none": "Noch keine Funktionen gefunden.",
+      "reaches": "Erreicht",
+      "openCode": "Code öffnen"
+    },
+    "connectors": {
+      "lead": "Vorhandene Fabric-Daten, die die App über Rayfin-Connectors liest und schreibt. Jeder verwendet die Benutzeridentität oder die App-Identität, festgelegt durch <code>auth.type</code> in <code>rayfin/rayfin.yml</code>."
+    },
+    "secrets": {
+      "manage": "Geheimnisse verwalten",
+      "readTyped": "Als ctx.Secrets lesen",
+      "lead": "API-Schlüssel, Kennwörter und Verbindungszeichenfolgen für die Funktionen. Ihre Werte bleiben außerhalb des Codes: Die veröffentlichte App speichert eigene Werte, ebenso dein Computer, wenn die App dort läuft. <code>rayfin.yml</code> enthält nur ihre Namen und Beschreibungen, und Funktionen lesen sie als <code>ctx.Secrets.NAME</code>.",
+      "noValue_one": "Die veröffentlichte App hat keinen Wert für {{names}}, daher schlägt eine Funktion, die es liest, dort fehl.",
+      "noValue_other": "Die veröffentlichte App hat keine Werte für {{names}}, daher schlägt eine Funktion, die sie liest, dort fehl.",
+      "readBy": "Gelesen von {{functions}}",
+      "readIn": "Gelesen in {{files}}",
+      "unread": "Keine Funktion liest es",
+      "undeclared": "{{readBy}} · nicht in rayfin.yml",
+      "publishedOnly": "Nur in der veröffentlichten App",
+      "status": {
+        "loading": "Es wird geprüft, welche Werte die veröffentlichte App hat…",
+        "notDeployed": "Werte für die veröffentlichte App können hinzugefügt werden, sobald sie veröffentlicht ist.",
+        "team": "Zeigt die Werte der veröffentlichten App. Die veröffentlichte App und die Vorschau jeder Person haben jeweils eigene Werte.",
+        "updateRayfin": "Aktualisiere die Rayfin-Version der App, um zu sehen, welche Werte festgelegt sind.",
+        "errorSignIn": "Die Werte der veröffentlichten App konnten nicht geprüft werden. Deine Fabric-Anmeldung ist möglicherweise abgelaufen.",
+        "error": "Die Werte der veröffentlichten App konnten nicht geprüft werden.",
+        "ready": "Werte können nur geschrieben werden: Fabricator zeigt an, ob ein Wert festgelegt ist, aber nie, welcher."
+      },
+      "calledFrom": "Aus demselben Code aufgerufen",
+      "localNote": "Wenn die App auf deinem Computer läuft, lesen ihre Funktionen lokale Werte statt der Werte der veröffentlichten App."
+    },
+    "source": {
+      "useApp": "App-Identität verwenden",
+      "viewModel": "Modell anzeigen",
+      "viewTables": "Tabellen anzeigen",
+      "useUser": "Benutzeridentität verwenden",
+      "audienceLead": "{{detail}}. Funktionen greifen über <code>ctx.Tokens.{{audience}}</code> darauf zu.",
+      "apiLead": "Eine Web-API, die die Funktionen aufrufen. Rayfin meldet diese Aufrufe nicht an: Der Code sendet seinen eigenen Schlüssel oder sein eigenes Token.",
+      "suggested": "Rayfin kann {{title}} mit der App-Identität über <code>AudienceType.{{audience}}</code> erreichen, daher brauchen die Funktionen dafür keinen Schlüssel.",
+      "alwaysUser": "Connectors vom Typ „{{kind}}“ verwenden immer die Benutzeridentität.",
+      "sameRows": "Alle sehen dieselben Zeilen, daher können Regeln pro Person für die Tabellen Personen nicht unterscheiden.",
+      "ownAccess": "Es gilt der eigene Fabric-Zugriff jeder Person, und Regeln pro Person für die Tabellen können nutzen, wer sie ist.",
+      "details": "Details",
+      "grantApp": "Der App gewähren"
+    }
+  }
+}

@@ -29,6 +29,7 @@ import {
 import { isCopilotAuthError } from '../copilotAuth'
 import { openDocs } from '../docsLinks'
 import type { WorkspaceUse } from '../fabric'
+import { Trans, useTranslation } from '../i18n'
 import {
   dataTurnPrompt,
   pendingData,
@@ -249,7 +250,7 @@ export default function ChatPanel({
   onToggleFocus,
   deploying = false,
   blockSubmitWhileDeploying = false,
-  submitBlockedTitle = 'Publishing — sending resumes when it goes live',
+  submitBlockedTitle,
   eventsManagedExternally = false,
   onOpenMention,
   draft,
@@ -269,6 +270,7 @@ export default function ChatPanel({
   experiments,
   onManageMcpServers
 }: Props): JSX.Element {
+  const { t } = useTranslation('chat')
   // The composer draft is seeded from — and mirrored back to — the parent so a
   // typed-but-unsent prompt survives this panel unmounting. Switching to the Code
   // tab and back to Build tears down ChatPanel, and local state alone would be
@@ -317,7 +319,10 @@ export default function ChatPanel({
   // A model on the user's own key that can't read images can't take attachments.
   const { models } = useCopilotModels(Boolean(selection.model))
   const chosenModel = models.find((m) => m.id === selection.model)
-  const imageNote = chosenModel?.byok && !chosenModel.vision ? `${chosenModel.name} can’t read images` : undefined
+  const imageNote =
+    chosenModel?.byok && !chosenModel.vision
+      ? t('composer.cantReadImages', { model: chosenModel.name })
+      : undefined
   const imagesBlocked = Boolean(imageNote) && (attachments?.length ?? 0) > 0
   const [planBusyId, setPlanBusyId] = useState<string | null>(null)
   const [confirmNewChat, setConfirmNewChat] = useState(false)
@@ -430,7 +435,7 @@ export default function ChatPanel({
     if (!marking) return null
     if ('path' in marking) {
       const shot = (attachments ?? []).find((a) => a.path === marking.path)
-      return shot ? { shot, label: 'Screenshot' } : null
+      return shot ? { shot, label: t('composer.screenshot') } : null
     }
     const pick = picks.find((p) => p.id === marking.pick)
     return pick?.shot ? { shot: pick.shot, label: pick.target.label } : null
@@ -546,7 +551,7 @@ export default function ChatPanel({
   )
   const fallbackSuggestions = useMemo(
     () => suggestionsFor(project),
-    [project.id, project.name, project.template]
+    [project.id, project.name, project.template, t]
   )
 
   // Copilot-generated starter prompts grounded in the app's code. Only generated
@@ -818,8 +823,8 @@ export default function ChatPanel({
       if (awaiting && question) {
         if (!question.allowFreeform) {
           const errText = awaiting.plan
-            ? 'Choose one of the available answers before planning can continue.'
-            : 'Choose one of the available answers to continue.'
+            ? t('composer.chooseAnswerToPlan')
+            : t('composer.chooseAnswer')
           if (awaiting.plan) {
             changePlan(awaiting.id, (plan) => ({ ...plan, error: errText }))
           } else {
@@ -1561,13 +1566,13 @@ export default function ChatPanel({
       options.unshift({
         key: 'here',
         kind: 'here',
-        name: 'This folder',
+        name: t('composer.thisFolder'),
         detail: dir,
         insert: `${mentionText(dir, atQuoted)} `
       })
     }
     return options
-  }, [atOpen, atQuery, atQuoted, fileList, pathParts, pathListing])
+  }, [atOpen, atQuery, atQuoted, fileList, pathParts, pathListing, t])
   const atLoading = atOpen && (pathParts ? !pathListing : fileList == null)
   const atCapture = atOpen && atOptions.length > 0
   const atSel = Math.max(0, Math.min(atIdx, atOptions.length - 1))
@@ -1755,8 +1760,8 @@ export default function ChatPanel({
             type="button"
             className={`chat-tool${focused ? ' is-on' : ''}`}
             onClick={onToggleFocus}
-            title={focused ? 'Exit focus — show the preview again' : 'Focus the chat — hide the preview'}
-            aria-label={focused ? 'Exit focus' : 'Focus the chat'}
+            title={focused ? t('panel.exitFocusTitle') : t('panel.focusTitle')}
+            aria-label={focused ? t('panel.exitFocus') : t('panel.focus')}
           >
             {focused ? <CollapseIcon /> : <ExpandIcon />}
           </button>
@@ -1774,9 +1779,9 @@ export default function ChatPanel({
           className="chat-tool chat-tool--label"
           onClick={() => setConfirmNewChat(true)}
           disabled={sending || messages.length === 0}
-          title="Clear this conversation and start fresh"
+          title={t('panel.newChatTitle')}
         >
-          <Codicon name="add" /> New chat
+          <Codicon name="add" /> {t('panel.newChat')}
         </button>
       </div>
 
@@ -1813,10 +1818,12 @@ export default function ChatPanel({
             type="button"
             className={`chat-jump${jumpNew ? ' chat-jump--new' : ''}`}
             onClick={jumpToLatest}
-            title="Jump to the latest message"
+            title={t('panel.jumpTitle')}
           >
             {jumpNew && <span className="chat-jump-dot" aria-hidden="true" />}
-            <span className="chat-jump-label">{jumpNew ? 'New messages' : 'Jump to latest'}</span>
+            <span className="chat-jump-label">
+              {jumpNew ? t('panel.newMessages') : t('panel.jump')}
+            </span>
             <Codicon name="arrow-down" className="chat-jump-arrow" />
           </button>
         )}
@@ -1829,7 +1836,7 @@ export default function ChatPanel({
           {dragOver && (
             <div className="composer-drop" aria-hidden="true">
               <ImageIcon className="composer-drop-ico" />
-              <span>Drop to attach</span>
+              <span>{t('composer.dropToAttach')}</span>
             </div>
           )}
           {atOpen && (
@@ -1837,30 +1844,28 @@ export default function ChatPanel({
               ref={atMenuRef}
               className="mention-menu"
               role="listbox"
-              aria-label={pathParts ? 'Files and folders' : 'Project files'}
+              aria-label={pathParts ? t('mention.filesAndFolders') : t('mention.projectFiles')}
             >
               <div className="mention-menu-head">
-                {pathParts ? 'Reference a file or folder' : 'Reference a file'}
+                {pathParts ? t('mention.referenceFileOrFolder') : t('mention.referenceFile')}
               </div>
               {pathListing?.dir && (
                 <div className="mention-dir" title={pathListing.dir}>
                   {pathListing.dir}
                 </div>
               )}
-              {atLoading && <div className="mention-empty">Loading files…</div>}
+              {atLoading && <div className="mention-empty">{t('mention.loading')}</div>}
               {!atLoading && pathListing?.error && (
                 <div className="mention-empty">{pathListing.error}</div>
               )}
               {!atLoading && !pathListing?.error && atOptions.length === 0 && (
                 <div className="mention-empty">
                   {pathParts ? (
-                    `Nothing here matches “${pathParts.partial}”`
+                    t('mention.nothingHere', { query: pathParts.partial })
                   ) : (
                     <>
-                      No files match “{atQuery}”
-                      <span className="mention-hint">
-                        To reference something outside the project, type ../ or a full path.
-                      </span>
+                      {t('mention.noFiles', { query: atQuery })}
+                      <span className="mention-hint">{t('mention.outsideHint')}</span>
                     </>
                   )}
                 </div>
@@ -1913,9 +1918,13 @@ export default function ChatPanel({
                     type="button"
                     className="chat-attachment-open"
                     onClick={() => setMarking({ path: a.path })}
-                    title={onReplaceAttachment ? 'Show it larger and draw on it' : 'Show it larger'}
+                    title={
+                      onReplaceAttachment
+                        ? t('composer.showLargerDraw')
+                        : t('imageViewer.showLarger')
+                    }
                   >
-                    <img src={a.thumb} alt="Screenshot to send" draggable={false} />
+                    <img src={a.thumb} alt={t('composer.screenshotToSend')} draggable={false} />
                     {onReplaceAttachment && (
                       <span className="chat-attachment-draw" aria-hidden="true">
                         <PenIcon />
@@ -1926,15 +1935,19 @@ export default function ChatPanel({
                     type="button"
                     className="chat-attachment-x"
                     onClick={() => onRemoveAttachment?.(a.path)}
-                    title="Remove"
-                    aria-label="Remove screenshot"
+                    title={t('actions.remove')}
+                    aria-label={t('composer.removeScreenshot')}
                   >
                     <CloseIcon />
                   </button>
                 </div>
               ))}
               {attaching && (
-                <div className="chat-attachment chat-attachment--loading" role="status" aria-label="Adding image">
+                <div
+                  className="chat-attachment chat-attachment--loading"
+                  role="status"
+                  aria-label={t('composer.addingImage')}
+                >
                   <span className="step-spin" aria-hidden="true" />
                 </div>
               )}
@@ -1943,7 +1956,7 @@ export default function ChatPanel({
           {imageNote && (attachments?.length ?? 0) > 0 && (
             <p className="chat-attachments-note" role="note">
               <Codicon name="warning" />
-              {imageNote}. Remove the images, or choose a model that can.
+              {t('composer.imagesBlocked', { note: imageNote })}
             </p>
           )}
           <div className="composer-input-sizer" ref={sizerRef} data-replicated-value={input}>
@@ -1965,13 +1978,13 @@ export default function ChatPanel({
               placeholder={
                 picks.length > 0
                   ? picks.length === 1
-                    ? `Say how to change ${picks[0].target.label}, or press Enter to polish it`
-                    : `Say how to change these ${picks.length}, or press Enter to polish them`
+                    ? t('composer.placeholderPick', { label: picks[0].target.label })
+                    : t('composer.placeholderPicks', { count: picks.length })
                   : dataChips.length > 0
-                    ? 'Say what to build with this data, or just press Enter to connect it'
+                    ? t('composer.placeholderData')
                     : fileChips.length > 0
-                      ? 'Say what to do with these, or just press Enter to send them'
-                      : `Message Fabricator about ${project.name}…`
+                      ? t('composer.placeholderFiles')
+                      : t('composer.placeholder', { name: project.name })
               }
               value={input}
               rows={1}
@@ -2010,7 +2023,7 @@ export default function ChatPanel({
             </div>
             <div className="composer-right">
               <span className="composer-hint" aria-hidden="true">
-                <kbd>Enter</kbd> to send
+                <Trans t={t} i18nKey="composer.enterToSend" components={{ kbd: <kbd /> }} />
               </span>
               <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={onPickFiles} />
               {sending ? (
@@ -2020,8 +2033,8 @@ export default function ChatPanel({
                     className="composer-send composer-send--interject"
                     onClick={send}
                     disabled={!input.trim()}
-                    title="Interject — send this now without waiting"
-                    aria-label="Interject this message"
+                    title={t('composer.interjectTitle')}
+                    aria-label={t('composer.interject')}
                   >
                     <SendIcon />
                   </button>
@@ -2029,8 +2042,8 @@ export default function ChatPanel({
                     type="button"
                     className="composer-send composer-send--stop"
                     onClick={stop}
-                    title="Stop generating"
-                    aria-label="Stop generating"
+                    title={t('composer.stop')}
+                    aria-label={t('composer.stop')}
                   >
                     <StopIcon />
                   </button>
@@ -2040,9 +2053,9 @@ export default function ChatPanel({
                   style={{ display: 'contents' }}
                   title={
                     submitBlocked
-                      ? submitBlockedTitle
+                      ? (submitBlockedTitle ?? t('composer.publishing'))
                       : imagesBlocked
-                        ? `${imageNote}. Remove the images, or choose a model that can.`
+                        ? t('composer.imagesBlocked', { note: imageNote })
                         : undefined
                   }
                 >
@@ -2064,12 +2077,12 @@ export default function ChatPanel({
                       submitBlocked || imagesBlocked
                         ? undefined
                         : picks.length > 0
-                          ? `Send, with ${picks.length === 1 ? 'the picked element' : `the ${picks.length} picked elements`} (Enter)`
+                          ? t('composer.sendPicks', { count: picks.length })
                           : dataChips.length > 0
-                            ? `Send, and connect ${dataChips.length === 1 ? 'this data' : `these ${dataChips.length} data sources`} (Enter)`
-                            : 'Send (Enter)'
+                            ? t('composer.sendData', { count: dataChips.length })
+                            : t('composer.sendTitle')
                     }
-                    aria-label="Send"
+                    aria-label={t('composer.send')}
                   >
                     <SendIcon />
                   </button>
@@ -2111,9 +2124,9 @@ export default function ChatPanel({
       )}
       {confirmNewChat && (
         <ConfirmModal
-          title="Start a new chat?"
-          message="This clears the conversation and starts Fabricator fresh. Your app and its files stay exactly as they are."
-          confirmLabel="New chat"
+          title={t('panel.newChatConfirm')}
+          message={t('panel.newChatMessage')}
+          confirmLabel={t('panel.newChat')}
           onConfirm={() => void newChat()}
           onCancel={() => setConfirmNewChat(false)}
         />

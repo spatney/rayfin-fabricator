@@ -4,6 +4,7 @@
  * `useMigration` drives it.
  */
 import type { ChatMigrationRef, MigrationPage, MigrationState } from '@shared/ipc'
+import { translator } from '../i18n'
 
 /**
  * The order pages are migrated in: the report's visible pages in order, then
@@ -170,9 +171,10 @@ export function migrationTurn(state: MigrationState, pageIndex: number, projectP
   const missing = gaps(state)
   if (missing.length) lines.push('', ...missing)
 
+  const t = translator('migrate')
   const display = foundation
-    ? `Migrate ${quote(report)} from Power BI`
-    : `Migrate page ${position + 1} of ${count}: ${page.displayName}`
+    ? t('turn.first', { report: report.replace(/\s+/g, ' ').trim() })
+    : t('turn.page', { n: position + 1, total: count, name: page.displayName })
   return { pageIndex, display, prompt: lines.join('\n'), migration, shots }
 }
 

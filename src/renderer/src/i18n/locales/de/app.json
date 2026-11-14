@@ -1,0 +1,104 @@
+{
+  "startup": {
+    "verifySignIn": "Die Anmeldung konnte nicht überprüft werden. Bitte versuche es erneut.",
+    "checkTools": "Die installierten Tools konnten nicht geprüft werden. Bitte versuche es erneut.",
+    "loadSettings": "Die App-Einstellungen konnten nicht geladen werden. Bitte versuche es erneut.",
+    "settingsUnavailable": "Einstellungen nicht verfügbar"
+  },
+  "appBar": {
+    "tabs": {
+      "build": "Erstellen",
+      "code": "Code",
+      "blueprint": "Blueprint",
+      "advisor": "Berater"
+    },
+    "views": "Projektansichten",
+    "advisorIssues_one": "Berater – {{count}} offenes Problem mit hohem oder mittlerem Schweregrad",
+    "advisorIssues_other": "Berater – {{count}} offene Probleme mit hohem oder mittlerem Schweregrad",
+    "openIssues_one": "{{count}} offenes Problem",
+    "openIssues_other": "{{count}} offene Probleme",
+    "allProjects": "Alle Projekte",
+    "allProjectsLabel": "{{name}} – Alle Projekte",
+    "allProjectsTitle": "{{path}}\nAlle Projekte",
+    "switchProjects": "Projekt wechseln",
+    "switchProjectsLabel": "{{name}} – Projekt wechseln",
+    "recentProjects": "Zuletzt verwendete Projekte",
+    "noRecentProjects": "Keine anderen zuletzt verwendeten Projekte",
+    "team": "Team",
+    "back": "Zurück zu {{name}}",
+    "backToProjects": "Zurück zu den Projekten",
+    "backTitle": "Zurück zu {{name}} – es lief weiter, während du Projekte durchsucht hast"
+  },
+  "splash": {
+    "stages": {
+      "tools": "Deine Tools werden geprüft",
+      "accounts": "Deine Anmeldungen werden geprüft",
+      "ready": "Alles bereit",
+      "setup": "Zuerst ist noch einiges einzurichten",
+      "error": "Etwas muss geprüft werden"
+    },
+    "opening": "<b>{{name}}</b> wird geöffnet",
+    "openingProjects": "Deine Projekte werden geöffnet",
+    "firstLaunch": "Hallo, ich bin Ray! Willkommen zurück."
+  },
+  "crash": {
+    "title": "Etwas ist schiefgelaufen",
+    "body": "In Fabricator ist ein unerwarteter Fehler aufgetreten. Neu laden behebt das meistens; deine Projekte und dein Chatverlauf sind gespeichert.",
+    "details": "Technische Details",
+    "reload": "Neu laden",
+    "openLogs": "Protokolle öffnen"
+  },
+  "update": {
+    "title": "Update verfügbar",
+    "lead": "Ein neues Update ist bereit zur Installation.",
+    "leadVersion": "Fabricator {{version}} ist bereit zur Installation.",
+    "hint": "Du kannst es jetzt installieren oder „Später“ wählen, um diese Version weiter zu verwenden und jederzeit zu aktualisieren.",
+    "updateNow": "Jetzt aktualisieren",
+    "later": "Später",
+    "installingShort": "Wird installiert…",
+    "downloading": "Update wird heruntergeladen…",
+    "downloadingVersion": "Update {{version}} wird heruntergeladen…",
+    "ready": "Das Update ist bereit zur Installation",
+    "readyVersion": "Update {{version}} ist bereit zur Installation",
+    "installing": "Update wird installiert…",
+    "installingVersion": "Update {{version}} wird installiert…",
+    "starting": "Wird gestartet…",
+    "restartToApply": "Fabricator wird neu gestartet, um es anzuwenden.",
+    "restartsAutomatically": "Fabricator wird automatisch neu gestartet.",
+    "restartAndUpdate": "Neu starten und aktualisieren",
+    "required": "Ein erforderliches Update muss installiert werden, bevor es weitergeht."
+  },
+  "attention": {
+    "notSignedIn": "Nicht bei {{names}} angemeldet.",
+    "toolsMissing_one": "{{tools}} fehlt oder ist veraltet.",
+    "toolsMissing_other": "{{tools}} fehlen oder sind veraltet.",
+    "manageAccounts": "Konten verwalten",
+    "reviewSetup": "Einrichtung prüfen"
+  },
+  "toast": {
+    "region": "Benachrichtigungen",
+    "dismiss": "Benachrichtigung ausblenden"
+  },
+  "touchUp": {
+    "label": "Zeigen & Bearbeiten",
+    "labelPicked_one": "{{label}}, {{count}} ausgewählt",
+    "labelPicked_other": "{{label}}, {{count}} ausgewählt",
+    "turnOff": "Ausschalten",
+    "turnOn": "Einschalten",
+    "clip": "Screenshot ausschneiden",
+    "shiftKey": "Umschalt",
+    "drag": "ziehen"
+  },
+  "pick": {
+    "display_one": "Überarbeite dieses Element",
+    "display_other": "Überarbeite diese {{count}} Elemente",
+    "toSend": "Ausgewählte Elemente zum Senden",
+    "sent": "Ausgewählte Elemente",
+    "number": "Auswahl {{n}}",
+    "draw": "Auf dem Bild von {{label}} zeichnen",
+    "drawTitle": "Größer anzeigen und darauf zeichnen",
+    "remove": "{{label}} entfernen",
+    "show": "Bild von {{label}} anzeigen",
+    "showTitle": "Größer anzeigen"
+  }
+}

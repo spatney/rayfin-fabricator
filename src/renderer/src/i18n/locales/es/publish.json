@@ -1,0 +1,368 @@
+{
+  "button": {
+    "publish": "Publicar",
+    "publishing": "Publicando…"
+  },
+  "progress": {
+    "label": "Progreso de la publicación",
+    "publishing": "Publicando",
+    "position": "paso {{step}} de {{steps}}",
+    "starting": "Iniciando la publicación…",
+    "watch": "Ver",
+    "waitingForSignIn": "Esperando a que inicies sesión en Fabric en el explorador",
+    "retrying": "Fabric está ocupado; volviendo a intentarlo"
+  },
+  "logs": {
+    "show": "Ver registros",
+    "hide": "Ocultar registros",
+    "short": "Registros"
+  },
+  "findOutWhy": "Averiguar por qué",
+  "region": {
+    "chooseAnother": "Elegir otra área de trabajo",
+    "availability": "Disponibilidad por región",
+    "availabilityTitle": "Consulta qué regiones tienen aplicaciones de Fabric (abre learn.microsoft.com)"
+  },
+  "signIn": {
+    "fabric": "Iniciar sesión en Fabric",
+    "busy": "Iniciando sesión…",
+    "failed": "Error al iniciar sesión",
+    "incomplete": "No se completó el inicio de sesión en Fabric. Inténtalo de nuevo.",
+    "notCompleted": "No se completó el inicio de sesión. Inténtalo de nuevo."
+  },
+  "copy": {
+    "link": "Copiar vínculo",
+    "itemId": "Copiar el ID del elemento",
+    "failed": "Error al copiar",
+    "linkFailed": "No se pudo copiar el vínculo.",
+    "itemFailed": "No se pudo copiar el ID del elemento."
+  },
+  "deploySteps": {
+    "packages": "Instalando paquetes",
+    "connect": "Conectando con Fabric",
+    "capacity": "Preparando la capacidad de Fabric",
+    "workspace": "Buscando tu área de trabajo",
+    "item": "Configurando tu aplicación en Fabric",
+    "settings": "Aplicando la configuración",
+    "data": "Actualizando tu base de datos",
+    "storage": "Configurando el almacenamiento de archivos",
+    "connectors": "Conectando tus orígenes de datos",
+    "build": "Compilando y cargando tu aplicación",
+    "functions": "Publicando tus funciones",
+    "live": "Poniendo tu aplicación en línea",
+    "prepare": "Preparando la publicación",
+    "buildOnly": "Compilando tu aplicación",
+    "package": "Empaquetando recursos",
+    "upload": "Cargando en Fabric"
+  },
+  "dataKinds": {
+    "semanticmodel": {
+      "label": "Modelo semántico",
+      "plural": "Modelos semánticos",
+      "hint": "Consultar datos de Power BI con DAX"
+    },
+    "warehouse": {
+      "label": "Almacén",
+      "plural": "Almacenes",
+      "hint": "Leer y escribir en sus tablas"
+    },
+    "sqldatabase": {
+      "label": "Base de datos SQL",
+      "plural": "Bases de datos SQL",
+      "hint": "Leer y escribir en sus tablas"
+    },
+    "lakehouse": {
+      "label": "Lakehouse",
+      "plural": "Lakehouses",
+      "hint": "Leer sus tablas"
+    }
+  },
+  "workspaceStatus": {
+    "title": "Área de trabajo de Fabric",
+    "openItem": "Abrir la aplicación publicada en el portal de Fabric, en el área de trabajo “{{name}}”",
+    "openWorkspace": "Abrir el área de trabajo “{{name}}” en el portal de Fabric"
+  },
+  "strip": {
+    "publishingTo": "Publicando en {{target}}",
+    "starting": "Iniciando la publicación",
+    "watchTitle": "Mostrar la pantalla de publicación"
+  },
+  "stage": {
+    "unnamed": "Tu aplicación",
+    "unnamedPublishing": "tu aplicación",
+    "published": "Publicada",
+    "fabricating": "Fabricando",
+    "live": "<b>{{app}}</b> ya está en línea",
+    "publishing": "Publicando <b>{{app}}</b>",
+    "steps": "Pasos de la publicación",
+    "back": "Volver a tu aplicación"
+  },
+  "failedNotice": {
+    "label": "No se pudo publicar",
+    "ray": "Ray, la mantarraya de Fabricator. Selecciónalo para averiguar por qué falló la publicación.",
+    "plain": {
+      "failed": "No se pudo publicar esta aplicación. Ayuda puede averiguar por qué.",
+      "signin": "Fabric necesita que vuelvas a iniciar sesión para poder publicar esta aplicación.",
+      "stopped": "La publicación se detuvo antes de terminar.",
+      "unsupported": "Las aplicaciones de Fabric no están disponibles en la región de esta área de trabajo. Elige un área de trabajo de otra región.",
+      "unsupportedRegion": "La capacidad de esta área de trabajo está en {{region}}, donde las aplicaciones de Fabric aún no están disponibles. Elige un área de trabajo de otra región."
+    },
+    "refreshAuth": "Actualizar la autenticación de Fabric",
+    "diagnoseTitle": "Abrir Ayuda, que lee lo que ocurrió y te lo explica",
+    "showDetails": "Mostrar detalles",
+    "hideDetails": "Ocultar detalles",
+    "dismissTitle": "Descartar: vuelve a aparecer si la publicación falla de nuevo"
+  },
+  "rayfinVersion": {
+    "updateTitle": "Rayfin {{version}}: actualización a {{latest}} disponible",
+    "newerTitle": "Rayfin {{version}}: Rayfin {{newer}} está disponible",
+    "updateAvailable": "Actualización disponible",
+    "newerReady": "Hay una versión más reciente de Rayfin lista.",
+    "updateWithCopilot": "Actualizar con Copilot",
+    "newerAvailable": "Rayfin {{version}} está disponible",
+    "newerAvailableToo": "Rayfin {{version}} también está disponible",
+    "current": "Esta aplicación usa Rayfin {{version}}.",
+    "updateToNewer": "Actualizar a {{version}} con Copilot",
+    "notePublishes": "Copilot actualiza los paquetes y corrige lo que haya cambiado. Los cambios llegan a Fabric cuando Fabricator publica la aplicación después del turno.",
+    "note": "Copilot actualiza los paquetes y corrige lo que haya cambiado. Los cambios llegan a Fabric la próxima vez que publiques."
+  },
+  "create": {
+    "unknownSku": "Capacidad",
+    "unknownSkuTitle": "En una capacidad dedicada, pero no puedes ver su SKU (no la administras); se comprueba al publicar",
+    "otherCapacitySku": "La capacidad ({{sku}}) no es de Fabric (F-SKU) ni Premium (P-SKU)",
+    "otherCapacity": "La capacidad no es de Fabric (F-SKU) ni Premium (P-SKU)",
+    "noCapacity": "No tiene asignada ninguna capacidad de Fabric o Premium",
+    "refusal": {
+      "workspace": "Las aplicaciones de Fabric no estaban disponibles en {{workspace}} cuando publicaste allí antes, por lo que es probable que publicar aquí falle.",
+      "capacity": "Las aplicaciones de Fabric no estaban disponibles en la capacidad de esta área de trabajo cuando publicaste antes, por lo que es probable que publicar aquí falle.",
+      "region": "Las aplicaciones de Fabric no estaban disponibles en {{region}} cuando publicaste antes, por lo que es probable que publicar aquí falle."
+    },
+    "refusedNote": {
+      "regions": "Las aplicaciones de Fabric no estaban disponibles en {{regions}}, por lo que las áreas de trabajo de allí están marcadas. Si ninguna región funciona, es posible que tu administrador de Fabric tenga que activar Fabric Apps.",
+      "region": "Las aplicaciones de Fabric no estaban disponibles en {{region}}, por lo que las áreas de trabajo de allí están marcadas. Elige una que esté en una capacidad de otra región.",
+      "capacity": "Las aplicaciones de Fabric no estaban disponibles en un área de trabajo en la que publicaste, por lo que las áreas de trabajo de su capacidad están marcadas. Elige una que esté en una capacidad de otra región."
+    },
+    "errors": {
+      "capacities": "No se pudieron cargar las capacidades. Inténtalo de nuevo.",
+      "createWorkspace": "No se pudo crear el área de trabajo.",
+      "createWorkspaceRetry": "No se pudo crear el área de trabajo. Inténtalo de nuevo."
+    },
+    "unavailableIn": "{{region}} · Aplicaciones de Fabric no disponibles",
+    "unavailable": "Aplicaciones de Fabric no disponibles",
+    "name": "Nombre",
+    "optional": "opcional",
+    "namePlaceholder": "p. ej., Producción",
+    "workspace": "Publicar en el área de trabajo",
+    "newWorkspace": "+ Nueva área de trabajo",
+    "newWorkspaceTitle": "Crear un área de trabajo de Fabric en una capacidad a la que tengas acceso",
+    "refresh": "Actualizar áreas de trabajo",
+    "newWorkspaceName": "Nombre de la nueva área de trabajo",
+    "loadingCapacities": "Cargando capacidades…",
+    "noCapacities": "No hay capacidades aptas disponibles.",
+    "creating": "Creando…",
+    "createWorkspace": "Crear área de trabajo",
+    "reauthenticating": "Volviendo a autenticar…",
+    "loading": "Cargando tus áreas de trabajo…",
+    "search": "Buscar en {{total}} áreas de trabajo…",
+    "clearSearch": "Borrar búsqueda",
+    "noEligible": {
+      "title": "No hay áreas de trabajo aptas",
+      "body_one": "Las aplicaciones de Rayfin necesitan un área de trabajo en una capacidad de Fabric (<strong>F-SKU</strong>) o Power BI Premium (<strong>P-SKU</strong>). Tu única área de trabajo no cumple los requisitos; aparece abajo para que veas por qué. Inicia una prueba gratuita de Fabric o agrega una capacidad y, después, actualiza.",
+      "body_other": "Las aplicaciones de Rayfin necesitan un área de trabajo en una capacidad de Fabric (<strong>F-SKU</strong>) o Power BI Premium (<strong>P-SKU</strong>). Ninguna de tus {{count}} áreas de trabajo cumple los requisitos; aparecen abajo para que veas por qué. Inicia una prueba gratuita de Fabric o agrega una capacidad y, después, actualiza."
+    },
+    "trial": "Iniciar una prueba gratuita",
+    "buy": "Comprar una capacidad",
+    "recent": "Recientes",
+    "others": "Otras áreas de trabajo",
+    "checking": "Buscando en {{workspace}} una aplicación con el mismo nombre…",
+    "willReplace": "Al publicar, se reemplazará la aplicación “{{app}}” de {{workspace}}.",
+    "conflict": "{{workspace}} ya tiene una aplicación llamada “{{app}}”. Publicar aquí la reemplazaría, así que elige otra área de trabajo.",
+    "replaceAnyway": "Reemplazarla de todos modos",
+    "app": "Aplicación",
+    "sameName": "{{app}} (mismo nombre que esta aplicación)",
+    "newAppNamed": "Una aplicación nueva llamada “{{name}}”",
+    "newApp": "Una aplicación nueva",
+    "replaces": "Al publicar, la aplicación “{{app}}” de {{workspace}} se reemplaza por esta.",
+    "publishAnyway": "Publicar aquí de todos modos",
+    "notEligible": "No aptas",
+    "ineligibleHint": "Estas necesitan una capacidad de Fabric (<strong>F-SKU</strong>) o Power BI Premium (<strong>P-SKU</strong>).",
+    "noMatch": "Ninguna área de trabajo coincide con “{{query}}”.",
+    "noWorkspaces": {
+      "title": "No se encontraron áreas de trabajo",
+      "body": "No encontramos ninguna área de trabajo de Fabric para tu cuenta. Inicia una prueba gratuita de Fabric o agrega una capacidad y, después, actualiza."
+    },
+    "signInPrompt": "Inicia sesión en Microsoft Fabric para ver tus áreas de trabajo.",
+    "loadFailedWith": "No se pudieron cargar las áreas de trabajo: {{error}}",
+    "loadFailed": "No se pudieron cargar las áreas de trabajo."
+  },
+  "share": {
+    "title": "Compartir aplicación",
+    "intro": "Concede acceso a <strong>{{app}}</strong> a personas de tu inquilino. Cada destinatario obtiene el rol <strong>Colaborador</strong> en el área de trabajo de la aplicación.",
+    "introBuild_one": "Concede acceso a <strong>{{app}}</strong> a personas de tu inquilino. Cada destinatario obtiene el rol <strong>Colaborador</strong> en el área de trabajo de la aplicación y el permiso de <strong>Compilación</strong> en el modelo semántico que usa.",
+    "introBuild_other": "Concede acceso a <strong>{{app}}</strong> a personas de tu inquilino. Cada destinatario obtiene el rol <strong>Colaborador</strong> en el área de trabajo de la aplicación y el permiso de <strong>Compilación</strong> en los modelos semánticos que usa.",
+    "people": "Personas o grupos",
+    "placeholder": "Buscar por nombre o correo electrónico",
+    "remove": "Quitar {{name}}",
+    "searching": "Buscando…",
+    "add": "Agregar “{{email}}”",
+    "noMatches": "No hay coincidencias",
+    "invalid": "Correo electrónico no válido: {{emails}}",
+    "searchSignIn": {
+      "azure": "Inicia sesión en Azure para buscar",
+      "fabric": "Inicia sesión en Fabric para buscar"
+    },
+    "directory": {
+      "signInAzure": "Inicia sesión en Azure para buscar en el directorio.",
+      "signInFabric": "Inicia sesión en Fabric para buscar en el directorio.",
+      "failed": "No se pudo buscar en el directorio. Aún puedes escribir un correo electrónico."
+    },
+    "contributor": "Colaborador",
+    "build": "Compilación",
+    "covered": "Cubierto por el área de trabajo",
+    "checkingModels": "Comprobando los modelos semánticos…",
+    "modelCheck": {
+      "failed": "No se pudieron comprobar los modelos semánticos de la aplicación.",
+      "title": "Error al comprobar los modelos"
+    },
+    "expired": "Tu sesión de Fabric expiró. Inicia sesión para terminar de compartir.",
+    "signInRetry": "Iniciar sesión y reintentar",
+    "azRequired": "Debes iniciar sesión en la CLI de Azure para buscar destinatarios en tu directorio.",
+    "azRetry": "Iniciar sesión en Azure y reintentar",
+    "app": "Aplicación",
+    "model": "Modelo",
+    "status": {
+      "failed": "Error",
+      "skipped": "Ya tenía acceso",
+      "shared": "Compartido"
+    },
+    "share": "Compartir",
+    "sharing": "Compartiendo…",
+    "again": "Volver a compartir",
+    "shared_one": "Se compartió con {{count}} destinatario.",
+    "shared_other": "Se compartió con {{count}} destinatarios.",
+    "sharedTitle": "Aplicación compartida",
+    "failed": "No se pudo compartir la aplicación. Vuelve a intentarlo.",
+    "linkCopied": "Vínculo de la aplicación copiado en el portapapeles."
+  },
+  "control": {
+    "panel": "Aplicaciones publicadas",
+    "yourApp": "tu aplicación",
+    "notPublished": "Sin publicar",
+    "notPublishedYet": "Aún sin publicar",
+    "checkingForApp": "Buscando una aplicación publicada…",
+    "errors": {
+      "loadApps": "No se pudieron cargar tus aplicaciones publicadas. Vuelve a intentarlo.",
+      "appCheck": "Error al comprobar la aplicación publicada",
+      "loadWorkspaces": "No se pudieron cargar las áreas de trabajo. Vuelve a intentarlo.",
+      "workspaceCheck": "Error al comprobar las áreas de trabajo"
+    },
+    "held": {
+      "publish": "Copilot está trabajando en esta aplicación. La publicación espera a que termine el turno.",
+      "deleting": "Se está eliminando una aplicación publicada. La publicación espera a que termine.",
+      "deleteWhilePublishing": "Publicando. La eliminación espera a que termine.",
+      "delete": "Copilot está trabajando en esta aplicación. La eliminación espera a que termine el turno."
+    },
+    "next": {
+      "publishingPercent": "Publicando… {{percent}} %",
+      "publishingTitle": "Ver cómo va la publicación",
+      "publishTitle": "Publicar esta aplicación en un área de trabajo de Fabric",
+      "chooseWorkspace": "Elegir área de trabajo",
+      "chooseWorkspaceTitle": "Las aplicaciones de Fabric no están disponibles en esta área de trabajo. Elige otra área de trabajo en la que publicar.",
+      "again": "Volver a publicar {{name}}",
+      "publishChanges_one": "Publicar {{count}} cambio",
+      "publishChanges_other": "Publicar {{count}} cambios",
+      "publishSomeChanges": "Publicar cambios",
+      "filesChanged_one": "{{count}} archivo cambió desde que se publicó {{name}}",
+      "filesChanged_other": "{{count}} archivos cambiaron desde que se publicó {{name}}",
+      "changesWaiting": "Tus cambios más recientes aún no están en {{name}}",
+      "upToDate": "{{name}} está al día. Vuelve a publicarla de todos modos."
+    },
+    "chip": {
+      "label": "Aplicación publicada:",
+      "failedNote": "Error",
+      "auto": "Automático",
+      "publishing": "Publicando en {{name}}…",
+      "none": "Aún sin publicar. Haz clic para elegir un área de trabajo.",
+      "failed": "No se pudo publicar en {{name}}. Haz clic para ver los detalles.",
+      "liveIn": "{{name}} está en línea en {{workspace}}. Haz clic para ver los detalles, o para cambiar o agregar una aplicación publicada.",
+      "live": "{{name}} está en línea. Haz clic para ver los detalles, o para cambiar o agregar una aplicación publicada.",
+      "autoOn": "“Publicar después de cada turno de chat” está activado: los cambios del chat se publican al terminar cada turno.",
+      "autoOff": "“Publicar después de cada turno de chat” está desactivado: los cambios del chat esperan a que los publiques."
+    },
+    "status": {
+      "failed": "No se pudo publicar",
+      "published": "Publicada",
+      "publishedWhen": "Publicada {{when}}"
+    },
+    "switchError": {
+      "signIn": "Inicia sesión en Fabric antes de cambiar de aplicación publicada.",
+      "failed": "No se pudo cambiar de aplicación publicada. Vuelve a intentarlo.",
+      "title": "Error al cambiar"
+    },
+    "delete": {
+      "title": "Eliminar esta aplicación publicada",
+      "named": "Eliminar {{name}}",
+      "confirm": "¿Eliminar <strong>{{name}}</strong> y todos sus datos de {{workspace}}?",
+      "detail": "Desaparecerá para todos los que la usan y no se puede deshacer. {{after}}",
+      "keep": "Tu aplicación en este dispositivo se queda como está.",
+      "keepThen": "Tu aplicación en este dispositivo se mantiene y, a partir de entonces, se publica en {{name}}.",
+      "keepUnpublished": "Tu aplicación en este dispositivo se mantiene, sin publicar.",
+      "done": "Se eliminaron {{name}} y sus datos de Fabric.",
+      "failed": "No se pudo eliminar {{name}}. Inténtalo de nuevo.",
+      "failedTitle": "Error al eliminar"
+    },
+    "share": {
+      "title": "Compartir esta aplicación con personas de tu inquilino",
+      "opening": "Abriendo el cuadro de diálogo para compartir…",
+      "nothing": "Publica esta aplicación en un área de trabajo antes de compartirla.",
+      "nothingTitle": "Aún no hay nada que compartir",
+      "loadFailed": "No se pudo cargar la aplicación publicada para compartirla. Vuelve a intentarlo."
+    },
+    "rename": "Cambiar el nombre de esta aplicación publicada",
+    "renameNamed": "Cambiar el nombre de {{name}}",
+    "renameLabel": "Nombre de la aplicación publicada",
+    "create": {
+      "first": "Publicar en un área de trabajo de Fabric",
+      "another": "Publicar en otra área de trabajo",
+      "firstButton": "Publicar en un área de trabajo de Fabric…",
+      "anotherButton": "Publicar en otra área de trabajo…"
+    },
+    "publishesAs": "Publica como <strong>{{user}}</strong>",
+    "yourAccountInSentence": "tu cuenta de Fabric",
+    "change": "Cambiar",
+    "turnedDown": {
+      "named": "No se pudo publicar en “{{name}}”.",
+      "unnamed": "No se pudo publicar en esa área de trabajo.",
+      "region": "Las aplicaciones de Fabric no están disponibles en {{region}}, donde está su capacidad. Elige un área de trabajo que esté en una capacidad de otra región.",
+      "noRegion": "Las aplicaciones de Fabric no están disponibles en su región. Elige un área de trabajo que esté en una capacidad de otra región."
+    },
+    "failedCallout": "La publicación no terminó.",
+    "waiting": {
+      "files_one": "<strong>{{count}} archivo</strong> cambió desde que se publicó {{name}}.",
+      "files_other": "<strong>{{count}} archivos</strong> cambiaron desde que se publicó {{name}}.",
+      "changes": "Tus cambios más recientes aún no están en {{name}}."
+    },
+    "seeChanges": "Ver qué cambió",
+    "facts": {
+      "app": "Aplicación",
+      "item": "Elemento",
+      "workspace": "Área de trabajo",
+      "account": "Cuenta"
+    },
+    "openInBrowser": "Abrir en el explorador",
+    "openInFabric": "Abrir en Fabric",
+    "openWorkspace": "Abrir el área de trabajo en Fabric",
+    "yourAccount": "Tu cuenta de Fabric",
+    "notSignedIn": "No has iniciado sesión en Fabric",
+    "others": "Otras aplicaciones publicadas",
+    "publishedAgo": "publicada {{when}}",
+    "switchTitle": "Obtener la vista previa y publicar en {{name}}",
+    "switch": "Cambiar a esta",
+    "switching": "Cambiando…",
+    "auto": {
+      "title": "Publicar después de cada turno de chat",
+      "on": "Cuando un turno cambia tu aplicación, se publica al terminar el turno.",
+      "off": "Los cambios se quedan en este dispositivo, visibles en la vista previa, hasta que los publiques."
+    }
+  }
+}

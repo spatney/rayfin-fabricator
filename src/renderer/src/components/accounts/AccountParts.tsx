@@ -1,15 +1,16 @@
 import { Children, type JSX, type ReactNode } from 'react'
+import { useTranslation } from '../../i18n'
 import { CheckIcon } from '../icons'
 
 /** How a service (or a model provider) stands. */
 export type CardState = 'ok' | 'off' | 'checking' | 'error'
 
-const STATE_LABEL: Record<CardState, string> = {
-  ok: 'Signed in',
-  off: 'Not signed in',
-  checking: 'Checking…',
-  error: 'Needs attention'
-}
+const STATE_LABEL = {
+  ok: 'state.ok',
+  off: 'state.off',
+  checking: 'status.checking',
+  error: 'state.error'
+} as const satisfies Record<CardState, string>
 
 /**
  * One service: a top row with its name, what it's for, how it stands, and its
@@ -34,7 +35,8 @@ export function AccountCard({
   action?: ReactNode
   children: ReactNode
 }): JSX.Element {
-  const label = (s: CardState): string => stateLabels?.[s] ?? STATE_LABEL[s]
+  const { t } = useTranslation('accounts')
+  const label = (s: CardState): string => stateLabels?.[s] ?? t(STATE_LABEL[s])
   return (
     <section className={`acct-card acct-card--${state}`} aria-label={title}>
       <div className="acct-head">

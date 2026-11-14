@@ -115,7 +115,7 @@ says which, and you render again.
 ### Change what Ray says
 
 1. Edit `script/lines.ts`. Keep every claim true to `README.md`, to Ray's lines in the app
-   (`src/renderer/src/components/mascot/lines.ts`) and, for Rayfin, to <https://rayfin.ai>.
+   (`src/renderer/src/i18n/locales/en/mascot.json`) and, for Rayfin, to <https://rayfin.ai>.
 2. Run `npm run voice -- <id>` with the ids of the lines you changed, say
    `npm run voice -- tricks`. Only those lines are generated again; the others keep their clips
    and timings. `npm run voice` on its own makes every line again: each request is cached in

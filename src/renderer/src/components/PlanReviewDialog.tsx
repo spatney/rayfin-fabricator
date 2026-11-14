@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useId, useState, type JSX } from 'react'
 import { createPortal } from 'react-dom'
 import type { ChatPlanArtifact, ChatPlanTodo } from '@shared/ipc'
-import { planActionLabel } from '../chatPlan'
+import { planActionLabel, planErrorText } from '../chatPlan'
+import { useTranslation } from '../i18n'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { useEditorTheme } from '../useEditorTheme'
@@ -57,6 +58,7 @@ export default function PlanReviewDialog({
   onRequestChanges,
   onExport
 }: PlanReviewDialogProps): JSX.Element {
+  const { t } = useTranslation('plan')
   useSuppressPreview()
   const theme = useEditorTheme()
   const titleId = useId()
@@ -83,7 +85,7 @@ export default function PlanReviewDialog({
       setCopyError(null)
       setTimeout(() => setCopied(false), 1200)
     } catch (err) {
-      setCopyError(err instanceof Error ? err.message : 'Could not copy the plan to the clipboard.')
+      setCopyError(err instanceof Error ? err.message : t('review.copyFailed'))
     }
   }
 
@@ -101,7 +103,7 @@ export default function PlanReviewDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>Plan for {projectName}</h2>
+          <h2 id={titleId}>{t('dialog.title', { projectName })}</h2>
           <div className="chat-plan-dialog-head-actions">
             {editable && (
               <button
@@ -110,14 +112,21 @@ export default function PlanReviewDialog({
                 disabled={busy}
                 onClick={() => setEditing((v) => !v)}
               >
-                {editing ? 'Done editing' : (
+                {editing ? (
+                  t('dialog.doneEditing')
+                ) : (
                   <>
-                    <Codicon name="edit" /> Edit
+                    <Codicon name="edit" /> {t('actions.edit')}
                   </>
                 )}
               </button>
             )}
-            <button className="icon-btn" onClick={onClose} aria-label="Close" disabled={busy}>
+            <button
+              className="icon-btn"
+              onClick={onClose}
+              aria-label={t('actions.close')}
+              disabled={busy}
+            >
               ✕
             </button>
           </div>
@@ -126,21 +135,21 @@ export default function PlanReviewDialog({
         <div className="modal-body chat-plan-dialog-body">
           {plan.error && (
             <div className="chat-plan-error">
-              <Codicon name="warning" /> {plan.error}
+              <Codicon name="warning" /> {planErrorText(plan.error)}
             </div>
           )}
 
           {editing ? (
             <div className="chat-plan-dialog-columns">
               <div className="chat-plan-dialog-editor">
-                <Suspense fallback={<div className="code-empty">Loading editor…</div>}>
+                <Suspense fallback={<div className="code-empty">{t('dialog.loadingEditor')}</div>}>
                   <Editor
                     height="100%"
                     theme={theme}
                     language="markdown"
                     value={plan.content}
                     onChange={(value) => onContentChange(value ?? '')}
-                    loading={<div className="code-empty">Loading editor…</div>}
+                    loading={<div className="code-empty">{t('dialog.loadingEditor')}</div>}
                     options={{
                       readOnly: busy,
                       minimap: { enabled: false },
@@ -155,18 +164,18 @@ export default function PlanReviewDialog({
                 </Suspense>
               </div>
               <div className="chat-plan-dialog-preview md">
-                <Markdown>{plan.content || '_Nothing written yet._'}</Markdown>
+                <Markdown>{plan.content || t('dialog.nothingWritten')}</Markdown>
               </div>
             </div>
           ) : (
             <div className="chat-plan-dialog-preview chat-plan-dialog-preview--full md">
-              <Markdown>{plan.content || '_No plan content yet._'}</Markdown>
+              <Markdown>{plan.content || t('dialog.noContent')}</Markdown>
             </div>
           )}
 
           {plan.todos.length > 0 && (
             <div className="chat-plan-dialog-todos">
-              <div className="chat-plan-dialog-section-title">Todos</div>
+              <div className="chat-plan-dialog-section-title">{t('dialog.todos')}</div>
               {plan.todos.map((todo) => (
                 <div key={todo.id} className={`chat-plan-todo chat-plan-todo--${todo.status}`}>
                   <Codicon
@@ -189,7 +198,7 @@ export default function PlanReviewDialog({
               ))}
               {plan.dependencies.length > 0 && (
                 <div className="chat-plan-dialog-deps">
-                  <div className="chat-plan-dialog-section-title">Dependencies</div>
+                  <div className="chat-plan-dialog-section-title">{t('dialog.dependencies')}</div>
                   {plan.dependencies.map((dep, i) => {
                     const prereq = todoTitle(plan.todos, dep.dependsOn)
                     const dependent = todoTitle(plan.todos, dep.todoId)
@@ -197,7 +206,7 @@ export default function PlanReviewDialog({
                       <div
                         key={i}
                         className="chat-plan-dialog-dep"
-                        aria-label={`${prereq} must finish before ${dependent}`}
+                        aria-label={t('dialog.dependency', { prereq, dependent })}
                       >
                         {prereq} <Codicon name="chevron-right" aria-hidden="true" /> {dependent}
                       </div>
@@ -223,7 +232,7 @@ export default function PlanReviewDialog({
               {alternateActions.length > 0 && (
                 <select
                   className="chat-plan-alt-select"
-                  aria-label="Other plan actions"
+                  aria-label={t('review.otherActions')}
                   disabled={busy}
                   value=""
                   onChange={(e) => {
@@ -233,7 +242,7 @@ export default function PlanReviewDialog({
                   }}
                 >
                   <option value="" disabled>
-                    {primaryAction ? 'More options…' : 'Choose an action…'}
+                    {primaryAction ? t('review.moreOptions') : t('review.chooseAction')}
                   </option>
                   {alternateActions.map((a) => (
                     <option key={a} value={a}>
@@ -248,7 +257,7 @@ export default function PlanReviewDialog({
                 disabled={busy}
                 onClick={() => setRevising((v) => !v)}
               >
-                Request changes
+                {t('review.requestChanges')}
               </button>
             </div>
           )}
@@ -257,7 +266,7 @@ export default function PlanReviewDialog({
             <div className="chat-plan-revise">
               <textarea
                 className="chat-plan-feedback"
-                placeholder="Optional — what should change about the plan?"
+                placeholder={t('review.feedbackPlaceholder')}
                 value={feedback}
                 rows={2}
                 disabled={busy}
@@ -273,7 +282,7 @@ export default function PlanReviewDialog({
                   setRevising(false)
                 }}
               >
-                Send feedback
+                {t('review.sendFeedback')}
               </button>
             </div>
           )}
@@ -287,7 +296,7 @@ export default function PlanReviewDialog({
 
         <div className="modal-footer chat-plan-dialog-footer">
           <button type="button" className="chat-plan-tool-btn" onClick={() => void copyPlan()}>
-            <Codicon name="copy" /> {copied ? 'Copied' : 'Copy'}
+            <Codicon name="copy" /> {copied ? t('actions.copied') : t('actions.copy')}
           </button>
           <button
             type="button"
@@ -295,10 +304,10 @@ export default function PlanReviewDialog({
             disabled={busy}
             onClick={() => void onExport(plan.content)}
           >
-            <Codicon name="desktop-download" /> Export
+            <Codicon name="desktop-download" /> {t('review.export')}
           </button>
           <button type="button" className="btn btn--sm btn--ghost" onClick={onClose} disabled={busy}>
-            Close
+            {t('actions.close')}
           </button>
         </div>
       </div>

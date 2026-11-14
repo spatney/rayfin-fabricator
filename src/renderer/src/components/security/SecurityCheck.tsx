@@ -11,8 +11,9 @@ import { StepRow } from '../chat/StepRow'
 import { describeStep, stepLabel } from '../chat/toolPresentation'
 import { formatTurnDuration } from '../chat/format'
 import { EvidenceView } from '../advisor/EvidenceView'
-import { CodeText, clock, plainText, plural } from '../advisor/format'
+import { CodeText, clock, plainText } from '../advisor/format'
 import { ChevronRightIcon, Codicon } from '../icons'
+import { translator, useTranslation } from '../../i18n'
 import {
   areasFor,
   type SecurityCheck,
@@ -23,21 +24,21 @@ import '../chat/chat.css'
 import '../advisor/advisor.css'
 import './securityCheck.css'
 
-const AREAS: Record<SecurityAreaId, { label: string; about: string }> = {
-  install: { label: 'Install scripts', about: 'What npm runs when its packages install' },
-  packages: { label: 'Packages', about: 'Where its packages come from' },
-  network: { label: 'Data sent out', about: 'What it sends, and where' },
-  hidden: { label: 'Hidden code', about: 'Code written to hide what it does' },
-  system: { label: 'System access', about: 'What reaches outside the app' },
-  agents: { label: 'Copilot instructions', about: 'What it tells Copilot to do while you build' }
-}
+const AREAS = {
+  install: { label: 'areas.install.label', about: 'areas.install.about' },
+  packages: { label: 'areas.packages.label', about: 'areas.packages.about' },
+  network: { label: 'areas.network.label', about: 'areas.network.about' },
+  hidden: { label: 'areas.hidden.label', about: 'areas.hidden.about' },
+  system: { label: 'areas.system.label', about: 'areas.system.about' },
+  agents: { label: 'areas.agents.label', about: 'areas.agents.about' }
+} as const satisfies Record<SecurityAreaId, { label: string; about: string }>
 
-const SEVERITY: Record<SecuritySeverity, string> = {
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
-  note: 'Note'
-}
+const SEVERITY = {
+  high: 'severity.high',
+  medium: 'severity.medium',
+  low: 'severity.low',
+  note: 'severity.note'
+} as const satisfies Record<SecuritySeverity, string>
 
 const RANK: Record<SecuritySeverity, number> = { high: 3, medium: 2, low: 1, note: 0 }
 
@@ -76,11 +77,12 @@ function counts(finding: SecurityFinding): boolean {
 
 /** What Copilot is doing right now, in a few words. */
 function liveStep(progress: SecurityProgress): string {
-  if (!progress.root) return 'Unpacking it, without running anything…'
-  const tool = [...progress.activity].reverse().find((t) => t.state === 'running')
+  const t = translator('security')
+  if (!progress.root) return t('live.unpacking')
+  const tool = [...progress.activity].reverse().find((call) => call.state === 'running')
   if (tool) return `${stepLabel(describeStep(tool, progress.root))}…`
-  if (progress.activity.length === 0) return 'Starting Copilot (Auto)…'
-  return 'Thinking…'
+  if (progress.activity.length === 0) return t('live.starting')
+  return t('live.thinking')
 }
 
 /** The check's headline, the line under it, and its color. */
@@ -89,6 +91,7 @@ function outcome(
   findings: SecurityFinding[],
   kind: SecurityCheckKind
 ): { tone: Tone; title: string; sub: string } {
+  const t = translator('security')
   const tone: Tone =
     report.verdict === 'danger' ? 'danger' : report.verdict === 'caution' ? 'caution' : 'clear'
   const worth = findings.filter(counts).length
@@ -96,40 +99,35 @@ function outcome(
     // What it found before it stopped still counts.
     return {
       tone: tone === 'clear' ? 'idle' : tone,
-      title: 'Check stopped',
-      sub: worth
-        ? `It had found ${plural(worth, 'thing')} to look at when you stopped it.`
-        : 'It hadn’t found anything when you stopped it.'
+      title: t('outcome.stopped'),
+      sub: worth ? t('outcome.stoppedFound', { count: worth }) : t('outcome.stoppedNothing')
     }
   }
   if (!report.ok && report.files === 0) {
-    return { tone: 'idle', title: 'Fabricator couldn’t check it', sub: report.error ?? '' }
+    return { tone: 'idle', title: t('outcome.fabricatorCouldnt'), sub: report.error ?? '' }
   }
   if (!report.ok) {
     return {
       tone: tone === 'clear' ? 'idle' : tone,
-      title: 'Copilot couldn’t check it',
-      sub: worth
-        ? `Fabricator’s own checks found ${plural(worth, 'thing')} to look at.`
-        : 'Fabricator’s own checks found nothing risky, but they don’t read the code the way Copilot does.'
+      title: t('outcome.copilotCouldnt'),
+      sub: worth ? t('outcome.ownChecksFound', { count: worth }) : t('outcome.ownChecksNothing')
     }
   }
   const serious = findings.filter((f) => f.severity === 'high').length
   if (tone === 'danger') {
-    const title = serious
-      ? `Found ${plural(serious, 'serious risk')}`
-      : 'Copilot advises against it'
+    const title = serious ? t('outcome.serious', { count: serious }) : t('outcome.advisesAgainst')
     return { tone, title, sub: report.summary }
   }
   if (tone === 'caution') {
-    const title = worth ? `Found ${plural(worth, 'thing')} to look at` : 'Worth a look first'
+    const title = worth ? t('outcome.found', { count: worth }) : t('outcome.worthALook')
     return { tone, title, sub: report.summary }
   }
-  const goAhead = kind === 'project' ? 'import it' : 'install it'
   return {
     tone,
-    title: 'No security risks found',
-    sub: report.summary || `Nothing in it looks risky to ${goAhead}.`
+    title: t('outcome.clear'),
+    sub:
+      report.summary ||
+      (kind === 'project' ? t('outcome.clearToImport') : t('outcome.clearToInstall'))
   }
 }
 
@@ -163,8 +161,9 @@ function AreaStrip({
   findings: SecurityFinding[]
   phase: SecurityCheck['state']['phase']
 }): JSX.Element {
+  const { t } = useTranslation('security')
   return (
-    <ul className="sec-areas" aria-label="What it checks">
+    <ul className="sec-areas" aria-label={t('strip.label')}>
       {areas.map((area) => {
         const found = findings.filter((f) => f.area === area && counts(f))
         const worst = found.reduce<SecuritySeverity>(
@@ -184,21 +183,22 @@ function AreaStrip({
                   ? 'waiting'
                   : 'skipped'
         const said = found.length
-          ? plural(found.length, 'thing') + ' to look at'
+          ? t('strip.found', { count: found.length })
           : status === 'clear'
-            ? 'nothing risky'
+            ? t('strip.clear')
             : status === 'medium'
-              ? 'worth a look'
+              ? t('strip.medium')
               : status === 'waiting'
-                ? 'not checked yet'
+                ? t('strip.waiting')
                 : status === 'skipped'
-                  ? 'not checked'
+                  ? t('strip.skipped')
                   : null
-        const tip = [AREAS[area].about, result?.note].filter(Boolean).join('. ')
+        const about = t(AREAS[area].about)
+        const tip = result?.note ? t('strip.tip', { about, note: result.note }) : about
         return (
           <li key={area} className={`sec-area sec-area--${status}`} title={tip}>
             <span className="sec-area-dot" aria-hidden="true" />
-            <span className="sec-area-name">{AREAS[area].label}</span>
+            <span className="sec-area-name">{t(AREAS[area].label)}</span>
             {found.length > 0 && (
               <span className="sec-area-count" aria-hidden="true">
                 {found.length}
@@ -221,6 +221,7 @@ function FindingRow({
   open: boolean
   onToggle: () => void
 }): JSX.Element {
+  const { t } = useTranslation('security')
   const fullWhere = finding.file ? `${finding.file}${finding.line ? `:${finding.line}` : ''}` : ''
   // Under the title there's room for most paths whole; a long one reads best by its file's name.
   const where =
@@ -244,7 +245,7 @@ function FindingRow({
         onClick={onToggle}
       >
         <span className="sec-sev" aria-hidden="true" />
-        <span className="sr-only">{SEVERITY[finding.severity]}: </span>
+        <span className="sr-only">{t(SEVERITY[finding.severity])}: </span>
         <span className="sec-finding-text">
           <span className="sec-finding-title">{finding.title}</span>
           {where && (
@@ -254,7 +255,7 @@ function FindingRow({
           )}
         </span>
         <span className="sec-finding-level" aria-hidden="true">
-          {SEVERITY[finding.severity]}
+          {t(SEVERITY[finding.severity])}
         </span>
         <ChevronRightIcon className="sec-finding-caret" />
       </button>
@@ -265,7 +266,7 @@ function FindingRow({
           </p>
           {finding.assessment && (
             <p>
-              <span className="sec-label">Copilot read it:</span>{' '}
+              <span className="sec-label">{t('finding.assessment')}</span>{' '}
               <CodeText text={finding.assessment} />
             </p>
           )}
@@ -280,7 +281,7 @@ function FindingRow({
           )}
           {finding.places && finding.places.length > 0 && (
             <p className="sec-finding-places">
-              Also in{' '}
+              {t('finding.alsoIn')}{' '}
               {finding.places.map((place, i) => (
                 <span key={place}>
                   {i > 0 && ', '}
@@ -291,14 +292,13 @@ function FindingRow({
           )}
           {finding.advice && (
             <p>
-              <span className="sec-label">What to do:</span> <CodeText text={finding.advice} />
+              <span className="sec-label">{t('finding.advice')}</span>{' '}
+              <CodeText text={finding.advice} />
             </p>
           )}
           <p className="sec-finding-source">
-            {SEVERITY[finding.severity]} ·{' '}
-            {finding.source === 'fabricator'
-              ? 'Found by Fabricator’s own checks'
-              : 'Found by Copilot, quoted from the file'}
+            {t(SEVERITY[finding.severity])} ·{' '}
+            {finding.source === 'fabricator' ? t('finding.byFabricator') : t('finding.byCopilot')}
             {fullWhere && ` · ${fullWhere}`}
           </p>
         </div>
@@ -309,6 +309,7 @@ function FindingRow({
 
 /** What Copilot read and searched, newest at the bottom; follows new steps unless you scroll up. */
 function Steps({ tools, root }: { tools: ChatToolCall[]; root: string }): JSX.Element {
+  const { t } = useTranslation('security')
   const ref = useRef<HTMLDivElement>(null)
   const follow = useRef(true)
   useEffect(() => reveal(ref.current), [])
@@ -321,7 +322,7 @@ function Steps({ tools, root }: { tools: ChatToolCall[]; root: string }): JSX.El
       className="sec-steps"
       ref={ref}
       role="log"
-      aria-label="What Copilot read"
+      aria-label={t('steps.label')}
       onScroll={(e) => {
         const el = e.currentTarget
         follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24
@@ -352,6 +353,7 @@ interface Props {
  * it; then the verdict, with each finding's evidence and what to do about it.
  */
 export default function SecurityCheckPanel({ check, kind, disabled = false }: Props): JSX.Element {
+  const { t } = useTranslation('security')
   const { state } = check
   const running = state.phase === 'running'
   const startedAt = state.phase === 'idle' ? 0 : state.progress.startedAt
@@ -378,18 +380,15 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
 
   if (state.phase === 'idle') {
     return (
-      <section className="sec" aria-label="Security check">
+      <section className="sec" aria-label={t('panel.label')}>
         <div className="sec-head">
           <Mark tone={null} />
           <div className="sec-head-text">
-            <strong className="sec-title">Check for security risks</strong>
-            <span className="sec-sub">
-              Copilot reads its code, without running any of it, and tells you what it could do on
-              this computer.
-            </span>
+            <strong className="sec-title">{t('panel.title')}</strong>
+            <span className="sec-sub">{t('panel.sub')}</span>
           </div>
           <button type="button" className="btn btn--sm" disabled={disabled} onClick={check.start}>
-            <Codicon name="sparkle" /> Check
+            <Codicon name="sparkle" /> {t('panel.check')}
           </button>
         </div>
         <AreaStrip areas={areasFor(kind)} results={{}} findings={[]} phase="idle" />
@@ -403,26 +402,27 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
     : progress.results
   const told = report
     ? outcome(report, findings, kind)
-    : { tone: 'running' as Tone, title: 'Checking for security risks…', sub: liveStep(progress) }
+    : { tone: 'running' as Tone, title: t('panel.checking'), sub: liveStep(progress) }
   const problem =
     report && !report.cancelled && report.error && (report.ok || report.files > 0)
       ? report.partial
-        ? `Some areas weren’t checked: ${report.error}`
+        ? t('panel.partial', { error: report.error })
         : report.error
       : null
   const root = progress.root
   const steps = progress.activity
   const files = report?.files || progress.files
+  const fileCount = files ? ` · ${t('meta.files', { count: files })}` : ''
   const about = report?.ok
-    ? `Checked by Copilot (Auto)${files ? ` · ${plural(files, 'file')}` : ''} · ${formatTurnDuration(report.durationMs)}`
+    ? `${t('meta.checkedBy')}${fileCount} · ${formatTurnDuration(report.durationMs)}`
     : running
-      ? `Copilot (Auto)${files ? ` · ${plural(files, 'file')}` : ''}`
+      ? `${t('meta.running')}${fileCount}`
       : null
 
   return (
     <section
       className={`sec sec--${told.tone}`}
-      aria-label="Security check"
+      aria-label={t('panel.label')}
       aria-busy={running || undefined}
     >
       <div className="sec-head">
@@ -440,7 +440,7 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
         </div>
         {running && (
           <>
-            <span className="sec-clock" aria-label="Elapsed time">
+            <span className="sec-clock" aria-label={t('panel.elapsed')}>
               {clock(now - progress.startedAt)}
             </span>
             <button
@@ -449,7 +449,7 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
               className="btn btn--sm btn--ghost"
               onClick={check.stop}
             >
-              <Codicon name="debug-stop" /> Stop
+              <Codicon name="debug-stop" /> {t('actions.stop')}
             </button>
           </>
         )}
@@ -472,7 +472,7 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
       )}
 
       {findings.length > 0 && (
-        <ul className="sec-findings" aria-label="What it found">
+        <ul className="sec-findings" aria-label={t('panel.found')}>
           {findings.map((finding) => (
             <FindingRow
               key={finding.id}
@@ -495,7 +495,7 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
                 aria-expanded={showSteps}
                 onClick={() => setShowSteps((open) => !open)}
               >
-                <Codicon name="list-unordered" /> {plural(steps.length, 'step')}
+                <Codicon name="list-unordered" /> {t('panel.steps', { count: steps.length })}
                 <ChevronRightIcon className="sec-action-caret" />
               </button>
             )}
@@ -506,7 +506,7 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
                 disabled={disabled}
                 onClick={check.start}
               >
-                <Codicon name="refresh" /> Check again
+                <Codicon name="refresh" /> {t('panel.checkAgain')}
               </button>
             )}
           </span>

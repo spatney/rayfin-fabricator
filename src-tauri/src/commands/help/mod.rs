@@ -349,8 +349,8 @@ impl Answer {
           .and_then(Value::as_str)
           .map(str::trim)
           .filter(|s| !s.is_empty())
-          .unwrap_or("Copilot reported an error.");
-        self.errored = Some(msg.to_string());
+          .map_or_else(|| t!("assist.common.copilotError"), str::to_string);
+        self.errored = Some(msg);
         None
       }
       _ => None,
@@ -528,10 +528,10 @@ pub async fn help_ask(
     request;
   let question = question.trim().to_string();
   if question.is_empty() {
-    return Err("Type a question first.".to_string());
+    return Err(t!("assist.help.emptyQuestion"));
   }
   if question.chars().count() > MAX_QUESTION {
-    return Err("That question is too long. Attach the file instead of pasting it.".to_string());
+    return Err(t!("assist.help.questionTooLong"));
   }
 
   let attachments: Vec<String> =
@@ -676,13 +676,9 @@ async fn run_turn(
   let text = answer.text.trim().to_string();
   match end {
     DrainEnd::Cancelled => Err(STOPPED.to_string()),
-    DrainEnd::TimedOut if text.is_empty() => {
-      Err("That took too long. Try asking something more specific.".to_string())
-    }
-    DrainEnd::Closed if text.is_empty() => {
-      Err("The connection to Copilot closed before an answer arrived. Try again.".to_string())
-    }
-    _ if text.is_empty() => Err("No answer came back. Try again.".to_string()),
+    DrainEnd::TimedOut if text.is_empty() => Err(t!("assist.help.tookTooLong")),
+    DrainEnd::Closed if text.is_empty() => Err(t!("assist.help.connectionClosed")),
+    _ if text.is_empty() => Err(t!("assist.help.noAnswer")),
     _ => {
       let held = artifacts.lock().unwrap();
       Ok(HelpAnswer {
@@ -700,13 +696,11 @@ async fn run_turn(
 fn friendly_send_error(raw: &str) -> String {
   let lower = raw.to_ascii_lowercase();
   if lower.contains("sign in") || lower.contains("authenticat") || lower.contains("unauthor") {
-    "You need to be signed in to GitHub Copilot to use Help. Open the account menu in the app bar \
-and sign in, then ask again."
-      .to_string()
+    t!("assist.help.signInRequired")
   } else if lower.contains("quota") || lower.contains("rate limit") {
-    "Your Copilot quota is used up right now, so Help can't answer. Try again later.".to_string()
+    t!("assist.help.quotaUsed")
   } else {
-    format!("Help couldn't reach Copilot: {raw}")
+    t!("assist.help.cantReachCopilot", error = raw)
   }
 }
 

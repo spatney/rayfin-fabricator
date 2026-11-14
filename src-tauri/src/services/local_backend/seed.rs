@@ -25,8 +25,8 @@ pub async fn save(control: &ControlClient, project: &Path) -> Result<LocalSeedSa
   if export.data.is_empty() && export.storage.is_empty() {
     return Err(error(
       "nothing-to-save",
-      "The app's local data is empty, so there's nothing to save as seed data.",
-      Some("Add data with the app in the preview, then save it."),
+      t!("services.localBackend.seedEmpty"),
+      Some(&t!("services.localBackend.seedEmptyHint")),
     ));
   }
   let seed = project.join("rayfin").join("seed");
@@ -79,8 +79,8 @@ async fn write(path: &Path, bytes: Vec<u8>) -> Result<(), LocalCommandError> {
   let failed = |e: std::io::Error| {
     error(
       "save-failed",
-      format!("Couldn't write {}: {e}", path.display()),
-      Some("Check that the project's folder can be written to, then save again."),
+      t!("services.localBackend.seedWriteFailed", path = path.display(), error = e),
+      Some(&t!("services.localBackend.seedWriteFailedHint")),
     )
   };
   if let Some(parent) = path.parent() {
@@ -100,8 +100,8 @@ fn relative(path: &str) -> Result<PathBuf, LocalCommandError> {
     if !plain {
       return Err(error(
         "save-failed",
-        format!("Fabricator can't save the seed file {path:?}: its name can't be a file's name here."),
-        Some("Rename or delete the stored file with that name, then save again."),
+        t!("services.localBackend.seedBadName", name = format!("{path:?}")),
+        Some(&t!("services.localBackend.seedBadNameHint")),
       ));
     }
     relative.push(name);
@@ -141,8 +141,8 @@ fn swap_with(
       }
       return Err(error(
         "save-failed",
-        format!("Couldn't replace rayfin/seed/{part}: {e}"),
-        Some("Close any program that has its files open, then save again."),
+        t!("services.localBackend.seedReplaceFailed", part = part, error = e),
+        Some(&t!("services.localBackend.seedReplaceFailedHint")),
       ));
     }
   }

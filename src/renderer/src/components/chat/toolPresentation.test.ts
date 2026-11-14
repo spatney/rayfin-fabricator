@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { ChatToolCall } from '@shared/ipc'
+import { setLanguage } from '../../i18n'
 import {
   describeStep,
   isHiddenTool,
@@ -253,5 +254,23 @@ describe('summarizeKinds', () => {
       'Ran 2 searches',
       'Read 1 web page'
     ])
+  })
+})
+
+describe('in other languages', () => {
+  afterEach(async () => {
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('pluralizes header counts and labels steps in the interface language', async () => {
+    await setLanguage('de')
+    const tools = [tool('view', 'a'), tool('view', 'b'), tool('powershell', 'x')]
+    expect(summarizeKinds(tools).map((k) => k.label)).toEqual([
+      '2 Dateien gelesen',
+      '1 Befehl ausgeführt'
+    ])
+    const chart = tool('chart-generate_bar_chart', 'generate_bar_chart', { server: 'Charts' })
+    expect(stepLabel(describeStep(chart, ROOT))).toBe('Verwendet: generate_bar_chart von Charts')
   })
 })

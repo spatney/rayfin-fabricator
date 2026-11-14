@@ -1,0 +1,321 @@
+{
+  "localState": {
+    "starting": "Wird gestartet…",
+    "restarting": "Wird neu gestartet…",
+    "running": "Läuft",
+    "stopped": "Beendet",
+    "runningProblems_one": "Läuft · 1 Problem",
+    "runningProblems_other": "Läuft · {{count}} Probleme"
+  },
+  "runningProblem": {
+    "analysis": "Die letzte Änderung am Datenmodell deiner App konnte nicht gelesen werden, daher verwendet sie weiterhin das vorherige Datenmodell.",
+    "schema": "Die letzte Änderung am Datenmodell deiner App konnte nicht auf ihre lokale Datenbank angewendet werden, daher verwendet sie weiterhin die vorherige.",
+    "functions": "Die Funktionen deiner App konnten nicht erstellt werden, daher schlagen Aufrufe fehl oder führen den vorherigen Build aus.",
+    "vite": "Der Vite-Entwicklungsserver deiner App wurde beendet und konnte nicht neu starten, daher kann die Vorschau sie nicht anzeigen."
+  },
+  "fallback": {
+    "published": {
+      "newerVersion": "Diese App verwendet Rayfin {{version}}, das neuer ist als die Rayfin-Versionen, die Fabricator auf diesem Computer ausführt, und hier nicht starten konnte, daher verwendet die Vorschau das Back-End deiner veröffentlichten App.",
+      "newer": "Die neuere Rayfin-Version dieser App konnte auf diesem Computer nicht starten, daher verwendet die Vorschau das Back-End deiner veröffentlichten App.",
+      "oldVersion": "Diese App verwendet Rayfin {{version}}, das Fabricator auf diesem Computer nicht ausführen kann, daher verwendet die Vorschau das Back-End deiner veröffentlichten App.",
+      "old": "Die Rayfin-Version dieser App kann auf diesem Computer nicht ausgeführt werden, daher verwendet die Vorschau das Back-End deiner veröffentlichten App.",
+      "connector": "Der Connector {{name}} läuft nur auf Fabric, daher verwendet die Vorschau das Back-End deiner veröffentlichten App.",
+      "connectors": "Die Connectors {{names}} laufen nur auf Fabric, daher verwendet die Vorschau das Back-End deiner veröffentlichten App."
+    },
+    "team": {
+      "newerVersion": "Diese App verwendet Rayfin {{version}}, das neuer ist als die Rayfin-Versionen, die Fabricator auf diesem Computer ausführt, und hier nicht starten konnte, daher verwendet die Vorschau die Bereitstellung des Teams in Fabric.",
+      "newer": "Die neuere Rayfin-Version dieser App konnte auf diesem Computer nicht starten, daher verwendet die Vorschau die Bereitstellung des Teams in Fabric.",
+      "oldVersion": "Diese App verwendet Rayfin {{version}}, das Fabricator auf diesem Computer nicht ausführen kann, daher verwendet die Vorschau die Bereitstellung des Teams in Fabric.",
+      "old": "Die Rayfin-Version dieser App kann auf diesem Computer nicht ausgeführt werden, daher verwendet die Vorschau die Bereitstellung des Teams in Fabric.",
+      "connector": "Der Connector {{name}} läuft nur auf Fabric, daher verwendet die Vorschau die Bereitstellung des Teams in Fabric.",
+      "connectors": "Die Connectors {{names}} laufen nur auf Fabric, daher verwendet die Vorschau die Bereitstellung des Teams in Fabric."
+    }
+  },
+  "sdkWarning": {
+    "newerVersion": "Diese App verwendet Rayfin {{version}}, das neuer ist als die Rayfin-Versionen, die Fabricator auf diesem Computer ausführt, daher funktioniert manches möglicherweise nicht wie erwartet.",
+    "newer": "Diese App verwendet eine neuere Rayfin-Version als die, die Fabricator auf diesem Computer ausführt, daher funktioniert manches möglicherweise nicht wie erwartet.",
+    "olderVersion": "Diese App verwendet Rayfin {{version}}, das nicht zu den Rayfin-Versionen gehört, die Fabricator auf diesem Computer ausführt, daher funktioniert manches möglicherweise nicht wie erwartet.",
+    "older": "Die Rayfin-Version dieser App gehört nicht zu denen, die Fabricator auf diesem Computer ausführt, daher funktioniert manches möglicherweise nicht wie erwartet."
+  },
+  "problem": {
+    "couldntStart": "Deine App konnte auf diesem Computer nicht starten",
+    "stopped": "Ihr lokales Back-End wurde beendet.",
+    "schemaRefused": {
+      "title": "Diese Änderung würde lokale Daten löschen",
+      "message": "Das Datenmodell wurde so geändert, dass auf diesem Computer gespeicherte Daten gelöscht werden, daher wartet deine App auf deine Entscheidung."
+    },
+    "packagesMissing": {
+      "title": "Die Pakete deiner App sind nicht installiert",
+      "hint": "Installiere sie, dann startet Fabricator deine App neu."
+    },
+    "nodeMissing": {
+      "title": "Node.js ist nicht installiert",
+      "message": "Deine App läuft mit Node.js, und Fabricator konnte es auf diesem Computer nicht finden.",
+      "hint": "Richte es ein und versuche es dann erneut."
+    },
+    "nodeTooOld": {
+      "title": "Node.js muss aktualisiert werden",
+      "messageVersion": "Deine App benötigt Node.js 20 oder höher, und auf diesem Computer ist {{version}} installiert.",
+      "message": "Deine App benötigt Node.js 20 oder höher.",
+      "hint": "Aktualisiere es und versuche es dann erneut."
+    },
+    "alreadyServing": {
+      "title": "Diese App wird bereits ausgeführt",
+      "messagePid": "Ein anderes Programm führt diese App auf diesem Computer aus (Prozess {{pid}}), etwa rayfin-local in einem Terminal.",
+      "message": "Ein anderes Programm führt diese App auf diesem Computer aus, etwa rayfin-local in einem Terminal.",
+      "hint": "Beende es, dann führt Fabricator deine App hier aus."
+    },
+    "crashed": "Deine App wird immer wieder beendet"
+  },
+  "starting": {
+    "restarted": "Sie wurde unerwartet beendet, daher startet Fabricator sie neu.",
+    "analysis": "Datenmodell deiner App wird gelesen",
+    "schema": "Datenbank wird aktualisiert",
+    "functions": "Funktionen werden erstellt",
+    "vite": "Entwicklungsserver wird gestartet",
+    "restarting": "Wird auf diesem Computer neu gestartet",
+    "starting": "Wird auf diesem Computer vorbereitet"
+  },
+  "seed": {
+    "row": "Zeile {{row}}",
+    "label": "Seed-Daten",
+    "problems_one": "Die Seed-Daten weisen {{count, number}} Problem auf und wurden daher nicht geladen.",
+    "problems_other": "Die Seed-Daten weisen {{count, number}} Probleme auf und wurden daher nicht geladen.",
+    "fixRequest": "Behebe die Probleme in den Seed-Daten",
+    "fix": "Mit Copilot beheben",
+    "offer": "<b>Diese App enthält Seed-Daten</b> ({{amount}}). Die lokalen Daten der App sind leer: Lade die Seed-Daten, um damit zu beginnen.",
+    "offerEmpty": "<b>Diese App enthält Seed-Daten</b>. Die lokalen Daten der App sind leer: Lade die Seed-Daten, um damit zu beginnen.",
+    "rows_one": "{{count, number}} Zeile",
+    "rows_other": "{{count, number}} Zeilen",
+    "files_one": "{{count, number}} Datei",
+    "files_other": "{{count, number}} Dateien",
+    "rowsAndFiles": "{{rows}} und {{files}}",
+    "load": "Seed-Daten laden"
+  },
+  "notes": {
+    "backend": "Vorschau-Back-End",
+    "rayfinVersion": "Rayfin-Version",
+    "schemaWaiting": "Ausstehende Änderung am Datenmodell",
+    "schemaWaitingText": "<b>Eine Änderung am Datenmodell steht aus.</b> Sie würde auf diesem Computer gespeicherte Daten löschen, daher verwendet deine App weiterhin das vorherige Datenmodell."
+  },
+  "output": {
+    "running": "Deine App läuft auf diesem Computer, mit eigenem Back-End und eigenen Daten.",
+    "starting": "Deine App wird auf diesem Computer gestartet.",
+    "couldntStart": "Deine App konnte auf diesem Computer nicht starten.",
+    "notRunning": "Deine App läuft nicht auf diesem Computer.",
+    "problems_one": "1 Problem",
+    "problems_other": "{{count}} Probleme",
+    "label": "Ausgabe: {{state}}",
+    "show": "{{explanation}} Zum Anzeigen der Ausgabe auswählen.",
+    "hide": "{{explanation}} Zum Ausblenden der Ausgabe auswählen."
+  },
+  "info": {
+    "label": "Über „Lokal“ und „Veröffentlicht“",
+    "freshTitle": "{{name}} läuft jetzt auf diesem Computer, mit eigenen Daten. Auswählen, um mehr zu erfahren.",
+    "title": "{{name}} läuft an zwei Orten",
+    "local": "<b>Lokal</b> ist deine App auf diesem Computer, mit eigenen Daten, getrennt von denen der veröffentlichten App. Änderungen von Copilot erscheinen zuerst hier.",
+    "localEmpty": "<b>Lokal</b> ist deine App auf diesem Computer, mit eigenen Daten, getrennt von denen der veröffentlichten App. Diese Daten sind anfangs leer. Änderungen von Copilot erscheinen zuerst hier.",
+    "publishedTeam": "<b>Veröffentlicht</b> ist die App, die dein Team auf Microsoft Fabric verwendet, mit ihren Daten. Deine Änderungen erreichen sie, wenn du sie veröffentlichst.",
+    "published": "<b>Veröffentlicht</b> ist deine App auf Microsoft Fabric, mit ihren Daten. Deine Änderungen erreichen sie, wenn du sie veröffentlichst."
+  },
+  "statePanel": {
+    "viewOutput": "Ausgabe anzeigen",
+    "noPages": "{{name}} hat keine Seiten zum Anzeigen. Das Back-End läuft unter {{url}}.",
+    "notRunning": "{{name}} läuft nicht auf diesem Computer.",
+    "start": "Starten",
+    "starting": "Wird gestartet…",
+    "installing": "Wird installiert…",
+    "install": "Abhängigkeiten installieren",
+    "stopping": "Wird beendet…",
+    "stopOther": "Das andere beenden",
+    "setUpNode": "Node.js einrichten",
+    "allowHelp": "Erfahren, wie du es zulässt",
+    "whyTitle": "Öffnet die Hilfe, die liest, was passiert ist, und es erklärt",
+    "why": "Ursache herausfinden"
+  },
+  "schema": {
+    "title": "Diese Änderung würde lokale Daten löschen",
+    "lead": "Das Datenmodell von <b>{{name}}</b> wurde geändert. Wenn du die Änderung anwendest, werden diese auf diesem Computer gespeicherten Daten gelöscht:",
+    "deletes": "Daten, die die Änderung löscht",
+    "unknown": "Es ist nicht bekannt, welche Daten gelöscht werden.",
+    "choices": {
+      "default": "<b>Diese Daten löschen und anwenden</b> löscht nur, was aufgelistet ist. <b>Lokale Daten zurücksetzen</b> löscht alle lokalen Daten der App, ihre Testbenutzer und Dateien, und wendet dann die Änderung an. <b>Aktuelle Version beibehalten</b> behält deine Daten und das Datenmodell, das du jetzt hast.",
+      "atStart": "<b>Diese Daten löschen und anwenden</b> löscht nur, was aufgelistet ist. <b>Lokale Daten zurücksetzen</b> löscht alle lokalen Daten der App, ihre Testbenutzer und Dateien, und wendet dann die Änderung an. <b>Aktuelle Version beibehalten</b> behält deine Daten und das Datenmodell, das du jetzt hast, und die App startet erst, wenn du dich entscheidest.",
+      "published": "<b>Diese Daten löschen und anwenden</b> löscht nur, was aufgelistet ist. <b>Lokale Daten zurücksetzen</b> löscht alle lokalen Daten der App, ihre Testbenutzer und Dateien, und wendet dann die Änderung an. <b>Aktuelle Version beibehalten</b> behält deine Daten und das Datenmodell, das du jetzt hast. Deine veröffentlichte App und ihre Daten sind nicht betroffen.",
+      "atStartPublished": "<b>Diese Daten löschen und anwenden</b> löscht nur, was aufgelistet ist. <b>Lokale Daten zurücksetzen</b> löscht alle lokalen Daten der App, ihre Testbenutzer und Dateien, und wendet dann die Änderung an. <b>Aktuelle Version beibehalten</b> behält deine Daten und das Datenmodell, das du jetzt hast, und die App startet erst, wenn du dich entscheidest. Deine veröffentlichte App und ihre Daten sind nicht betroffen."
+    },
+    "keep": "Aktuelle Version beibehalten",
+    "resetting": "Wird zurückgesetzt…",
+    "reset": "Lokale Daten zurücksetzen",
+    "applying": "Wird angewendet…",
+    "apply": "Diese Daten löschen und anwenden",
+    "review": "Änderung prüfen"
+  },
+  "rayfinWarning": {
+    "prerelease": "Es ist noch nicht die neueste Version von Rayfin und könnte daher instabil sein.",
+    "unsupported": "Fabricator führt sie auf diesem Computer noch nicht aus, daher funktionieren hier manche Dinge möglicherweise nicht wie erwartet."
+  },
+  "devices": {
+    "desktop": "Desktop",
+    "tablet": "Tablet",
+    "phone": "Smartphone"
+  },
+  "port": {
+    "anApp": "einer App",
+    "holder": {
+      "backend": "<b>{{name}}</b>, eine andere App, die auf diesem Computer läuft, verwendet sie.",
+      "preview": "Die Live-Vorschau von <b>{{name}}</b> verwendet sie, während Copilot an dieser App arbeitet.",
+      "earlierPreview": "Eine frühere Vorschau von <b>{{name}}</b> läuft noch und verwendet sie.",
+      "appPreview": "Eine Vorschau von <b>{{name}}</b> verwendet sie.",
+      "devServerFor": "Ein Entwicklungsserver für <b>{{name}}</b> verwendet sie.",
+      "devServer": "Ein Entwicklungsserver verwendet sie.",
+      "program": "<b>{{name}}</b>, ein anderes Programm auf diesem Computer, verwendet sie.",
+      "unknown": "Ein anderes Programm auf diesem Computer verwendet sie, und Fabricator kann nicht erkennen, welches."
+    },
+    "stop": {
+      "named": "{{name}} beenden",
+      "appWorking": "Copilot arbeitet gerade an {{name}}. Die App startet wieder, wenn du sie öffnest.",
+      "appIdle": "Die App startet wieder, wenn du sie öffnest.",
+      "earlierPreview": "Frühere Vorschau beenden",
+      "preview": "Diese Vorschau beenden",
+      "previewDetail": "Es geht nichts verloren: Es ist nur eine Vorschau.",
+      "devServer": "Entwicklungsserver beenden",
+      "devServerDetail": "Es geht nichts verloren: Du kannst ihn später wieder starten.",
+      "programDetail": "Alles, was in {{name}} nicht gespeichert ist, geht verloren.",
+      "unknown": "Dieses Programm beenden",
+      "unknownDetail": "Alles, was darin nicht gespeichert ist, geht verloren."
+    },
+    "recommended": "Empfohlen",
+    "stopping": "Wird beendet…",
+    "use": "Stattdessen localhost:{{port}} verwenden",
+    "useDetailPush": "Fügt sie den Anmeldeeinstellungen deiner App hinzu und aktualisiert diese in Fabric. Dauert einen Moment.",
+    "useDetail": "Fügt sie den Anmeldeeinstellungen deiner App hinzu. Die Anmeldung akzeptiert sie, sobald du veröffentlichst.",
+    "updatingSignIn": "Anmeldeeinstellungen werden aktualisiert…",
+    "updatingYml": "rayfin.yml wird aktualisiert…",
+    "title": "Deine Live-Vorschau benötigt localhost:{{port}}",
+    "sub": "Das ist die Adresse, die die Anmeldung deiner App akzeptiert.",
+    "useLater": "Wenn du stattdessen localhost:{{port}} verwendest, werden die Anmeldeeinstellungen deiner App in Fabric aktualisiert. Das ist nicht möglich, während Copilot arbeitet. Überspringe den Schritt vorerst, um die Adresse mit deiner nächsten Nachricht auszuwählen.",
+    "log": "Protokoll der Portregistrierung",
+    "technical": "Technische Details",
+    "program": "Programm",
+    "command": "Befehl",
+    "process": "{{name}} (PID {{pid}})",
+    "skip": "Live-Vorschau überspringen",
+    "skipTitle": "Copilot arbeitet weiter, und die Vorschau zeigt deine veröffentlichte App."
+  },
+  "previewAs": {
+    "title": "Vorschau als",
+    "label": "Vorschau als: {{label}}",
+    "sub": "Wer in der App auf diesem Computer angemeldet ist",
+    "you": "Du",
+    "youTip": "Dein Microsoft Entra-Konto, wenn du bei Azure angemeldet bist, andernfalls ein lokales Entwicklerkonto",
+    "signedOut": "Abgemeldet",
+    "noOne": "Niemand ist angemeldet",
+    "testUser": "Testbenutzer",
+    "testUsers": "Testbenutzer",
+    "whoTitle": {
+      "you": "Die Vorschau ist mit deinem Konto angemeldet. Wähle aus, wer in der Vorschau angemeldet ist.",
+      "signedOut": "Die Vorschau ist nicht angemeldet. Wähle aus, wer in der Vorschau angemeldet ist.",
+      "user": "Die Vorschau ist als {{name}} angemeldet. Wähle aus, wer in der Vorschau angemeldet ist."
+    },
+    "chooseTitle": "Wähle aus, wer in der App in der Vorschau angemeldet ist.",
+    "couldntSwitch": "Der in der Vorschau angemeldete Benutzer konnte nicht gewechselt werden: {{message}}",
+    "reload": {
+      "you": "Lade die Vorschau neu, um die App mit deinem Konto zu sehen.",
+      "signedOut": "Lade die Vorschau neu, um die App abgemeldet zu sehen.",
+      "user": "Lade die Vorschau neu, um die App als {{name}} zu sehen."
+    },
+    "progress": {
+      "reloading": "Vorschau wird neu geladen…",
+      "signingOut": "Wird abgemeldet…",
+      "adding": "{{name}} wird hinzugefügt…",
+      "signingInYou": "Wird mit deinem Konto angemeldet…",
+      "signingIn": "Wird als {{name}} angemeldet…"
+    },
+    "account": {
+      "unknown": "Dein Microsoft Entra-Konto oder ein lokales Konto",
+      "entra": "{{name}} · Microsoft Entra ID",
+      "local": "{{name}} · lokales Konto"
+    },
+    "email": {
+      "label": "E-Mail-Adresse des Testbenutzers",
+      "empty": "Gib eine E-Mail-Adresse ein.",
+      "invalid": "Gib eine E-Mail-Adresse ein, z. B. ana@example.com.",
+      "yours": "Das ist dein eigenes Konto. Wähle stattdessen „Du“.",
+      "exists": "{{name}} ist bereits ein Testbenutzer."
+    },
+    "addUser": "Testbenutzer hinzufügen…",
+    "addForm": "Testbenutzer hinzufügen",
+    "adding": "Wird hinzugefügt…",
+    "hint": "Testbenutzer haben kein Kennwort: Sie melden sich hier über „Vorschau als“ an.",
+    "note": "Beim Wechseln wird der Browserspeicher der Vorschau gelöscht und die Vorschau neu geladen."
+  },
+  "pane": {
+    "status": {
+      "publishing": "Wird veröffentlicht…",
+      "published": "Veröffentlicht",
+      "failed": "Veröffentlichung fehlgeschlagen",
+      "notPublished": "Nicht veröffentlicht",
+      "updating": "Veröffentlicht · wird aktualisiert",
+      "title": "Die veröffentlichte App wird angezeigt: das, was alle im Team sehen."
+    },
+    "fabric": {
+      "unavailable": "Die Fabric-Portalansicht ist für diese veröffentlichte App nicht verfügbar",
+      "local": "Die Fabric-Portalansicht zeigt deine veröffentlichte App, nicht diese Vorschau auf deinem Computer",
+      "exit": "Anzeige in der Fabric-Portalshell – klicke, um zur direkten App-Ansicht zurückzukehren",
+      "enter": "App in der Fabric-Portalshell anzeigen, wo sie vollständig funktioniert"
+    },
+    "forward": "Vorwärts",
+    "reload": "Neu laden",
+    "views": {
+      "label": "Anzuzeigende App",
+      "local": "Lokal",
+      "localTitle": "Deine App auf diesem Computer, mit ihren lokalen Daten",
+      "published": "Veröffentlicht",
+      "publishedTitle": "Deine veröffentlichte App in Microsoft Fabric, mit ihren Daten"
+    },
+    "data": {
+      "published": "Veröffentlichte Daten",
+      "publishedTitle": "Hier werden die Daten der veröffentlichten App verwendet, daher wirken sich deine Änderungen auf echte Daten aus.",
+      "none": "Noch keine Daten",
+      "noneTitle": "Es ist noch nichts veröffentlicht, daher läuft die App ohne Daten."
+    },
+    "url": {
+      "local": "Deine App, die auf diesem Computer unter {{url}} läuft, mit eigenem Back-End und lokalen Daten: Die Änderungen von Copilot werden hier angezeigt, während Copilot sie vornimmt. Klicke, um sie im Browser zu öffnen.",
+      "teamPublishedData": "Deine App, die auf diesem Computer unter {{url}} mit der Bereitstellung des Teams in Fabric läuft: Die Änderungen von Copilot werden hier angezeigt, während Copilot sie vornimmt. Hier werden die Daten der veröffentlichten App verwendet, daher wirken sich deine Änderungen auf echte Daten aus. Klicke, um sie im Browser zu öffnen.",
+      "teamNoData": "Deine App, die auf diesem Computer unter {{url}} mit der Bereitstellung des Teams in Fabric läuft: Die Änderungen von Copilot werden hier angezeigt, während Copilot sie vornimmt. Es ist noch nichts veröffentlicht, daher läuft die App ohne Daten. Klicke, um sie im Browser zu öffnen.",
+      "teamOwnData": "Deine App, die auf diesem Computer unter {{url}} mit der Bereitstellung des Teams in Fabric läuft: Die Änderungen von Copilot werden hier angezeigt, während Copilot sie vornimmt. Hier werden die Daten deiner Vorschau verwendet. Klicke, um sie im Browser zu öffnen.",
+      "manual": "Deine App, die auf diesem Computer unter {{url}} mit dem Back-End deiner veröffentlichten App läuft. Solange nach Chat-Durchgängen nicht veröffentlicht wird, zeigt sie deine neuesten Änderungen, wann immer die App geöffnet ist. Klicke, um sie im Browser zu öffnen.",
+      "published": "Deine App, die auf diesem Computer unter {{url}} mit dem Back-End deiner veröffentlichten App läuft, während Copilot arbeitet, sodass seine Änderungen angezeigt werden, während er sie vornimmt. Klicke, um sie im Browser zu öffnen."
+    },
+    "device": {
+      "label": "Vorschaubreite",
+      "width": "Breite: {{device}}",
+      "fixed": "{{device}} – {{width}} px breit",
+      "fill": "{{device}} – gesamten Bereich ausfüllen"
+    },
+    "pick": {
+      "publishing": "{{feature}} ist wieder verfügbar, sobald die Veröffentlichung abgeschlossen ist.",
+      "waiting": "{{feature}} funktioniert, sobald deine App hier angezeigt wird."
+    },
+    "focus": {
+      "exit": "Fokus beenden",
+      "enter": "Fokus",
+      "exitTitle": "Fokus beenden – Chat wieder anzeigen",
+      "enterTitle": "Vorschau fokussieren – Chat ausblenden"
+    },
+    "publishUnfinished": "Die Veröffentlichung wurde nicht abgeschlossen.",
+    "workspace": {
+      "title": "Veröffentlichungsziel auswählen",
+      "text": "<b>{{name}}</b> wurde noch nicht veröffentlicht. Wähle oben in der Kopfzeile <b>Veröffentlichen</b> aus, um einen Namen festzulegen und den Fabric-Arbeitsbereich auszuwählen, in dem veröffentlicht werden soll."
+    },
+    "empty": {
+      "teamFailed": "Die Team-Pipeline konnte diese Version nicht veröffentlichen. Öffne das Teammenü in der Kopfzeile, um zu sehen, was passiert ist.",
+      "region": "Wähle einen Arbeitsbereich auf einer Kapazität in einer anderen Region aus, und veröffentliche dann erneut.",
+      "failed": "Prüfe den Fehler und die Protokolle oben, und veröffentliche dann erneut, um es noch einmal zu versuchen.",
+      "team": "Die veröffentlichte App wird hier angezeigt, sobald dein Team sie veröffentlicht.",
+      "local": "Deine veröffentlichte App wird hier angezeigt, sobald du sie veröffentlichst.",
+      "default": "Deine veröffentlichte App wird hier nach einem vollständigen <code>rayfin up</code> angezeigt. Bitte Copilot, etwas zu erstellen, oder wähle <b>Veröffentlichen</b> aus."
+    }
+  }
+}

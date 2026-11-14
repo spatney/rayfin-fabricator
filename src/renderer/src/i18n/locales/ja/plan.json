@@ -1,0 +1,69 @@
+{
+  "actionLabels": {
+    "interactive": "プランを実装",
+    "autopilot": "Autopilot で実行",
+    "autopilotFleet": "フリートで実行",
+    "exitOnly": "プランを承認"
+  },
+  "errors": {
+    "planningIncomplete": "プランの作成が完了しませんでした。",
+    "executionIncomplete": "プランの実行が完了しませんでした。"
+  },
+  "phases": {
+    "researching": "コードベースを調査しています…",
+    "clarifying": "下書きの前にいくつか質問があります",
+    "drafting": "プランを作成しています…",
+    "review": "プランのレビュー準備ができました",
+    "revising": "プランを修正しています…",
+    "executing": "プランを実行しています",
+    "completed": "プランが完了しました",
+    "failed": "プランが失敗しました",
+    "interruptedReview": "レビューが中断されました",
+    "interruptedExecution": "実行が中断されました"
+  },
+  "card": {
+    "expandProgress": "プランの進行状況を展開",
+    "executing": "プランを実行中",
+    "workingThrough": "承認されたプランを進めています",
+    "revision": "修正 {{number}} 回目",
+    "collapseProgress": "プランの進行状況を折りたたむ",
+    "collapse": "折りたたむ",
+    "progress": "プランの進行状況",
+    "stepsDone_other": "{{count}} ステップ中 {{done}} ステップ完了",
+    "now": "現在:",
+    "showFewer": "表示を減らす",
+    "showAll_other": "{{count}} ステップをすべて表示",
+    "reviewFull": "プラン全体をレビュー",
+    "continuePlanning": "プランの作成を続行",
+    "resumeRemaining": "残りの作業を再開",
+    "retryPlanning": "プランの作成を再試行"
+  },
+  "review": {
+    "copyFailed": "プランをクリップボードにコピーできませんでした。",
+    "export": "エクスポート",
+    "otherActions": "その他のプラン操作",
+    "moreOptions": "その他のオプション…",
+    "chooseAction": "操作を選択…",
+    "requestChanges": "変更を依頼",
+    "feedbackPlaceholder": "省略可能: プランで変更する点を入力してください",
+    "sendFeedback": "フィードバックを送信"
+  },
+  "dialog": {
+    "title": "{{projectName}} のプラン",
+    "doneEditing": "編集を終了",
+    "loadingEditor": "エディターを読み込んでいます…",
+    "nothingWritten": "_まだ何も書かれていません。_",
+    "noContent": "_プランの内容はまだありません。_",
+    "todos": "タスク",
+    "dependencies": "依存関係",
+    "dependency": "{{dependent}} の前に {{prereq}} を完了する必要があります"
+  },
+  "question": {
+    "interrupted": "ターンが中断される前に回答されませんでした。",
+    "recommended": "推奨",
+    "orOwnWords": "または自分の言葉で回答",
+    "yourAnswer": "回答",
+    "placeholder": "回答を入力…",
+    "send": "回答を送信"
+  }
+}

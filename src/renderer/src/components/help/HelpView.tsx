@@ -1,5 +1,6 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState, type JSX } from 'react'
 import type { HelpAction, HelpGrounding, HelpIssueDraft } from '@shared/ipc'
+import { useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { topLayerOpen, useSuppressPreview } from '../../overlay'
 import { useToast } from '../../toast'
@@ -9,7 +10,7 @@ import { HelpComposer } from './HelpComposer'
 import { HelpRayAvatar, TypedLine } from './HelpRay'
 import { ExchangeView } from './HelpExchange'
 import { useHelpConversation } from './HelpConversation'
-import { PROMPTS, Spinner } from './parts'
+import { PROMPTS, promptText, Spinner } from './parts'
 import { describeWhen } from './history'
 import { helpGreeting } from '../mascot/lines'
 import './help.css'
@@ -74,6 +75,7 @@ export function HelpView({
   initialQuestion,
   continuing
 }: HelpViewProps): JSX.Element {
+  const { t } = useTranslation('help')
   const toast = useToast()
   useSuppressPreview()
   const [conversation, { exchanges, busy, historyReady, resumedAt, grounding, preparing }] =
@@ -108,14 +110,14 @@ export function HelpView({
   const refreshGrounding = useCallback(async (): Promise<void> => {
     try {
       await conversation.refreshGrounding()
-      toast.success('Help refreshed its copy of the docs and source.')
+      toast.success(t('view.refreshed'))
     } catch (reason) {
       toast.error(reportThrown(reason, { operation: 'help_prepare', area: 'app' }), {
-        title: "Couldn't refresh",
+        title: t('view.refreshFailed'),
         record: false
       })
     }
-  }, [conversation, toast])
+  }, [conversation, toast, t])
 
   /* ----------------------------- asking ----------------------------- */
 
@@ -138,7 +140,8 @@ export function HelpView({
     if (!historyReady || !question || askedInitialRef.current) return
     askedInitialRef.current = true
     setAskedInitial(true)
-    void ask(question, [])
+    // A starter question is asked in the user's language.
+    void ask(promptText(question), [])
   }, [historyReady, initialQuestion, ask])
 
   /* ----------------------------- chrome ----------------------------- */
@@ -172,7 +175,7 @@ export function HelpView({
   const empty = exchanges.length === 0 && !(initialQuestion?.trim() && !askedInitial)
 
   return (
-    <div className="help" role="dialog" aria-modal="true" aria-label="Help">
+    <div className="help" role="dialog" aria-modal="true" aria-label={t('title')}>
       <header className="help-bar">
         <span className="help-bar-id">
           <Codicon name="terminal" />
@@ -181,7 +184,7 @@ export function HelpView({
         <GroundingBadge grounding={grounding} preparing={preparing} onRefresh={refreshGrounding} />
         <span className="help-bar-spacer" />
         {projectName && (
-          <span className="help-bar-ctx" title={`Questions are answered about ${projectName}`}>
+          <span className="help-bar-ctx" title={t('view.projectTitle', { project: projectName })}>
             <Codicon name="folder" />
             {projectName}
           </span>
@@ -190,10 +193,10 @@ export function HelpView({
           <button
             className="help-bar-new"
             onClick={() => conversation.startNew()}
-            title="Start a new conversation and forget this one"
+            title={t('view.newTitle')}
           >
             <Codicon name="add" />
-            New
+            {t('view.new')}
           </button>
         )}
         {/* The escape hatch for someone who wants to read rather than ask.
@@ -202,12 +205,12 @@ export function HelpView({
         <button
           className="help-bar-new"
           onClick={() => openDocs('home')}
-          title="Open the Fabricator documentation in your browser"
+          title={t('view.docsTitle')}
         >
           <Codicon name="book" />
-          Docs
+          {t('view.docs')}
         </button>
-        <button className="help-bar-close" onClick={onClose} title="Close Help (Esc)">
+        <button className="help-bar-close" onClick={onClose} title={t('view.close')}>
           <Codicon name="close" />
         </button>
       </header>
@@ -223,13 +226,13 @@ export function HelpView({
                 {resumedAt && item.restored && i === 0 && (
                   <p className="help-resumed">
                     <Codicon name="history" />
-                    Picking up where you left off, {describeWhen(resumedAt)}
+                    {t('view.resumed', { when: describeWhen(resumedAt) })}
                   </p>
                 )}
                 {resumedAt && !item.restored && exchanges[i - 1]?.restored && (
                   <p className="help-resumed help-resumed--now">
                     <Codicon name="arrow-down" />
-                    Now
+                    {t('view.now')}
                   </p>
                 )}
                 <ExchangeView
@@ -259,11 +262,12 @@ function GroundingBadge({
   preparing: boolean
   onRefresh: () => Promise<void>
 }): JSX.Element | null {
+  const { t } = useTranslation('help')
   if (preparing) {
     return (
       <span className="help-ground help-ground--busy">
         <Spinner />
-        reading docs
+        {t('grounding.reading')}
       </span>
     )
   }
@@ -273,17 +277,17 @@ function GroundingBadge({
   const label = both
     ? grounding.pinned && grounding.reference
       ? grounding.reference
-      : 'ready'
+      : t('grounding.ready')
     : grounding.docsReady
-      ? 'docs only'
-      : 'logs only'
+      ? t('grounding.docsOnly')
+      : t('grounding.logsOnly')
   const title = both
     ? grounding.pinned
-      ? `Help is reading the documentation and the source for ${grounding.reference}, which matches this build.`
-      : 'Help is reading the documentation and the latest source.'
+      ? t('grounding.pinnedTitle', { reference: grounding.reference })
+      : t('grounding.latestTitle')
     : grounding.docsReady
-      ? "Help has the documentation but not the source, so it can't trace an error to its cause."
-      : 'Help is working from this machine\u2019s logs only. Select to download the documentation.'
+      ? t('grounding.docsOnlyTitle')
+      : t('grounding.logsOnlyTitle')
 
   return (
     <button
@@ -309,7 +313,10 @@ function Welcome({
   appVersion?: string
   onPick: (text: string) => void
 }): JSX.Element {
-  const greeting = useMemo(() => helpGreeting(), [])
+  const { t } = useTranslation('help')
+  // Ray's greeting goes by the time Help opened, in whatever language it's shown in.
+  const [openedAt] = useState(() => new Date())
+  const greeting = helpGreeting(openedAt)
   return (
     <div className="help-welcome">
       <div className="help-hello-host">
@@ -319,21 +326,18 @@ function Welcome({
         <h2 className="help-hello-title">
           <TypedLine text={greeting} />
         </h2>
-        <p className="help-hello-lead">
-          Ask about anything that isn&apos;t working. I can read what this machine has been
-          doing, the documentation, and your project.
-        </p>
+        <p className="help-hello-lead">{t('welcome.lead')}</p>
         <ul className="help-prompts">
-          {PROMPTS.map((text, i) => (
-            <li key={text} style={{ animationDelay: `${90 + i * 55}ms` }}>
-              <button onClick={() => onPick(text)}>
+          {PROMPTS.map((prompt, i) => (
+            <li key={prompt} style={{ animationDelay: `${90 + i * 55}ms` }}>
+              <button onClick={() => onPick(promptText(prompt))}>
                 <Codicon name="chevron-right" />
-                {text}
+                {promptText(prompt)}
               </button>
             </li>
           ))}
         </ul>
-        <p className="help-hello-meta">v{appVersion ?? '\u2014'} · read-only</p>
+        <p className="help-hello-meta">{t('welcome.meta', { version: appVersion ?? '\u2014' })}</p>
       </div>
     </div>
   )

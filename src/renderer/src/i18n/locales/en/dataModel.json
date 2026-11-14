@@ -1,0 +1,231 @@
+{
+  "diagram": {
+    "clearSearch": "Clear search",
+    "clearFocus": "Clear focus",
+    "focusing": "Focusing {{name}}",
+    "zoom": "Zoom",
+    "zoomOut": "Zoom out",
+    "zoomIn": "Zoom in",
+    "fit": "Fit to view",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "relationships_one": "{{count}} relationship",
+    "relationships_other": "{{count}} relationships",
+    "cardinality": {
+      "one": "one",
+      "many": "many"
+    }
+  },
+  "signIn": {
+    "signingIn": "Signing in…",
+    "fabric": "Sign in to Fabric",
+    "azure": "Sign in to Azure",
+    "failed": "Sign-in failed",
+    "incomplete": "Sign-in did not complete. Please try again."
+  },
+  "semantic": {
+    "title": "Fabric connections",
+    "types": {
+      "semanticModel": "Semantic model",
+      "warehouse": "Warehouse",
+      "sqlDatabase": "SQL database",
+      "sqlEndpoint": "Lakehouse SQL endpoint"
+    },
+    "tables_one": "{{count}} table",
+    "tables_other": "{{count}} tables",
+    "discovered": "discovered {{date}}",
+    "empty": {
+      "noSources": "There are no Fabric connections to draw.",
+      "noTablesTitle": "No tables to draw yet",
+      "noneFound": "Rayfin found no tables in {{source}} when it last looked.",
+      "noneFoundOn": "Rayfin found no tables in {{source}} when it last looked ({{date}}).",
+      "noMetadata": "Fabricator draws a source’s tables from the <code>metadata.json</code> Rayfin writes when it adds the connector, and from the app’s entity files. <code>{{dir}}/</code> has neither yet.",
+      "noModelTitle": "This semantic model has no tables",
+      "noModelDesc": "The connected model returned no tables. It may still be loading data in Fabric."
+    },
+    "discover": "Discover the tables with Copilot",
+    "discoverChat": "Discover the tables in {{source}}",
+    "useChat": "Use the tables in {{source}}",
+    "useWithCopilot": "Use them with Copilot",
+    "loading": "Reading your semantic model…",
+    "signInFabric": {
+      "title": "Sign in to view the semantic model",
+      "desc": "The semantic model is read live from Fabric, so you need an active Fabric session."
+    },
+    "signInAzure": {
+      "title": "Sign in to Azure to view the semantic model",
+      "desc": "Fabricator reads the model’s tables, measures and relationships from Fabric with your Azure sign-in."
+    },
+    "error": {
+      "title": "Couldn’t read the semantic model",
+      "read": "Could not read the semantic model."
+    },
+    "legend": {
+      "primaryKey": "primary key",
+      "foreignKey": "foreign key",
+      "inactive": "inactive"
+    },
+    "notice": {
+      "unused": "The app doesn’t use these tables yet.",
+      "entitiesOnly": "Rayfin’s discovered tables (metadata.json) aren’t in the project, so this shows only the tables the app’s entity files describe."
+    },
+    "search": {
+      "sqlPlaceholder": "Search tables & columns",
+      "sqlLabel": "Search tables and columns",
+      "placeholder": "Search tables, columns & measures",
+      "label": "Search tables, columns and measures"
+    },
+    "filter": {
+      "label": "Tables",
+      "used": "Used by the app",
+      "all": "All tables"
+    },
+    "expandAll": "Expand all tables",
+    "collapseAll": "Collapse all tables",
+    "openMetadata": "Open metadata.json",
+    "refresh": "Refresh from Fabric",
+    "card": {
+      "expand": "Expand table",
+      "collapse": "Collapse table",
+      "hidden": "hidden",
+      "focus": "Focus this table",
+      "focusTitle": "Focus neighbourhood",
+      "columns_one": "{{count}} column",
+      "columns_other": "{{count}} columns",
+      "measures_one": "{{count}} measure",
+      "measures_other": "{{count}} measures",
+      "noColumns": "No columns.",
+      "measuresHead": "Measures",
+      "showDax": "Show DAX",
+      "showFewer": "Show fewer",
+      "showAll": "Show all {{total}}",
+      "storageMode": "Storage mode: {{mode}}",
+      "openFile": "Open {{file}}",
+      "unused": "Not used by the app"
+    },
+    "column": {
+      "typeNullable": "{{type}}, can be empty",
+      "typeRequired": "{{type}}, required",
+      "primaryKey": "primary key",
+      "references": "references {{target}}",
+      "generated": "filled in by the database",
+      "generatedBy": "filled in by the database ({{how}})",
+      "unmapped": "not in the app’s entity",
+      "calculated": "Calculated: {{expression}}"
+    },
+    "measure": {
+      "label": "DAX for {{name}}",
+      "formatTitle": "Format string — how this measure's value is displayed",
+      "format": "Format",
+      "folderTitle": "Display folder in the model",
+      "folder": "Folder",
+      "description": "Description",
+      "copy": "Copy DAX",
+      "noDax": "No DAX expression available."
+    }
+  },
+  "model": {
+    "loading": "Reading your data model…",
+    "title": "Data model",
+    "empty": {
+      "title": "No data model yet",
+      "desc": "Rayfin entities live under <code>{{dataDir}}/</code> and are listed in <code>{{schemaFile}}</code>. Once you add some, this tab draws them as an entity‑relationship diagram with per‑entity access badges.",
+      "add": "Add a data model with Copilot",
+      "addChat": "Add a data model"
+    },
+    "noEntities": {
+      "title": "Your schema has no entities",
+      "desc": "<code>{{file}}</code> exists but its <code>schema</code> array is empty.",
+      "add": "Add an entity with Copilot"
+    },
+    "entities_one": "{{count}} entity",
+    "entities_other": "{{count}} entities",
+    "legend": {
+      "access": "Access",
+      "scoped": "Row‑scoped",
+      "signedIn": "Any signed‑in",
+      "public": "Public"
+    },
+    "search": {
+      "placeholder": "Search entities & fields",
+      "label": "Search entities and fields"
+    },
+    "expandAll": "Expand all entities",
+    "collapseAll": "Collapse all entities",
+    "resetLayout": "Reset layout",
+    "card": {
+      "expand": "Expand entity",
+      "collapse": "Collapse entity",
+      "nameTitle": "{{detail}} · Open {{file}}",
+      "fields_one": "{{count}} field",
+      "fields_other": "{{count}} fields",
+      "linked_one": "{{count}} linked",
+      "linked_other": "{{count}} linked",
+      "references": "References {{target}}",
+      "primaryKey": "Primary key",
+      "required": "Required",
+      "optional": "Optional",
+      "unique": "Unique",
+      "toOne": "↦ one",
+      "toMany": "↦ many",
+      "noFields": "No fields parsed.",
+      "grants": "Access grants",
+      "noRoles": "no explicit roles",
+      "rowPolicy": "{{grant}} (row-level policy)",
+      "policy": "policy",
+      "harden": "Harden",
+      "focus": "Focus",
+      "unfocus": "Unfocus"
+    },
+    "hardenChat": "Harden access on {{name}}"
+  },
+  "connect": {
+    "title": "Add Fabric data",
+    "subtitle": "Pick data from any workspace you can open. It goes into your message, and when you send it, Copilot connects each one to this app as a Rayfin connector.",
+    "signInBanner": "Sign in to Fabric to see your workspaces and their data.",
+    "signInRetry": "Sign in & retry",
+    "azureFinish": "Finish signing in to Azure in your browser.",
+    "azureWhy": "Your app reads Fabric data with your Azure sign-in while you build it.",
+    "workspaces": {
+      "search": "Search workspaces",
+      "loading": "Loading your workspaces…",
+      "none": "You don’t have any Fabric workspaces yet.",
+      "label": "Workspaces",
+      "recent": "Recent",
+      "all": "All workspaces",
+      "noMatch": "No workspace matches “{{query}}”.",
+      "thisApp": "This app"
+    },
+    "picked_one": "{{count}} picked",
+    "picked_other": "{{count}} picked",
+    "pickedAcross_one": "{{count}} picked across workspaces",
+    "pickedAcross_other": "{{count}} picked across workspaces",
+    "data": {
+      "choose": "Choose a workspace to see its data.",
+      "kinds": "Kind of data",
+      "all": "All",
+      "search": "Search {{workspace}}",
+      "loading": "Loading {{workspace}}…",
+      "empty": "{{workspace}} has no semantic models, warehouses, SQL databases or lakehouses.",
+      "noMatch": "Nothing matches “{{query}}”.",
+      "none": "{{workspace}} has no data.",
+      "label": "Data in {{workspace}}",
+      "connected": "Connected",
+      "noneOf": {
+        "semanticmodel": "{{workspace}} has no semantic models.",
+        "warehouse": "{{workspace}} has no warehouses.",
+        "sqldatabase": "{{workspace}} has no SQL databases.",
+        "lakehouse": "{{workspace}} has no lakehouses."
+      }
+    },
+    "pickHint": "Pick data from one or more workspaces.",
+    "add": "Add to chat",
+    "errors": {
+      "workspaces": "Could not list your workspaces.",
+      "workspacesRetry": "Could not list your workspaces. Please retry.",
+      "data": "Could not list the data in this workspace.",
+      "dataRetry": "Could not list the data in this workspace. Please retry.",
+      "signIn": "Fabric sign-in did not complete. Please try again."
+    }
+  }
+}

@@ -80,7 +80,7 @@ fn save_to(path: &Path, data: Value, now: chrono::DateTime<chrono::Utc>) -> Resu
   let stored = StoredSession { saved_at: now.to_rfc3339(), data };
   let text = serde_json::to_string(&stored).map_err(|e| e.to_string())?;
   if text.len() > MAX_BYTES {
-    return Err("That conversation is too long to save.".to_string());
+    return Err(t!("services.helpSession.tooLong"));
   }
   std::fs::write(path, text).map_err(|e| e.to_string())
 }

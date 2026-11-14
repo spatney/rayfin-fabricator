@@ -1,5 +1,6 @@
 import { useEffect, useState, type JSX, type ReactNode } from 'react'
 import type { LocalFile, LocalFiles, LocalStorageFolder, LocalUser } from '@shared/ipc'
+import { translator, useTranslation } from '../../i18n'
 import { toLocalBackendError, type LocalBackendError } from '../../localBackend'
 import { drawPdfPages } from '../../migration/pdfPages'
 import { useToast } from '../../toast'
@@ -10,7 +11,6 @@ import {
   formatDate,
   lastPage,
   PAGE_SIZE,
-  plural,
   previewKind,
   type PreviewKind
 } from './localData'
@@ -28,6 +28,9 @@ const KIND_ICON: Record<PreviewKind, string> = {
   text: 'file-text',
   none: 'file'
 }
+
+/** The files table's columns, by their `fields` keys. */
+const FILE_COLUMNS = ['name', 'type', 'size', 'owner', 'updated'] as const
 
 /** A storage folder as the Data explorer names it: by its `@blob` class, else by its own name. */
 export function folderLabel(folder: LocalStorageFolder): string {
@@ -61,6 +64,7 @@ export function FilesPane({
   onClear: (files: number) => void
   onDelete: (file: LocalFile) => void
 }): JSX.Element {
+  const { t } = useTranslation('data')
   const [offset, setOffset] = useState(0)
   const [page, setPage] = useState<LocalFiles | null>(null)
   const [error, setError] = useState<LocalBackendError | null>(null)
@@ -95,22 +99,12 @@ export function FilesPane({
   let content: ReactNode
   if (error) {
     content = (
-      <Problem
-        title="Couldn’t read the files"
-        error={error}
-        onRetry={() => setRetry((n) => n + 1)}
-      />
+      <Problem title={t('files.readError')} error={error} onRetry={() => setRetry((n) => n + 1)} />
     )
   } else if (!page) {
-    content = <div className="model-empty">Reading files…</div>
+    content = <div className="model-empty">{t('files.reading')}</div>
   } else if (page.files.length === 0) {
-    content = (
-      <Empty
-        icon="folder"
-        title="No files yet"
-        sub="Files the app stores in this folder show up here. Use the app in the preview, then refresh."
-      />
-    )
+    content = <Empty icon="folder" title={t('files.emptyTitle')} sub={t('files.emptySub')} />
   } else {
     content = (
       <>
@@ -119,17 +113,17 @@ export function FilesPane({
             <table className="bp-data-table">
               <thead>
                 <tr>
-                  {['Name', 'Type', 'Size', 'Owner', 'Updated'].map((label) => (
+                  {FILE_COLUMNS.map((column) => (
                     <th
-                      key={label}
+                      key={column}
                       scope="col"
-                      className={label === 'Size' ? 'bp-data-num' : undefined}
+                      className={column === 'size' ? 'bp-data-num' : undefined}
                     >
-                      <span className="bp-data-th">{label}</span>
+                      <span className="bp-data-th">{t(`fields.${column}`)}</span>
                     </th>
                   ))}
                   <th scope="col">
-                    <span className="sr-only">Actions</span>
+                    <span className="sr-only">{t('fields.actions')}</span>
                   </th>
                 </tr>
               </thead>
@@ -146,7 +140,7 @@ export function FilesPane({
                           type="button"
                           className="bp-data-file"
                           aria-pressed={on}
-                          aria-label={`Preview ${file.path}`}
+                          aria-label={t('files.previewLabel', { path: file.path })}
                           title={file.path}
                           onClick={() => setOpenPath(on ? null : file.path)}
                         >
@@ -167,16 +161,19 @@ export function FilesPane({
                         </span>
                       </td>
                       <td className="bp-data-td--number">
-                        <span className="bp-data-cell" title={plural(file.size, 'byte')}>
+                        <span
+                          className="bp-data-cell"
+                          title={t('size.bytes', { count: file.size })}
+                        >
                           {formatBytes(file.size)}
                         </span>
                       </td>
                       <td className={owner ? undefined : 'bp-data-td--null'}>
                         <span
                           className="bp-data-cell"
-                          title={file.ownerId ?? 'Uploaded while signed out'}
+                          title={file.ownerId ?? t('files.signedOutUpload')}
                         >
-                          {owner ?? 'Anonymous'}
+                          {owner ?? t('files.anonymous')}
                         </span>
                       </td>
                       <td className={updated ? 'bp-data-td--date' : 'bp-data-td--null'}>
@@ -188,11 +185,11 @@ export function FilesPane({
                         <button
                           type="button"
                           className="bp-data-row-btn"
-                          aria-label={`Delete ${file.path}`}
+                          aria-label={t('files.deleteLabel', { path: file.path })}
                           onClick={() => onDelete(file)}
                         >
                           <Codicon name="trash" />
-                          Delete
+                          {t('actions.delete')}
                         </button>
                       </td>
                     </tr>
@@ -220,24 +217,21 @@ export function FilesPane({
 
   const label = folderLabel(folder)
   return (
-    <section className="bp-data-main" aria-label={`${label} files`}>
+    <section className="bp-data-main" aria-label={t('files.regionLabel', { folder: label })}>
       <div className="bp-data-main-head">
         <h3 className="bp-data-title">{label}</h3>
         {folder.displayName && folder.displayName !== folder.name && (
-          <code className="bp-data-folder" title="The folder’s name in the app’s code">
+          <code className="bp-data-folder" title={t('files.folderNameTitle')}>
             {folder.name}
           </code>
         )}
         {!folder.displayName && (
-          <span
-            className="bp-chip"
-            title="The app no longer has this storage folder. Its files stay here until you clear them."
-          >
-            Not in the app
+          <span className="bp-chip" title={t('files.orphanTitle')}>
+            {t('files.orphan')}
           </span>
         )}
         <span className="bp-data-meta">
-          {plural(total, 'file')} · {formatBytes(folder.bytes)}
+          {t('files.meta', { count: total, size: formatBytes(folder.bytes) })}
         </span>
         <div className="model-toolbar-spacer" />
         <button
@@ -247,7 +241,7 @@ export function FilesPane({
           disabled={total === 0}
         >
           <Codicon name="trash" />
-          Clear files
+          {t('files.clear')}
         </button>
       </div>
       {content}
@@ -302,6 +296,7 @@ function FilePreview({
   onClose: () => void
   onDelete: () => void
 }): JSX.Element {
+  const { t } = useTranslation('data')
   const toast = useToast()
   const kind = previewKind(file)
   const [shown, setShown] = useState<Shown | null>(null)
@@ -331,7 +326,11 @@ function FilePreview({
             )
             if (alive) setShown({ kind, pages, total })
           } catch (reason) {
-            if (alive) setError({ message: `Couldn’t draw this PDF: ${String(reason)}` })
+            if (alive) {
+              setError({
+                message: translator('data')('preview.pdfError', { reason: String(reason) })
+              })
+            }
           }
         } else {
           url = URL.createObjectURL(new Blob([bytes], { type: blobType(file) }))
@@ -352,10 +351,10 @@ function FilePreview({
     setSaving(true)
     try {
       const where = await window.api.local.saveFile(projectId, folder.name, file.path)
-      if (where) toast.success(`Saved a copy of ${file.name} to ${where}.`)
+      if (where) toast.success(t('preview.saved', { name: file.name, where }))
     } catch (reason) {
       const failure = toLocalBackendError(reason)
-      toast.error(failure.message, { title: 'Couldn’t save a copy' })
+      toast.error(failure.message, { title: t('preview.saveError') })
     } finally {
       setSaving(false)
     }
@@ -363,18 +362,20 @@ function FilePreview({
 
   let preview: ReactNode
   if (error) {
-    preview = <Problem title="Couldn’t preview the file" error={error} />
+    preview = <Problem title={t('preview.error')} error={error} />
   } else if (kind === 'none') {
     preview = (
       <Empty
         icon="file"
-        title="No preview"
-        sub={`Fabricator can’t show ${file.contentType} files. Save a copy to open it in another app.`}
+        title={t('preview.noneTitle')}
+        sub={t('preview.noneSub', { type: file.contentType })}
       />
     )
   } else if (!shown) {
     preview = (
-      <div className="model-empty">{kind === 'pdf' ? 'Drawing the PDF…' : 'Reading the file…'}</div>
+      <div className="model-empty">
+        {kind === 'pdf' ? t('preview.drawingPdf') : t('preview.reading')}
+      </div>
     )
   } else if (shown.kind === 'image') {
     preview = <img className="bp-data-preview-img" src={shown.url} alt={file.name} />
@@ -392,7 +393,7 @@ function FilePreview({
         <pre className="bp-data-preview-text">{shown.text}</pre>
         {shown.clipped && (
           <p className="bp-data-preview-note">
-            Showing the first {formatBytes(MAX_TEXT_BYTES)}. Save a copy to see all of it.
+            {t('preview.textClipped', { size: formatBytes(MAX_TEXT_BYTES) })}
           </p>
         )}
       </>
@@ -405,13 +406,12 @@ function FilePreview({
             key={i}
             className="bp-data-preview-page"
             src={png}
-            alt={`Page ${i + 1} of ${file.name}`}
+            alt={t('preview.page', { page: i + 1, name: file.name })}
           />
         ))}
         {shown.total > shown.pages.length && shown.pages.length >= MAX_PDF_PAGES && (
           <p className="bp-data-preview-note">
-            Showing the first {shown.pages.length} of {shown.total} pages. Save a copy to see them
-            all.
+            {t('preview.pdfClipped', { shown: shown.pages.length, total: shown.total })}
           </p>
         )}
       </>
@@ -422,7 +422,7 @@ function FilePreview({
   const created = file.createdAt ? formatDate(file.createdAt) : null
   const updated = file.updatedAt ? formatDate(file.updatedAt) : null
   return (
-    <aside className="bp-data-preview" aria-label={`Preview of ${file.path}`}>
+    <aside className="bp-data-preview" aria-label={t('preview.label', { path: file.path })}>
       <div className="bp-data-preview-head">
         <Codicon name={KIND_ICON[kind]} />
         <span className="bp-data-preview-name" title={file.path}>
@@ -433,48 +433,48 @@ function FilePreview({
           className="model-tool-btn"
           onClick={() => void save()}
           disabled={saving}
-          title="Save a copy of the file on this computer"
+          title={t('preview.saveTitle')}
         >
           <Codicon name="desktop-download" />
-          {saving ? 'Saving…' : 'Save a copy'}
+          {saving ? t('status.saving') : t('preview.save')}
         </button>
         <button type="button" className="model-tool-btn" onClick={onDelete}>
           <Codicon name="trash" />
-          Delete
+          {t('actions.delete')}
         </button>
         <button
           type="button"
           className="bp-data-preview-close"
           onClick={onClose}
-          aria-label="Close the preview"
+          aria-label={t('preview.close')}
         >
           <Codicon name="close" />
         </button>
       </div>
       <div className="bp-data-preview-body">{preview}</div>
       <dl className="bp-data-preview-facts">
-        <dt>Path</dt>
+        <dt>{t('fields.path')}</dt>
         <dd title={file.path}>{file.path}</dd>
-        <dt>Type</dt>
+        <dt>{t('fields.type')}</dt>
         <dd>{file.contentType}</dd>
-        <dt>Size</dt>
+        <dt>{t('fields.size')}</dt>
         <dd>
           {formatBytes(file.size)}
           {file.size >= 1024 && (
-            <span className="bp-data-preview-dim"> ({plural(file.size, 'byte')})</span>
+            <span className="bp-data-preview-dim"> ({t('size.bytes', { count: file.size })})</span>
           )}
         </dd>
-        <dt>Owner</dt>
-        <dd>{owner ?? 'Anonymous'}</dd>
+        <dt>{t('fields.owner')}</dt>
+        <dd>{owner ?? t('files.anonymous')}</dd>
         {created && (
           <>
-            <dt>Uploaded</dt>
+            <dt>{t('fields.uploaded')}</dt>
             <dd title={file.createdAt ?? undefined}>{created}</dd>
           </>
         )}
         {updated && updated !== created && (
           <>
-            <dt>Updated</dt>
+            <dt>{t('fields.updated')}</dt>
             <dd title={file.updatedAt ?? undefined}>{updated}</dd>
           </>
         )}
@@ -488,6 +488,7 @@ function FilePreview({
 
 /** One of the app's own fields of a file. */
 function FieldFact({ name, value }: { name: string; value: unknown }): JSX.Element {
+  const { t } = useTranslation('data')
   const text =
     value === null || value === undefined
       ? 'null'
@@ -496,7 +497,7 @@ function FieldFact({ name, value }: { name: string; value: unknown }): JSX.Eleme
         : String(value)
   return (
     <>
-      <dt title="A field the app stores with the file">{name}</dt>
+      <dt title={t('preview.fieldTitle')}>{name}</dt>
       <dd title={text}>{text}</dd>
     </>
   )

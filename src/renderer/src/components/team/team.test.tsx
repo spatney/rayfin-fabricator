@@ -7,6 +7,8 @@ import TeamPublishControl, { livePreviewUrl, teamChipLabel } from './TeamPublish
 import TeamDeployCard from './TeamDeployCard'
 import CreateTeamWorkspaceModal from './CreateTeamWorkspaceModal'
 import { conflictPrompt } from './useTeamWork'
+import { timeAgo } from './runProgress'
+import { setLanguage } from '../../i18n'
 
 import type { JSX } from 'react'
 
@@ -534,5 +536,60 @@ describe('CreateProjectScreen team destination', () => {
     })
     expect(create).toHaveBeenCalledTimes(1)
     expect(createProject).not.toHaveBeenCalled()
+  })
+})
+
+describe('in other languages', () => {
+  afterEach(async () => {
+    cleanup()
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('counts days with German plurals', async () => {
+    await act(() => setLanguage('de'))
+    const now = Date.parse('2025-01-10T12:00:00Z')
+    expect(timeAgo('2025-01-09T12:00:00Z', now)).toBe('vor 1 Tag')
+    expect(timeAgo('2025-01-07T12:00:00Z', now)).toBe('vor 3 Tagen')
+  })
+
+  it('adds the approval note to what is waiting, with no space between Japanese sentences', async () => {
+    const project: StudioProject = {
+      id: 'p1',
+      name: 'Trips',
+      path: 'C:/team/trips/trips',
+      addedAt: '',
+      team: { workspaceId: 'w1', folder: 'trips', worktree: 'C:/team/trips' }
+    }
+    const control = (): JSX.Element => (
+      <OverlayProvider>
+        <TeamPublishControl
+          project={project}
+          status={status({ unpublished: 2, requireReview: true })}
+          syncing={false}
+          onPublish={() => {}}
+          onUpdate={() => {}}
+          onCombine={() => {}}
+          onDiscard={() => {}}
+          onViewLogs={() => {}}
+          onRefresh={() => {}}
+        />
+      </OverlayProvider>
+    )
+    const { unmount } = render(control())
+    fireEvent.click(screen.getByRole('button', { name: /2 unpublished/ }))
+    expect(
+      screen.getByText('2 changes not published yet. Publishing needs a teammate’s approval.')
+    ).toBeTruthy()
+    unmount()
+
+    await act(() => setLanguage('ja'))
+    render(control())
+    fireEvent.click(screen.getByRole('button', { name: /未公開 2 件/ }))
+    expect(
+      screen.getByText(
+        'まだ公開されていない変更が 2 件あります。公開にはチーム メンバーの承認が必要です。'
+      )
+    ).toBeTruthy()
   })
 })

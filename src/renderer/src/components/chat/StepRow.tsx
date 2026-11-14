@@ -1,5 +1,6 @@
 import { memo, useMemo, useState, type JSX } from 'react'
 import type { ChatToolCall } from '@shared/ipc'
+import { useTranslation } from '../../i18n'
 import { langFromPath } from '../../syntax'
 import { ChevronRightIcon, Codicon } from '../icons'
 import { CodePreview } from './CodePreview'
@@ -13,20 +14,21 @@ import { describeStep, stepLabel, type StepTarget, type StepView } from './toolP
 const SHOW_DURATION_MS = 2000
 
 function Target({ target, more }: { target: StepTarget; more: number }): JSX.Element {
+  const { t } = useTranslation('chat')
   if (target.kind === 'path') {
     const { dir, base, full } = target.path
     return (
       <span className="step-target step-target--path" title={full}>
         {dir && <span className="step-dir">{dir}</span>}
         <span className="step-base">{base}</span>
-        {more > 0 && <span className="step-more"> +{more} more</span>}
+        {more > 0 && <span className="step-more"> {t('format.more', { count: more })}</span>}
       </span>
     )
   }
   if (target.kind === 'quote') {
     return (
       <span className="step-target step-target--quote" title={target.text}>
-        “{target.text}”
+        {t('format.quoted', { text: target.text })}
       </span>
     )
   }
@@ -53,6 +55,7 @@ function StepDetail({
   projectPath: string
   onOpenFile?: (path: string) => void
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   const target = view.target?.kind === 'path' ? view.target.path : null
   const lang = target ? langFromPath(target.base) : undefined
   const openable = Boolean(!tool.diff && target?.rel && onOpenFile && view.kind !== 'delete')
@@ -64,7 +67,12 @@ function StepDetail({
             $
           </span>
           <code className="step-cmd-text">{tool.command}</code>
-          <CopyButton text={tool.command} title="Copy command" compact className="step-cmd-copy" />
+          <CopyButton
+            text={tool.command}
+            title={t('steps.copyCommand')}
+            compact
+            className="step-cmd-copy"
+          />
         </div>
       )}
       {tool.diff ? (
@@ -84,7 +92,7 @@ function StepDetail({
             className="step-open"
             onClick={() => onOpenFile?.(target.rel as string)}
           >
-            <Codicon name="go-to-file" /> Open {target.base}
+            <Codicon name="go-to-file" /> {t('steps.open', { name: target.base })}
           </button>
         </div>
       )}
@@ -102,7 +110,9 @@ export const StepRow = memo(function StepRow({
   projectPath: string
   onOpenFile?: (path: string) => void
 }): JSX.Element {
-  const view = useMemo(() => describeStep(tool, projectPath), [tool, projectPath])
+  const { t, i18n } = useTranslation('chat')
+  // The step's words are in the language shown, so a switch describes it again.
+  const view = useMemo(() => describeStep(tool, projectPath), [tool, projectPath, i18n.language])
   const [open, setOpen] = useState(false)
   const running = tool.state === 'running'
   const expandable = !running && Boolean(tool.output || tool.diff || tool.command)
@@ -121,9 +131,11 @@ export const StepRow = memo(function StepRow({
       <span className="step-meta">
         {view.added ? <span className="stat-add">+{view.added}</span> : null}
         {view.removed ? <span className="stat-del">−{view.removed}</span> : null}
-        {view.failedExit != null && <span className="step-exit">exit {view.failedExit}</span>}
+        {view.failedExit != null && (
+          <span className="step-exit">{t('steps.exit', { code: view.failedExit })}</span>
+        )}
         {tool.state === 'error' && view.failedExit == null && (
-          <span className="step-failed">failed</span>
+          <span className="step-failed">{t('steps.failed')}</span>
         )}
         {view.kind === 'run' && view.durationMs != null && view.durationMs >= SHOW_DURATION_MS && (
           <span className="step-time">{formatTurnDuration(view.durationMs)}</span>

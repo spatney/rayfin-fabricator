@@ -1,0 +1,91 @@
+{
+  "title": "Servidores MCP",
+  "close": "Cerrar servidores MCP",
+  "lead": "Los servidores MCP dan más herramientas al chat, como buscar documentación, dibujar gráficos o leer tu sistema de seguimiento de problemas. Agrega un servidor aquí y luego actívalo en <b>Complementos</b> de un chat. El chat solo lo usa cuando una solicitud lo necesita.",
+  "empty": "Aún no has agregado ningún servidor. Agrega uno con el comando que lo inicia o con su URL, o pega la configuración de sus instrucciones.",
+  "tryExample": "Para probar uno, agrega Microsoft Learn, que busca en la documentación de Microsoft, como la de Fabric y Power BI.",
+  "add": "Agregar un servidor",
+  "addExample": "Agregar Microsoft Learn",
+  "addServer": "Agregar un servidor MCP",
+  "editServer": "Editar {{name}}",
+  "help": "Ayuda sobre los servidores MCP",
+  "errors": {
+    "read": "No se pudieron leer tus servidores MCP.",
+    "check": "Fabricator no pudo comprobarlo.",
+    "save": "No se pudo guardar el servidor.",
+    "remove": "No se pudo quitar el servidor."
+  },
+  "card": {
+    "readOnly": "Solo lectura",
+    "connected": "Conectado",
+    "signsIn": "Inicia sesión al usarse",
+    "failed": "No se conectó",
+    "checkLabel": "Comprobar {{name}}",
+    "checkTitle": "Iniciarlo o conectarse a él y enumerar sus herramientas",
+    "check": "Comprobar",
+    "removeLabel": "Quitar {{name}}",
+    "removing": "Quitando…",
+    "confirmRemove": "¿Quitar {{name}}? Los chats que lo tienen activado dejarán de usarlo.",
+    "noTools": "Se conectó, pero no ofrece herramientas.",
+    "tools_one": "Se conectó y ofrece {{count}} herramienta:",
+    "tools_other": "Se conectó y ofrece {{count}} herramientas:",
+    "toolsLabel": "Herramientas de {{name}}",
+    "showAll": "Mostrar las {{total}}",
+    "needsSignIn": "Necesita que inicies sesión. La primera vez que un mensaje de un chat lo use, Fabricator abrirá su página de inicio de sesión en tu explorador."
+  },
+  "form": {
+    "paste": "Pegar una configuración…",
+    "configuration": "Configuración",
+    "pasteHint": "Pega el JSON de las instrucciones del servidor, su comando o su URL. Fabricator rellena el formulario para que lo revises.",
+    "choicesLabel": "Servidores de la configuración",
+    "choose": "Tiene {{total}} servidores. Elige el que quieres agregar:",
+    "fillIn": "Rellenar",
+    "name": "Nombre",
+    "namePlaceholder": "Gráficos",
+    "startsWith": "Se inicia con",
+    "kind": {
+      "command": "Un comando",
+      "url": "Una URL"
+    },
+    "command": "Comando",
+    "commandHint": "El comando que inicia el servidor, con sus argumentos, tal como lo escribirías en un terminal. Fabricator lo ejecuta en este dispositivo, en la carpeta de la aplicación.",
+    "url": "URL",
+    "sse": "Usa eventos enviados por el servidor (SSE), como algunos servidores antiguos",
+    "values": {
+      "env": {
+        "title": "Variables de entorno",
+        "nameLabel": "Nombre de la variable",
+        "valueLabel": "Valor de la variable",
+        "removeLabel": "Quitar la variable",
+        "add": "Agregar variable"
+      },
+      "header": {
+        "title": "Encabezados",
+        "nameLabel": "Nombre del encabezado",
+        "valueLabel": "Valor del encabezado",
+        "removeLabel": "Quitar el encabezado",
+        "add": "Agregar encabezado"
+      },
+      "value": "Valor",
+      "saved": "Guardado",
+      "change": "Cambiar",
+      "changeLabel": "Cambiar el valor de {{name}}",
+      "valueOf": "Valor de {{name}}",
+      "newValue": "Nuevo valor",
+      "remove": "Quitar {{name}}"
+    },
+    "secrets": {
+      "windows": "Para claves y tokens. Fabricator guarda sus valores en el Administrador de credenciales de Windows, no en su configuración, y nunca vuelve a mostrarlos.",
+      "mac": "Para claves y tokens. Fabricator guarda sus valores en tu llavero, no en su configuración, y nunca vuelve a mostrarlos."
+    },
+    "readOnly": "Solo herramientas de lectura",
+    "readOnlyHint": "El chat solo puede llamar a las herramientas que el servidor marca como de solo lectura, así que no puede cambiar nada a través del servidor. En una aplicación de equipo, siempre es así.",
+    "trust": "Un servidor se ejecuta con tu acceso a este dispositivo y a tus cuentas, y lo que el chat le envía sale de Fabricator. Agrega solo servidores de confianza."
+  },
+  "parse": {
+    "empty": "Primero pega una configuración.",
+    "unreadable": "Fabricator no puede leer esa configuración. Pega el JSON de las instrucciones del servidor.",
+    "noServer": "Esa configuración no tiene ningún servidor con un comando o una URL."
+  },
+  "defaultName": "Servidor MCP"
+}

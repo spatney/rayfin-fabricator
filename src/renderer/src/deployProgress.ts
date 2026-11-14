@@ -16,6 +16,8 @@
  * screen backwards.
  */
 
+import { translator } from './i18n'
+
 export type DeployStepId =
   | 'packages'
   | 'connect'
@@ -67,6 +69,20 @@ export interface PhaseDef {
   markers: string[]
 }
 
+/** A step's label in the publish catalog. */
+type StepLabelKey = `deploySteps.${DeployStepId | 'buildOnly'}`
+
+/** An older CLI's step. Its label reads in the language shown when it's read. */
+function legacyPhase(id: DeployStepId, labelKey: StepLabelKey, markers: string[]): PhaseDef {
+  return {
+    id,
+    get label() {
+      return translator('publish')(labelKey)
+    },
+    markers
+  }
+}
+
 /**
  * The steps of an older CLI's deploy (Rayfin 1.34 and earlier), each with loose
  * lowercase fragments of its `rayfin up` output that signal it has begun.
@@ -78,78 +94,58 @@ export interface PhaseDef {
  * show up in the early Targeting block).
  */
 export const LEGACY_PHASES: PhaseDef[] = [
-  { id: 'connect', label: 'Connecting to Fabric', markers: [] },
-  {
-    id: 'prepare',
-    label: 'Preparing to publish',
-    markers: [
-      'targeting',
-      'workload endpoint',
-      'publishable key',
-      'runtime settings',
-      'redeploy',
-      'reusing',
-      'deployment config',
-      'wrote deployment',
-      'database config'
-    ]
-  },
-  {
-    id: 'build',
-    label: 'Building your app',
-    markers: [
-      'build command',
-      'build:fabric',
-      'tsc -b',
-      'vite build',
-      'building client',
-      'transform',
-      'modules transformed',
-      'compiling',
-      'esbuild',
-      'webpack'
-    ]
-  },
-  {
-    id: 'package',
-    label: 'Packaging assets',
-    markers: [
-      'rendering chunks',
-      'gzip',
-      'built in',
-      'build command completed',
-      'content packaged',
-      'packaged (',
-      'packaging',
-      'bundling'
-    ]
-  },
-  {
-    id: 'upload',
-    label: 'Uploading to Fabric',
-    markers: [
-      'content deployed',
-      'deployed (',
-      'uploading',
-      'pushing',
-      'hosting url',
-      'deployment id',
-      'static hosting'
-    ]
-  },
-  {
-    id: 'live',
-    label: 'Going live',
-    markers: [
-      'is now deployed',
-      'now deployed to fabric',
-      'deployed to fabric!',
-      'live at',
-      'is live',
-      'next steps',
-      '🎉'
-    ]
-  }
+  legacyPhase('connect', 'deploySteps.connect', []),
+  legacyPhase('prepare', 'deploySteps.prepare', [
+    'targeting',
+    'workload endpoint',
+    'publishable key',
+    'runtime settings',
+    'redeploy',
+    'reusing',
+    'deployment config',
+    'wrote deployment',
+    'database config'
+  ]),
+  legacyPhase('build', 'deploySteps.buildOnly', [
+    'build command',
+    'build:fabric',
+    'tsc -b',
+    'vite build',
+    'building client',
+    'transform',
+    'modules transformed',
+    'compiling',
+    'esbuild',
+    'webpack'
+  ]),
+  legacyPhase('package', 'deploySteps.package', [
+    'rendering chunks',
+    'gzip',
+    'built in',
+    'build command completed',
+    'content packaged',
+    'packaged (',
+    'packaging',
+    'bundling'
+  ]),
+  legacyPhase('upload', 'deploySteps.upload', [
+    'content deployed',
+    'deployed (',
+    'uploading',
+    'pushing',
+    'hosting url',
+    'deployment id',
+    'static hosting'
+  ]),
+  legacyPhase('live', 'deploySteps.live', [
+    'is now deployed',
+    'now deployed to fabric',
+    'deployed to fabric!',
+    'live at',
+    'is live',
+    'next steps',
+    '🎉'
+  ])
 ]
 
 /** Furthest older-CLI step whose markers appear anywhere in the (lowercased) log. */
@@ -202,20 +198,20 @@ const PHASE_STEPS = new Map<string, DeployStepId | null>([
   ['functions', 'functions']
 ])
 
-const LABELS: Partial<Record<DeployStepId, string>> = {
-  packages: 'Installing packages',
-  connect: 'Connecting to Fabric',
-  capacity: 'Getting Fabric capacity ready',
-  workspace: 'Finding your workspace',
-  item: 'Setting up your app in Fabric',
-  settings: 'Applying settings',
-  data: 'Updating your database',
-  storage: 'Setting up file storage',
-  connectors: 'Connecting your data sources',
+const LABELS: Partial<Record<DeployStepId, StepLabelKey>> = {
+  packages: 'deploySteps.packages',
+  connect: 'deploySteps.connect',
+  capacity: 'deploySteps.capacity',
+  workspace: 'deploySteps.workspace',
+  item: 'deploySteps.item',
+  settings: 'deploySteps.settings',
+  data: 'deploySteps.data',
+  storage: 'deploySteps.storage',
+  connectors: 'deploySteps.connectors',
   // Rayfin builds the app quietly and uploads it in the same step.
-  build: 'Building and uploading your app',
-  functions: 'Publishing your functions',
-  live: 'Going live'
+  build: 'deploySteps.build',
+  functions: 'deploySteps.functions',
+  live: 'deploySteps.live'
 }
 
 /** Where each step usually starts, as a share of the whole deploy. */
@@ -413,8 +409,11 @@ export function readDeployProgress(log: readonly string[], cliSec: number): Depl
     upcoming = EXPECTED.filter((id) => !ids.includes(id) && (STRUCTURED_AT[id] ?? 0) > at)
   }
 
-  const label = (id: DeployStep['id']): string =>
-    labels.get(id) ?? LABELS[id as DeployStepId] ?? capitalize(id.replace(/^cli:/, ''), 48)
+  const t = translator('publish')
+  const label = (id: DeployStep['id']): string => {
+    const key = LABELS[id as DeployStepId]
+    return labels.get(id) ?? (key ? t(key) : capitalize(id.replace(/^cli:/, ''), 48))
+  }
   const currentIndex = ids.indexOf(currentId)
   const stateOf = (i: number): DeployStep['state'] =>
     live || i < currentIndex ? 'done' : i === currentIndex ? 'active' : 'todo'
@@ -425,7 +424,11 @@ export function readDeployProgress(log: readonly string[], cliSec: number): Depl
   const current = steps[currentIndex]
 
   const said = detail === null ? '' : capitalize(tidy(detail), 80)
-  const sameAsLabel = said.toLowerCase() === current.label.toLowerCase()
+  // The CLI writes English, so its words can repeat the English of a translated label.
+  const englishKey = labels.has(current.id) ? undefined : LABELS[current.id as DeployStepId]
+  const sameAsLabel = [current.label, englishKey && t(englishKey, { lng: 'en' })].some(
+    (shown) => !!shown && said.toLowerCase() === shown.toLowerCase()
+  )
   const topic: DeployTopic = live
     ? 'live'
     : signingIn

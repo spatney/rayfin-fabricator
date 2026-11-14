@@ -372,7 +372,8 @@ pub enum Pinning {
 pub fn pin_project(project: &Path, sdk: &NewProjectSdk, only_if_admitted: bool) -> Result<Pinning, String> {
   let mut manifests = Vec::new();
   for path in manifest_paths(project) {
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("Couldn't read {}: {e}", path.display()))?;
+    let text = std::fs::read_to_string(&path)
+      .map_err(|e| t!("services.rayfinSdk.readFailed", path = path.display(), error = e))?;
     manifests.push((path, text));
   }
   if only_if_admitted {
@@ -385,7 +386,8 @@ pub fn pin_project(project: &Path, sdk: &NewProjectSdk, only_if_admitted: bool) 
   let mut files = 0;
   for (path, text) in manifests {
     if let Some(pinned) = pin_rayfin_specs(&text, &range) {
-      std::fs::write(&path, pinned).map_err(|e| format!("Couldn't update {}: {e}", path.display()))?;
+      std::fs::write(&path, pinned)
+        .map_err(|e| t!("services.rayfinSdk.updateFailed", path = path.display(), error = e))?;
       files += 1;
     }
   }

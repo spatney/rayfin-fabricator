@@ -1,0 +1,230 @@
+{
+  "verbs": {
+    "read": {
+      "running": "読み取り中",
+      "done": "読み取り済み"
+    },
+    "edit": {
+      "running": "編集中",
+      "done": "編集済み"
+    },
+    "create": {
+      "running": "作成中",
+      "done": "作成済み"
+    },
+    "delete": {
+      "running": "削除中",
+      "done": "削除済み"
+    },
+    "search": {
+      "running": "検索中",
+      "done": "検索済み"
+    },
+    "find": {
+      "running": "一致するファイルを検索中",
+      "done": "一致するファイルを検索済み"
+    },
+    "run": {
+      "running": "実行中",
+      "done": "実行済み"
+    },
+    "shellIo": {
+      "running": "コマンドを確認しています",
+      "done": "コマンドを確認しました"
+    },
+    "web": {
+      "running": "読み取り中",
+      "done": "読み取り済み"
+    },
+    "webSearch": {
+      "running": "Web を検索中",
+      "done": "Web を検索済み"
+    },
+    "skill": {
+      "running": "スキルを読み込み中",
+      "done": "使用したスキル"
+    },
+    "todo": {
+      "running": "タスク リストを更新しています",
+      "done": "タスク リストを更新しました"
+    },
+    "agent": {
+      "running": "委任中",
+      "done": "委任済み"
+    },
+    "deploy": {
+      "running": "アプリを公開しています",
+      "done": "アプリを公開しました"
+    },
+    "navigate": {
+      "running": "プレビューで開いています",
+      "done": "プレビューで開きました"
+    },
+    "screenshot": {
+      "running": "スクリーンショットを撮っています",
+      "done": "スクリーンショットを撮りました"
+    },
+    "console": {
+      "running": "プレビュー コンソールを読み取っています",
+      "done": "プレビュー コンソールを読み取りました"
+    },
+    "scroll": {
+      "running": "プレビューをスクロールしています",
+      "done": "プレビューをスクロールしました"
+    },
+    "model": {
+      "running": "セマンティック モデルを参照しています",
+      "done": "セマンティック モデルを参照しました"
+    },
+    "localStatus": {
+      "running": "ローカル バックエンドを確認しています",
+      "done": "ローカル バックエンドを確認しました"
+    },
+    "localCall": {
+      "running": "呼び出し中",
+      "done": "呼び出し済み"
+    },
+    "localSeed": {
+      "running": "シード データを確認しています",
+      "done": "シード データを確認しました"
+    },
+    "fabricIq": {
+      "running": "Fabric IQ で検索しています",
+      "done": "Fabric IQ で検索しました"
+    },
+    "workIq": {
+      "running": "Work IQ で検索しています",
+      "done": "Work IQ で検索しました"
+    },
+    "mcp": {
+      "running": "ツールを使用中",
+      "done": "使用したツール"
+    },
+    "other": {
+      "running": "ツールを使用中",
+      "done": "使用したツール"
+    }
+  },
+  "bareVerbs": {
+    "read": {
+      "running": "ファイルを読み取っています",
+      "done": "ファイルを読み取りました"
+    },
+    "edit": {
+      "running": "ファイルを編集しています",
+      "done": "ファイルを編集しました"
+    },
+    "create": {
+      "running": "ファイルを作成しています",
+      "done": "ファイルを作成しました"
+    },
+    "delete": {
+      "running": "ファイルを削除しています",
+      "done": "ファイルを削除しました"
+    },
+    "search": {
+      "running": "プロジェクトを検索しています",
+      "done": "プロジェクトを検索しました"
+    },
+    "find": {
+      "running": "ファイルを検索しています",
+      "done": "ファイルを検索しました"
+    },
+    "run": {
+      "running": "コマンドを実行しています",
+      "done": "コマンドを実行しました"
+    },
+    "web": {
+      "running": "Web ページを読み取っています",
+      "done": "Web ページを読み取りました"
+    },
+    "webSearch": {
+      "running": "Web を検索しています",
+      "done": "Web を検索しました"
+    },
+    "skill": {
+      "running": "スキルを読み込んでいます",
+      "done": "スキルを使用しました"
+    },
+    "agent": {
+      "running": "タスクを委任しています",
+      "done": "タスクを委任しました"
+    },
+    "localCall": {
+      "running": "アプリを呼び出しています",
+      "done": "アプリを呼び出しました"
+    }
+  },
+  "shellIoVerbs": {
+    "write": {
+      "running": "コマンドに入力を送信しています",
+      "done": "コマンドに入力を送信しました"
+    },
+    "stop": {
+      "running": "コマンドを停止しています",
+      "done": "コマンドを停止しました"
+    },
+    "list": {
+      "running": "実行中のコマンドを一覧表示しています",
+      "done": "実行中のコマンドを一覧表示しました"
+    }
+  },
+  "agentIoVerbs": {
+    "read": {
+      "running": "エージェントを待っています",
+      "done": "エージェントを確認しました"
+    },
+    "write": {
+      "running": "エージェントにメッセージを送信しています",
+      "done": "エージェントにメッセージを送信しました"
+    },
+    "list": {
+      "running": "エージェントを一覧表示しています",
+      "done": "エージェントを一覧表示しました"
+    }
+  },
+  "seedLoad": {
+    "running": "シード データを読み込んでいます",
+    "done": "シード データを読み込みました"
+  },
+  "phases": {
+    "read": "ファイルを読み取っています",
+    "edit": "コードを編集しています",
+    "create": "ファイルを作成しています",
+    "delete": "ファイルを削除しています",
+    "search": "プロジェクトを検索しています",
+    "run": "コマンドを実行しています",
+    "web": "Web ページを読み取っています",
+    "webSearch": "Web を検索しています",
+    "skill": "スキルを読み込んでいます",
+    "todo": "タスク リストを更新しています",
+    "agent": "タスクを委任しています",
+    "deploy": "アプリを公開しています",
+    "navigate": "プレビューを開いています",
+    "screenshot": "スクリーンショットを撮っています",
+    "console": "プレビュー コンソールを読み取っています",
+    "scroll": "プレビューをスクロールしています",
+    "model": "セマンティック モデルを参照しています",
+    "localStatus": "ローカル バックエンドを確認しています",
+    "localCall": "アプリを呼び出しています",
+    "localSeed": "シード データを確認しています",
+    "fabricIq": "Power BI のデータを参照しています",
+    "workIq": "Microsoft 365 を参照しています",
+    "mcp": "MCP サーバーを使用しています",
+    "other": "処理しています",
+    "server": "{{server}} を使用しています"
+  },
+  "label": {
+    "withTarget": "{{verb}}: {{target}}",
+    "quoted": "「{{text}}」",
+    "fromServer": "{{server}} の {{tool}}"
+  },
+  "summary": {
+    "read_other": "{{count}} 個のファイルを読み取りました",
+    "edit_other": "{{count}} 件の編集を行いました",
+    "create_other": "{{count}} 個のファイルを作成しました",
+    "run_other": "{{count}} 個のコマンドを実行しました",
+    "search_other": "{{count}} 回の検索を実行しました",
+    "web_other": "{{count}} 個の Web ページを読み取りました"
+  }
+}

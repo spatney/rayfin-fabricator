@@ -1,6 +1,8 @@
 import type { JSX } from 'react'
+import type { TFunction } from 'i18next'
 import type { MigrationStage, MigrationState } from '@shared/ipc'
 import { doneCount, materialReady, nextPage, turnOrder } from '../../migration/turns'
+import { useTranslation } from '../../i18n'
 import { CloseIcon, Codicon } from '../icons'
 import './migrate.css'
 
@@ -20,29 +22,34 @@ interface Props {
   onDismiss: () => void
 }
 
-const STAGES: ReadonlyArray<[keyof MigrationState['stages'], string]> = [
-  ['definition', 'Report definition'],
-  ['model', 'Data model'],
-  ['export', 'Page export'],
-  ['images', 'Page images']
-]
+const STAGES = [
+  ['definition', 'card.stages.definition'],
+  ['model', 'card.stages.model'],
+  ['export', 'card.stages.export'],
+  ['images', 'card.stages.images']
+] as const satisfies ReadonlyArray<readonly [keyof MigrationState['stages'], string]>
 
-function stageWord(stage: MigrationStage): string {
+function stageWord(stage: MigrationStage, t: TFunction<'migrate'>): string {
   switch (stage.status) {
     case 'running':
-      return stage.progress != null ? `${stage.progress}%` : 'Working…'
+      return stage.progress != null ? `${stage.progress}%` : t('status.working')
     case 'done':
-      return 'Done'
+      return t('card.stageStatus.done')
     case 'skipped':
-      return 'Skipped'
+      return t('card.stageStatus.skipped')
     case 'failed':
-      return 'Not available'
+      return t('card.stageStatus.failed')
     default:
-      return 'Waiting'
+      return t('card.stageStatus.waiting')
   }
 }
 
-const PAGE_WORDS = { pending: 'Not started', running: 'Migrating', done: 'Migrated', failed: 'Needs another try' }
+const PAGE_STATUS = {
+  pending: 'card.pageStatus.pending',
+  running: 'card.pageStatus.running',
+  done: 'card.pageStatus.done',
+  failed: 'card.pageStatus.failed'
+} as const
 
 /**
  * A report migration's progress above the composer: first how far reading the
@@ -61,6 +68,7 @@ export default function MigrationCard({
   onSkipImages,
   onDismiss
 }: Props): JSX.Element | null {
+  const { t } = useTranslation('migrate')
   if (state.dismissed) return null
   const ready = materialReady(state)
   const total = state.pages.length
@@ -71,25 +79,27 @@ export default function MigrationCard({
   const failedStages = STAGES.filter(([key]) => state.stages[key].status === 'failed' && state.stages[key].message)
 
   let note: string
-  if (finished) note = 'Every page is migrated. MIGRATION.md lists what’s approximated.'
+  if (finished) note = t('card.finished')
   else if (running >= 0) {
-    note = `Copilot is migrating “${state.pages[running].displayName}”.${chaining ? ' The rest follow, one page at a time.' : ''}`
+    const name = state.pages[running].displayName
+    note = chaining ? t('card.runningRest', { name }) : t('card.running', { name })
   } else if (waiting) note = waiting
-  else if (next !== null) note = `Next: “${state.pages[next].displayName}”.`
+  else if (next !== null) note = t('card.next', { name: state.pages[next].displayName })
   else note = ''
+  const close = t('actions.close')
 
   return (
-    <section className="mig-card" aria-label="Power BI migration">
+    <section className="mig-card" aria-label={t('card.label')}>
       <header className="mig-head">
         <Codicon name="graph" className="mig-ico" />
         <span className="mig-title" title={state.source.reportName}>
-          Migrating “{state.source.reportName}” from Power BI
+          {t('card.title', { name: state.source.reportName })}
         </span>
         <span className="mig-count">
-          {ready ? `${done} of ${total} page${total === 1 ? '' : 's'}` : drawing ? 'Drawing pages' : 'Reading the report'}
+          {ready ? t('card.progress', { done, count: total }) : drawing ? t('card.drawing') : t('card.reading')}
         </span>
         {finished && (
-          <button type="button" className="mig-close" aria-label="Close" title="Close" onClick={onDismiss}>
+          <button type="button" className="mig-close" aria-label={close} title={close} onClick={onDismiss}>
             <CloseIcon />
           </button>
         )}
@@ -103,22 +113,22 @@ export default function MigrationCard({
               return (
                 <li key={key} className={`mig-stage mig-stage--${stage.status}`} title={stage.message}>
                   <span className="mig-dot" aria-hidden="true" />
-                  <span>{label}</span>
-                  <span className="mig-stage-word">{stageWord(stage)}</span>
+                  <span>{t(label)}</span>
+                  <span className="mig-stage-word">{stageWord(stage, t)}</span>
                 </li>
               )
             })}
           </ul>
           {failedStages.map(([key, label]) => (
             <p key={key} className="mig-msg">
-              {label}: {state.stages[key].message}
+              {t('card.stageFailed', { stage: t(label), message: state.stages[key].message })}
             </p>
           ))}
           {state.stages.export.status === 'running' && (
             <div className="mig-foot">
-              <span className="mig-note">Exporting takes about 20 seconds a page.</span>
+              <span className="mig-note">{t('card.exportTime')}</span>
               <button type="button" className="btn btn--sm" onClick={onSkipImages}>
-                Skip page images
+                {t('card.skipImages')}
               </button>
             </div>
           )}
@@ -128,12 +138,13 @@ export default function MigrationCard({
           <ol className="mig-pages">
             {turnOrder(state).map((index, position) => {
               const page = state.pages[index]
+              const status = t(PAGE_STATUS[page.status])
               return (
                 <li
                   key={page.name || index}
                   className={`mig-page mig-page--${page.status}`}
-                  aria-label={`${position + 1}. ${page.displayName}: ${PAGE_WORDS[page.status]}`}
-                  title={`${page.displayName}: ${PAGE_WORDS[page.status]}`}
+                  aria-label={t('card.page', { n: position + 1, name: page.displayName, status })}
+                  title={t('card.pageTitle', { name: page.displayName, status })}
                 >
                   {page.thumb ? (
                     <img src={page.thumb} alt="" className="mig-thumb" />
@@ -150,7 +161,7 @@ export default function MigrationCard({
                   </span>
                   {page.status === 'failed' && running < 0 && (
                     <button type="button" className="link-btn mig-retry" disabled={Boolean(waiting)} onClick={() => onRetry(index)}>
-                      Try again
+                      {t('actions.tryAgain')}
                     </button>
                   )}
                 </li>
@@ -159,23 +170,23 @@ export default function MigrationCard({
           </ol>
           {failedStages.map(([key, label]) => (
             <p key={key} className="mig-msg">
-              {label}: {state.stages[key].message}
+              {t('card.stageFailed', { stage: t(label), message: state.stages[key].message })}
             </p>
           ))}
           <div className="mig-foot">
             <span className="mig-note">{note}</span>
             {!finished && chaining && (
               <button type="button" className="btn btn--sm" onClick={onStopRest}>
-                Stop after this page
+                {t('card.stopRest')}
               </button>
             )}
             {!finished && !chaining && running < 0 && next !== null && (
               <>
                 <button type="button" className="btn btn--sm btn--primary" disabled={Boolean(waiting)} onClick={onNext}>
-                  Migrate next page
+                  {t('card.migrateNext')}
                 </button>
                 <button type="button" className="btn btn--sm" disabled={Boolean(waiting)} onClick={onRest}>
-                  Migrate the rest
+                  {t('card.migrateRest')}
                 </button>
               </>
             )}

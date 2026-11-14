@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type JSX } from 'react'
 import type { FileNode, StudioProject, TeamManifest } from '@shared/ipc'
+import { translator, useTranslation } from '../../i18n'
 import { emptyDataModel, parseProjectDataModel, type DataModel } from '../../model/parseSchema'
 import { loadProjectFabricConfig } from '../../model/fabricConfig'
 import {
@@ -126,7 +127,8 @@ async function readMetadata(projectId: string, connectorName: string): Promise<S
     } catch {
       continue
     }
-    if (fc.tooLarge) return { path, text: null, problem: 'metadata.json is too large to read.' }
+    if (fc.tooLarge)
+      return { path, text: null, problem: translator('blueprint')('tab.metadataTooLarge') }
     if (fc.error) continue
     return { path, text: fc.binary ? null : (fc.content ?? '') }
   }
@@ -145,7 +147,13 @@ async function readSqlSources(
       const warnings: string[] = []
       let paths = filesIn(tree, dir).filter((p) => /\.[cm]?ts$/.test(p) && !/\.d\.[cm]?ts$/.test(p))
       if (paths.length > MAX_CONNECTOR_FILES) {
-        warnings.push(`Read the first ${MAX_CONNECTOR_FILES} of ${paths.length} files in ${dir}/.`)
+        warnings.push(
+          translator('blueprint')('tab.firstFiles', {
+            max: MAX_CONNECTOR_FILES,
+            total: paths.length,
+            dir
+          })
+        )
         paths = paths.slice(0, MAX_CONNECTOR_FILES)
       }
       const [metadata, files] = await Promise.all([
@@ -217,6 +225,7 @@ export default function BlueprintTab({
   teamManifest,
   onOpenSecrets
 }: Props): JSX.Element {
+  const { t, i18n } = useTranslation('blueprint')
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [view, setView] = useState<BlueprintView>(() => readViewPref(project.id) ?? 'architecture')
   const [slot, setSlot] = useState<HTMLElement | null>(null)
@@ -242,6 +251,8 @@ export default function BlueprintTab({
     }
   }, [fabricUser, project.team])
 
+  // The architecture's words are built while loading, so a new language reloads it.
+  const language = i18n.language
   useEffect(() => {
     let alive = true
     void loadBlueprint(project.id, project.name).then((next) => {
@@ -250,7 +261,7 @@ export default function BlueprintTab({
     return () => {
       alive = false
     }
-  }, [project.id, project.name, refreshKey])
+  }, [project.id, project.name, refreshKey, language])
 
   const pick = useCallback(
     (next: BlueprintView): void => {
@@ -295,19 +306,19 @@ export default function BlueprintTab({
 
   const tables = loaded?.dataModel.entities.length ?? 0
   const tabs: { id: BlueprintView; label: string; icon: string; count?: number }[] = [
-    { id: 'architecture', label: 'Architecture', icon: 'type-hierarchy-sub' },
-    { id: 'data', label: 'Data model', icon: 'database', count: tables || undefined },
+    { id: 'architecture', label: t('tab.architecture'), icon: 'type-hierarchy-sub' },
+    { id: 'data', label: t('tab.dataModel'), icon: 'database', count: tables || undefined },
     ...(fabricSources
       ? [
           {
             id: 'fabric' as const,
-            label: 'Fabric connections',
+            label: t('tab.fabricConnections'),
             icon: 'plug',
             count: fabricSources > 1 ? fabricSources : undefined
           }
         ]
       : []),
-    { id: 'local-data', label: 'Data explorer', icon: 'table' }
+    { id: 'local-data', label: t('tab.dataExplorer'), icon: 'table' }
   ]
 
   let body: JSX.Element
@@ -322,7 +333,7 @@ export default function BlueprintTab({
       />
     )
   } else if (!loaded) {
-    body = <div className="model-empty">Reading your app…</div>
+    body = <div className="model-empty">{t('tab.reading')}</div>
   } else if (active === 'data') {
     body = (
       <ModelView
@@ -350,10 +361,10 @@ export default function BlueprintTab({
   } else if ('error' in loaded.arch) {
     body = (
       <div className="model-empty model-empty--cta">
-        <div className="model-empty-title">Couldn’t draw the app</div>
+        <div className="model-empty-title">{t('tab.cantDraw')}</div>
         <p className="model-empty-sub">{loaded.arch.error}</p>
         <button className="btn btn--primary" onClick={() => onOpenFile('rayfin/rayfin.yml')}>
-          Open rayfin.yml
+          {t('tab.openYml')}
         </button>
       </div>
     )
@@ -377,18 +388,18 @@ export default function BlueprintTab({
   return (
     <div className="bp-tab">
       <div className="bp-head">
-        <div className="seg bp-seg" role="tablist" aria-label="Blueprint views">
-          {tabs.map((t) => (
+        <div className="seg bp-seg" role="tablist" aria-label={t('tab.views')}>
+          {tabs.map((tab) => (
             <button
-              key={t.id}
+              key={tab.id}
               role="tab"
-              aria-selected={active === t.id}
-              className={`seg-btn${active === t.id ? ' seg-btn--active' : ''}`}
-              onClick={() => pick(t.id)}
+              aria-selected={active === tab.id}
+              className={`seg-btn${active === tab.id ? ' seg-btn--active' : ''}`}
+              onClick={() => pick(tab.id)}
             >
-              <Codicon name={t.icon} />
-              {t.label}
-              {t.count !== undefined && <span className="bp-seg-count">{t.count}</span>}
+              <Codicon name={tab.icon} />
+              {tab.label}
+              {tab.count !== undefined && <span className="bp-seg-count">{tab.count}</span>}
             </button>
           ))}
         </div>

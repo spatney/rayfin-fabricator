@@ -36,6 +36,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import type { LocalIdentity, LocalIdentityRequest, LocalStatus, LocalUser } from '@shared/ipc'
+import { translator, useTranslation } from '../../i18n'
 import { localBackendStore, toLocalBackendError, type LocalBackendError } from '../../localBackend'
 import { moveMenuFocus } from '../../menuFocus'
 import { useSuppressPreview } from '../../overlay'
@@ -110,32 +111,37 @@ function whoFromIdentity(identity: LocalIdentity, fallback: Who | null): Who {
 
 /** The button's text: "You", "Signed out" or the test user's name. */
 function whoLabel(who: Who | null): string {
-  if (!who) return 'Preview as'
-  if (who.kind === 'developer') return 'You'
-  if (who.kind === 'none') return 'Signed out'
-  return who.username || 'Test user'
+  const t = translator('preview')
+  if (!who) return t('previewAs.title')
+  if (who.kind === 'developer') return t('previewAs.you')
+  if (who.kind === 'none') return t('previewAs.signedOut')
+  return who.username || t('previewAs.testUser')
 }
 
-function whoSentence(who: Who): string {
-  if (who.kind === 'developer') return 'The preview is signed in as you.'
-  if (who.kind === 'none') return 'The preview isn’t signed in.'
-  return `The preview is signed in as ${whoLabel(who)}.`
+/** The button's tooltip while it's idle: who the preview signs in as, and what the button does. */
+function whoTitle(who: Who): string {
+  const t = translator('preview')
+  if (who.kind === 'developer') return t('previewAs.whoTitle.you')
+  if (who.kind === 'none') return t('previewAs.whoTitle.signedOut')
+  return t('previewAs.whoTitle.user', { name: whoLabel(who) })
 }
 
-/** How the app looks after a switch to `who`, for "Reload the preview to see the app …". */
-function seenAs(who: Who): string {
-  if (who.kind === 'developer') return 'as you'
-  if (who.kind === 'none') return 'signed out'
-  return `as ${whoLabel(who)}`
+/** What to do when the preview didn't reload after a switch to `who`. */
+function reloadHint(who: Who): string {
+  const t = translator('preview')
+  if (who.kind === 'developer') return t('previewAs.reload.you')
+  if (who.kind === 'none') return t('previewAs.reload.signedOut')
+  return t('previewAs.reload.user', { name: whoLabel(who) })
 }
 
 function progress(pending: Pending): string {
-  if (pending.step === 'reload') return 'Reloading the preview…'
-  if (pending.who.kind === 'none') return 'Signing out…'
-  if (pending.adding) return `Adding ${whoLabel(pending.who)}…`
+  const t = translator('preview')
+  if (pending.step === 'reload') return t('previewAs.progress.reloading')
+  if (pending.who.kind === 'none') return t('previewAs.progress.signingOut')
+  if (pending.adding) return t('previewAs.progress.adding', { name: whoLabel(pending.who) })
   return pending.who.kind === 'developer'
-    ? 'Signing in as you…'
-    : `Signing in as ${whoLabel(pending.who)}…`
+    ? t('previewAs.progress.signingInYou')
+    : t('previewAs.progress.signingIn', { name: whoLabel(pending.who) })
 }
 
 /**
@@ -151,23 +157,25 @@ function yourAccount(identity: LocalIdentity | null, users: LocalUser[]): LocalU
 }
 
 function accountDetail(account: LocalUser | null): string {
-  if (!account) return 'Your Microsoft Entra account, or a local account'
+  const t = translator('preview')
+  if (!account) return t('previewAs.account.unknown')
   const name = account.email ?? account.username
-  // Non-breaking spaces keep the kind of account on one line when the detail wraps.
+  // The texts' non-breaking spaces keep the kind of account on one line when the detail wraps.
   return account.signIn.includes('entra')
-    ? `${name} · Microsoft\u00a0Entra\u00a0ID`
-    : `${name} · local\u00a0account`
+    ? t('previewAs.account.entra', { name })
+    : t('previewAs.account.local', { name })
 }
 
 /** Why `email` can't be a new test user, or `null` when it can. */
 function emailProblem(email: string, users: LocalUser[]): string | null {
-  if (!email) return 'Enter an email address.'
-  if (!EMAIL.test(email)) return 'Enter an email address, like ana@example.com.'
+  const t = translator('preview')
+  if (!email) return t('previewAs.email.empty')
+  if (!EMAIL.test(email)) return t('previewAs.email.invalid')
   const existing = users.find(
     (user) => sameName(user.username, email) || (user.email !== null && sameName(user.email, email))
   )
-  if (existing?.developer) return 'That’s your own account. Choose You instead.'
-  if (existing) return `${existing.username} is already a test user.`
+  if (existing?.developer) return t('previewAs.email.yours')
+  if (existing) return t('previewAs.email.exists', { name: existing.username })
   return null
 }
 
@@ -201,6 +209,7 @@ export default function PreviewAsMenu({
   disabled = false,
   onSwitched
 }: Props): JSX.Element {
+  const { t } = useTranslation('preview')
   const status = useSyncExternalStore(
     localBackendStore.subscribe,
     () => localBackendStore.get(projectId) ?? null
@@ -389,11 +398,7 @@ export default function PreviewAsMenu({
       onSwitched?.()
     } catch (reason) {
       const error = toLocalBackendError(reason)
-      setFailure(
-        switched
-          ? { message: error.message, hint: `Reload the preview to see the app ${seenAs(next)}.` }
-          : failureOf(error)
-      )
+      setFailure(switched ? { message: error.message, hint: reloadHint(next) } : failureOf(error))
       // Show the menu as the backend has it now (a test user may be gone, say).
       if (openRef.current) void load(true)
     } finally {
@@ -500,10 +505,10 @@ export default function PreviewAsMenu({
   const title = pending
     ? progress(pending)
     : missed
-      ? `Couldn’t switch who the preview signs in as: ${missed.message}`
+      ? t('previewAs.couldntSwitch', { message: missed.message })
       : who
-        ? `${whoSentence(who)} Choose who it signs in as.`
-        : 'Choose who the app in the preview signs in as.'
+        ? whoTitle(who)
+        : t('previewAs.chooseTitle')
 
   const item = (
     key: string,
@@ -556,7 +561,7 @@ export default function PreviewAsMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        aria-label={who ? `Preview as: ${label}` : 'Preview as'}
+        aria-label={who ? t('previewAs.label', { label }) : t('previewAs.title')}
         aria-busy={busy || undefined}
         title={title}
         disabled={disabled}
@@ -577,30 +582,30 @@ export default function PreviewAsMenu({
         createPortal(
           <div ref={popRef} className="pva-pop" style={placement} onMouseDown={keepFocus}>
             <div className="pva-head" aria-hidden="true">
-              <span className="pva-title">Preview as</span>
-              <span className="pva-sub">Who the app signs in as on this computer</span>
+              <span className="pva-title">{t('previewAs.title')}</span>
+              <span className="pva-sub">{t('previewAs.sub')}</span>
             </div>
             <div
               ref={menuRef}
               className="pva-menu"
               role="menu"
               id={menuId}
-              aria-label="Preview as"
+              aria-label={t('previewAs.title')}
               onKeyDown={(event) => moveMenuFocus(event, ITEM)}
             >
               {item(
                 'developer',
                 'account',
-                'You',
+                t('previewAs.you'),
                 accountDetail(account),
                 { kind: 'developer' },
                 { kind: 'developer' },
-                'Your Microsoft Entra account when you’re signed in to Azure, else a local developer account'
+                t('previewAs.youTip')
               )}
               {testUsers.length > 0 && (
-                <div className="pva-group" role="group" aria-label="Test users">
+                <div className="pva-group" role="group" aria-label={t('previewAs.testUsers')}>
                   <div className="pva-heading" aria-hidden="true">
-                    Test users
+                    {t('previewAs.testUsers')}
                   </div>
                   {testUsers.map((name) =>
                     item(
@@ -617,8 +622,8 @@ export default function PreviewAsMenu({
               {item(
                 'none',
                 'circle-slash',
-                'Signed out',
-                'No one is signed in',
+                t('previewAs.signedOut'),
+                t('previewAs.noOne'),
                 { kind: 'none' },
                 { kind: 'none' }
               )}
@@ -638,7 +643,7 @@ export default function PreviewAsMenu({
               >
                 <Codicon name="person-add" className="pva-item-icon" />
                 <span className="pva-item-text">
-                  <span className="pva-item-label">Add test user…</span>
+                  <span className="pva-item-label">{t('previewAs.addUser')}</span>
                 </span>
               </button>
             </div>
@@ -647,12 +652,12 @@ export default function PreviewAsMenu({
               <form
                 ref={formRef}
                 className="pva-add"
-                aria-label="Add a test user"
+                aria-label={t('previewAs.addForm')}
                 noValidate
                 onSubmit={submitNewUser}
               >
                 <label className="pva-add-label" htmlFor={inputId}>
-                  Test user’s email
+                  {t('previewAs.email.label')}
                 </label>
                 <div className="pva-add-row">
                   <input
@@ -678,7 +683,7 @@ export default function PreviewAsMenu({
                     className="btn btn--sm btn--primary"
                     aria-disabled={busy || undefined}
                   >
-                    {pending?.adding ? 'Adding…' : 'Add'}
+                    {pending?.adding ? t('previewAs.adding') : t('actions.add')}
                   </button>
                 </div>
                 {invalid && (
@@ -686,9 +691,7 @@ export default function PreviewAsMenu({
                     {invalid}
                   </p>
                 )}
-                <p className="pva-add-hint">
-                  Test users have no password: they sign in here, through Preview as.
-                </p>
+                <p className="pva-add-hint">{t('previewAs.hint')}</p>
               </form>
             )}
 
@@ -705,9 +708,7 @@ export default function PreviewAsMenu({
             <p className="pva-status" role="status">
               {pending ? progress(pending) : ''}
             </p>
-            <p className="pva-note">
-              Switching clears the preview’s browser storage and reloads it.
-            </p>
+            <p className="pva-note">{t('previewAs.note')}</p>
           </div>,
           document.body
         )}

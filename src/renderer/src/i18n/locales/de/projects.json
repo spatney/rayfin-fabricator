@@ -1,0 +1,261 @@
+{
+  "file": {
+    "progress_one": "{{processed, number}} von {{count, number}} Datei",
+    "progress_other": "{{processed, number}} von {{count, number}} Dateien",
+    "files_one": "{{count, number}} Datei",
+    "files_other": "{{count, number}} Dateien",
+    "versions_one": "{{count, number}} Version",
+    "versions_other": "{{count, number}} Versionen"
+  },
+  "parts": {
+    "code": "App-Code",
+    "history": "Versionsverlauf",
+    "published": "Veröffentlichte App",
+    "secrets": "Geheimnisse",
+    "from": "Von {{from}}",
+    "version": "Version {{version}}"
+  },
+  "installedApps": {
+    "title": "Installierte Apps",
+    "count_one": "{{count}} App",
+    "count_other": "{{count}} Apps",
+    "openName": "{{name}} öffnen",
+    "isOpen": "Geöffnet",
+    "fromFile": "Aus einer .rayfin-Datei installiert",
+    "confirm": "App und ihre Daten entfernen?",
+    "removing": "Wird entfernt…",
+    "keep": "Behalten",
+    "removeName": "{{name}} entfernen",
+    "cantRemove": "Fabricator konnte {{name}} nicht entfernen."
+  },
+  "guard": {
+    "cantPrepare": "Dieses Projekt konnte nicht vorbereitet werden. Überprüfe seine Abhängigkeiten und versuche es erneut.",
+    "cantInstall": "Die Abhängigkeiten dieses Projekts konnten nicht installiert werden.",
+    "failedLabel": "{{name}} konnte nicht vorbereitet werden",
+    "preparing": "{{name}} wird vorbereitet",
+    "failedTitle": "Projektabhängigkeiten konnten nicht installiert werden",
+    "retry": "Installation wiederholen",
+    "switchProjects": "Projekt wechseln",
+    "checking": "Die Rayfin CLI des Projekts wird geprüft, und fehlende Abhängigkeiten werden installiert..."
+  },
+  "remove": {
+    "title": "Projekt entfernen",
+    "lead": "Wähle aus, was für <strong>{{name}}</strong> entfernt werden soll.",
+    "folder": {
+      "title": "Lokaler Projektordner",
+      "badge": "Wiederherstellbar",
+      "desc": "Wird in den <strong>Papierkorb des Systems</strong> verschoben. Von dort kannst du ihn wiederherstellen."
+    },
+    "app": {
+      "title": "Veröffentlichte Fabric-App",
+      "badge": "Endgültig",
+      "desc": "Löscht {{name}} und alle App-Daten in {{workspace}}.",
+      "descNoWorkspace": "Löscht {{name}} und alle App-Daten im zugehörigen Fabric-Arbeitsbereich.",
+      "warn": "Dies kann nicht rückgängig gemacht werden."
+    },
+    "note": {
+      "noApp": "Mit diesem Projekt ist keine veröffentlichte Fabric-App verknüpft.",
+      "keepsWorkspace": "Dein Fabric-Arbeitsbereich bleibt erhalten.",
+      "keepsApp": "Die veröffentlichte App und ihre Daten bleiben in Fabric."
+    },
+    "confirmBoth": "Ordner in Papierkorb & App löschen",
+    "confirmFolder": "Ordner in Papierkorb verschieben"
+  },
+  "manage": {
+    "title": "Projekt verwalten",
+    "close": "Projektverwaltung schließen",
+    "nameLabel": "Projektname",
+    "renameHint": "Benennt es auch in <code>rayfin/rayfin.yml</code> um.",
+    "actionsHeading": "Projektaktionen",
+    "errors": {
+      "cantRename": "Das Projekt konnte nicht umbenannt werden. Versuche es erneut.",
+      "cantMove": "Das Projekt konnte nicht verschoben werden.",
+      "noName": "Gib einen Projektnamen ein."
+    },
+    "move": {
+      "title": "In einen Team-Arbeitsbereich verschieben",
+      "desc": "Kopiert diese App und ihren Chat in den Team-Arbeitsbereich, damit dein Team daran arbeiten kann. Die Team-Pipeline stellt sie als neue App bereit, ohne die Daten der veröffentlichten App dieses Projekts. Dieses lokale Projekt bleibt unverändert.",
+      "workspaceLabel": "Team-Arbeitsbereich",
+      "moving": "Wird verschoben…",
+      "move": "Verschieben"
+    },
+    "export": {
+      "button": "Exportieren"
+    },
+    "recents": {
+      "title": "Zuletzt verwendete Projekte",
+      "remove": "Aus zuletzt verwendeten Projekten entfernen",
+      "team": "Aus deiner Liste der zuletzt verwendeten Projekte ausblenden. Deine Arbeit auf GitHub bleibt erhalten, und du kannst das Projekt über seinen Team-Arbeitsbereich wieder öffnen.",
+      "missing": "Fabricator kann dieses Projekt auf diesem Computer nicht finden. Entferne es aus deiner Liste der zuletzt verwendeten Projekte.",
+      "withApp": "Aus deiner Liste der zuletzt verwendeten Projekte ausblenden. Dateien und die Fabric-App bleiben erhalten.",
+      "filesOnly": "Aus deiner Liste der zuletzt verwendeten Projekte ausblenden. Dateien bleiben erhalten."
+    },
+    "team": {
+      "title": "Team-App",
+      "desc": "Diese App gehört zum Team-Arbeitsbereich <strong>{{team}}</strong>. Dessen Besitzer können sie in den Einstellungen des Arbeitsbereichs für alle entfernen.",
+      "descUnknown": "Diese App gehört zu dem Team-Arbeitsbereich, aus dem sie geöffnet wurde. Dessen Besitzer können sie in den Einstellungen des Arbeitsbereichs für alle entfernen."
+    },
+    "remove": {
+      "review": "Optionen prüfen",
+      "withApp": "Verschiebt den Ordner in den Papierkorb und löscht optional die veröffentlichte App.",
+      "folderOnly": "Verschiebt den Ordner in den Papierkorb. Fabric-Apps bleiben unverändert."
+    }
+  },
+  "import": {
+    "title": "Projekt importieren",
+    "reading": "{{file}} wird gelesen…",
+    "exportedByOn": "Exportiert von {{from}} am {{date}}",
+    "exportedBy": "Exportiert von {{from}}",
+    "fromFile": "Aus {{file}}",
+    "importingFrom": "Wird aus {{file}} importiert.",
+    "importingName": "{{name}} wird importiert…",
+    "progress": "Importfortschritt",
+    "bringsIn": "Was es mitbringt",
+    "code": {
+      "desc": "Fabricator installiert die Pakete, wenn du es öffnest."
+    },
+    "history": {
+      "desc": "Alle zuvor gespeicherten Versionen, damit „Verlauf“ und „Wiederherstellen“ funktionieren."
+    },
+    "published": {
+      "askFrom": "Beim Veröffentlichen wird genau diese App aktualisiert. Bitte {{from}} um Zugriff auf den Arbeitsbereich.",
+      "needAccess": "Beim Veröffentlichen wird genau diese App aktualisiert, sobald du Zugriff auf ihren Arbeitsbereich hast."
+    },
+    "secrets": {
+      "desc": "Ihre Werte werden nicht mitgeliefert. Lege deine eigenen unter „Code → Geheimnisse“ fest."
+    },
+    "folder": "Es kommt in einen neuen Ordner: <code>{{folder}}</code>.",
+    "trust": "Importiere nur Projekte von Personen, denen du vertraust. Ihr Code wird auf diesem Computer ausgeführt.",
+    "importing": "Wird importiert…",
+    "importAnyway": "Trotzdem importieren",
+    "import": "Importieren",
+    "errors": {
+      "cantRead": "Fabricator konnte {{file}} nicht lesen.",
+      "cantImport": "Fabricator konnte {{file}} nicht importieren."
+    }
+  },
+  "export": {
+    "title": "Projekt exportieren",
+    "lead": {
+      "project": "Speichere eine Kopie, die jemand anderes in Fabricator importieren kann.",
+      "app": "Speichere es als App, die jemand anderes installieren und verwenden kann.",
+      "done": "Der Export ist fertig und kann verschickt werden."
+    },
+    "format": {
+      "label": "Exportieren als",
+      "project": "Projekt",
+      "projectDesc": "Um es in Fabricator weiterzuentwickeln · .fabricator",
+      "app": "App",
+      "appDesc": "Um es in einem eigenen Fenster zu verwenden · .rayfin"
+    },
+    "checking": "Es wird geprüft, was enthalten sein soll…",
+    "includes": "Was der Export enthält",
+    "code": {
+      "desc": "Quellcode und Einstellungen. Installierte Pakete und Build-Ausgabe bleiben außen vor."
+    },
+    "app": {
+      "desc": "Die App öffnet sich in einem eigenen Fenster, mit diesem Namen und Symbol. Ihre Daten bleiben auf dem Computer, auf dem sie installiert ist."
+    },
+    "history": {
+      "desc": "Alle gespeicherten Versionen, damit „Verlauf“ und „Wiederherstellen“ auch bei den Empfängern funktionieren."
+    },
+    "published": {
+      "include": "Wenn die Empfänger veröffentlichen, wird genau diese App aktualisiert. Dafür brauchen sie Zugriff auf den Arbeitsbereich der App.",
+      "exclude": "Die Empfänger veröffentlichen es als neue App in einem Arbeitsbereich ihrer Wahl."
+    },
+    "never": {
+      "project": "Nie enthalten: dein Chat, Werte von Geheimnissen, lokale App-Daten und Anmeldungen.",
+      "projectSecrets": "Nie enthalten: dein Chat, Werte von Geheimnissen ({{secrets}}), lokale App-Daten und Anmeldungen.",
+      "app": "Nie enthalten: dein Chat, der Versionsverlauf, der Veröffentlichungsort, Werte von Geheimnissen, lokale App-Daten und Anmeldungen.",
+      "appSecrets": "Nie enthalten: dein Chat, der Versionsverlauf, der Veröffentlichungsort, Werte von Geheimnissen ({{secrets}}), lokale App-Daten und Anmeldungen."
+    },
+    "keptOut": "Ebenfalls weggelassen, falls sie Geheimnisse enthalten: {{files}}.",
+    "keptOutMore_one": "{{count}} weitere",
+    "keptOutMore_other": "{{count}} weitere",
+    "secretsWarning": "Es verwendet Geheimnisse, die nicht mitgeliefert werden. Alles, was darauf angewiesen ist, funktioniert daher dort nicht, wo es installiert wird.",
+    "exportingName": "{{name}} wird exportiert…",
+    "progress": "Exportfortschritt",
+    "saved": "{{file}} gespeichert",
+    "next": {
+      "title": "So geht es weiter",
+      "send": "Sende die Datei per E-Mail, Chat oder über einen freigegebenen Ordner.",
+      "openApp": "Die Empfänger doppelklicken darauf. Fabricator fragt nach, bevor die App installiert wird, und öffnet sie dann in einem eigenen Fenster. Beim ersten Mal dauert das ein bis zwei Minuten. Kein Fabricator installiert?",
+      "openProject": "Die Empfänger doppelklicken darauf, um es in Fabricator zu importieren, oder wählen <strong>Vorhandenes Projekt öffnen</strong> und dann <strong>Projekt importieren</strong>. Neu bei Fabricator?",
+      "copyLink": "Installationslink kopieren",
+      "linkCopied": "Installationslink kopiert",
+      "afterApp": "Danach öffnet sie sich wie jede andere App. Unter Windows ist sie im Startmenü unter „Rayfin apps“.",
+      "access": "Damit die Empfänger veröffentlichen können, gib ihnen in Fabric die Rolle „Mitwirkender“ für <strong>{{workspace}}</strong>.",
+      "openWorkspace": "Arbeitsbereich öffnen"
+    },
+    "showInFolder": "Im Ordner anzeigen",
+    "exporting": "Wird exportiert…",
+    "export": "Exportieren…",
+    "errors": {
+      "cantLook": "Fabricator konnte dieses Projekt nicht untersuchen.",
+      "cantExportApp": "Fabricator konnte die App nicht exportieren.",
+      "cantExportProject": "Fabricator konnte das Projekt nicht exportieren.",
+      "cantCopy": "Fabricator konnte den Link nicht kopieren.",
+      "cantShow": "Fabricator konnte die Datei nicht anzeigen."
+    }
+  },
+  "appWindow": {
+    "defaultName": "Rayfin-App",
+    "installText": "Installiere die App, um sie auf diesem Computer zu verwenden. Sie öffnet sich in einem eigenen Fenster und speichert ihre Daten auf diesem Computer.",
+    "update": {
+      "noDates": "{{name}} ist installiert. Diese Datei enthält eine andere Version. Beim Aktualisieren wird die App ersetzt, ihre Daten bleiben erhalten.",
+      "installedDate": "{{name}} ist installiert (exportiert am {{installedOn}}). Diese Datei enthält eine andere Version. Beim Aktualisieren wird die App ersetzt, ihre Daten bleiben erhalten.",
+      "fileDate": "{{name}} ist installiert. Diese Datei enthält eine andere Version, exportiert am {{fileOn}}. Beim Aktualisieren wird die App ersetzt, ihre Daten bleiben erhalten.",
+      "bothDates": "{{name}} ist installiert (exportiert am {{installedOn}}). Diese Datei enthält eine andere Version, exportiert am {{fileOn}}. Beim Aktualisieren wird die App ersetzt, ihre Daten bleiben erhalten."
+    },
+    "bringsIn": "Was sie mitbringt",
+    "codeDesc": "Beim ersten Öffnen installiert Fabricator die Pakete und erstellt die App.",
+    "secretsDesc": "Ihre Werte werden nicht mitgeliefert. Alles, was darauf angewiesen ist, funktioniert daher nicht.",
+    "trust": "Installiere nur Apps von Personen, denen du vertraust. Ihr Code läuft auf diesem Computer mit deinen Rechten.",
+    "openInstalled": "Installierte öffnen",
+    "updateAnyway": "Trotzdem aktualisieren",
+    "installAnyway": "Trotzdem installieren",
+    "installingName": "{{name}} wird installiert…",
+    "progress": "Installationsfortschritt",
+    "gettingReady": "{{name}} wird vorbereitet…",
+    "building": "{{name}} wird erstellt…",
+    "starting": "{{name}} wird gestartet…",
+    "packagesHint": "Die Pakete werden installiert. Beim ersten Mal dauert das ein bis zwei Minuten.",
+    "needsNode": "Diese App benötigt Node.js",
+    "didntStart": "{{name}} wurde nicht gestartet",
+    "restartForNode": "Starte neu, sobald Node.js installiert ist, um die App zu verwenden.",
+    "noOutput": "Noch keine Ausgabe.",
+    "showDetails": "Details anzeigen",
+    "installNode": "Node.js installieren",
+    "installingNode": "Node.js wird installiert…",
+    "cantOpenTitle": "Fabricator kann diese App nicht öffnen",
+    "errors": {
+      "didntStart": "Die App wurde nicht gestartet.",
+      "cantOpen": "Fabricator konnte diese App nicht öffnen.",
+      "nothingToOpen": "Es gibt nichts zu öffnen.",
+      "cantInstall": "Fabricator konnte die App nicht installieren."
+    }
+  },
+  "appIcon": {
+    "unreadable": "Das Symbol konnte nicht gelesen werden.",
+    "cantDraw": "Fabricator konnte das Symbol der App nicht zeichnen."
+  },
+  "removals": {
+    "waitingSignIn": "Es wird auf deine Anmeldung bei Fabric gewartet…",
+    "deletingApp": "Die veröffentlichte App wird gelöscht…",
+    "deletingAppFrom": "Die veröffentlichte App wird aus {{workspace}} gelöscht…",
+    "trashing": "Der Ordner wird in den Papierkorb verschoben…",
+    "counting": "Dateien werden gezählt… {{processed, number}}",
+    "moving_one": "{{count, number}} Datei wird in den Papierkorb verschoben…",
+    "moving_other": "{{count, number}} Dateien werden in den Papierkorb verschoben…",
+    "movingFor_one": "{{count, number}} Datei wird in den Papierkorb verschoben… {{seconds}} s",
+    "movingFor_other": "{{count, number}} Dateien werden in den Papierkorb verschoben… {{seconds}} s",
+    "sessionExpired": "Deine Fabric-Sitzung ist abgelaufen. Melde dich bei Fabric an und versuche es erneut.",
+    "cantDeleteApp": "Die veröffentlichte App konnte nicht gelöscht werden.",
+    "cantDeleteAppRetry": "Die veröffentlichte App konnte nicht gelöscht werden. Versuche es erneut.",
+    "tooLong": "Das Löschen der veröffentlichten App dauert zu lange. Möglicherweise ist die Verbindung langsam. Versuche es erneut.",
+    "cantTrash": "Der Ordner konnte nicht in den Papierkorb verschoben werden. Versuche es erneut.",
+    "signInUnfinished": "Die Fabric-Anmeldung wurde nicht abgeschlossen. Versuche es erneut.",
+    "cantConfirmSignIn": "Die Fabric-Anmeldung konnte nicht bestätigt werden. Versuche es erneut.",
+    "closedBeforeSignIn": "Fabricator wurde geschlossen, bevor die Anmeldung abgeschlossen war."
+  }
+}

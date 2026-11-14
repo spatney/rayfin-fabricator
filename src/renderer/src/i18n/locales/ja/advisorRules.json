@@ -1,0 +1,636 @@
+{
+  "rules": {
+    "access/entity-missing-permission": {
+      "title": "エンティティにアクセス許可のデコレーターがない",
+      "summary": "すべてのエンティティで `@authenticated`、`@anonymous`、`@role` のいずれかを明示的に宣言している",
+      "why": "アクセス許可のデコレーターがないエンティティは保護されません。暗黙のうちに `authenticated: *` が適用されるため、サインインしているすべてのユーザーが、すべての行を作成、読み取り、更新、削除できます。",
+      "fix": "デコレーターを明示的に追加してください。ユーザーごとのデータには `@authenticated('*', { policy: (claims, item) => claims.sub.eq(item.user_id) })`、共有の参照データには `@authenticated('read')` を使います。"
+    },
+    "access/route-without-auth-guard": {
+      "title": "保護されたページにサインインせずにアクセスできる",
+      "summary": "アプリのデータを使うページで、セッションの読み込みを待ち、サインインを必須にしている",
+      "why": "ガードがないと、サインインしていない訪問者がデータ API を呼び出すページを開けてしまい、呼び出しが失敗したり、サインインしているユーザー向けの UI が表示されたりします。また、サインインをまったく組み込んでいないアプリでは、認証が必要なデータを一切読み込めません。",
+      "fix": "保護するルートをガードで囲んでください。ガードでは認証コンテキストの `loading` 状態を待ち、`!isAuthenticated` の場合はサインイン ページにリダイレクトします。また、データを呼び出す前に認証プロバイダーが設定されていることを確認してください。"
+    },
+    "access/on-auth-state-change": {
+      "title": "Rayfin に `onAuthStateChange` は存在しない",
+      "summary": "セッションの変化を `onSessionChange` で監視している",
+      "why": "Rayfin の認証クライアントには `onAuthStateChange` (ほかの認証 SDK の名前) がないため、これを呼び出すコードは実行時に例外をスローします。",
+      "fix": "`client.auth.onSessionChange(callback)` でサブスクライブしてください。戻り値は、サブスクライブを解除する関数です。"
+    },
+    "access/fabric-provider-missing": {
+      "title": "Fabric SSO が有効なのにプロバイダー パッケージがインストールされていない",
+      "summary": "Fabric SSO を使うアプリで `@microsoft/rayfin-auth-provider-fabric` を依存関係に含めている",
+      "why": "`services.auth.fabric.enabled` でバックエンドのフローは有効になりますが、実際にユーザーをサインインさせるには、フロントエンドに `@microsoft/rayfin-auth-provider-fabric` が必要です。",
+      "fix": "`@microsoft/rayfin-auth-provider-fabric` をほかの Rayfin SDK と同じバージョンでインストールし、`ensureSignedInWithFabric` でサインインしてください。"
+    },
+    "access/fabric-provider-dynamic-import": {
+      "title": "Fabric 認証プロバイダーを遅延インポートでしか読み込んでいない",
+      "summary": "Fabric 認証プロバイダーを起動時に静的にインポートしている",
+      "why": "このプロバイダーは、モジュールが最初に読み込まれたときに `?fabricEmbedded=true` フラグを取得します。`import()` だけで読み込むとフラグを取りこぼすことがあり、Fabric 内でのサインインがポップアップにフォールバックします。",
+      "fix": "アプリのエントリ モジュール (または起動時にそこからインポートされるモジュール) で `@microsoft/rayfin-auth-provider-fabric` を静的にインポートしてください。"
+    },
+    "access/sign-in-outside-gesture": {
+      "title": "ポップアップのサインインがユーザーのクリックなしで始まる",
+      "summary": "ポップアップのサインインをユーザー操作から直接開始している",
+      "why": "`ensureSignedInWithFabric` は最後に `window.open()` を呼び出しますが、ブラウザーはクリックの処理の中で直接実行されない限りこれをブロックします。そのため、サインインがエラーも表示されずに失敗します。",
+      "fix": "ボタンの `onClick` から、`await` より前に呼び出してください。Fabric 内でページの読み込み時に自動でサインインするには、代わりに `initEmbeddedAuth()` を使います。こちらはポップアップを開きません。"
+    },
+    "access/mock-auth-credentials": {
+      "title": "ハードコードされた資格情報を使うモックのサインインがアプリに含まれている",
+      "summary": "ハードコードされた資格情報を使うモックのサインインがアプリに含まれていない",
+      "why": "残っている `MockAuthService` は、Fabric アプリではサポートされていないローカル バックエンドのフローを使って、固定のメール アドレスとパスワードでサインインします。構成が不足していると、本来のサインインの代わりにこちらが使われることがあります。",
+      "fix": "`MockAuthService` と、それを選択するローカル開発用の分岐を削除するか、テストからのみインポートされるメモリ内のテスト ダブルに置き換えてください。"
+    },
+    "access/entra-exchange-not-enabled": {
+      "title": "rayfin.yml で Entra トークンによるサインインが有効になっていない",
+      "summary": "Entra トークンでサインインするアプリ (ローカルの自動サインインを含む) で `externalEntraExchange` を有効にしている",
+      "why": "`signInWithEntraToken()` とローカルの自動サインイン (`fetchRayfinLocalSessionToken()`) は、委任された Entra トークンを Rayfin セッションと交換します。Fabricator のローカル バックエンドは警告を出したうえで交換を受け入れますが、`services.auth.fabric.externalEntraExchange` が `true` でない限り、公開したアプリのバックエンドは「External Entra exchange is not enabled.」というエラーで拒否します。",
+      "fix": "rayfin.yml の `services.auth.fabric` に `externalEntraExchange: true` を設定してください。"
+    },
+    "access/session-introspection": {
+      "title": "コードがドキュメントに記載されていないセッション フィールドに依存している",
+      "summary": "ドキュメントに記載されたセッション フィールドだけを読み取っている",
+      "why": "Rayfin のセッションは、意図的に内部構造を公開していません。`user`、`isAuthenticated`、`isAnonymous`、`role`、`expiresAt` 以外を読み取ったりデコードしたりするコードは、SDK でセッションの構造が変わると動作しなくなります。",
+      "fix": "UI の表示は `session.isAuthenticated` または `session.user` に基づいて切り替え、ドキュメントに記載されたフィールドだけを使ってください。"
+    },
+    "access/embedded-auth-not-awaited": {
+      "title": "埋め込みサインインが完了する前にサインイン後の UI が表示される",
+      "summary": "起動時に `initEmbeddedAuth()` の完了を待ってから、サインイン後の UI の表示やデータの読み込みを行っている",
+      "why": "Fabric 内では、`initEmbeddedAuth()` がユーザーをサインインさせます。Rayfin 1.36 以降は、最初に外部の埋め込みホストがあるかどうかも確認します。これが完了する前にサインイン後の UI を表示したりデータ API を呼び出したりすると、別のユーザーの古いセッションが使われたり、セッションがまったくない状態になったりすることがあります。",
+      "fix": "認証プロバイダーで `initEmbeddedAuth()` の完了を待ってから `loading` を false に設定し、データの呼び出しと保護されたルートはその状態に基づいて制御してください。"
+    },
+    "policy/owner-field-without-policy": {
+      "title": "ユーザーごとのデータが所有者に限定されていない",
+      "summary": "所有者フィールドを持つエンティティで、行を変更できるのを所有者だけにしている",
+      "why": "このエンティティは所有者 (`user_id`、`owner_id`、`created_by` など) を保存していますが、サインインしているユーザーに作成、更新、削除のいずれかを許可する設定に行レベルの `policy` がありません。そのため、サインインしているユーザーなら誰でも、ほかのユーザーの行も含めてすべての行を変更できます。",
+      "fix": "所有者に限定すべき各許可に `policy: (claims, item) => claims.sub.eq(item.user_id)` を追加してください。読み取りは共有し、書き込みは共有しない場合は、操作ごとに別のデコレーターを使います。"
+    },
+    "policy/anonymous-write": {
+      "title": "サインインしなくても誰でもこのデータを変更できる",
+      "summary": "匿名 (公開) アクセスの許可を読み取り専用にしている",
+      "why": "作成、更新、削除のいずれかを含む `@anonymous` の許可があると、認証されていない呼び出し元が行を変更できます。これは、テナント管理者が匿名のデータ アクセスを許可している環境で公開したアプリ (ほとんどのテナントは公開時に `anonymous` ロールを拒否します) と、Fabricator のローカル プレビューで起こります。",
+      "fix": "`@anonymous` は本当に公開するデータに限り、`'read'` だけにしてください。書き込みは、所有者のポリシーを付けて `@authenticated` に移します。"
+    },
+    "policy/anonymous-grant": {
+      "title": "匿名のデータ アクセスが原因で公開できない可能性がある",
+      "summary": "公開 (匿名) のデータ アクセスを、テナントが許可している場合にだけ使っている",
+      "why": "ほとんどの Fabric テナントは `anonymous` ロールを拒否します。テナント管理者が「Enable anonymous data access for Fabric Apps (Preview)」をオンにしていない限り、公開 (`rayfin up`) は `ANONYMOUS_DATA_ACCESS_BLOCKED_BY_TENANT_ADMIN` で失敗します。Fabricator のローカル バックエンドはこのロールを許可するため、ローカル プレビューでは公開データが動作し、問題は公開したときに初めて表面化します。",
+      "fix": "サインインしているユーザーだけが必要とするデータは、代わりに `authenticated` ロールに許可してください。`@anonymous('read')` (または `@role('anonymous', …)`) を `@authenticated('read')` に置き換えます。`@anonymous('read')` を残すのは本当に公開するデータだけにし、それもテナント管理者が Fabric アプリの匿名データ アクセスをオンにしている場合に限ります。"
+    },
+    "policy/unsupported-claim": {
+      "title": "ポリシーでサポートされていないクレームを使っている",
+      "summary": "ポリシーでは `claims.sub`、`claims.email`、`claims.role` だけを比較している",
+      "why": "ポリシーの DSL でサポートされているのは `sub`、`email`、`role` だけです。それ以外のクレーム (テナント、組織、カスタム) は、コンパイルできないか、一致することがありません。",
+      "fix": "値を行に保存し (例: `organization_id`)、`claims.sub` とアプリケーション コードでのメンバーシップ チェックを組み合わせて範囲を限定してください。"
+    },
+    "policy/blob-without-permission": {
+      "title": "ストレージ フォルダーにアクセス許可のデコレーターがない",
+      "summary": "すべての `@blob()` ストレージ クラスでアクセス許可を明示的に宣言している",
+      "why": "ストレージ フォルダーは、エンティティと同じ `@authenticated` / `@anonymous` / `@role` デコレーターで保護します。デコレーターがないと、誰がファイルを読み書きできるのかが明示されません。",
+      "fix": "`@blob()` クラスに `@authenticated('*', { policy: (claims, item) => claims.sub.eq(item.owner_id) })` などのデコレーターを追加してください。"
+    },
+    "policy/prefer-shorthand": {
+      "title": "`@authenticated` / `@anonymous` の短縮形を使う",
+      "summary": "組み込みロールに `@authenticated` / `@anonymous` の短縮形を使っている",
+      "why": "`@role('authenticated', …)` でも動作しますが、短縮形はドキュメントに記載されている書き方で、呼び出し箇所で意図もわかりやすくなります。",
+      "fix": "`@role('authenticated', …)` を `@authenticated(…)` に、`@role('anonymous', …)` を `@anonymous(…)` に置き換えてください。"
+    },
+    "policy/sensitive-field-exposed": {
+      "title": "機密フィールドをデータ API から読み取れる",
+      "summary": "機密フィールドを読み取りの許可から除外している",
+      "why": "シークレット、トークン、パスワード、機密性の高い個人データなどのフィールドは、除外しない限り、エンティティの読み取りを許可されたすべての呼び出し元に返されます。",
+      "fix": "読み取りの許可に `exclude: ['field']` を追加するか (書き込みでそのフィールドが引き続き必要な場合は、操作ごとに別のデコレーターを使います)、値をエンティティから外してサーバー側のシークレットに移してください。"
+    },
+    "policy/overbroad-grant": {
+      "title": "許可の範囲がデータに必要な範囲より広い",
+      "summary": "各ロールに必要な操作だけを許可している",
+      "why": "共有データで、サインインしているすべてのユーザーに `'*'` (または更新と削除) を許可すると、どのユーザーでもそのデータを編集、削除できます。また、ユーザーごとのデータを範囲を限定せずに読み取れるようにすると、すべてのユーザーの行が見えてしまいます。",
+      "fix": "許可を操作ごとに分けてください。たとえば、全員には `@authenticated('read')` を許可し、書き込みには所有者に限定したポリシーを付けます (または書き込みを許可しません)。"
+    },
+    "policy/policy-not-caller-scoped": {
+      "title": "行のポリシーで呼び出し元を確認していない",
+      "summary": "ユーザーごとのデータに対する行のポリシーでクレームを比較している",
+      "why": "行自身のフィールドだけを比較する (`claims` を一切使わない) ポリシーは、行を絞り込みはしますが、サインインしているユーザーの行だけに制限するものではありません。",
+      "fix": "`claims.sub.eq(item.user_id)` などの呼び出し元に関する条件を追加してください。既存のフィルターも引き続き必要な場合は、`.and()` で組み合わせます。"
+    },
+    "policy/org-scope-without-membership": {
+      "title": "チームのデータでメンバーシップを確認していない",
+      "summary": "チーム単位のデータで、読み書きの前にメンバーシップを確認している",
+      "why": "ポリシーでは「呼び出し元が `item.organization_id` に所属している」という条件を表現できません。そのため、アプリでメンバーシップを確認しないと、ユーザーがほかのチームの行を読み書きできてしまいます。",
+      "fix": "まず呼び出し元のメンバーシップを調べて読み取りを `organization_id` で絞り込み、組織の行を作成または更新する前にはメンバーシップを確認してください。"
+    },
+    "policy/connector-policy-app-auth": {
+      "title": "アプリの ID で実行されるコネクタにユーザーごとのルールがある",
+      "summary": "ユーザーごとに範囲を限定するデータのコネクタで委任認証を使っている",
+      "why": "`auth.type: application` では、コネクタのすべてのクエリがアプリの ID で実行されます。そのため、データ ソース側ではユーザーを区別できず、`claims.sub` や `claims.email` を比較するポリシーがあっても、各ユーザーがそこで見られる範囲は制限されません。Rayfin 1.36 以降、`rayfin connector add` は SQL コネクタを既定で `application` に設定します。",
+      "fix": "ユーザーごとに範囲を限定する必要があるデータのコネクタには `auth.type: delegated` を使ってください。全員がデータを見てもよい場合は、ユーザーごとのルールを削除してください。"
+    },
+    "secrets/secret-in-public-env": {
+      "title": "ブラウザーから見える変数でシークレットが漏えいしている",
+      "summary": "ブラウザーから見える変数 (`VITE_`、`RAYFIN_PUBLIC_`) にシークレットを入れていない",
+      "why": "`VITE_*` と `RAYFIN_PUBLIC_*` の値はブラウザー向けのバンドルに組み込まれるため、アプリを使う誰もが読み取れます。",
+      "fix": "フロントエンドの変数から値を削除し、`rayfin secret set <NAME>` で保存して、Rayfin の関数からサーバー側で読み取ってください。公開を前提としたキー (ブラウザーからの利用に制限した地図サービスのキーなど) の場合は、許容済みのリスクとしてこの問題を無視してください。"
+    },
+    "secrets/env-file-not-ignored": {
+      "title": "環境ファイルが git の無視対象になっていない",
+      "summary": "ローカルの環境ファイルを git の無視対象にしている",
+      "why": "`rayfin/.env` と `.env.local` には、公開したアプリの設定や、場合によってはシークレットが含まれます。無視対象にしていないと、git の履歴に残ってしまいます。",
+      "fix": "ファイルを `.gitignore` に追加して、代わりにプレースホルダーの `.env.example` をコミットし、すでにコミットした値はすべてローテーションしてください。"
+    },
+    "secrets/hardcoded-credential": {
+      "title": "プロジェクトに資格情報がハードコードされている",
+      "summary": "ソース、スクリプト、ワークフローに資格情報をハードコードしていない",
+      "why": "コミットしたファイル内のキー、トークン、接続文字列は、コードにアクセスできる誰からも見えます。また、削除したあとも git の履歴に残ります。",
+      "fix": "値を Rayfin のシークレット (`rayfin secret set`) または CI のシークレット ストアに移して名前で参照し、漏えいした資格情報をローテーションしてください。"
+    },
+    "secrets/redirect-uri-scope": {
+      "title": "リダイレクト URI が想定外のオリジンを許可している",
+      "summary": "`allowedRedirectUris` にアプリ自身のオリジンだけを指定している",
+      "why": "指定したオリジンはどれも Fabric SSO の引き渡しを受け取れます。ワイルドカードや、ローカル以外の `http` (HTTPS ではない) のオリジンがあると、引き渡しを受け取れる相手が広がります。",
+      "fix": "ローカル開発用のオリジン (`http://localhost:5173` など) と公開したアプリ自身のオリジンだけを残し、ワイルドカードやほかのプロジェクトからコピーしたエントリは削除してください。"
+    },
+    "secrets/publishable-key-mismatch": {
+      "title": "公開可能キーの変数に別の値が入っている",
+      "summary": "公開可能キーの変数に公開可能キー (`pk-…`) が入っている",
+      "why": "クライアント コードに含めても安全なのは公開可能キー (`pk-…`) だけです。この変数にほかの値を入れると、その値がブラウザーに送られます。",
+      "fix": "公開 (`rayfin up`) または `rayfin env` で書き込まれる値 (`pk-` で始まる値) に戻し、誤って貼り付けた値はローテーションしてください。"
+    },
+    "secrets/deployments-file-tracked": {
+      "title": "公開したアプリの記録が git の無視対象になっていない",
+      "summary": "`rayfin/.deployments.json` を git の無視対象にしている",
+      "why": "このファイルには公開したアプリのワークスペース、テナント、アイテムの ID が含まれ、公開 (`rayfin up`) のたびに書き換えられます。共有するためのファイルではありません。",
+      "fix": "`rayfin/.deployments.json` を `.gitignore` に追加し、`git rm --cached rayfin/.deployments.json` で追跡を解除してください。"
+    },
+    "secrets/local-backend-not-ignored": {
+      "title": "ローカル バックエンドのフォルダーが git の無視対象になっていない",
+      "summary": "ローカル バックエンドがデータ、キー、シークレットを保存する `.rayfin-local/` を git の管理対象外にしている",
+      "why": "Fabricator は、状態を `.rayfin-local/` に保存するローカル バックエンドを使って、このコンピューターでアプリを実行します。保存されるのは、ユーザーとセッションを含むアプリのローカル データベース (`db.sqlite`)、署名キー (`keys/`)、シークレットのローカルの値 (`secrets.json`) です。フォルダー内の `.gitignore` (`*` の 1 行だけ) によって、これらはすべて git の管理対象外になっています。このファイルがない、変更されている、または git がすでにこのフォルダー内のファイルを追跡している場合は、コミット (Fabricator が行うコミットを含む) によってそれらが git の履歴に入ってしまいます。",
+      "fix": "`.rayfin-local/.gitignore` を `*` の 1 行だけに戻すか (ファイルがない場合は、ローカル バックエンドが次回の起動時に再作成します)、プロジェクトの `.gitignore` に `.rayfin-local/` を追加してください。git がすでにこのフォルダー内のファイルを追跡している場合は、`git rm -r --cached .rayfin-local` で追跡を解除し、コミットされた本物のシークレットをローテーションしてください。"
+    },
+    "secrets/encryption-fallback-committed": {
+      "title": "コミットしたファイルで平文のトークン キャッシュが有効になっている",
+      "summary": "コミットしたファイルで CLI トークンの平文キャッシュを有効にしていない",
+      "why": "`RAYFIN_ENCRYPTION_FALLBACK_ENABLED` は CLI のトークン キャッシュを平文で保存する設定で、ローカル開発専用です。",
+      "fix": "コミットしたスクリプト、env ファイル、CI の構成から削除し、必要なときにローカルのシェルでだけ設定してください。"
+    },
+    "secrets/credential-in-browser": {
+      "title": "ブラウザーのコードが秘密の資格情報を使ってサービスを呼び出している",
+      "summary": "ほかのサービスの資格情報をサーバー側だけで扱っている",
+      "why": "ブラウザーが送信する内容はすべてユーザーから見えるため、有料の API や特権が必要な API をフロントエンドのコードから呼び出すと、資格情報が漏えいします。",
+      "fix": "呼び出しを、キーを `ctx.Secrets.<NAME>` として読み取る Rayfin の関数に移し (シークレットは Fabricator の [シークレット] ビューで追加します)、アプリからはその関数を呼び出してください。Functions はすべての Fabric リージョンで利用できるわけではないため、使用するワークスペースで Functions を含めた公開が成功することを確認してください。"
+    },
+    "data-model/text-without-max": {
+      "title": "テキスト フィールドに最大長が指定されていない",
+      "summary": "すべての `@text` と `@email` のフィールドで `max` を設定している",
+      "why": "公開したアプリが使う MSSQL では、`max` のない `@text()` や `@email()` は `NVARCHAR(MAX)` になり、GraphQL のスキーマ生成が失敗することがあります。公開は成功と表示されますが、その後、公開したアプリのクエリが内部サーバー エラーで失敗します。",
+      "fix": "`@text({ max: 200 })` のように、長さを明示的に設定してください。`claims.sub` から取得する所有者 ID には `max: 128` を使います。"
+    },
+    "data-model/fk-typed-text": {
+      "title": "外部キーがテキスト型になっている",
+      "summary": "ほかのエンティティへの外部キーに `@uuid` を使っている",
+      "why": "ほかのエンティティを参照する `{property}_id` 列は、そのエンティティの UUID 主キーと型が一致している必要があります。`@text()` として宣言すると型の不一致になります。",
+      "fix": "`@uuid()` として宣言してください。サインインから得られる所有者 ID (`claims.sub` から取得する `user_id` など) は外部キーではないため、`@text({ max: 128 })` のままにします。"
+    },
+    "data-model/relation-not-lazy": {
+      "title": "リレーションシップの対象がアロー関数で囲まれていない",
+      "summary": "`@one` / `@many` の対象に遅延評価のアロー関数を使っている",
+      "why": "`@one(Target)` はクラスをすぐに評価するため、エンティティ ファイル間で循環インポートがあると動作しなくなります。",
+      "fix": "`@one(() => Target)` や `@many(() => Target)` のように記述してください。"
+    },
+    "data-model/relation-import-type": {
+      "title": "エンティティのインポートが実行時に機能しない",
+      "summary": "エンティティ ファイルで、関連するクラスを `.js` のパスを使って値としてインポートしている",
+      "why": "リレーションシップのデコレーターには実行時のクラスが必要ですが、`import type` はコンパイル時に消去されます。また、エンティティ ファイル間の相対インポートを ESM として解決するには、`.js` 拡張子が必要です。",
+      "fix": "`import { Target } from './Target.js'` を使ってください。"
+    },
+    "data-model/entity-not-registered": {
+      "title": "エンティティがスキーマに完全には登録されていない",
+      "summary": "すべてのエンティティを `schema` 配列とスキーマ型の両方に含めている",
+      "why": "スキーマ ファイル (`schema.ts`、またはデータ パッケージの `src/index.ts`) にないエンティティは、型付きクライアントに含まれません (`client.data.<Entity>` が存在しません)。また、配列と型の一方だけに含まれるエンティティは、登録が中途半端な状態になります。",
+      "fix": "`.js` のパスでインポートし、エクスポートしているスキーマ型と `schema` 配列の両方に追加してください。"
+    },
+    "data-model/field-missing-decorator": {
+      "title": "エンティティのプロパティにフィールド デコレーターがない",
+      "summary": "エンティティのすべてのプロパティに、フィールド デコレーターが 1 つだけ付いている",
+      "why": "型デコレーター (`@text`、`@int`、`@uuid` など) のないプロパティは保存されません。また、1 つのプロパティに型デコレーターが 2 つあると競合し、読み書きがクラスの定義どおりに動作しません。",
+      "fix": "保存する各プロパティにフィールド デコレーター (`@int()` など) を 1 つだけ付け、保存しない値はエンティティ クラスの外に移してください。"
+    },
+    "data-model/decimal-precision": {
+      "title": "decimal の有効桁数と小数点以下桁数の指定が不完全",
+      "summary": "`@decimal` で有効桁数と小数点以下桁数を一緒に設定し、有効桁数を 28 以下にしている",
+      "why": "Data API Builder がサポートする有効桁数は最大 28 です。また、`precision` / `scale` の一方だけを設定すると、列の型が想定外のものになります。",
+      "fix": "`@decimal({ precision: 18, scale: 2 })` のように、両方を設定してください。"
+    },
+    "data-model/nullable-mismatch": {
+      "title": "フィールドを省略可能にする指定が片方にしかない",
+      "summary": "NULL 許容のフィールドで `{ optional: true }` と `?` を一緒に使っている",
+      "why": "フィールドは既定で必須です。`?` のない `optional: true` (またはオプションのない `?`) では、データベースと TypeScript の型が一致しなくなります。",
+      "fix": "`@text({ optional: true, max: 200 }) note?: string` のように、両方を一緒に使ってください。"
+    },
+    "data-model/many-to-many": {
+      "title": "結合エンティティのない多対多のリレーションシップ",
+      "summary": "多対多の関連付けに明示的な結合エンティティを使っている",
+      "why": "`@one` / `@many` で表せるのは一対多だけです。2 つのエンティティで互いに `@many` を指定しても、機能する関連付けにはなりません。",
+      "fix": "両側に 1 つずつ対応する 2 つの `@one()` フィールドを持つ結合エンティティを追加し、それを介してクエリを実行してください。"
+    },
+    "data-model/reserved-entity-name": {
+      "title": "エンティティ名が GraphQL で予約されている",
+      "summary": "GraphQL の組み込み型と同じ名前のエンティティがない",
+      "why": "エンティティ名は GraphQL の型名になります。Rayfin 1.36 以降、CLI は `Date`、`String`、`Query`、`UUID` などの名前や、`__` で始まる名前を拒否するため、公開が失敗します。",
+      "fix": "クラスの名前を変更するか (例: `Date` ではなく `EventDate`)、名前はそのままにして `@entity('EventDate')` で安全な名前を渡してください。"
+    },
+    "data-model/relation-options": {
+      "title": "リレーションシップのデコレーターにサポートされていないオプションがある",
+      "summary": "`@one()` と `@many()` で `optional` と `unique` だけを使っている",
+      "why": "リレーションシップのデコレーターが受け付けるのは `{ optional, unique }` だけです。`default`、`max`、`foreignKey`、`targetKey` などのオプションはサポートされていません。外部キーは常に `<property>_id` 列です。",
+      "fix": "ほかのオプションを削除し、リレーションシップによって生成される `<property>_id` 外部キーを使ってください。"
+    },
+    "data-model/weak-constraints": {
+      "title": "アプリで使わない値をフィールドが受け付ける",
+      "summary": "フィールドに、ドキュメントに記載された最も厳密な型と制限を使っている",
+      "why": "決まった選択肢に自由入力のテキストを使ったり、メール アドレスに通常のテキストを使ったり、数値に範囲を設けなかったりすると、無効なデータが UI を経由せずに入り込み、フィルター、グラフ、合計が正しく機能しなくなります。",
+      "fix": "ドキュメントに記載されたオプションを使ってください。決まった選択肢には `@set([...])`、メール アドレスには `@email()`、数値とテキストには `min` / `max` を使います。"
+    },
+    "data-model/seed-authenticated-entity": {
+      "title": "シード スクリプトがサインイン専用のエンティティに書き込んでいる",
+      "summary": "シード スクリプトの対象を、スクリプトからの書き込みを許可するエンティティだけにしている",
+      "why": "サインインが必要なエンティティにスクリプトでデータを書き込む方法はサポートされていないため、このようなシード スクリプトは失敗します。",
+      "fix": "開発中のデータは、代わりに `rayfin/seed` に行を置いてください。Fabricator がそれらをアプリのローカル データに読み込みます。各行の所有者は `$developer` または `$user:<email>` で表します。Fabric では、サインインが必要なデータは実行中のアプリから作成してください。スクリプトでシードできるのは `@anonymous()` のエンティティだけですが、ほとんどの Fabric テナントは公開時にこれを拒否します。"
+    },
+    "queries/unpaginated-list": {
+      "title": "一覧のクエリが通知なく 100 行で打ち切られる",
+      "summary": "増える可能性のある一覧で、結果をページ単位で取得している",
+      "why": "`.execute()` は 1 ページ (既定では 100 行) だけを返し、続きがあることを知らせません。そのため、テーブルが大きくなるにつれて、アプリは不完全な一覧や合計を警告なしに表示することになります。",
+      "fix": "`.first(n).executePaginated()` を使い、`hasNextPage` が true の間は `.after(endCursor)` で続きを取得するか、必要に応じて追加のページを読み込んでください。"
+    },
+    "queries/count-method": {
+      "title": "Rayfin のクエリに `.count()` は存在しない",
+      "summary": "行数を結果の長さまたは数値の集計で求めている",
+      "why": "メソッド チェーン形式のクライアントには `count()` メソッドがありません。`count` は数値フィールドに対する集計で、数えるのは行ではなく NULL 以外の値です。",
+      "fix": "行数を求めるには、最小限のフィールドを選択して `results.length` を使うか (大きなテーブルではページごとの数を合計します)、NULL 非許容の数値フィールドに対して `count` で集計してください。"
+    },
+    "queries/find-by-pk": {
+      "title": "`findByPk` は存在しないため `findById` を使う",
+      "summary": "1 件のレコードの読み取りに `findById` を使っている",
+      "why": "Rayfin には `findByPk` (ほかの ORM の名前) がないため、これらの呼び出しは失敗します。",
+      "fix": "`client.data.<Entity>.findById(id)` を使ってください。"
+    },
+    "queries/total-count": {
+      "title": "設定されることのない `totalCount` にコードが依存している",
+      "summary": "`totalCount` に依存するコードがない",
+      "why": "Data API Builder は総件数を返せないため、`totalCount` は結果の型には存在しますが、値が設定されることはありません。",
+      "fix": "代わりに読み込んだ項目の数を数えるか、`.executePaginated()` でページ単位に取得して `items.length` を合計してください。"
+    },
+    "queries/where-dot-path": {
+      "title": "フィルターでリレーションシップのドット パスを使っている",
+      "summary": "フィルターでドット パスではなく外部キーの列を使っている",
+      "why": "`'notebook.id'` のようなドット パスが機能するのは `.select()` の中だけです。`.where()` では失敗するか、何も絞り込まれません。",
+      "fix": "`.where({ notebook_id: { eq: notebookId } })` のように、外部キーの列で絞り込んでください。"
+    },
+    "queries/select-nested-path": {
+      "title": "select でリレーションシップを 2 階層以上たどっている",
+      "summary": "select でたどるリレーションシップを 1 階層までにしている",
+      "why": "`.select()` でサポートされるリレーションシップのドット パスは 1 階層 (`'notebook.name'`) までで、2 階層 (`'notebook.owner.email'`) はサポートされていません。",
+      "fix": "深い階層のデータは 2 回目のクエリで取得するか、それを必要とするエンティティに直接のリレーションシップを追加してください。"
+    },
+    "queries/aggregate-with-row-methods": {
+      "title": "集計と行の選択を組み合わせている",
+      "summary": "集計を `select` / `orderBy` / `first` / `after` と組み合わせていない",
+      "why": "Data API Builder は、グループ化した集計と行のクエリの組み合わせを拒否するため、このようなメソッド チェーンは失敗します。",
+      "fix": "集計を単独で実行し、返されたグループの並べ替えや切り出しは TypeScript で行ってください。"
+    },
+    "queries/sort-direction-case": {
+      "title": "並べ替えの方向が小文字になっていない",
+      "summary": "`orderBy` で `'asc'` / `'desc'` を使っている",
+      "why": "並べ替えの方向は、小文字の文字列 `'asc'` と `'desc'` で指定します。大文字を使った定数ではありません。",
+      "fix": "`.orderBy({ createdAt: 'desc' })` のように記述してください。"
+    },
+    "queries/raw-data-fetch": {
+      "title": "手書きの GraphQL でデータを取得している",
+      "summary": "アプリのデータを型付きクライアント (`client.data`) 経由で扱っている",
+      "why": "Rayfin API に対する `fetch()` や GraphQL の呼び出しを手書きすると、型付きクライアントのセッション処理と型安全性が使われません。",
+      "fix": "代わりに `client.data.<Entity>` のクエリとミューテーションを使ってください。"
+    },
+    "queries/n-plus-one": {
+      "title": "ループ内で項目ごとにクエリを実行している",
+      "summary": "関連データを、行ごとのクエリではなくまとめて読み込んでいる",
+      "why": "一覧の項目ごとにクエリを実行して完了を待つと、データが増えるにつれてラウンドトリップの回数と容量の使用量が何倍にも増えます。",
+      "fix": "`.where({ id: { in: ids } })`、1 階層の `.select()` ドット パス、または集計を使って、1 回のクエリですべてを読み込んでください。"
+    },
+    "queries/mutation-shape": {
+      "title": "ミューテーションがドキュメントに記載された形式に従っていない",
+      "summary": "ミューテーションで、ドキュメントに記載された方法でリレーションシップを設定している",
+      "why": "`create` / `update` で外部キーの列 (`notebook_id`) を直接設定するのは、リレーションシップの正しい書き方ではありません。また、`@many` フィールドに配列を代入しても何も起こりません。",
+      "fix": "代わりに関連オブジェクト (`notebook: { id: notebookId }`) を渡してください。`@many` 側を変更するには、各子の `@one` を更新します。"
+    },
+    "config/missing-service-blocks": {
+      "title": "rayfin.yml で auth と data が宣言されていない",
+      "summary": "rayfin.yml で、無効にする場合も含めて `services.auth` と `services.data` を宣言している",
+      "why": "CLI はこれらのキーを既定値を適用せずに読み取るため、どちらかを省略すると公開が失敗します。",
+      "fix": "両方のブロックを追加してください。たとえば、アプリがデータを保存しない場合は `data: { enabled: false }` とします。"
+    },
+    "config/data-dialect": {
+      "title": "データ サービスに `dialect: mssql` が必要",
+      "summary": "データ サービスで `dialect: mssql` を宣言している",
+      "why": "`services.data.enabled: true` の場合は `dialect` が必須で、Fabric アプリがサポートするのは `mssql` だけです。指定しないと、公開が「Dialect is required when Data module is enabled」というエラーで失敗します。",
+      "fix": "`services.data` に `dialect: mssql` を設定してください。"
+    },
+    "config/experimental-decorators": {
+      "title": "tsconfig で従来のデコレーターが有効になっている",
+      "summary": "tsconfig で `experimentalDecorators` と `emitDecoratorMetadata` を有効にしていない",
+      "why": "Rayfin は標準の TC39 デコレーターを使います。従来の `experimentalDecorators` モード (およびそれを必要とする `emitDecoratorMetadata`) を有効にすると、エンティティのコンパイルが失敗します。",
+      "fix": "すべての tsconfig から `experimentalDecorators` と `emitDecoratorMetadata` を削除してください。"
+    },
+    "config/decorators-lib": {
+      "title": "tsconfig に `ESNext.Decorators` がない",
+      "summary": "エンティティに使う tsconfig に `ESNext.Decorators` が含まれている",
+      "why": "Rayfin の標準デコレーターの型チェックを可能にしているのは、`ESNext.Decorators` ライブラリです。",
+      "fix": "ルートの tsconfig.json の `compilerOptions.lib` に `\"ESNext.Decorators\"` を追加してください。"
+    },
+    "config/swc-with-runtime-entities": {
+      "title": "アプリがインポートするエンティティ クラスをビルド プラグインでコンパイルできない",
+      "summary": "エンティティ クラスをインポートするフロントエンドのコードを、デコレーターに対応したプラグインでビルドしている",
+      "why": "`@vitejs/plugin-react-swc` は標準のデコレーターを解析できません。エンティティ クラスを (`import type` ではなく) 値としてインポートすると、クラスがブラウザー向けのビルドに含まれ、ビルドが「Expression expected」というエラーで失敗します。",
+      "fix": "エンティティを `import type` でインポートするか、`@vitejs/plugin-react` に切り替えてください。"
+    },
+    "config/vite-target": {
+      "title": "Vite のターゲットが、バンドルするエンティティ クラスに対して古すぎる",
+      "summary": "バンドルにエンティティ クラスが含まれる場合、Vite のターゲットを ES2022 以降にしている",
+      "why": "ブラウザー向けのビルドにデコレーター付きのエンティティ クラスが含まれる場合は、esbuild のターゲットを ES2022 以降にする必要があります。そうしないと、デコレーターの構文を解析できません。",
+      "fix": "vite.config.ts の `build`、`esbuild`、`optimizeDeps.esbuildOptions` に `target: 'es2022'` を設定してください。"
+    },
+    "config/static-hosting-folder": {
+      "title": "静的ホスティングのフォルダーがビルドの出力先と一致しない",
+      "summary": "`staticHosting.folder` がフロントエンドのビルド出力ディレクトリと一致している",
+      "why": "公開 (`rayfin up`) では `staticHosting.folder` がアップロードされます。これがバンドラーのビルドの出力先と異なると、公開が失敗するか、古いファイルがアップロードされます。",
+      "fix": "`services.staticHosting.folder` を Vite の `build.outDir` (既定値は `dist`) に合わせてください。"
+    },
+    "config/deprecated-yml-keys": {
+      "title": "rayfin.yml に非推奨のキーがある",
+      "summary": "rayfin.yml で非推奨のキーを使っていない",
+      "why": "最上位の `frontend:` (フレームワークは自動検出されます) と `publishable_key:` (`rayfin/.env` で管理されます)、`services.connectors.enabled` (Rayfin 1.36 以降、コネクタは常に有効です)、`services.staticHosting.anonymousAccess` (1.35.1 で `assetAccess` に置き換えられました) は、従来のキーか、無視されるキーです。",
+      "fix": "rayfin.yml から削除してください。`anonymousAccess` を削除する場合は、代わりに `assetAccess` を `protected` または `public` に設定します。"
+    },
+    "config/connectors-list-shape": {
+      "title": "rayfin.yml のコネクタが古いマップ形式になっている",
+      "summary": "rayfin.yml の `connectors:` がエントリのリストになっている",
+      "why": "現在の Rayfin CLI は、`connectors:` を `type` を持つ `- name:` エントリのリストとして読み取ります。コネクタ名をキーとする古いマップは、ドキュメントに記載された形式ではありません。",
+      "fix": "各コネクタを、`name` と `type` を持つリストの項目に書き換えてください (`rayfin connector add` を再実行するなど)。その際、`config`、`auth`、`operations` はそのまま残します。"
+    },
+    "config/functions-auth": {
+      "title": "アプリケーション認証なしで Functions が有効になっている",
+      "summary": "有効にした Functions で `auth.type: application` を宣言している",
+      "why": "Rayfin 1.36 以降、`services.functions.auth.type` が `application` でない限り、公開 (`rayfin up`) で有効な Functions が拒否され、「authentication is required when Functions are enabled.」というエラーになります。",
+      "fix": "rayfin.yml の `services.functions` に `auth: { type: application }` を追加してください。これにより、Functions はアプリの ID でほかのサービスを呼び出します。"
+    },
+    "config/static-hosting-posture": {
+      "title": "静的ホスティングで、アプリを読み込めるユーザーが指定されていない",
+      "summary": "`services.staticHosting.assetAccess` を明示的に設定している",
+      "why": "Rayfin 1.35.1 以降、ホストされるアプリでは `protected` (Fabric へのサインインが必要) または `public` を選ぶ必要があります。指定がないと、最初の非対話型の公開 (`rayfin up`) で rayfin.yml に `protected` が自動的に書き込まれるため、アクセスの設定が意図的な選択になりません。",
+      "fix": "`services.staticHosting` に `assetAccess: protected` を追加してください (リンクを知っている誰もがアプリのファイルを読み込めるようにする場合は `public` にします。その場合もデータのアクセス許可は適用されます)。"
+    },
+    "config/embedded-public-conflict": {
+      "title": "埋め込み専用のアプリが public に設定されている",
+      "summary": "`assetAccess: public` と `embedded.only: true` を組み合わせていない",
+      "why": "Fabric ポータル内でしか読み込まれないアプリには一般に公開する単独のページがないため、公開が失敗します。`rayfin up` はこの組み合わせを「Invalid static hosting posture」というエラーで拒否します。",
+      "fix": "埋め込み専用のアプリには `assetAccess: protected` を使ってください。単独でも読み込めるようにする場合は、`embedded.only: false` に設定します。"
+    },
+    "config/stale-feature-flags": {
+      "title": "フラグが不要になった機能を機能フラグで有効にしている",
+      "summary": "`RAYFIN_FEATURE_FLAGS` に、まだフラグが必要な機能だけを指定している",
+      "why": "Functions とコネクタは Rayfin 1.36 から一般提供されているため、`RAYFIN_FEATURE_FLAGS` の `functions` と `connectors` は何の効果もありません。現在もフラグを使うのは `storage` だけです。",
+      "fix": "`RAYFIN_FEATURE_FLAGS` から `functions` と `connectors` を削除してください。何も残らない場合は、変数自体を削除します。"
+    },
+    "platform/cli-outdated": {
+      "title": "Rayfin CLI が最新ではない",
+      "summary": "Rayfin CLI が最新のリリースになっている",
+      "why": "新しい CLI には修正が含まれ、現在のドキュメントとも一致しています。rayfin.ai に記載されている動作は、古いバージョンには当てはまらない場合があります。Fabricator がこのコンピューターで実行するアプリでは、Fabricator のローカル バックエンドが実行するリリースだけが対象になります。",
+      "fix": "`@microsoft/rayfin-cli` を最新のリリースに更新してください。アップグレードは Fabricator から Copilot に任せることもできます。"
+    },
+    "platform/sdk-outdated": {
+      "title": "Rayfin SDK が最新ではない",
+      "summary": "Rayfin SDK のパッケージが最新のリリースになっている",
+      "why": "SDK と CLI のバージョンは別々に管理されています。新しい SDK のリリースには、修正と、現在のドキュメントで説明されている API が含まれています。また、Rayfin 1.36 では、いくつかのインポートと Functions の API が変更されました。Fabricator がこのコンピューターで実行するアプリでは、Fabricator のローカル バックエンドが実行するリリースだけが対象になります。",
+      "fix": "すべての Rayfin SDK パッケージを、まとめて同じ最新バージョンに更新してください。アップグレードは Fabricator から Copilot に任せることもできます。"
+    },
+    "platform/sdk-lockstep": {
+      "title": "Rayfin SDK のパッケージのバージョンがそろっていない",
+      "summary": "Rayfin SDK のパッケージ群が同じバージョンでインストールされている",
+      "why": "`rayfin-core`、`-client`、`-data`、`-auth`、`-auth-provider-fabric`、`-lib`、`-functions`、`-storage`、`-embed-host`、`-local-dev` は、常に同じバージョンでリリースされます。バージョンを混在させた状態はテストされておらず、実行時に問題が起きる可能性があります。",
+      "fix": "すべての Rayfin SDK パッケージを同じリリースに固定して、再インストールしてください。Fabricator がこのコンピューターで実行するアプリでは、プロジェクトの `~` の範囲 (`~1.36.0` など) に固定します。"
+    },
+    "platform/sdk-local-range": {
+      "title": "Rayfin パッケージが、Fabricator がローカルで実行するリリースに固定されていない",
+      "summary": "Rayfin パッケージを、Fabricator がこのコンピューターで実行するリリース系列にとどめている",
+      "why": "Fabricator のローカル バックエンドは、Rayfin の一部のリリース系列 (1.36.x や 2.0.x など) を実行します。新しいプロジェクトでは、すべての `@microsoft/rayfin-*` パッケージを `~` の範囲 (`~1.36.0`) でそのいずれかに固定します。古いリリースでは、このコンピューター上でアプリの一部が正しく動作しないことがあり、公開したアプリは代わりに公開先のバックエンドでプレビューされます。`^` の範囲や `latest` などのタグを使うと、次回のインストールで、誰も選んでいない別のリリースにアプリが移ってしまうことがあります。自分で選んだ新しいリリースもこのコンピューターで実行されますが、その場合は、一部が想定どおりに動作しない可能性があることがプレビューに表示されます。",
+      "fix": "package.json のすべての `@microsoft/rayfin-*` パッケージを、Fabricator が実行するリリース系列の `~` の範囲 (`~1.36.0` や `~2.0.0` など) に設定してから `npm install` を実行し、すべてのパッケージがそのリリースに解決されるようにしてください。"
+    },
+    "platform/connector-version": {
+      "title": "コネクタ パッケージが CLI のバージョンに固定されていない",
+      "summary": "コネクタ パッケージを CLI のバージョンまたはプロジェクトの `~` の範囲に固定している",
+      "why": "コネクタ パッケージは CLI と同じバージョンでリリースされますが、npm のタグの更新は遅れることがあります。バージョンを固定せずにインストールすると、独自の `rayfin-data` を含む古いコネクタが取得され、1 つのアプリに 2 つの Rayfin バージョンが混在することがあります。",
+      "fix": "`rayfin connector add` が表示する正確なバージョン (通常は CLI のバージョン)、またはプロジェクトのほかの Rayfin パッケージが使っている `~` の範囲 (`~1.36.0` など) でインストールしてください。`^` の範囲は使わないでください。"
+    },
+    "platform/connector-schema-value-import": {
+      "title": "コネクタのスキーマにデコレーター付きのエンティティ クラスがバンドルされている",
+      "summary": "リレーションシップのパスでクラスが必要な場合を除き、コネクタの `schema.ts` ファイルでエンティティのフィールドを名前で列挙している",
+      "why": "エンティティ クラスを値としてインポートすると、そのデコレーターがブラウザー向けのバンドルに含まれます。ビルドと公開は成功しますが、公開したページが空白で表示されることがあります。",
+      "fix": "`rayfin/connectors/<name>/schema.ts` で、各エンティティのスカラー フィールドを `connectorConfig.entities` に文字列の配列として列挙し、クラスには `import type` / `export type` を使ってください。クラスの形式は、アプリが `orderItems.quantity` のようなリレーションシップのパスを選択する場合にだけ残し、公開したページが読み込まれることを確認してください。"
+    },
+    "platform/connector-app-auth": {
+      "title": "セマンティック モデルまたは KQL のコネクタでアプリケーション認証を使っている",
+      "summary": "セマンティック モデルと KQL のコネクタで委任認証を使っている",
+      "why": "`fabric-semanticmodel` と `kusto` のコネクタでは `auth.type: application` が許可されていないため、公開が失敗します (`rayfin up` がこの構成を拒否します)。",
+      "fix": "これらのコネクタには `auth.type: delegated` を設定してください。"
+    },
+    "platform/connector-fabric-only": {
+      "title": "コネクタが Fabric 上でしか実行されない",
+      "summary": "すべてのコネクタがローカル プレビューで実行される",
+      "why": "Fabricator はこのコンピューターでアプリを実行します。ここでは、セマンティック モデルと SQL のコネクタ (`fabric-semanticmodel`、`fabric-sqldatabase`、`fabric-warehouse`、`fabric-sqlanalytics`) がお使いのアカウントで実行されます。`kusto` などのほかの種類は、Fabric 上でしか実行されません。アプリを公開するまでは、プレビューでそれらへの呼び出しが失敗します。公開後は、プレビューでこのコンピューターではなく公開したアプリのバックエンドが使われるため、データ モデル、関数、コネクタへの変更は、公開したあとでないとプレビューに反映されません。",
+      "fix": "アプリにこのデータが必要な場合はコネクタを残し、それを使う変更は公開して試してください。同じデータがセマンティック モデル、ウェアハウス、SQL データベースにもある場合は、その種類のコネクタであればローカル プレビューで実行できます。"
+    },
+    "platform/connector-orphaned-dir": {
+      "title": "コネクタ フォルダーに対応する rayfin.yml のエントリがない",
+      "summary": "`rayfin/connectors` のすべてのフォルダーが rayfin.yml のコネクタと対応している",
+      "why": "残ったコネクタ フォルダーは公開も更新もされなくなりますが、アプリのコードがまだそこからインポートしている可能性があります。",
+      "fix": "フォルダーとそのインポートを削除するか、`rayfin connector add` でコネクタを追加し直してください。"
+    },
+    "platform/connector-wiring": {
+      "title": "コネクタの構成に一貫性がない",
+      "summary": "コネクタの名前とランタイムが rayfin.yml、スキーマ、クライアントの間で一致している",
+      "why": "コネクタのキーは、rayfin.yml、コネクタのスキーマ型、クライアントの `connectors` オプション、そしてセマンティック モデルと KQL のコネクタではランタイム マップでも同じである必要があります。そうでないと、呼び出しが失敗するか、デコードされていないデータが返されます。",
+      "fix": "すべての場所で同じキーを使い、ランタイム マップ (`fabricSemanticModel()`、`kusto()`) をクライアントのコンストラクターの第 2 引数として渡してください。"
+    },
+    "platform/functions-context-import": {
+      "title": "`RayfinContext` を誤ったパッケージからインポートしている",
+      "summary": "関数で `RayfinContext` と `AudienceType` を `@microsoft/fabric-user-data-functions` からインポートしている",
+      "why": "`RayfinContext` と `AudienceType` は `@microsoft/fabric-user-data-functions` が提供します。`@microsoft/rayfin-functions` (フロントエンドのクライアント) からインポートすると失敗します。",
+      "fix": "`@microsoft/fabric-user-data-functions` からインポートしてください。"
+    },
+    "platform/functions-mssql": {
+      "title": "関数の SQL クライアントに Fabric への接続に関する既知のバグがある",
+      "summary": "関数で `mssql@^12.6.0` と `encrypt: true` を使っている",
+      "why": "古いバージョンの `mssql` は、ログインにバグがある `tedious` のリリースを取り込むため、Fabric の SQL エンドポイントで「socket hang up」エラーが発生します。また、`encrypt: 'strict'` は Fabric が想定する設定と一致しません。",
+      "fix": "`mssql@^12.6.0` と `encrypt: true` を使ってください。"
+    },
+    "platform/functions-unregistered": {
+      "title": "関数ハンドラーが登録されていない",
+      "summary": "すべての関数ハンドラーを `udf.func` で登録している",
+      "why": "ローカルでも公開後でも、呼び出せるのは `udf.func(...)` で登録したハンドラーだけで、クライアント用の型が付くのもそれらだけです。`types.ts` は生成されるファイルのため、手動での編集は上書きされます。",
+      "fix": "各ハンドラーを `udf.func(name, handler, …)` で登録し、`types.ts` を編集する代わりに型を再生成してください。"
+    },
+    "platform/experimental-services": {
+      "title": "アプリで試験段階の Rayfin Storage を使っている",
+      "summary": "試験段階の Storage の利用可否に関する注意",
+      "why": "Storage は試験段階の機能です。すべての Fabric リージョンやテナントで利用できるわけではなく、`@microsoft/rayfin-storage` はリリース間で大きく変わる可能性があります。",
+      "fix": "ストレージに依存する前に、対象のワークスペースでストレージを含めた公開が成功することを確認し (ストレージはローカル プレビューでも動作します)、すべての Rayfin パッケージを同じリリースにそろえてください。"
+    },
+    "platform/deprecated-fabric-callback": {
+      "title": "非推奨の Fabric コールバック ブリッジを使っている",
+      "summary": "非推奨の Fabric サインイン API を使っていない",
+      "why": "`bridgeFabricCallback()` と `callbackUrl` オプションは古い Fabric ポータルのためだけに存在し、今後削除される予定です。",
+      "fix": "これらを削除し、標準の `ensureSignedInWithFabric` / `initEmbeddedAuth` のフローを使ってください。"
+    },
+    "platform/ai-files-missing": {
+      "title": "Rayfin のエージェント ファイルがない",
+      "summary": "CLI で管理される Rayfin スキルがコーディング エージェント用にインストールされている",
+      "why": "`.agents/skills/rayfin/SKILL.md` は、バージョンに合った Rayfin のガイダンスを Copilot に提供します。これがないと、エージェントは古い一般的な知識に頼ることになります。",
+      "fix": "`npx rayfin init ai-files install` を実行してください。"
+    },
+    "platform/removed-experimental-import": {
+      "title": "削除された試験的なパスからインポートしている",
+      "summary": "デコレーターを `@microsoft/rayfin-core` から、コネクタのヘルパーを `@microsoft/rayfin-connectors` からインポートしている",
+      "why": "Rayfin 1.36 以降、`@microsoft/rayfin-core/experimental` に残っているのはストレージの `blob` ヘルパーだけです。エンティティとフィールドのデコレーター、`RayfinPrimaryKey`、`Source`、`AutoGenerated` はここから削除されたため、これらのインポートがあるとビルドが失敗します。",
+      "fix": "デコレーターと `RayfinPrimaryKey` は `@microsoft/rayfin-core` から、`Source` と `AutoGenerated` は `@microsoft/rayfin-connectors` からインポートしてください。"
+    },
+    "platform/connector-client-experimental-import": {
+      "title": "コネクタのクライアントを古い試験的なエントリ ポイントからインポートしている",
+      "summary": "`ConnectorsRayfinClient` を `@microsoft/rayfin-client` からインポートしている",
+      "why": "Rayfin 1.36 以降、コネクタのクライアントは安定版の `@microsoft/rayfin-client` エントリ ポイントからエクスポートされています。`/experimental` のパスも互換性のために引き続き機能しますが、非推奨です。",
+      "fix": "`import { ConnectorsRayfinClient } from '@microsoft/rayfin-client'` と記述してください。"
+    },
+    "platform/functions-removed-audience": {
+      "title": "関数で削除されたトークンのオーディエンスを使っている",
+      "summary": "関数で `Sql`、`Storage`、`Fabric`、`AzureAI`、`ADO` のオーディエンスだけを使っている",
+      "why": "Rayfin 1.36 で `CosmosDB`、`KeyVault`、`EventGrid`、`Kusto`、`WorkIQ` のオーディエンスが削除されたため、これらを参照するコードはコンパイルできなくなりました。",
+      "fix": "残っている 5 つのオーディエンスのいずれかを使うか、`rayfin secret set` でキーを保存して `ctx.Secrets.<NAME>` として読み取ってください。"
+    },
+    "platform/functions-legacy-context-api": {
+      "title": "関数で非推奨の `ctx.getToken()` または `ctx.getSecret()` を使っている",
+      "summary": "関数でトークンを `ctx.Tokens.<Audience>`、シークレットを `ctx.Secrets.<NAME>` として読み取っている",
+      "why": "Rayfin 1.36 で、`ctx.getToken()` と `ctx.getSecret()` は型付きの `ctx.Tokens` と `ctx.Secrets` に置き換えられました。古い呼び出しは非推奨で、オーディエンスとシークレット名のチェックが行われません。",
+      "fix": "`RayfinContext<Schema, AudienceType.Sql>` でオーディエンスを宣言して `ctx.Tokens.Sql` を読み取り、シークレットは `ctx.Secrets.API_KEY` として読み取ってください。"
+    },
+    "platform/functions-availability": {
+      "title": "アプリで Rayfin Functions を使っている",
+      "summary": "対象のワークスペースでの Functions の利用可否に関する注意",
+      "why": "Functions は Rayfin 1.36 から一般提供されていますが、すべての Fabric リージョンやテナントで利用できるわけではありません。",
+      "fix": "関数に依存する前に、対象のワークスペースで Functions を含めた公開が成功することを確認してください (Functions はローカル プレビューでも動作します)。また、関数が不要な箇所では、データ アクセスに `client.data` を使ってください。"
+    },
+    "platform/latest-guidance": {
+      "title": "現在の Rayfin のガイダンスと矛盾している",
+      "summary": "アプリが、公開されている最新の Rayfin のルールと既知の制限事項に従っている",
+      "why": "コーディング エージェント向けの Rayfin のルール、既知の制限事項、非推奨の機能はリリースごとに変わるため、アプリが推奨されなくなった動作に依存している可能性があります。",
+      "fix": "インストールされている Rayfin のバージョンについて、リンク先のガイダンスに従ってください。"
+    },
+    "performance/client-side-aggregation": {
+      "title": "すべての行を読み込んで合計を計算している",
+      "summary": "合計や集計値をサーバー側の集計で求めている",
+      "why": "行を取得してブラウザーで合計、平均、件数を計算すると、時間がかかり、容量を消費するうえ、ページングの上限にも制約されます。",
+      "fix": "`.groupBy()` / `.aggregate()` を使い、返されたグループを表示してください。"
+    },
+    "performance/client-per-render": {
+      "title": "Rayfin クライアントが繰り返し作成されている",
+      "summary": "`RayfinClient` を 1 つだけ作成して再利用している",
+      "why": "コンポーネント内や呼び出しのたびにクライアントを作成すると、セットアップが繰り返され、共有のセッション状態が失われることがあります。",
+      "fix": "クライアントはモジュール (`src/services/rayfinClient.ts` など) で 1 回だけ作成し、どこからでもそれをインポートしてください。"
+    },
+    "performance/oversized-page": {
+      "title": "ページ サイズがビューに必要な量よりはるかに大きい",
+      "summary": "ページ サイズを UI に表示する量に合わせている",
+      "why": "1 ページに何千行も要求すると (`.first(10000)`)、ページングの意味がなくなり、毎回の読み込みが遅くなります。",
+      "fix": "`.first(n)` をビューに表示する量に合わせ、必要に応じて追加のページを読み込んでください。"
+    },
+    "performance/unvirtualized-list": {
+      "title": "非常に長い一覧ですべての行をレンダリングしている",
+      "summary": "非常に長い一覧を少しずつレンダリングしている",
+      "why": "数百から数千の行を一度にレンダリングすると、ページの読み込みやスクロールが遅くなります。",
+      "fix": "「さらに読み込む」ボタンなどで 1 ページずつ表示するか、一覧を仮想化してください。"
+    },
+    "performance/expensive-render": {
+      "title": "レンダリングのたびに重い処理が実行される",
+      "summary": "負荷の高い計算をメモ化するか、レンダリングの処理から外している",
+      "why": "コンポーネントの本体で大きな配列を直接並べ替えたり、絞り込んだり、変形したりすると、レンダリングのたびに再実行され、UI の動作が重くなります。",
+      "fix": "計算を `useMemo` で囲むか、データを読み込む箇所に移してください。"
+    },
+    "accessibility/img-alt": {
+      "title": "画像に代替テキストがない",
+      "summary": "画像に代替テキストがある (装飾用の場合は `alt=\"\"`)",
+      "why": "`alt` のない画像は、スクリーン リーダーで説明できません。ファイル名が読み上げられるか、画像の意味がまったく伝わりません。",
+      "fix": "短い説明を追加してください。純粋に装飾用の画像には `alt=\"\"` を指定します。"
+    },
+    "accessibility/control-label": {
+      "title": "フォーム コントロールにラベルがない",
+      "summary": "入力欄、選択リスト、テキスト エリアにアクセシブルなラベルがある",
+      "why": "ラベルがないと、スクリーン リーダーの利用者には名前のないコントロールとして読み上げられ、何を入力すればよいかわかりません。プレースホルダーはラベルとして扱われません。",
+      "fix": "目に見える `<label htmlFor>` をコントロールに関連付けるか、`aria-label` / `aria-labelledby` を追加してください。"
+    },
+    "accessibility/non-semantic-interactive": {
+      "title": "クリック可能な要素をキーボードで操作できない",
+      "summary": "クリック可能な要素がボタンかリンクになっている (またはキーボードで完全に操作できる)",
+      "why": "`onClick` を持つ `div` や `span` は、キーボードでフォーカスすることも実行することもできず、ボタンとして読み上げられません。",
+      "fix": "`<button>` (またはリンク) を使うか、`role=\"button\"`、`tabIndex={0}`、Enter キーと Space キーのハンドラーを追加してください。"
+    },
+    "accessibility/icon-button-name": {
+      "title": "アイコンだけのボタンにアクセシブルな名前がない",
+      "summary": "アイコンだけのボタンにアクセシブルな名前がある",
+      "why": "中身がアイコンだけのボタンは単に「ボタン」と読み上げられるため、スクリーン リーダーの利用者には何をするボタンなのかわかりません。",
+      "fix": "`aria-label` (例: `aria-label=\"Delete task\"`) か、視覚的に非表示のテキストを追加してください。"
+    },
+    "accessibility/color-only-state": {
+      "title": "状態を色だけで示している",
+      "summary": "状態やエラーを色だけで伝えていない",
+      "why": "色を区別できない人には、状態がまったく伝わりません。",
+      "fix": "色に加えて、テキスト、アイコン、またはアクセシブルな状態メッセージを併用してください。"
+    }
+  },
+  "categories": {
+    "access": {
+      "title": "アクセスとサインイン",
+      "description": "アプリのデータやページに誰がアクセスできるか、サインインが正しく組み込まれているかを確認します。"
+    },
+    "policy": {
+      "title": "データ ポリシー",
+      "description": "行レベルのポリシー、フィールドの公開範囲、各ロールへの許可の広さを確認します。"
+    },
+    "secrets": {
+      "title": "シークレットと漏えい",
+      "description": "漏えいやアクセス範囲の拡大につながるおそれのある資格情報、環境ファイル、オリジンを確認します。"
+    },
+    "data-model": {
+      "title": "データ モデル",
+      "description": "エンティティ、フィールド、リレーションシップの定義を、MSSQL の制限も含めて確認します。"
+    },
+    "queries": {
+      "title": "クエリ",
+      "description": "アプリが型付きクライアントを通じてデータを読み書きする方法を確認します。"
+    },
+    "config": {
+      "title": "構成",
+      "description": "rayfin.yml、TypeScript と Vite の設定、静的ホスティングを確認します。"
+    },
+    "platform": {
+      "title": "Rayfin のバージョンとプラットフォーム",
+      "description": "CLI と SDK のバージョン、非推奨の API、コネクタ、関数、ストレージ、エージェント ファイルを確認します。"
+    },
+    "performance": {
+      "title": "パフォーマンス",
+      "description": "データや使用量が増えるにつれて遅くなったり、コストが増えたりする処理を確認します。"
+    },
+    "accessibility": {
+      "title": "アクセシビリティ",
+      "description": "キーボードや支援技術を使うユーザーがアプリを利用できるかどうかを確認します。"
+    }
+  }
+}

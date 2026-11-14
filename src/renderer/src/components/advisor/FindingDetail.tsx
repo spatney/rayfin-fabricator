@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type JSX } from 'react'
 import { normalizeSeverity, ruleById } from '@shared/advisor/catalog'
 import type { AdvisorDismissReason } from '@shared/ipc'
 import type { FindingItem } from '../../advisor/lifecycle'
+import { findingFix, findingTitle, ruleText } from '../../advisor/ruleText'
 import type { ExplainState } from '../../advisor/store'
+import { useTranslation } from '../../i18n'
 import Markdown, { MarkdownLinksContext, type MarkdownLinks } from '../Markdown'
 import { Codicon } from '../icons'
 import { EvidenceView } from './EvidenceView'
@@ -15,6 +17,7 @@ function DismissMenu({
   onDismiss: (reason: AdvisorDismissReason) => void
   onMute: () => void
 }): JSX.Element {
+  const { t } = useTranslation('advisor')
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -45,21 +48,21 @@ function DismissMenu({
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        <Codicon name="eye-closed" /> Dismiss <Codicon name="chevron-down" className="adv-menu-caret" />
+        <Codicon name="eye-closed" /> {t('detail.dismiss')} <Codicon name="chevron-down" className="adv-menu-caret" />
       </button>
       {open && (
         <div className="adv-menu-pop" role="menu">
           <button type="button" role="menuitem" onClick={pick(() => onDismiss('false-positive'))}>
-            <strong>False positive</strong>
-            <span>This isn’t actually a problem here.</span>
+            <strong>{t('detail.falsePositive')}</strong>
+            <span>{t('detail.falsePositiveHint')}</span>
           </button>
           <button type="button" role="menuitem" onClick={pick(() => onDismiss('accepted-risk'))}>
-            <strong>Accepted risk</strong>
-            <span>It’s a real issue, but it’s intended for this app.</span>
+            <strong>{t('detail.acceptedRisk')}</strong>
+            <span>{t('detail.acceptedRiskHint')}</span>
           </button>
           <button type="button" role="menuitem" onClick={pick(onMute)}>
-            <strong>Mute this rule</strong>
-            <span>Stop reporting this rule for this app.</span>
+            <strong>{t('detail.mute')}</strong>
+            <span>{t('detail.muteHint')}</span>
           </button>
         </div>
       )}
@@ -78,12 +81,13 @@ function Explanation({
   onRetry: () => void
   onStop: () => void
 }): JSX.Element {
+  const { t } = useTranslation('advisor')
   if (state?.status === 'error' && !state.text) {
     return (
       <div className="adv-explain adv-explain--error">
-        <span>{state.error || 'Couldn’t generate an explanation.'}</span>
+        <span>{state.error || t('detail.explainError')}</span>
         <button type="button" className="btn btn--sm btn--ghost" onClick={onRetry}>
-          <Codicon name="refresh" /> Try again
+          <Codicon name="refresh" /> {t('actions.tryAgain')}
         </button>
       </div>
     )
@@ -91,9 +95,9 @@ function Explanation({
   if (generating && !state?.text) {
     return (
       <div className="adv-explain adv-explain--thinking">
-        <span className="shimmer-text">Copilot is looking into this…</span>
+        <span className="shimmer-text">{t('detail.thinking')}</span>
         <button type="button" className="adv-link" onClick={onStop}>
-          Stop
+          {t('actions.stop')}
         </button>
       </div>
     )
@@ -104,15 +108,15 @@ function Explanation({
       <div className="adv-explain-foot">
         {generating ? (
           <button type="button" className="adv-link" onClick={onStop}>
-            <Codicon name="debug-stop" /> Stop
+            <Codicon name="debug-stop" /> {t('actions.stop')}
           </button>
         ) : (
           <>
             <span className="adv-explain-by">
-              <Codicon name="sparkle" /> Explained by Copilot
+              <Codicon name="sparkle" /> {t('detail.explainedBy')}
             </span>
             <button type="button" className="adv-link" onClick={onRetry}>
-              <Codicon name="refresh" /> Regenerate
+              <Codicon name="refresh" /> {t('detail.regenerate')}
             </button>
           </>
         )}
@@ -159,6 +163,7 @@ export function FindingDetail({
   onOpenFile: (path: string, line?: number) => void
   onOpenUrl: (url: string) => void
 }): JSX.Element {
+  const { t } = useTranslation('advisor')
   const f = item.finding
   const rule = ruleById(f.ruleId)
   const sev = normalizeSeverity(f.severity)
@@ -167,7 +172,7 @@ export function FindingDetail({
   // Opening another finding shows its explanation only if one already exists.
   useEffect(() => setShowExplain(Boolean(explain)), [f.id])
   const generating = explain?.status === 'loading' || explain?.status === 'streaming'
-  const docs = [...(f.docsUrl ? [{ title: 'Cited guidance', url: f.docsUrl }] : []), ...(rule?.docs ?? [])]
+  const docs = [...(f.docsUrl ? [{ title: t('detail.citedGuidance'), url: f.docsUrl }] : []), ...(rule?.docs ?? [])]
   const fixable = item.status !== 'dismissed' && item.status !== 'muted'
   const canVerify = ai && (item.status === 'applied' || item.status === 'still' || item.status === 'open')
 
@@ -182,14 +187,14 @@ export function FindingDetail({
 
   return (
     <MarkdownLinksContext.Provider value={links}>
-      <article className={`adv-detail adv-detail--${sev}`} aria-label={plainText(f.title)}>
+      <article className={`adv-detail adv-detail--${sev}`} aria-label={plainText(findingTitle(f))}>
         <div className="adv-detail-tags">
           <span className="adv-detail-source">
-            <Codicon name={ai ? 'sparkle' : 'zap'} /> {ai ? 'Found by Copilot’s deep review' : 'Found by a quick check'}
+            <Codicon name={ai ? 'sparkle' : 'zap'} /> {ai ? t('detail.foundByDeep') : t('detail.foundByQuick')}
           </span>
           {ai && f.verified && (
-            <span className="adv-verified" title="The quoted code was found in the file">
-              <Codicon name="verified-filled" /> Evidence checked
+            <span className="adv-verified" title={t('detail.evidenceTitle')}>
+              <Codicon name="verified-filled" /> {t('detail.evidenceChecked')}
             </span>
           )}
           {rule && <code className="adv-rule-id">{rule.id}</code>}
@@ -197,46 +202,50 @@ export function FindingDetail({
 
         {item.status === 'fixing' && (
           <div className="adv-notice adv-notice--busy" role="status">
-            <span className="step-spin" aria-hidden="true" /> Copilot is fixing this in the Build chat…
+            <span className="step-spin" aria-hidden="true" /> {t('detail.fixing')}
           </div>
         )}
         {item.status === 'checking' && (
           <div className="adv-notice adv-notice--busy" role="status">
-            <span className="step-spin" aria-hidden="true" /> Copilot finished — re-running the quick checks…
+            <span className="step-spin" aria-hidden="true" /> {t('detail.rechecking')}
           </div>
         )}
         {item.status === 'applied' && (
           <div className="adv-notice adv-notice--applied" role="status">
-            <Codicon name="check" /> Copilot applied a fix. Verify to confirm the issue is gone.
+            <Codicon name="check" /> {t('detail.applied')}
           </div>
         )}
         {item.status === 'still' && (
           <div className="adv-notice adv-notice--still" role="status">
-            <Codicon name="warning" /> Still detected after the fix.
+            <Codicon name="warning" /> {t('detail.still')}
             {item.verdict?.note ? ` ${item.verdict.note}` : ''}
           </div>
         )}
         {item.status === 'dismissed' && item.dismissal && (
           <div className="adv-notice" role="status">
-            <Codicon name="eye-closed" /> Dismissed as{' '}
-            {item.dismissal.reason === 'false-positive' ? 'a false positive' : 'an accepted risk'}{' '}
-            {relativeTime(item.dismissal.at)}.
+            <Codicon name="eye-closed" />{' '}
+            {t(
+              item.dismissal.reason === 'false-positive'
+                ? 'detail.dismissedFalsePositive'
+                : 'detail.dismissedAcceptedRisk',
+              { time: relativeTime(item.dismissal.at) }
+            )}
             <button type="button" className="adv-link" onClick={onUndismiss}>
-              Restore
+              {t('detail.restore')}
             </button>
           </div>
         )}
         {item.status === 'muted' && (
           <div className="adv-notice" role="status">
-            <Codicon name="mute" /> This rule is muted for this app.
+            <Codicon name="mute" /> {t('detail.mutedNote')}
             <button type="button" className="adv-link" onClick={onUnmute}>
-              Unmute
+              {t('detail.unmute')}
             </button>
           </div>
         )}
 
         <div className="adv-detail-body">
-          <Markdown>{f.detail}</Markdown>
+          <Markdown>{f.detailText ?? f.detail}</Markdown>
         </div>
 
         {f.file && (
@@ -245,7 +254,7 @@ export function FindingDetail({
               type="button"
               className="file-chip adv-file"
               onClick={() => onOpenFile(f.file!, f.line)}
-              title={`Open ${f.file} in the Code tab`}
+              title={t('detail.openFile', { file: f.file })}
             >
               <Codicon name="go-to-file" />
               <span className="file-chip-name">{f.line ? `${f.file}:${f.line}` : f.file}</span>
@@ -279,19 +288,19 @@ export function FindingDetail({
         <div className="adv-detail-sections">
           {rule && (
             <section className="adv-detail-section">
-              <h4>Why it matters</h4>
-              <Markdown>{rule.why}</Markdown>
+              <h4>{t('detail.why')}</h4>
+              <Markdown>{ruleText(rule, 'why')}</Markdown>
             </section>
           )}
           <section className="adv-detail-section">
-            <h4>How to fix</h4>
-            <Markdown>{f.recommendation || rule?.fix || ''}</Markdown>
+            <h4>{t('detail.howToFix')}</h4>
+            <Markdown>{findingFix(f)}</Markdown>
           </section>
         </div>
 
         {docs.length > 0 && (
           <div className="adv-docs">
-            <span className="adv-docs-label">Learn more</span>
+            <span className="adv-docs-label">{t('actions.learnMore')}</span>
             {docs.map((d) => (
               <button key={d.url} type="button" className="adv-doc" onClick={() => onOpenUrl(d.url)} title={d.url}>
                 {d.title} <Codicon name="link-external" />
@@ -307,13 +316,9 @@ export function FindingDetail({
               className="btn btn--sm btn--primary"
               onClick={onFix}
               disabled={chatBusy || item.status === 'fixing'}
-              title={
-                chatBusy
-                  ? 'Copilot is working on a task — fixes resume when it finishes'
-                  : 'Send this finding to the Build chat for Copilot to fix'
-              }
+              title={chatBusy ? t('detail.fixBusy') : t('detail.fixTitle')}
             >
-              <Codicon name="sparkle" /> Fix with Copilot
+              <Codicon name="sparkle" /> {t('detail.fixWithCopilot')}
             </button>
           )}
           <button
@@ -321,9 +326,9 @@ export function FindingDetail({
             className={`btn btn--sm btn--ghost${showExplain ? ' is-active' : ''}`}
             onClick={toggleExplain}
             disabled={explainBusy && !generating && !explain}
-            title={explainBusy && !explain ? 'Finishing another explanation…' : 'Explain this in depth — read-only, kept out of the chat'}
+            title={explainBusy && !explain ? t('detail.explainBusy') : t('detail.explainTitle')}
           >
-            <Codicon name="comment-discussion" /> {showExplain ? 'Hide explanation' : 'Explain'}
+            <Codicon name="comment-discussion" /> {showExplain ? t('detail.hideExplanation') : t('detail.explain')}
           </button>
           {canVerify && (
             <button
@@ -331,10 +336,10 @@ export function FindingDetail({
               className="btn btn--sm btn--ghost"
               onClick={onVerify}
               disabled={verifyBusy}
-              title="Ask Copilot to re-check just this finding against the current code"
+              title={t('detail.verifyTitle')}
             >
               {verifying ? <span className="step-spin" aria-hidden="true" /> : <Codicon name="verified" />}
-              {verifying ? 'Verifying…' : 'Verify'}
+              {verifying ? t('detail.verifying') : t('detail.verify')}
             </button>
           )}
           <span className="adv-detail-actions-spacer" />

@@ -5,6 +5,7 @@
  * and filter the list shows them in.
  */
 import type { RayfinLatest, StudioProject } from '@shared/ipc'
+import { translator } from '../i18n'
 import { newerRelease } from '../localDevelopment'
 import { ago, fullDate } from './gallery/model'
 
@@ -35,7 +36,8 @@ export function publishState(
     now = Date.now()
   }: { changed?: boolean; publishing?: boolean; now?: number } = {}
 ): PublishState {
-  if (publishing) return { kind: 'publishing', label: 'Publishing…' }
+  const t = translator('home')
+  if (publishing) return { kind: 'publishing', label: t('publish.publishing') }
   if (project.team) {
     const production = project.team.production
     switch (production?.state) {
@@ -43,7 +45,7 @@ export function publishState(
         const when = ago(production.updatedAt, now)
         return {
           kind: 'published',
-          label: when ? `Published ${when}` : 'Published',
+          label: when ? t('publish.publishedWhen', { when }) : t('publish.published'),
           title: fullDate(production.updatedAt)
         }
       }
@@ -51,27 +53,27 @@ export function publishState(
       case 'error':
         return {
           kind: 'failed',
-          label: 'Publish failed',
-          title: 'The team’s pipeline couldn’t publish it.'
+          label: t('publish.failed'),
+          title: t('publish.teamFailed')
         }
       case 'in_progress':
       case 'queued':
       case 'pending':
-        return { kind: 'publishing', label: 'Publishing…' }
+        return { kind: 'publishing', label: t('publish.publishing') }
       default:
-        return { kind: 'unpublished', label: 'Not published' }
+        return { kind: 'unpublished', label: t('publish.notPublished') }
     }
   }
   const deploy = project.lastDeploy
   switch (deploy?.status) {
     case 'success': {
       const when = ago(deploy.at, now)
-      const published = when ? `Published ${when}` : 'Published'
+      const published = when ? t('publish.publishedWhen', { when }) : t('publish.published')
       if (changed) {
         return {
           kind: 'changes',
-          label: 'Changes not published',
-          title: `${published}. It has changed since.`
+          label: t('publish.changes'),
+          title: when ? t('publish.changedSinceWhen', { when }) : t('publish.changedSince')
         }
       }
       return { kind: 'published', label: published, title: fullDate(deploy.at) }
@@ -79,14 +81,14 @@ export function publishState(
     case 'error':
       return {
         kind: 'failed',
-        label: 'Publish failed',
-        title: deploy.error ? sentence(deploy.error) : 'The last publish didn’t finish.'
+        label: t('publish.failed'),
+        title: deploy.error ? sentence(deploy.error) : t('publish.unfinished')
       }
     default:
       // A publish that was cancelled, or never finished, leaves the last one live.
       return deploy?.url
-        ? { kind: 'published', label: 'Published' }
-        : { kind: 'unpublished', label: 'Not published' }
+        ? { kind: 'published', label: t('publish.published') }
+        : { kind: 'unpublished', label: t('publish.notPublished') }
   }
 }
 
@@ -129,7 +131,7 @@ export function rayfinUpdate(
 /** "Opened 3 hours ago", or nothing before it's been opened since Fabricator kept track. */
 export function openedText(project: StudioProject, now = Date.now()): string | undefined {
   const when = ago(project.lastOpenedAt, now)
-  return when ? `Opened ${when}` : undefined
+  return when ? translator('home')('recent.opened', { when }) : undefined
 }
 
 export type ProjectGroupKey = 'pinned' | 'today' | 'week' | 'earlier'
@@ -140,12 +142,12 @@ export interface ProjectGroup {
   projects: StudioProject[]
 }
 
-const GROUP_LABELS: Record<ProjectGroupKey, string> = {
-  pinned: 'Pinned',
-  today: 'Today',
-  week: 'This week',
-  earlier: 'Earlier'
-}
+const GROUP_LABELS = {
+  pinned: 'groups.pinned',
+  today: 'groups.today',
+  week: 'groups.week',
+  earlier: 'groups.earlier'
+} as const satisfies Record<ProjectGroupKey, string>
 
 /** Midnight at the start of `now`'s day, where the user is. */
 function startOfDay(now: number): number {
@@ -183,9 +185,10 @@ export function groupProjects(
           : 'earlier'
     groups[key].push(project)
   }
+  const t = translator('home')
   return (Object.keys(groups) as ProjectGroupKey[])
     .filter((key) => groups[key].length > 0)
-    .map((key) => ({ key, label: GROUP_LABELS[key], projects: groups[key] }))
+    .map((key) => ({ key, label: t(GROUP_LABELS[key]), projects: groups[key] }))
 }
 
 /**

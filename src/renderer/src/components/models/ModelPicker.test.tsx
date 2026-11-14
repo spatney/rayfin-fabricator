@@ -4,7 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import type { AutoTiers, CopilotModel } from '@shared/ipc'
 import { invalidateCopilotModels } from '@renderer/copilotModels'
 import { AUTO_SELECTION, type ModelSelection } from '@renderer/modelSelection'
-import { ModelPicker } from './ModelPicker'
+import { setLanguage } from '../../i18n'
+import { formatTokens, ModelPicker } from './ModelPicker'
 
 const model = (id: string, name: string, more: Partial<CopilotModel> = {}): CopilotModel => ({
   id,
@@ -306,5 +307,20 @@ describe('ModelPicker', () => {
     fireEvent.click(within(list).getByRole('menuitem', { name: 'Add models with your API keys…' }))
     expect(onManageKeys).toHaveBeenCalledOnce()
     expect(screen.queryByRole('menu', { name: 'Models' })).toBeNull()
+  })
+})
+
+describe('formatTokens', () => {
+  afterEach(async () => {
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('writes millions with the language’s decimal mark', async () => {
+    expect(formatTokens(1_048_576)).toBe('1.05M')
+    await setLanguage('de')
+    expect(formatTokens(1_048_576)).toBe('1,05M')
+    expect(formatTokens(1_000_000)).toBe('1M')
+    expect(formatTokens(200_000)).toBe('200K')
   })
 })

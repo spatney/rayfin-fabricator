@@ -1,5 +1,5 @@
 import type { DiffEditorProps } from '@monaco-editor/react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   GitChange,
@@ -9,6 +9,7 @@ import type {
   StudioProject
 } from '@shared/ipc'
 import { makeProject } from '../../test/harness'
+import { setLanguage } from '../i18n'
 import HistoryView from './HistoryView'
 
 const editorProps = vi.hoisted(() => vi.fn<(props: DiffEditorProps) => void>())
@@ -155,6 +156,23 @@ describe('HistoryView live-version banner', () => {
     await waitFor(() => expect(screen.getAllByText('Create app').length).toBeGreaterThan(0))
     expect(screen.queryByText(/match your current code/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Publish current version' })).toBeNull()
+  })
+})
+
+describe('HistoryView in German', () => {
+  afterEach(async () => {
+    cleanup()
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('says how long ago each version was made in German, not git’s English', async () => {
+    const isoDate = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+    const commit = { ...history.commits[0], relativeDate: '2 hours ago', isoDate }
+    installApi({}, { ...history, commits: [commit] })
+    await act(() => setLanguage('de'))
+    mount()
+    expect(await screen.findByText('vor 2 Stunden · Test')).toBeTruthy()
   })
 })
 

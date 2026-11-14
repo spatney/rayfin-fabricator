@@ -1,0 +1,543 @@
+{
+  "export": {
+    "importTitle": "プロジェクトのインポート",
+    "exportTitle": "プロジェクトのエクスポート",
+    "projectFile": "Fabricator プロジェクト",
+    "appFile": "Rayfin アプリ",
+    "zipArchive": "ZIP アーカイブ",
+    "cantRead": "ファイルを読み取れませんでした: {{error}}",
+    "teamApp": "チーム アプリはチーム ワークスペースを通じて共有されます。代わりに、ワークスペースにユーザーを招待してください。",
+    "missing": "Fabricator がこのプロジェクトのフォルダーを見つけられません。",
+    "unreadable": "Fabricator はこのファイルを読み取れません。誰かがエクスポートした .fabricator ファイルか、Rayfin プロジェクトの .zip をインポートしてください。",
+    "notAnApp": "このファイルには Rayfin プロジェクトが含まれていません。rayfin/rayfin.yml がありません。",
+    "manyApps": "このファイルには複数の Rayfin プロジェクトが含まれています。展開してから、目的のプロジェクトを [フォルダーを開く] で開いてください。",
+    "tooBig": "このファイルは展開すると 16 GB を超えるため、Fabricator はインポートしませんでした。",
+    "tooMany": "このファイルには 500,000 個を超えるファイルが含まれているため、Fabricator はインポートしませんでした。",
+    "badIcon": "Fabricator はアプリのアイコンを作成できませんでした。もう一度エクスポートしてみてください。",
+    "cantSave": "{{path}} を保存できませんでした: {{error}}",
+    "cantAdd": "{{name}} を追加できませんでした: {{error}}",
+    "cantFinish": "ファイルを完成できませんでした: {{error}}",
+    "noFreeFolder": "プロジェクト フォルダーには、{{slug}} から {{slug}}-99 までの名前のフォルダーがすでにあります。",
+    "cantOpen": "{{path}} を開けませんでした: {{error}}",
+    "cantCreateRoot": "プロジェクト フォルダー {{path}} を作成できませんでした: {{error}}",
+    "cantCreate": "{{path}} を作成できませんでした: {{error}}",
+    "cantUnpack": "{{path}} を展開できませんでした: {{error}}",
+    "notAnAppFile": "このファイルは、Fabricator がインストールできるアプリではありません。プロジェクトをアプリとしてもう一度エクスポートするよう依頼してください。",
+    "damagedAppFile": "このアプリ ファイルは破損しています。もう一度エクスポートするよう依頼してください。",
+    "cantInspect": "プロジェクトを確認できませんでした: {{error}}",
+    "cantExportApp": "アプリをエクスポートできませんでした: {{error}}",
+    "cantExport": "プロジェクトをエクスポートできませんでした: {{error}}",
+    "fileGone": "そのファイルはもうありません。"
+  },
+  "accounts": {
+    "fabricBusy": "Fabric のサインイン、サインアウト、またはアカウントの切り替えが既に進行中です。",
+    "azureBusy": "Azure のサインイン、サインアウト、またはアカウントの切り替えが既に進行中です。",
+    "azureMissing": "Azure CLI がインストールされていないため、Fabricator から Azure にサインインできません。セットアップからインストールして ([設定] を開き、[セットアップを開く] を選択)、もう一度お試しください。",
+    "badTenant": "組織は、テナント ID またはドメイン (contoso.onmicrosoft.com など) で入力してください。",
+    "alreadySignedIn": "そのアカウントはここで既にサインインしていたため、Fabricator はそのアカウントを使用しています。",
+    "fabricAccountGone": "その Fabric アカウントは、このコンピューターにはもうありません。アカウントを再確認してください。",
+    "signOutAgain": "もう一度サインアウトしてみてください。",
+    "recheckOrSignInAzure": "再確認するか、Azure にもう一度サインインしてください。",
+    "unreadableList": "Azure CLI から、Fabricator が読み取れないアカウント一覧が返されました。アカウントを再確認してください。",
+    "badSubscription": "これは Azure のサブスクリプション ID でもテナント ID でもありません。",
+    "recheckAndRetry": "アカウントを再確認して、もう一度お試しください。",
+    "sharedSubscription": "別のアカウントが同じサブスクリプションを共有しているため、Azure CLI は {{user}} に切り替えられませんでした。使用するには、{{user}} をもう一度追加してください。",
+    "startingAzureSignIn": "Azure へのサインインを開始しています…",
+    "finishBrowserSignIn": "ブラウザーでのサインインを完了して、もう一度お試しください。",
+    "signingOutAzure": "Azure からサインアウトしています...",
+    "nowUses": "Azure CLI は現在 {{user}} を使用しています。",
+    "signedOutAzure": "Azure からサインアウトしました。",
+    "recheckStatusOrSignOut": "アカウントの状態を再確認するか、もう一度サインアウトしてみてください。",
+    "invalidListAfterSignOut": "サインアウト後に Azure から無効なアカウント一覧が返されました。アカウントの状態を再確認してください。",
+    "stillSignedIn": "Azure CLI では {{user}} がまだサインインしています。もう一度サインアウトしてみてください。",
+    "stillSignedInAny": "Azure CLI にはまだサインインしているアカウントがあります。もう一度サインアウトしてみてください。",
+    "actions": {
+      "fabricSignOut": "Fabric からのサインアウト",
+      "listAzure": "Azure アカウントの一覧の取得",
+      "switchAzure": "Azure アカウントの切り替え",
+      "azureSignIn": "Azure へのサインイン",
+      "azureSignOut": "Azure からのサインアウト",
+      "azureSignOutCheck": "Azure からのサインアウトの確認"
+    }
+  },
+  "auth": {
+    "unconfirmed": "現時点では Fabric へのサインインを確認できませんでした。{{reason}}",
+    "unrecognizedStatus": "Rayfin CLI から認識できないサインイン状態が返されました。{{hint}}",
+    "unknownProvider": "不明なサインイン プロバイダーです: {{provider}}。",
+    "copilotBusy": "Copilot のサインインまたはサインアウトが既に進行中です。",
+    "copilotTasksSignIn": "実行中の Copilot タスクが完了するまで待つか、タスクを停止してから、もう一度サインインしてください。",
+    "copilotTasksSignOut": "実行中の Copilot タスクが完了するまで待つか、タスクを停止してから、もう一度サインアウトしてください。",
+    "startingCopilot": "{{host}} で GitHub Copilot へのサインインを開始しています...",
+    "bundledCliUnavailableHere": "同梱の Copilot CLI はこのプラットフォームでは使用できません。",
+    "bundledCliUnavailable": "同梱の Copilot CLI を使用できません。Fabricator を再起動または再インストールして、もう一度お試しください。",
+    "verifyingCopilot": "Copilot チャット エンジンでアクセスを確認しています...",
+    "invalidHost": "github.com、または company.ghe.com などの GitHub Enterprise Cloud のホスト名を入力してください (https:// は省略可)。パス、資格情報、HTTPS 以外のポートは含めないでください。",
+    "wrongHost": "Copilot へのサインインは完了しましたが、チャット エンジンは {{host}} を使用していません。COPILOT_GITHUB_TOKEN、GH_TOKEN、GITHUB_TOKEN によるオーバーライドを確認し、意図しないオーバーライドを削除してから、もう一度サインインしてください。",
+    "signingOutCopilot": "GitHub Copilot からサインアウトしています...",
+    "signedOutCopilot": "GitHub Copilot からサインアウトしました。",
+    "unverified": "{{provider}} へのサインインは完了しましたが、認証を確認できませんでした。接続を確認して、もう一度サインインしてみてください。",
+    "cliFailed": "{{action}}に失敗しました。{{reason}} {{hint}}",
+    "cliNotFound": "必要な CLI が見つかりませんでした。",
+    "cliExited": "CLI はコード {{code}} で終了しました。",
+    "cliTimedOut": "CLI がタイムアウトしたか、起動できませんでした。",
+    "incompleteProfile": "Azure から不完全なアカウント プロファイルが返されました。再確認するか、Azure にもう一度サインインしてください。",
+    "rayfinNotFound": "Rayfin CLI が見つかりませんでした。プロジェクトを開いて依存関係をインストールするか (または Node.js と Rayfin CLI をインストールして)、もう一度サインインしてみてください。",
+    "loginExited": "サインインは、サインイン ウィンドウを開かず理由も報告せずに、コード {{code}} で終了しました。もう一度お試しください。繰り返し発生する場合は、プロジェクト フォルダーで `npx rayfin login` を実行して、エラーの詳細を確認してください。",
+    "loginEnded": "サインインは、サインイン ウィンドウを開かず理由も報告せずに終了しました (タイムアウトしたか、ブロックされた可能性があります)。もう一度お試しください。繰り返し発生する場合は、プロジェクト フォルダーで `npx rayfin login` を実行して、エラーの詳細を確認してください。",
+    "fabricBusy": "Fabric のサインイン、サインアウト、または資格情報の更新が既に進行中です。",
+    "startingFabric": "Fabric / Rayfin へのサインインを開始しています…",
+    "verifyingFabric": "更新された資格情報を Fabric で確認しています...",
+    "signedInUnverified": "サインインしました。{{reason}}",
+    "fabricVerified": "Fabric の認証を確認しました。",
+    "waitingForOperations": "資格情報を更新する前に、実行中の Fabric の操作が完了するのを待っています...",
+    "clearingCredentials": "rayfin logout で共有の Fabric / Rayfin 資格情報を消去しています...",
+    "actions": {
+      "fabricCheck": "Fabric の認証の確認",
+      "azureCheck": "Azure の認証の確認",
+      "copilotSignIn": "GitHub Copilot へのサインイン",
+      "azureAccountCheck": "Azure アカウントの確認",
+      "fabricReset": "Fabric の資格情報のリセット"
+    },
+    "hints": {
+      "recheckSoon": "少し待ってから、アカウントを再確認してください。",
+      "recheckOrSignInFabric": "再確認するか、Fabric にもう一度サインインしてください。",
+      "openProjectAndSignIn": "Rayfin プロジェクトを開いて、Fabric にもう一度サインインしてください。",
+      "checkConnectionAzure": "接続を確認して、Azure にもう一度サインインしてください。",
+      "copilotSignInAgain": "もう一度サインインして、上に表示されているブラウザーまたはデバイス コードの手順を完了してください。",
+      "signInAzureAgain": "Azure にもう一度サインインしてください。",
+      "updateRayfin": "再試行は行われていません。このプロジェクトの Rayfin CLI と SDK を 1.35.1 以降に更新してから、もう一度更新してみてください。"
+    }
+  },
+  "chat": {
+    "copilotError": "Copilot からエラーが報告されました。",
+    "taskFailed": "チャット タスクが失敗しました: {{error}}",
+    "busy": "このプロジェクトでは、既にメッセージを処理中です。",
+    "turnRunning": "Copilot は既に応答中です。",
+    "sessionGone": "保存された Copilot セッションは利用できなくなりました。新しいセッションを開始しました。Fabricator のチャット履歴はそのまま残っています。",
+    "sessionUnavailable": "Copilot の保存されたセッションを利用できません。新しいセッションを開始しました。Fabricator のチャット履歴はそのまま残っています。",
+    "reconnecting": "Copilot セッションに再接続しています...",
+    "continuing": "モデルが完了前に停止しました。続行するよう依頼しています…",
+    "retrying": "Copilot で一時的な問題が発生しました。再試行しています ({{attempt}}/{{max}})…",
+    "timedOut": "Copilot は 2 時間後にタイムアウトしました。",
+    "endedUnexpectedly": "Copilot が予期せず終了しました。",
+    "turnFailed": "応答に失敗しました。",
+    "cantInterject": "割り込めませんでした: {{error}}",
+    "noPendingPlan": "解決する保留中のプランはありません。",
+    "planNotThisProject": "そのプランの要求は、このプロジェクトのものではありません。",
+    "noSession": "このプロジェクトにアクティブな Copilot セッションはありません。",
+    "cantUpdatePlan": "プランを更新できませんでした: {{error}}",
+    "answerRequired": "回答が必要です。",
+    "noPendingQuestion": "回答する保留中の質問はありません。",
+    "noFreeform": "この質問では自由形式の回答を受け付けません。",
+    "cantSavePlan": "プランを保存できませんでした: {{error}}",
+    "pickPathsTitle": "Copilot に読み取らせるファイルまたはフォルダーを選択",
+    "unknownPlugin": "Fabricator にはプラグイン {{plugin}} がありません。",
+    "serverGone": "その MCP サーバーはもう Fabricator にありません。"
+  },
+  "chatTools": {
+    "localCall": {
+      "function": "関数 {{name}}",
+      "aFunction": "関数",
+      "connector": "コネクタ {{name}}",
+      "connectorApi": "コネクタ {{name}} のデータ API",
+      "aConnector": "コネクタ",
+      "appApi": "アプリのデータ API",
+      "asYou": "(あなたとして)",
+      "signedOut": "(サインインなし)",
+      "asUser": "({{user}} として)",
+      "title": "{{what}} {{who}}"
+    }
+  },
+  "commitMessage": {
+    "nothingToCommit": "コミットする変更はありません。",
+    "noMessage": "Copilot がメッセージを書きませんでした。もう一度お試しください。",
+    "cantWrite": "メッセージを書けませんでした: {{error}}"
+  },
+  "customSkills": {
+    "noFrontmatter": "スキルは YAML の frontmatter ブロック (--- … ---) で始まる必要があります。",
+    "badFrontmatter": "スキルの frontmatter が無効です: {{error}}",
+    "needsName": "スキルの frontmatter には、空でない `name` が必要です。",
+    "needsDescription": "スキルの frontmatter には、空でない `description` が必要です。",
+    "fileError": "ファイル エラー: {{error}}",
+    "fallbackDescription": "カスタム スキルです。",
+    "needsTitle": "スキルにタイトルを付けてください。",
+    "noIdFromTitle": "そのタイトルから ID を作成できませんでした。英字か数字を使ってください。",
+    "reservedTitle": "「{{id}}」は組み込みスキルの ID です。別のタイトルを選んでください。",
+    "existsInApp": "このアプリには、スキル「{{id}}」がすでにあります。",
+    "inLibrary": "カスタム スキル「{{id}}」はすでにライブラリにあります。",
+    "gone": "そのカスタム スキルはもう存在しません。",
+    "noIdFromName": "スキル名から ID を作成できませんでした。名前には英字か数字が必要です。",
+    "reservedName": "「{{id}}」は組み込みスキルの ID です。追加する前に、スキルの名前を変更してください。",
+    "cantReadZip": "その .zip を読み取れませんでした: {{error}}",
+    "zipNoSkill": ".zip に SKILL.md が含まれていません。",
+    "folderNoSkill": "そのフォルダーの最上位に SKILL.md がありません。",
+    "unknown": "不明なカスタム スキルです。",
+    "cantRemove": "スキルを削除できませんでした: {{error}}",
+    "builtInId": "それは組み込みスキルの ID です。",
+    "alreadyInLibrary": "そのスキルはすでにライブラリにあります。",
+    "notInApp": "そのスキルはこのアプリにありません。",
+    "filter": "スキル (SKILL.md または .zip)",
+    "noSource": "そのカスタム スキルには SKILL.md がありません。"
+  },
+  "deploy": {
+    "unsupported": {
+      "nameRegion": "{{region}} の容量上にあるワークスペース「{{name}}」では、Fabric アプリを利用できません。",
+      "region": "{{region}} の容量上にあるこのワークスペースでは、Fabric アプリを利用できません。",
+      "name": "ワークスペース「{{name}}」では、Fabric アプリを利用できません。",
+      "none": "このワークスペースでは、Fabric アプリを利用できません。",
+      "message": "{{headline}}Fabric アプリはまだすべてのリージョンで利用できるわけではないため、別のリージョンの容量上にあるワークスペースに公開してください。どれもうまくいかない場合は、Fabric 管理者に Fabric Apps を有効にするよう依頼してください。"
+    },
+    "cantCheckChanges": "未公開の変更を確認できませんでした。{{error}}",
+    "gitStatusFailed": "git status に失敗しました。",
+    "cantCompare": "プロジェクトを最後に公開したバージョンと比較できませんでした。{{error}}",
+    "gitDiffFailed": "git diff に失敗しました。",
+    "taskFailed": "公開タスクが失敗しました: {{error}}",
+    "settingsPushFailed": "rayfin up でサインイン設定を反映できませんでした。上のログを確認してください。",
+    "cliNotStarted": "プロジェクトの Rayfin CLI を起動できませんでした。",
+    "exitedWithoutReason": "rayfin up が終了コード {{code}} で終了しましたが、詳しい失敗理由は報告されませんでした。公開ログを確認してください。Fabric へのサインインは成功しているように見えるのに公開が失敗し続ける場合は、[Fabric 認証を更新] を使用し、プロジェクトの Rayfin CLI と SDK を 1.35.1 以降に更新してください。",
+    "unknownCode": "不明",
+    "authCache": "{{detail}} [Fabric 認証を更新] を使用して CLI の資格情報をクリアし、もう一度サインインしてください。このプロジェクトの Rayfin CLI と SDK は 1.35.1 以降である必要があります。",
+    "cantStartHistory": "このアプリのバージョン履歴を開始できなかったため、Fabricator は変更内容を判断できません。{{error}}",
+    "cantReadPublished": "このプロジェクトの公開済みアプリを読み取れませんでした。{{error}}",
+    "invalidListResponse": "このプロジェクトの公開済みアプリを読み取れませんでした: CLI の応答が無効です。何も削除されていません。",
+    "cliNotOnPath": "PATH に rayfin CLI が見つかりませんでした。",
+    "switchFailed": "rayfin up switch に失敗しました。",
+    "cantReadFile": "{{path}} を読み取れませんでした: {{error}}",
+    "noDeployments": "デプロイが含まれていません",
+    "cantUpdateFile": "{{path}} を更新できませんでした: {{error}}",
+    "deleteFailed": "公開済みアプリを削除できませんでした: {{error}}",
+    "notRecorded": "その公開済みアプリは、このプロジェクトにもう記録されていません。",
+    "fabricDidntDelete": "Fabric はアプリを削除しませんでした。",
+    "stillRecorded": "Fabric はアプリを削除しましたが、このプロジェクトにはまだ記録されています。{{error}}"
+  },
+  "doctor": {
+    "hints": {
+      "node": "Node.js 22.12 以降をインストールしてください (npm が含まれます)。",
+      "npm": "npm は Node.js に含まれています。",
+      "git": "アプリのバージョン管理のために Git をインストールしてください。",
+      "az": "省略可能です。Azure にサインインすると、公開したアプリの共有、Fabric データの追加、Power BI レポートの移行ができます。また、開発中にアプリの関数とコネクタがあなたの Azure アクセスを使用できるようになります。",
+      "gh": "gh によるリポジトリの参照 (省略可能)。同梱の GitHub Copilot エンジンとは別のものです。"
+    },
+    "check": {
+      "noVersion": "{{name}} は見つかりましたが、バージョン チェックで認識可能なバージョンが返されませんでした。",
+      "failed": "{{name}} は見つかりましたが、バージョン チェックに失敗しました: {{detail}}。",
+      "exitCode": "{{name}} は見つかりましたが、バージョン チェックが終了コード {{code}} で失敗しました。",
+      "unfinished": "{{name}} は見つかりましたが、バージョン チェックを完了できませんでした (タイムアウトしたか、開始できなかった可能性があります)。",
+      "fix": "{{problem}}再確認するか、ターミナルで {{command}} を実行して既存のインストールを診断してください。"
+    },
+    "install": {
+      "viaWinget": "winget で {{name}} をインストールしています (アクセス許可の確認が表示される場合があります)…",
+      "installed": "{{name}} をインストールしました。セットアップを完了するには、Fabricator を再起動してください。",
+      "wingetFailed": "winget で {{name}} をインストールできませんでした (終了 {{code}})。公式インストーラーを開いています…",
+      "noWinget": "winget を利用できません。{{name}} の公式インストーラーを開いています…",
+      "viaHomebrew": "Homebrew で {{name}} をインストールしています…",
+      "brewFailed": "Homebrew で {{name}} をインストールできませんでした (終了 {{code}})。公式インストーラーを開いています…",
+      "noHomebrew": "Homebrew を利用できません。{{name}} の公式インストーラーを開いています…",
+      "cantOpenInstaller": "{{name}} のインストーラーを開けませんでした: {{error}}",
+      "opened": "{{url}} を開きました。{{name}} をインストールしてから、[再起動] をクリックしてください。",
+      "unknownTool": "不明な前提条件です: {{id}}。",
+      "alreadyAvailable": "{{name}} は既に利用可能です。",
+      "notAutomatic": "このプラットフォームでは {{name}} を自動的にインストールできません。",
+      "resolveCheckFirst": "すべての前提条件をインストールする前に、既存の CLI チェックの失敗を解決してください。{{error}}",
+      "remainingManual": "残りの前提条件は自動的にインストールできません。それぞれのセットアップ手順に従ってください。",
+      "installing": "{{name}} をインストールしています",
+      "incomplete": "1 つ以上のインストールが完了しませんでした。詳細については、プロセスの出力を確認してください。"
+    }
+  },
+  "fabric": {
+    "cantPrepareAppLookup": "Fabric アプリの検索を準備できませんでした: {{error}}",
+    "cantListApps": "そのワークスペースのアプリを一覧表示できませんでした。",
+    "noCliForWorkspace": "ワークスペースを調べるための Rayfin CLI が見つかりませんでした。",
+    "cantPrepareWorkspaceLookup": "ワークスペースの検索を準備できませんでした: {{error}}",
+    "cantLookUpWorkspace": "ワークスペースを調べられませんでした。",
+    "cantInstallDeps": "このプロジェクトの依存関係をインストールできませんでした: {{error}}",
+    "noCli": "Rayfin CLI が見つかりませんでした。Fabric に接続するには、Rayfin プロジェクトを開いてください。",
+    "noAuthModule": "Rayfin CLI の認証モジュールが見つかりませんでした。Fabric に接続するには、Rayfin プロジェクトを開いてください。",
+    "cantPrepareAuthCheck": "Fabric の認証チェックを準備できませんでした: {{error}}",
+    "cantVerifySession": "現在の Fabric セッションを確認できませんでした。",
+    "cantPrepareWorkspacesHelper": "ワークスペース検索用のヘルパーを準備できませんでした: {{error}}",
+    "cantPrepareCapacitiesHelper": "容量検索用のヘルパーを準備できませんでした: {{error}}",
+    "cantPrepareCreateHelper": "ワークスペース作成用のヘルパーを準備できませんでした: {{error}}",
+    "unrecordedApps": "このプロジェクトの公開済みアプリの一部に、Fabric のワークスペースまたはアイテム ID が記録されていません。何も削除されませんでした。",
+    "cantPrepareDeleteHelper": "削除用のヘルパーを準備できませんでした: {{error}}",
+    "enterEmail": "共有先のメール アドレスを 1 つ以上入力してください。",
+    "noWorkspaceId": "この公開済みアプリには、まだ Fabric のワークスペース ID がありません。共有する前に公開してください。",
+    "cantPrepareShareHelper": "共有用のヘルパーを準備できませんでした: {{error}}",
+    "cantPrepareDirectoryHelper": "ディレクトリ用のヘルパーを準備できませんでした: {{error}}"
+  },
+  "files": {
+    "notAFile": "ファイルではありません。",
+    "notFound": "ファイルが見つかりません。",
+    "cantRead": "ファイルを読み取れませんでした。",
+    "isFile": "これはフォルダーではなくファイルです。",
+    "noFolder": "ここにフォルダーはありません。",
+    "noAccess": "このフォルダーへのアクセス権がありません。",
+    "cantOpenFolder": "このフォルダーを開けませんでした。"
+  },
+  "gallery": {
+    "teamApp": "チーム アプリはチームのパイプラインによって公開されます。",
+    "notPublished": "このアプリはまだ公開されていません。",
+    "noDescription": "Copilot が説明を書きませんでした。もう一度お試しください。",
+    "cantWrite": "説明を書けませんでした: {{error}}"
+  },
+  "git": {
+    "enterMessage": "コミット メッセージを入力してください。",
+    "stillConflicted": "一部のファイルにまだ競合があります。先に競合を解決するか、マージを中止してください。",
+    "addFailed": "git add に失敗しました。",
+    "nothingToCommit": "コミットする変更はありません。",
+    "commitFailed": "git commit に失敗しました。",
+    "noSubject": "（メッセージなし）",
+    "cantReadPath": "{{path}} を読み取れませんでした: {{error}}",
+    "cantSaveBeforeRestore": "復元する前に現在の変更を保存できませんでした。",
+    "cantReadCurrent": "現在のバージョンを読み取れませんでした。",
+    "versionWithoutApp": "そのバージョンにはこのアプリが含まれていないため、復元できません。",
+    "cantSaveRestored": "復元したバージョンを保存できませんでした。",
+    "pickVersion": "復元する保存済みのバージョンを選んでください。",
+    "notTrackedRestore": "このプロジェクトは git で追跡されていないため、復元するものはありません。",
+    "versionGone": "そのバージョンはもう存在しません。",
+    "cantRestore": "そのバージョンを復元できませんでした。",
+    "cantReachRemote": "リモートに接続できませんでした。",
+    "teamSync": "Fabricator は変更のたびにこのチーム アプリを GitHub に保存します。代わりに [更新] と [公開] を使ってください。",
+    "merging": "完了していないマージがあります。先にマージを完了するか中止してください。",
+    "overlap": "あなたの変更と最新の変更が重なっているため、自動的にマージできませんでした。",
+    "noReason": "git から理由は示されませんでした。",
+    "overlapIn_other": "あなたの変更と最新の変更が {{count}} 個のファイルで重なっています。",
+    "notTracked": "このプロジェクトは git で追跡されていません。",
+    "noUpstream": "このブランチはまだリモート ブランチにリンクされていません。",
+    "cantSaveBeforeUpdate": "更新する前に現在の変更を保存できませんでした。",
+    "cantCombine": "最新の変更をマージできませんでした: {{reason}}",
+    "cantFinish": "マージを完了できませんでした: {{reason}}",
+    "cantCancel": "マージを中止できませんでした: {{reason}}",
+    "noBranch": "{{branch}} という名前のブランチはありません。",
+    "cantSaveBeforeSwitch": "切り替える前に現在の変更を保存できませんでした。",
+    "cantSwitch": "{{name}} に切り替えられませんでした: {{reason}}",
+    "rejected": "リモートに、まだ取得していない変更があります。先に最新の変更を取得してから、もう一度プッシュしてください。",
+    "cantPush": "変更をプッシュできませんでした。"
+  },
+  "github": {
+    "cantListAccounts": "GitHub アカウントの一覧を取得できませんでした",
+    "ghMissingSetup": "GitHub CLI (gh) がインストールされていません。セットアップからインストールして、もう一度お試しください。",
+    "cantOpenTerminal": "ターミナルを開けませんでした。`{{command}}` を自分で実行してから、戻ってきてください。",
+    "notAccountName": "{{login}} は GitHub アカウント名ではありません。",
+    "cantSwitch": "{{login}} に切り替えられませんでした",
+    "cantSignOut": "{{login}} からサインアウトできませんでした",
+    "ghMissingPath": "GitHub CLI (gh) がインストールされていないか、PATH にありません。",
+    "cantOpenLoginTerminal": "GitHub にサインインするためのターミナルを開けませんでした。ターミナルで `gh auth login --hostname github.com` を実行してください。",
+    "authExpired": "{{operation}}: GitHub の認証が必要か、期限切れです。github.com にもう一度サインインしてください。",
+    "exitCode": "{{operation}} (終了コード {{code}})。",
+    "cantReadRepoList": "リポジトリの一覧を読み取れませんでした: {{error}}",
+    "ghMissingBrowse": "GitHub CLI (gh) が見つかりませんでした。リポジトリを参照するには、インストールしてください。",
+    "cantListRepos": "リポジトリの一覧を取得できませんでした",
+    "enterRepository": "リポジトリを「所有者/名前」の形式か、GitHub の URL で入力してください。",
+    "cantCreateWorkspaceFolder": "ワークスペース フォルダーを作成できませんでした: {{error}}",
+    "folderExists": "ワークスペースには「{{name}}」という名前のフォルダーが既にあります。",
+    "ghMissingClone": "GitHub CLI (gh) が見つかりませんでした。インストールしてから、もう一度クローンしてください。",
+    "cloneFailed": "クローンに失敗しました",
+    "notRayfin": "そのリポジトリは Rayfin プロジェクトではありません (rayfin/rayfin.yml がありません)。",
+    "npmMissing": "{{path}} にクローンしましたが、PATH に npm が見つかりませんでした。Node.js (npm を含む) をインストールし、そのフォルダーで「npm install」を実行してから、[既存のプロジェクトを開く] → [フォルダーを開く] で開いてください。",
+    "installFailed": "{{path}} にクローンしましたが、依存関係のインストールに失敗しました: {{cause}}。下の詳細を確認してから、そのフォルダーで「npm install」を実行し、[既存のプロジェクトを開く] → [フォルダーを開く] で開いてください。",
+    "installExited": "{{path}} にクローンしましたが、依存関係のインストールに失敗しました (npm install の終了コード: {{code}})。下の詳細を確認してから、そのフォルダーで「npm install」を実行し、[既存のプロジェクトを開く] → [フォルダーを開く] で開いてください。"
+  },
+  "githubRepo": {
+    "nameRule": "リポジトリ名には、英字、数字、ハイフン、アンダースコア、ピリオドのみを使用してください。",
+    "notAccountOrOrg": "{{owner}} は GitHub のアカウント名でも組織名でもありません。",
+    "listOwners": "リポジトリを作成できる場所の一覧の取得",
+    "taken": "github.com/{{name}} は既に存在します。別の名前を選んでください。",
+    "adoptEmpty": "github.com/{{name}} は空のため、Fabricator はアプリをそこに配置します。",
+    "teamApp": "チーム アプリは既に GitHub 上の、チーム ワークスペースのリポジトリにあります。",
+    "folderMissing": "プロジェクトのフォルダーが見つかりません。",
+    "pushFailed": "Fabricator は github.com/{{name}} を作成しましたが、アプリをプッシュできませんでした。{{message}}",
+    "notTracked": "このプロジェクトは git で追跡されていないため、GitHub に置くバージョンがありません。",
+    "partOfRepo": "このアプリは {{path}} にある git リポジトリの一部であるため、独自の GitHub リポジトリを持つことはできません。",
+    "hasRemote": "このプロジェクトには既にリモート リポジトリがあります。",
+    "saveFirst": "アプリの最初のバージョンを保存してから、もう一度お試しください。",
+    "unexpectedRepo": "GitHub から予期しないリポジトリが返されました。",
+    "useExisting": "既存の GitHub リポジトリの使用",
+    "createRepo": "GitHub リポジトリの作成",
+    "noReason": "Git から理由は示されませんでした。",
+    "connect": "GitHub への接続"
+  },
+  "local": {
+    "notIdentity": "{{who}} はサインイン ID ではありません。",
+    "useIdentities": "developer、none、user:<ユーザー名> のいずれかを使ってください。",
+    "useKinds": "developer、user、none のいずれかを使ってください。",
+    "enterUsername": "ユーザー名 (メール アドレスなど) を入力してください。",
+    "chooseUser": "サインインに使うユーザーを選んでください。",
+    "cantSave": "ファイルを保存できませんでした: {{error}}",
+    "chooseFolder": "別のフォルダーを選んでください。",
+    "enterValue": "シークレットの値を入力してください。",
+    "badReason": "{{code}} は公開済みのバックエンドを使う理由ではありません。"
+  },
+  "mcp": {
+    "serverGone": "そのサーバーはもう Fabricator にありません。"
+  },
+  "migration": {
+    "turnOnFirst": "先に [設定] → [試験的機能] で [Power BI レポートの移行] をオンにしてください。"
+  },
+  "pick": {
+    "lookupFailed": "ソースの検索に失敗しました: {{error}}"
+  },
+  "projects": {
+    "enterRepoUrl": "GitHub リポジトリの URL を入力してください。例: https://github.com/microsoft/awesome-rayfin",
+    "cantReachGallery": "{{owner}}/{{repo}} に接続できませんでした。オンラインであること、およびリポジトリのルートに rayfin-template.yml があることを確認してください。",
+    "galleryUnreadable": "このギャラリーの rayfin-template.yml を解析できませんでした。",
+    "noTemplates": "このギャラリーにはテンプレートが見つかりませんでした。",
+    "nameCharacters": "使用できるのは英字、数字、スペース、ハイフン、アンダースコアのみです。",
+    "nameLetterOrNumber": "英字または数字を少なくとも 1 文字含めてください。",
+    "nameNeedsLetters": "名前には英字または数字を使ってください。",
+    "nameTaken": "{{place}}には「{{slug}}」という名前のフォルダーが既にあります。別の名前を選んでください。",
+    "folderExists": "{{place}}には「{{slug}}」という名前のフォルダーが既にあります。",
+    "place": {
+      "thatFolder": "そのフォルダー",
+      "projectsFolder": "プロジェクト フォルダー",
+      "workspace": "ワークスペース"
+    },
+    "enterFullPath": "フォルダーの完全なパスを入力するか、[参照] で選んでください。",
+    "notAFolder": "それはフォルダーではなくファイルです。",
+    "folderMissing": "このフォルダーはまだ存在しません。",
+    "cantCreateFolder": "フォルダーを作成できませんでした: {{error}}",
+    "enterName": "プロジェクト名を入力してください。",
+    "nameNeedsLettersOrNumbers": "プロジェクト名には英字または数字を含める必要があります。",
+    "npmMissingCreate": "PATH に npm が見つかりませんでした。プロジェクトを作成するには、Node.js (npm を含む) をインストールしてください。",
+    "createFromUrlFailed": "テンプレートの URL からプロジェクトを作成できませんでした (終了コード {{code}})。URL が有効な Rayfin テンプレートであることを確認してください。",
+    "createFailed": "プロジェクトを作成できませんでした (終了コード {{code}})。",
+    "creatingFrom": "Rayfin {{release}} で {{template}} テンプレートから「{{folder}}」を作成しています…",
+    "creatingFromCommunity": "Rayfin {{release}} でコミュニティ テンプレートから「{{folder}}」を作成しています…",
+    "noSkipInstall": "この Rayfin リリースは --skip-install に対応していないため、パッケージを自分でインストールします。",
+    "pinned": "Rayfin パッケージを {{range}} に固定しました。",
+    "keptVersions": "テンプレートは Rayfin {{major}}.{{minor}}.x ではなく {{name}} {{spec}} を要求しているため、そのバージョンを維持します。このコンピューターの Fabricator は Rayfin {{supported}} を実行します。他のリリースでは、一部が想定どおりに動作しない可能性があります。",
+    "npmMissingRetry": "PATH に npm が見つかりませんでした。Node.js (npm を含む) をインストールしてから、もう一度お試しください。",
+    "theProject": "プロジェクト",
+    "chooseAnotherFolder": "プロジェクト用に別のフォルダーを選んでください。",
+    "cantCreateWorkspaceFolder": "ワークスペース フォルダーを作成できませんでした: {{error}}",
+    "ready": "プロジェクトの準備ができました。",
+    "folderGone": "そのフォルダーはもう存在しません。",
+    "notRayfinProject": "そのフォルダーは Rayfin プロジェクトではありません (rayfin/rayfin.yml がありません)。",
+    "noLongerRayfinProject": "そのフォルダーはもう Rayfin プロジェクトではありません (rayfin/rayfin.yml がありません)。",
+    "cantTrash": "フォルダーをごみ箱に移動できませんでした: {{error}}",
+    "trashHint": "エディター、ターミナル、開発サーバーなど、そのファイルを使用しているプログラムを閉じてから、もう一度お試しください。",
+    "cantTrashHint": "フォルダーをごみ箱に移動できませんでした。{{hint}}",
+    "cantTrashReason": "フォルダーをごみ箱に移動できませんでした: {{reason}}。{{hint}}"
+  },
+  "screenshot": {
+    "pending": "Tauri ビルドでは、スクリーンショットのキャプチャはまだ使えません。",
+    "onlyImages": "添付できるのは PNG、JPEG、GIF、WebP、BMP の画像だけです。",
+    "cantRead": "画像を読み取れませんでした: {{error}}",
+    "tooLarge": "画像が大きすぎて添付できません。上限は 20 MB です。"
+  },
+  "secrets": {
+    "timedOut": "Rayfin CLI が時間内に完了しませんでした。接続を確認してから、もう一度お試しください。",
+    "notDeployed": "先にアプリを公開してください。公開済みの値は、公開済みのアプリと一緒に保存されます。",
+    "enterName": "シークレットの名前を入力してください。",
+    "nameTooLong": "128 文字以内の名前を使用してください。",
+    "nameRule": "名前は英字で始め、英字、数字、アンダースコアのみを使用してください。",
+    "teamApp": "Fabricator では、チーム アプリの公開済みシークレットをまだ変更できません。Fabric ポータルで変更してください。",
+    "needsRayfin": "シークレットには Rayfin {{version}} 以降が必要です。ステータス バーで Rayfin を選択し、[Copilot で更新] を選択してください。",
+    "notConfirmed": "Rayfin CLI で変更が確認されませんでした。",
+    "cliFailed": "Rayfin CLI が失敗しました (終了コード {{code}})。",
+    "cantRead": "シークレットを読み取れませんでした",
+    "notAList": "Fabricator は {{name}} を追加できません: rayfin/rayfin.yml の secrets: エントリがリストではありません。ファイルを修正してから、もう一度お試しください。",
+    "noConfig": "Fabricator がこのプロジェクトで rayfin/rayfin.yml を見つけられません。",
+    "cantAdd": "{{name}} を rayfin.yml に追加できませんでした: {{detail}}",
+    "enterValue": "シークレットの値を入力してください。"
+  },
+  "shared": {
+    "projectNotFound": "プロジェクトが見つかりません。",
+    "projectGone": "そのプロジェクトはもう Fabricator にありません。",
+    "projectFolderNotFound": "プロジェクト フォルダーが見つかりません。",
+    "pathOutside": "パスがプロジェクトの外にあります。",
+    "unknown": "不明",
+    "retryOnOpen": "アプリを開くときに、Fabricator がもう一度試します。",
+    "projectFolderGone": "プロジェクトのフォルダーがもうありません。",
+    "teamWorkspaceGone": "そのチーム ワークスペースはもうこのコンピューターにありません。",
+    "nodeMissing": "PATH に Node.js が見つかりませんでした。"
+  },
+  "skills": {
+    "cards": {
+      "polishedUi": {
+        "title": "洗練されたモダンな UI",
+        "description": "すっきりと統一された見た目: 余白、文字、色、コンポーネントがそろいます。"
+      },
+      "butteryAnimations": {
+        "title": "なめらかなアニメーション",
+        "description": "すばやく意味のある動きで、操作の妨げになりません。"
+      },
+      "responsiveLayout": {
+        "title": "どの画面にも対応",
+        "description": "スマートフォン、タブレット、横長のデスクトップで使えるレイアウト。"
+      },
+      "easyNavigation": {
+        "title": "わかりやすいナビゲーション",
+        "description": "明確なメニューとページ タイトル、共有できるリンク。"
+      },
+      "clearCopy": {
+        "title": "明確でわかりやすい文言",
+        "description": "平易な言葉で書かれたラベル、ボタン、メッセージ、空の状態。"
+      },
+      "loadingEmptyStates": {
+        "title": "読み込み中と空の状態",
+        "description": "すべての画面で、読み込み中、空、エラー、成功の状態を扱います。"
+      },
+      "friendlyForms": {
+        "title": "使いやすいフォームと検証",
+        "description": "ユーザーを導き、入力を早めに確認し、決して失わないフォーム。"
+      },
+      "dataModeling": {
+        "title": "堅実なデータ モデリング",
+        "description": "適切に設計された Rayfin のエンティティ、リレーションシップ、クエリ。"
+      },
+      "searchAndFilter": {
+        "title": "検索、並べ替え、フィルター",
+        "description": "長いリストでもレコードをすばやく見つけられます。フィルター処理はクエリで行います。"
+      },
+      "dataViz": {
+        "title": "美しいグラフとダッシュボード",
+        "description": "質問ごとに適切なグラフを使い、重要な数値を最初に示します。"
+      },
+      "accessibility": {
+        "title": "誰もが使えるアクセシビリティ",
+        "description": "キーボードとスクリーン リーダーで操作でき、読みやすいコントラストを備えます。"
+      },
+      "secureByDefault": {
+        "title": "既定でセキュア",
+        "description": "ユーザーごとのデータ ルール、サインインが必要なページ、ブラウザーにシークレットを置かない設計。"
+      },
+      "performance": {
+        "title": "高速で軽快",
+        "description": "アプリが大きくなっても、すばやく読み込まれ、なめらかに使えます。"
+      },
+      "rayfin": {
+        "title": "Rayfin の基本",
+        "description": "Rayfin の基礎知識: データ モデル、サインイン、公開、CLI。"
+      },
+      "rayfinFunctions": {
+        "description": "アプリから呼び出せるサーバー側の関数。"
+      },
+      "rayfinConnectors": {
+        "description": "既存の Fabric データを使用します: レイクハウス、ウェアハウス、SQL データベース、セマンティック モデル、KQL。"
+      },
+      "rayfinStorage": {
+        "description": "アプリ用のファイル ストレージです。試験段階です。"
+      }
+    },
+    "inThisApp": "このアプリのスキルです。",
+    "noPreview": "このスキルにはプレビューがありません。",
+    "nameTaken": "このアプリには、その名前の独自のスキルが既にあります。",
+    "unknown": "不明なスキルです。",
+    "managed": "そのスキルは Rayfin によって管理されています。",
+    "managedCantRemove": "そのスキルは Rayfin によって管理されているため、削除できません。",
+    "cantUpdate": "スキルを更新できませんでした: {{error}}"
+  },
+  "suggest": {
+    "busy": "このプロジェクトの提案は既に生成中です。"
+  },
+  "terminal": {
+    "notHere": "ターミナルは Fabricator のウィンドウでのみ使えます。",
+    "badId": "それはターミナル ID ではありません。",
+    "noShell": "Fabricator はこのコンピューターでシェルを見つけられませんでした。"
+  },
+  "transient": {
+    "cantReach": "モデルに接続できませんでした。",
+    "cantSend": "モデルにリクエストを送信できませんでした。"
+  }
+}

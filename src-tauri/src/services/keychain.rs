@@ -39,14 +39,6 @@ impl Item<'_> {
     }
   }
 
-  /// What it is, in messages.
-  fn what(self) -> &'static str {
-    match self {
-      Item::ApiKey(_) => "the key",
-      Item::McpServer(_) => "the server's values",
-    }
-  }
-
   /// What it's for, in the credential's comment.
   #[cfg_attr(not(windows), allow(dead_code))]
   fn comment(self) -> &'static str {
@@ -57,22 +49,22 @@ impl Item<'_> {
   }
 
   /// What to do when it can't be read.
-  fn unreadable(self) -> &'static str {
+  fn unreadable(self) -> String {
     match self {
-      Item::ApiKey(_) => "The saved key couldn't be read. Add it again.",
-      Item::McpServer(_) => "The server's saved values couldn't be read. Enter them again.",
+      Item::ApiKey(_) => t!("services.keychain.keyUnreadable"),
+      Item::McpServer(_) => t!("services.keychain.valuesUnreadable"),
     }
   }
 }
 
 /// Where secrets are kept, as people know it.
-pub fn store_name() -> &'static str {
+pub fn store_name() -> String {
   if cfg!(windows) {
-    "Windows Credential Manager"
+    t!("services.keychain.storeWindows")
   } else if cfg!(target_os = "macos") {
-    "your Keychain"
+    t!("services.keychain.storeMac")
   } else {
-    "your system's credential store"
+    t!("services.keychain.storeOther")
   }
 }
 
@@ -133,8 +125,8 @@ pub fn read(item: Item<'_>) -> Result<Option<String>, String> {
 pub fn write(item: Item<'_>, secret: &str) -> Result<(), String> {
   if secret.len() > MAX_SECRET_BYTES {
     return Err(match item {
-      Item::ApiKey(_) => "That key is too long to save.".into(),
-      Item::McpServer(_) => "Those values are too long to save. Shorten them, or give the server fewer of them.".into(),
+      Item::ApiKey(_) => t!("services.keychain.keyTooLong"),
+      Item::McpServer(_) => t!("services.keychain.valuesTooLong"),
     });
   }
   platform::set(&service(), item, secret)
@@ -180,10 +172,13 @@ mod platform {
           CredFree(cred as *const core::ffi::c_void);
           blob
         };
-        String::from_utf8(bytes).map(Some).map_err(|_| item.unreadable().to_string())
+        String::from_utf8(bytes).map(Some).map_err(|_| item.unreadable())
       }
       Err(e) if not_found(&e) => Ok(None),
-      Err(e) => Err(format!("Couldn't read {} from Windows Credential Manager: {}", item.what(), e.message())),
+      Err(e) => Err(match item {
+        Item::ApiKey(_) => t!("services.keychain.windows.readKey", error = e.message()),
+        Item::McpServer(_) => t!("services.keychain.windows.readValues", error = e.message()),
+      }),
     }
   }
 
@@ -207,7 +202,10 @@ mod platform {
     // SAFETY: every pointer in `cred` refers to a buffer that outlives the call.
     let result = unsafe { CredWriteW(&cred, 0) };
     blob.fill(0);
-    result.map_err(|e| format!("Couldn't save {} in Windows Credential Manager: {}", item.what(), e.message()))
+    result.map_err(|e| match item {
+      Item::ApiKey(_) => t!("services.keychain.windows.saveKey", error = e.message()),
+      Item::McpServer(_) => t!("services.keychain.windows.saveValues", error = e.message()),
+    })
   }
 
   pub fn delete(service: &str, item: Item<'_>) -> Result<(), String> {
@@ -215,7 +213,10 @@ mod platform {
     match unsafe { CredDeleteW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, None) } {
       Ok(()) => Ok(()),
       Err(e) if not_found(&e) => Ok(()),
-      Err(e) => Err(format!("Couldn't delete {} from Windows Credential Manager: {}", item.what(), e.message())),
+      Err(e) => Err(match item {
+        Item::ApiKey(_) => t!("services.keychain.windows.deleteKey", error = e.message()),
+        Item::McpServer(_) => t!("services.keychain.windows.deleteValues", error = e.message()),
+      }),
     }
   }
 }
@@ -231,22 +232,30 @@ mod platform {
 
   pub fn get(service: &str, item: Item<'_>) -> Result<Option<String>, String> {
     match get_generic_password(service, &item.account()) {
-      Ok(bytes) => String::from_utf8(bytes).map(Some).map_err(|_| item.unreadable().to_string()),
+      Ok(bytes) => String::from_utf8(bytes).map(Some).map_err(|_| item.unreadable()),
       Err(e) if e.code() == NOT_FOUND => Ok(None),
-      Err(e) => Err(format!("Couldn't read {} from your Keychain: {e}", item.what())),
+      Err(e) => Err(match item {
+        Item::ApiKey(_) => t!("services.keychain.mac.readKey", error = e),
+        Item::McpServer(_) => t!("services.keychain.mac.readValues", error = e),
+      }),
     }
   }
 
   pub fn set(service: &str, item: Item<'_>, secret: &str) -> Result<(), String> {
-    set_generic_password(service, &item.account(), secret.as_bytes())
-      .map_err(|e| format!("Couldn't save {} in your Keychain: {e}", item.what()))
+    set_generic_password(service, &item.account(), secret.as_bytes()).map_err(|e| match item {
+      Item::ApiKey(_) => t!("services.keychain.mac.saveKey", error = e),
+      Item::McpServer(_) => t!("services.keychain.mac.saveValues", error = e),
+    })
   }
 
   pub fn delete(service: &str, item: Item<'_>) -> Result<(), String> {
     match delete_generic_password(service, &item.account()) {
       Ok(()) => Ok(()),
       Err(e) if e.code() == NOT_FOUND => Ok(()),
-      Err(e) => Err(format!("Couldn't delete {} from your Keychain: {e}", item.what())),
+      Err(e) => Err(match item {
+        Item::ApiKey(_) => t!("services.keychain.mac.deleteKey", error = e),
+        Item::McpServer(_) => t!("services.keychain.mac.deleteValues", error = e),
+      }),
     }
   }
 }
@@ -261,8 +270,8 @@ mod platform {
 
   pub fn set(_service: &str, item: Item<'_>, _secret: &str) -> Result<(), String> {
     Err(match item {
-      Item::ApiKey(_) => "Saving API keys isn't supported on this operating system.".into(),
-      Item::McpServer(_) => "Saving an MCP server's values isn't supported on this operating system.".into(),
+      Item::ApiKey(_) => t!("services.keychain.keysUnsupported"),
+      Item::McpServer(_) => t!("services.keychain.valuesUnsupported"),
     })
   }
 

@@ -1,0 +1,296 @@
+{
+  "common": {
+    "separator": ", ",
+    "andMore_one": "{{items}}, and {{count}} more",
+    "andMore_other": "{{items}}, and {{count}} more",
+    "places_one": "Found in {{count}} place: {{labels}}.",
+    "places_other": "Found in {{count}} places: {{labels}}.",
+    "sentences": "{{first}} {{second}}"
+  },
+  "access/entity-missing-permission": {
+    "hit": "{{entity}} has no permission decorator, so every signed-in user can create, read, update, and delete all of its rows.",
+    "summary_one": "{{count}} entity has no permission decorator, so every signed-in user gets full access to its rows: {{entities}}.",
+    "summary_other": "{{count}} entities have no permission decorator, so every signed-in user gets full access to their rows: {{entities}}."
+  },
+  "access/on-auth-state-change": {
+    "hit": "{{file}} calls {{method}}, which doesn't exist on the Rayfin auth client."
+  },
+  "access/fabric-provider-missing": {
+    "hit": "{{setting}} is true, but {{package}} isn't a dependency in package.json."
+  },
+  "access/fabric-provider-dynamic-import": {
+    "hit": "{{file}} loads the Fabric auth provider with {{dynamicImport}}, and no module imports it statically."
+  },
+  "access/mock-auth-credentials": {
+    "hit": "{{file}} signs in with a hard-coded email and password, and the app still selects it when no backend URL is configured."
+  },
+  "access/entra-exchange-not-enabled": {
+    "hit": "{{file}} calls {{call}}, but rayfin.yml doesn't set {{setting}}."
+  },
+  "policy/owner-field-without-policy": {
+    "hit": "{{entity}} stores {{owner}}, but its {{grant}} grant has no row policy, so any signed-in user can change other users' rows.",
+    "summary": "These entities store an owner but let any signed-in user change every row: {{entities}}."
+  },
+  "policy/anonymous-write": {
+    "hit": "{{entity}} grants {{actions}} to anonymous callers, so anyone can change its rows without signing in."
+  },
+  "policy/anonymous-grant": {
+    "hitLocal": "{{entity}} allows anonymous reads. They work in the local preview, but publishing fails unless your tenant admin has turned on anonymous data access for Fabric apps.",
+    "hitFabric": "{{entity}} allows anonymous reads, which Fabric refuses unless your tenant admin has turned on anonymous data access for Fabric apps.",
+    "summaryLocal_one": "{{count}} entity allows anonymous reads. They work in the local preview, but publishing fails unless your tenant admin has turned on anonymous data access for Fabric apps: {{entities}}.",
+    "summaryLocal_other": "{{count}} entities allow anonymous reads. They work in the local preview, but publishing fails unless your tenant admin has turned on anonymous data access for Fabric apps: {{entities}}.",
+    "summaryFabric_one": "{{count}} entity allows anonymous reads, which Fabric refuses unless your tenant admin has turned on anonymous data access for Fabric apps: {{entities}}.",
+    "summaryFabric_other": "{{count}} entities allow anonymous reads, which Fabric refuses unless your tenant admin has turned on anonymous data access for Fabric apps: {{entities}}."
+  },
+  "policy/unsupported-claim": {
+    "hit": "{{entity}}'s policy compares {{claim}}, but policies only support {{sub}}, {{email}}, and {{role}}."
+  },
+  "policy/blob-without-permission": {
+    "hit": "The {{blob}} storage class {{storageClass}} has no permission decorator."
+  },
+  "policy/prefer-shorthand": {
+    "hit": "{{entity}} uses {{longhand}}; {{shorthand}} is the documented shorthand."
+  },
+  "secrets/secret-in-public-env": {
+    "inEnvFile": "{{key}} in {{file}} looks like a secret, but its prefix exposes it to the browser.",
+    "inCode": "{{file}} reads {{name}}, which looks like a secret, from browser-visible environment variables."
+  },
+  "secrets/env-file-not-ignored": {
+    "hit": "{{file}} isn't git-ignored, so its values can be committed."
+  },
+  "secrets/hardcoded-credential": {
+    "hit": "{{file}} contains {{credential}}.",
+    "credentials": {
+      "privateKey": "a private key",
+      "storageAccountKey": "an Azure storage account key",
+      "sqlPassword": "a SQL connection string with a password",
+      "githubToken": "a GitHub token",
+      "apiSecretKey": "an API secret key",
+      "slackToken": "a Slack token",
+      "awsAccessKey": "an AWS access key",
+      "clientSecret": "a service principal client secret",
+      "rayfinToken": "a Rayfin CLI token"
+    }
+  },
+  "secrets/redirect-uri-scope": {
+    "wildcard": "The allowed redirect URI {{uri}} is a wildcard.",
+    "plainHttp": "The allowed redirect URI {{uri}} uses plain http on a non-local host."
+  },
+  "secrets/publishable-key-mismatch": {
+    "hit": "{{key}} in {{file}} doesn't hold a publishable key (they start with {{prefix}})."
+  },
+  "secrets/deployments-file-tracked": {
+    "hit": "{{file}} isn't git-ignored, so your workspace and item IDs can be committed."
+  },
+  "secrets/local-backend-not-ignored": {
+    "what": "{{holds}} ({{files}})",
+    "holds": {
+      "secrets": "your secrets' local values",
+      "keys": "the local backend's signing keys",
+      "database": "the app's local database",
+      "uploads": "files uploaded to the local app",
+      "ids": "the local app's IDs",
+      "otherFiles": "the local backend's other files",
+      "files": "the local backend's files"
+    },
+    "missing": "{{gitignore}} is missing, so git can commit {{what}}.",
+    "changed": "{{gitignore}} no longer ignores everything in the folder, so git can commit {{what}}.",
+    "tracked": "Git tracks files in {{folder}} even though {{gitignore}} ignores the folder, so commits include {{what}}.",
+    "unknown": "Git can commit {{what}}."
+  },
+  "secrets/encryption-fallback-committed": {
+    "hit": "{{file}} turns on plaintext CLI token caching."
+  },
+  "data-model/text-without-max": {
+    "hit": "{{field}} is declared {{decorator}} without {{max}}, so it becomes NVARCHAR(MAX) on MSSQL.",
+    "summary_one": "{{count}} text field has no maximum length: {{fields}}.",
+    "summary_other": "{{count}} text fields have no maximum length: {{fields}}."
+  },
+  "data-model/fk-typed-text": {
+    "hit": "{{field}} references {{target}} through {{relation}} but is declared {{declared}} instead of {{expected}}."
+  },
+  "data-model/relation-not-lazy": {
+    "hit": "{{field}} passes {{target}} to {{decorator}} directly instead of {{lazy}}."
+  },
+  "data-model/relation-import-type": {
+    "typeImport": "{{file}} imports {{names}} with {{importType}}, but uses it in a relationship decorator, which needs the runtime class.",
+    "noExtension": "{{file}} imports {{module}} without the {{extension}} extension, which doesn't resolve as ESM."
+  },
+  "data-model/entity-not-registered": {
+    "notInSchema": "{{entity}} ({{file}}) isn't listed in the {{schema}} array in {{schemaFile}}.",
+    "notInType": "{{entity}} is in the {{schema}} array but missing from the {{type}} type.",
+    "notInArray": "{{entity}} is in the {{type}} type but missing from the {{schema}} array."
+  },
+  "data-model/field-missing-decorator": {
+    "none": "{{field}} has no field decorator, so it isn't stored.",
+    "several_one": "{{field}} has {{count}} field decorator ({{decorators}}).",
+    "several_other": "{{field}} has {{count}} field decorators ({{decorators}})."
+  },
+  "data-model/decimal-precision": {
+    "onlyPrecision": "{{field}} sets only precision.",
+    "onlyScale": "{{field}} sets only scale.",
+    "tooPrecise": "{{field}} sets precision {{precision}}, above the maximum of 28."
+  },
+  "data-model/nullable-mismatch": {
+    "optionWithoutQuestion": "{{field}} sets {{option}} but the property has no {{question}}.",
+    "questionWithoutOption": "{{field}} is marked {{question}} but its decorator doesn't set {{option}}, so the column is still required."
+  },
+  "data-model/many-to-many": {
+    "hit": "{{entity}} and {{other}} each declare {{many}} of the other, which Rayfin doesn't support without a join entity."
+  },
+  "data-model/reserved-entity-name": {
+    "registeredAs": "{{entity}} is registered as {{name}}, a name GraphQL reserves.",
+    "named": "The entity {{name}} uses a name GraphQL reserves."
+  },
+  "data-model/relation-options": {
+    "hit": "{{field}} passes {{options}} to {{decorator}}, which accepts only {{optional}} and {{unique}}."
+  },
+  "queries/count-method": {
+    "hit": "{{file}} calls {{method}} on a Rayfin query, which has no such method."
+  },
+  "queries/find-by-pk": {
+    "hit": "{{file}} calls {{method}}, which doesn't exist in Rayfin."
+  },
+  "queries/total-count": {
+    "hit": "{{file}} reads {{property}}, which Rayfin never populates."
+  },
+  "queries/where-dot-path": {
+    "hit": "{{file}} filters on {{path}}; dot-paths only work in {{select}}."
+  },
+  "queries/select-nested-path": {
+    "hit": "{{file}} selects {{path}}, which is more than one relationship level deep."
+  },
+  "queries/aggregate-with-row-methods": {
+    "hit": "{{file}} combines {{aggregate}} with {{rowMethod}} in one query."
+  },
+  "queries/sort-direction-case": {
+    "hit": "{{file}} sorts with {{direction}} instead of {{lowercase}}."
+  },
+  "queries/raw-data-fetch": {
+    "fetch": "{{file}} sends a hand-built GraphQL request with {{fetch}}.",
+    "gql": "{{file}} builds a raw GraphQL document with {{gql}}."
+  },
+  "config/missing-service-blocks": {
+    "hit": "rayfin.yml doesn't declare {{service}}."
+  },
+  "config/data-dialect": {
+    "noDialect": "{{service}} is enabled but doesn't set {{dialect}}.",
+    "wrongDialect": "{{setting}} is {{value}}; Fabric apps support only {{mssql}}."
+  },
+  "config/experimental-decorators": {
+    "hit": "{{file}} sets {{option}}."
+  },
+  "config/decorators-lib": {
+    "libMissing": "{{file}}'s {{lib}} doesn't include {{decorators}}.",
+    "noLib": "{{file}} doesn't set {{lib}}, so {{decorators}} isn't included."
+  },
+  "config/swc-with-runtime-entities": {
+    "hit": "{{file}} imports {{module}} as a value, which bundles decorated entity classes into the browser build. This project builds with {{plugin}}, which can't parse those decorators."
+  },
+  "config/vite-target": {
+    "hit": "{{file}} doesn't target ES2022 or later, but the bundle includes entity classes (for example {{example}})."
+  },
+  "config/static-hosting-folder": {
+    "hit": "{{setting}} is {{folder}}, but Vite writes the build to {{outDir}}."
+  },
+  "config/deprecated-yml-keys": {
+    "topLevelKey": "rayfin.yml still has the deprecated top-level {{key}} key.",
+    "connectorsEnabled": "{{setting}} does nothing since Rayfin 1.36; connectors are always on.",
+    "anonymousAccess": "{{setting}} was replaced by {{replacement}} in Rayfin 1.35.1."
+  },
+  "config/functions-auth": {
+    "noAuth": "{{service}} is enabled but doesn't set {{setting}}.",
+    "wrongType": "{{setting}} is {{value}}; enabled Functions need {{application}}."
+  },
+  "config/static-hosting-posture": {
+    "noAccess": "{{service}} doesn't set {{setting}}.",
+    "wrongAccess": "{{setting}} is {{value}}; use {{protected}} or {{public}}."
+  },
+  "config/embedded-public-conflict": {
+    "hit": "{{service}} sets {{public}} together with {{embedded}}."
+  },
+  "config/stale-feature-flags": {
+    "hit_one": "{{file}} lists {{flags}} in {{variable}}, which no longer need a flag.",
+    "hit_other": "{{file}} lists {{flags}} in {{variable}}, which no longer need a flag."
+  },
+  "config/connectors-list-shape": {
+    "hit": "{{key}} in rayfin.yml is a map keyed by connector name ({{names}}) instead of a list of {{entry}} entries."
+  },
+  "platform/cli-outdated": {
+    "hit": "The Rayfin CLI is on {{installed}}; {{latest}} is the latest release."
+  },
+  "platform/sdk-outdated": {
+    "hit": "The Rayfin SDK is on {{installed}} ({{package}}); {{latest}} is the latest release."
+  },
+  "platform/sdk-lockstep": {
+    "hit": "Rayfin SDK packages are installed at different versions: {{packages}}."
+  },
+  "platform/sdk-local-range": {
+    "runs": "the Rayfin releases Fabricator runs on this computer ({{lines}})",
+    "older": "{{package}} is declared as {{spec}}, which can't install {{runs}}.",
+    "loose": "{{package}} is declared as {{spec}}, so the next install can move it past Rayfin {{line}}, to a release Fabricator may not run on this computer.",
+    "installedPinned": "{{package}} is installed at {{version}}, outside {{runs}}, although it's declared as {{spec}}. Run {{command}} to bring it back.",
+    "installedOutside": "{{package}} is installed at {{version}}, outside {{runs}}.",
+    "pinIt": "Pin it to {{pin}}.",
+    "summary": "These Rayfin packages aren't pinned to {{runs}}: {{packages}}.",
+    "pinThem": "Pin them to {{pin}}, and reinstall."
+  },
+  "platform/connector-version": {
+    "range": "{{package}} is declared as {{range}}, which can install a different release than the CLI's.",
+    "installed": "{{package}} is installed at {{installed}} while the CLI is {{cli}}."
+  },
+  "platform/connector-schema-value-import": {
+    "imports": "{{file}} imports {{names}} as values instead of with {{typeOnly}}.",
+    "reexports": "{{file}} re-exports {{names}} as values instead of with {{typeOnly}}."
+  },
+  "platform/connector-client-experimental-import": {
+    "hit": "{{file}} imports {{name}} from {{experimental}} instead of {{package}}."
+  },
+  "platform/removed-experimental-import": {
+    "hit_one": "{{file}} imports {{names}} from {{module}}, which no longer exports them; they're in {{homes}}.",
+    "hit_other": "{{file}} imports {{names}} from {{module}}, which no longer exports them; they're in {{homes}}."
+  },
+  "platform/connector-app-auth": {
+    "hit": "The {{type}} connector {{connector}} uses {{setting}}, which isn't allowed for this connector type."
+  },
+  "platform/connector-fabric-only": {
+    "hit": "{{connector}} is a {{type}} connector, which runs only on Fabric, so the local preview can't call it. {{outcome}}",
+    "summary": "These connectors run only on Fabric, so the local preview can't call them: {{connectors}}. {{outcome}}",
+    "outcome": "Until the app is published, those calls fail; after that, the preview uses the published app's backend."
+  },
+  "platform/connector-orphaned-dir": {
+    "hit": "{{folder}} has no matching connector in rayfin.yml."
+  },
+  "platform/functions-context-import": {
+    "hit": "{{file}} imports {{names}} from {{package}}."
+  },
+  "platform/functions-mssql": {
+    "pinned": "{{file}} pins {{dependency}}, below 12.6.0.",
+    "strictEncrypt": "{{file}} connects with {{strict}} instead of {{encrypt}}."
+  },
+  "platform/functions-removed-audience": {
+    "hit": "{{file}} uses {{audience}}, which Rayfin 1.36 removed."
+  },
+  "platform/functions-legacy-context-api": {
+    "hit": "{{file}} calls {{call}} instead of {{replacement}}."
+  },
+  "platform/functions-availability": {
+    "hit": "The {{service}} service is enabled; it isn't available in every Fabric region or tenant."
+  },
+  "platform/experimental-services": {
+    "hit": "The experimental {{service}} service is enabled."
+  },
+  "platform/deprecated-fabric-callback": {
+    "bridge": "{{file}} calls the deprecated {{function}}.",
+    "callbackUrl": "{{file}} passes the deprecated {{option}} option."
+  },
+  "platform/ai-files-missing": {
+    "hit": "{{file}} isn't installed, so coding agents don't get version-matched Rayfin guidance."
+  },
+  "performance/oversized-page": {
+    "hit": "{{file}} requests pages of {{rows}} rows."
+  },
+  "accessibility/img-alt": {
+    "hit": "An {{img}} in {{file}} has no {{alt}} attribute."
+  }
+}

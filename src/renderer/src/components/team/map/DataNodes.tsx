@@ -1,4 +1,5 @@
 import type { TeamMap } from '@shared/ipc'
+import { formatList, translator, useTranslation } from '../../../i18n'
 import { Codicon } from '../../icons'
 import { Avatar, FabricGlyph } from './parts'
 import {
@@ -13,13 +14,10 @@ import {
 
 import type { JSX } from 'react'
 
-function plural(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`
-}
-
 /** "Your copy adds Receipt", with the author's face. */
 export function ChangeLine({ change }: { change: ResourceChange }): JSX.Element {
-  const text = `${copyName(change)} ${change.what}`
+  const { t } = useTranslation('teamMap')
+  const text = t('change.line', { copy: copyName(change), what: change.what })
   return (
     <span className={`tmap-change tmap-change--${change.kind}`} title={text}>
       <Avatar login={change.author || 'you'} url={change.avatarUrl} size={16} />
@@ -40,13 +38,20 @@ export function SourceIcon({ source, small }: { source: SourceItem; small?: bool
 
 /** One line under a resource's name: what it holds or does. */
 export function resourceSummary(item: ResourceItem): string {
+  const t = translator('teamMap')
   switch (item.kind) {
     case 'database':
-      return item.relations ? `${item.detail} · ${plural(item.relations, 'relationship')}` : item.detail
+      return item.relations
+        ? `${item.detail} · ${t('summary.relationships', { count: item.relations })}`
+        : item.detail
     case 'functions': {
       const reach = item.audiences ?? []
       if (!reach.length) return item.detail
-      return `${item.detail} · reaches ${reach.length === 1 ? serviceKind(reach[0]).label : `${reach.length} services`}`
+      const reaches =
+        reach.length === 1
+          ? t('summary.reaches', { service: serviceKind(reach[0]).label })
+          : t('summary.reachesServices', { count: reach.length })
+      return `${item.detail} · ${reaches}`
     }
     case 'connector': {
       const ability = item.connector ? connectorAbility(item.connector) : ''
@@ -69,10 +74,14 @@ export function sourceApps(map: TeamMap, view: ResourceView, source: SourceItem)
 
 export function usedBy(names: string[]): string {
   if (!names.length) return ''
-  return names.length <= 2 ? `Used by ${names.join(' and ')}` : `Used by ${names.length} apps`
+  const t = translator('teamMap')
+  return names.length <= 2
+    ? t('usedBy.names', { names: formatList(names) })
+    : t('usedBy.apps', { count: names.length })
 }
 
 export function ResourceNodeBody({ item }: { item: ResourceItem }): JSX.Element {
+  const { t } = useTranslation('teamMap')
   return (
     <>
       <div className="tmap-node-head">
@@ -89,7 +98,9 @@ export function ResourceNodeBody({ item }: { item: ResourceItem }): JSX.Element 
           {item.changes.slice(0, 2).map((change, i) => (
             <ChangeLine key={`${change.author}-${i}`} change={change} />
           ))}
-          {item.changes.length > 2 && <span className="tmap-dim">and {item.changes.length - 2} more</span>}
+          {item.changes.length > 2 && (
+            <span className="tmap-dim">{t('node.more', { count: item.changes.length - 2 })}</span>
+          )}
         </div>
       )}
     </>
@@ -115,14 +126,15 @@ export function SourceNodeBody({ source, apps }: { source: SourceItem; apps: str
 
 /** An app with nothing in the data view: still reading, unreadable, or simply none. */
 export function EmptyNodeBody({ loading, error }: { loading: boolean; error?: string }): JSX.Element {
+  const { t } = useTranslation('teamMap')
   return (
     <span className="tmap-dim tmap-ellipsis" title={error}>
       {loading ? (
         <>
-          <span className="tmap-spinner" /> Reading the app…
+          <span className="tmap-spinner" /> {t('node.reading')}
         </>
       ) : (
-        (error ?? 'No database or connections')
+        (error ?? t('node.empty'))
       )}
     </span>
   )

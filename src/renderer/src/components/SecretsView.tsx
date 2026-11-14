@@ -7,6 +7,7 @@ import type {
   StudioProject
 } from '@shared/ipc'
 import { toLocalBackendError, type LocalBackendError } from '../localBackend'
+import { Trans, translator, useTranslation } from '../i18n'
 import { relativeTime } from './advisor/format'
 import { Codicon } from './icons'
 import Skeleton from './Skeleton'
@@ -36,8 +37,8 @@ interface Props {
   onSendToChat?: (display: string, prompt: string) => void
 }
 
-const SIGN_IN_HINT =
-  'Your Fabric sign-in may have expired: open the account menu and select Refresh Fabric authentication, then try again.'
+/** A `t` for the Secrets tab's words. */
+type SecretsT = ReturnType<typeof translator<'secrets'>>
 
 /** One deployment of a team app and its secrets. */
 interface SecretGroup {
@@ -51,13 +52,23 @@ interface SecretGroup {
   portalUrl?: string
 }
 
-const ENVIRONMENT: Record<SecretEnvironment['kind'], { title: string; hint: string }> = {
-  published: { title: 'Published app', hint: 'What everyone on the team uses' },
-  preview: { title: 'Your preview', hint: 'Your changes, deployed when you publish' }
+/** An environment's name and what it's for. */
+function environmentText(
+  kind: SecretEnvironment['kind'],
+  t: SecretsT
+): { title: string; hint: string } {
+  switch (kind) {
+    case 'published':
+      return { title: t('environments.published.title'), hint: t('environments.published.hint') }
+    case 'preview':
+      return { title: t('environments.preview.title'), hint: t('environments.preview.hint') }
+    default:
+      return { title: kind, hint: '' }
+  }
 }
 
-function environmentGroup(environment: SecretEnvironment): SecretGroup {
-  const { title, hint } = ENVIRONMENT[environment.kind] ?? { title: environment.kind, hint: '' }
+function environmentGroup(environment: SecretEnvironment, t: SecretsT): SecretGroup {
+  const { title, hint } = environmentText(environment.kind, t)
   return {
     key: environment.kind,
     title,
@@ -66,9 +77,10 @@ function environmentGroup(environment: SecretEnvironment): SecretGroup {
     portalUrl: environment.portalUrl,
     message: !environment.deployed
       ? environment.kind === 'published'
-        ? 'Not published yet.'
-        : 'Not deployed yet. Your preview deploys when you publish, and its secrets show here then.'
-      : (environment.error ?? (environment.secrets.length === 0 ? 'No secrets yet.' : undefined))
+        ? t('groups.notPublishedYet')
+        : t('groups.notDeployedYet')
+      : (environment.error ??
+        (environment.secrets.length === 0 ? t('groups.noSecretsYet') : undefined))
   }
 }
 
@@ -88,6 +100,7 @@ function TeamSecretRow({
   selected: boolean
   onSelect: () => void
 }): JSX.Element {
+  const { t } = useTranslation('secrets')
   const now = Date.now()
   return (
     <li>
@@ -106,7 +119,7 @@ function TeamSecretRow({
         </span>
         <SecretStatus secret={secret} />
         <span className="sec-row-time">
-          {secret.updatedAt ? `Changed ${relativeTime(secret.updatedAt, now)}` : ''}
+          {secret.updatedAt ? t('rows.changed', { time: relativeTime(secret.updatedAt, now) }) : ''}
         </span>
         <Codicon name="chevron-right" className="sec-row-chevron" />
       </button>
@@ -129,9 +142,10 @@ function EntryRow({
   selected: boolean
   onSelect: () => void
 }): JSX.Element {
+  const { t } = useTranslation('secrets')
   const local = localValueState(entry, localCheck)
   const published = publishedCheck && publishedValueState(entry, publishedCheck)
-  const about = [entry.declared ? null : 'Not in rayfin.yml', entry.description]
+  const about = [entry.declared ? null : t('notInYml'), entry.description]
     .filter(Boolean)
     .join(' · ')
   return (
@@ -152,7 +166,7 @@ function EntryRow({
         <span className="sec-cell">
           {local && (
             <>
-              <span className="sr-only">Local value: </span>
+              <span className="sr-only">{t('rows.localSr')} </span>
               <ValueStatus state={local} />
             </>
           )}
@@ -161,7 +175,7 @@ function EntryRow({
           <span className="sec-cell sec-cell--published">
             {published && (
               <>
-                <span className="sr-only">Published value: </span>
+                <span className="sr-only">{t('rows.publishedSr')} </span>
                 <ValueStatus state={published} />
               </>
             )}
@@ -184,6 +198,7 @@ function EntryRow({
  * read-only, and their secrets are changed in the portal.
  */
 export default function SecretsView({ project, onChanged, onSendToChat }: Props): JSX.Element {
+  const { t } = useTranslation('secrets')
   const [data, setData] = useState<SecretsState | null>(null)
   const [loading, setLoading] = useState(false)
   const [local, setLocal] = useState<LocalValues>({ status: 'loading' })
@@ -286,16 +301,14 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
       setError(null)
       flash(
         what === 'added'
-          ? `Added ${name}, with its value on this computer.${
-              isTeam
-                ? ' Set its published value in the Fabric portal.'
-                : publishedCheck
-                  ? ' Set its published value too.'
-                  : ''
-            }`
+          ? isTeam
+            ? t('flash.addedPortal', { name })
+            : publishedCheck
+              ? t('flash.addedToo', { name })
+              : t('flash.addedLocal', { name })
           : what === 'local'
-            ? `Saved the value of ${name} on this computer.`
-            : `Saved a new value for ${name} on your published app.`
+            ? t('flash.savedLocal', { name })
+            : t('flash.savedPublished', { name })
       )
       setSelectedKey(`app:${name}`)
       if (what !== 'local') {
@@ -304,7 +317,7 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
       }
       void loadLocal()
     },
-    [flash, load, loadLocal, onChanged, publishedCheck, isTeam]
+    [flash, load, loadLocal, onChanged, publishedCheck, isTeam, t]
   )
 
   const closeDialog = useCallback(() => {
@@ -323,7 +336,7 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
     try {
       if (kind === 'local') {
         await window.api.local.deleteSecret(project.id, entry.name)
-        flash(`Removed the value of ${entry.name} from this computer.`)
+        flash(t('flash.removedLocal', { name: entry.name }))
         // A value rayfin.yml doesn't list goes away with it.
         if (!entry.declared && !entry.published?.stored) setSelectedKey(null)
         void loadLocal()
@@ -331,11 +344,11 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
         const result = await window.api.secrets.remove(project.id, entry.name)
         if (!result.ok) {
           setError(
-            `${result.error ?? 'Couldn’t delete the secret.'}${result.signIn ? ` ${SIGN_IN_HINT}` : ''}`
+            `${result.error ?? t('errors.deleteFailed')}${result.signIn ? ` ${t('signInHint')}` : ''}`
           )
           return
         }
-        flash(`Deleted ${entry.name} from your published app.`)
+        flash(t('flash.deletedPublished', { name: entry.name }))
         setSelectedKey(null)
         onChanged()
         reload()
@@ -347,12 +360,12 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
       setConfirmBusy(false)
       setConfirm(null)
     }
-  }, [confirm, project.id, flash, loadLocal, onChanged, reload])
+  }, [confirm, project.id, flash, loadLocal, onChanged, reload, t])
 
   const askCopilot = useCallback(
     (name: string, declared: boolean) =>
-      onSendToChat?.(`Use secret ${name}`, copilotPrompt(name, declared)),
-    [onSendToChat]
+      onSendToChat?.(t('useChat', { name }), copilotPrompt(name, declared)),
+    [onSendToChat, t]
   )
 
   // Esc closes the details, unless a dialog is open (it handles Esc itself).
@@ -372,8 +385,11 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
     [data, withEntries, local]
   )
   const groups = useMemo<SecretGroup[]>(
-    () => (isTeam ? (data?.environments ?? []).map(environmentGroup) : []),
-    [isTeam, data]
+    () =>
+      isTeam
+        ? (data?.environments ?? []).map((environment) => environmentGroup(environment, t))
+        : [],
+    [isTeam, data, t]
   )
 
   const selectedEntry = withEntries
@@ -410,7 +426,7 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
             className="skl-link sec-lane-link"
             onClick={() => void window.api.openExternal(group.portalUrl ?? '')}
           >
-            Open in Fabric <Codicon name="link-external" />
+            {t('openInFabric')} <Codicon name="link-external" />
           </button>
         )}
       </div>
@@ -437,12 +453,12 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
   const publishedError = status === 'error' && (
     <div className="alert alert--error skl-error sec-alert" role="alert">
       <span>
-        Couldn’t read your published app’s secrets.
+        {t('errors.publishedRead')}
         {data?.error ? ` ${data.error}` : ''}
-        {data?.signIn ? ` ${SIGN_IN_HINT}` : ''}
+        {data?.signIn ? ` ${t('signInHint')}` : ''}
       </span>
       <button type="button" className="btn btn--sm" onClick={() => void load()} disabled={loading}>
-        <Codicon name="refresh" /> Try again
+        <Codicon name="refresh" /> {t('actions.tryAgain')}
       </button>
     </div>
   )
@@ -451,7 +467,7 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
     <p className="skl-note sec-local-note">
       <Codicon name="info" />
       <span>
-        Couldn’t check the values on this computer. {local.error.message}
+        {t('errors.localCheck', { message: local.error.message })}
         {local.error.hint ? ` ${local.error.hint}` : ''}
       </span>
     </p>
@@ -463,34 +479,26 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
       className="btn btn--sm btn--primary"
       onClick={() => setDialog({ kind: 'new' })}
     >
-      <Codicon name="add" /> New secret
+      <Codicon name="add" /> {t('newSecret')}
     </button>
   ) : undefined
   /** The app's own secrets: their values on this computer and, once it's published, on the published app. */
   const entriesTable =
     entries.length === 0 ? (
-      empty(
-        'No secrets yet',
-        'Add API keys, passwords and connection strings your functions need. Their values never go into your code.',
-        newSecretButton
-      )
+      empty(t('empty.title'), t('empty.desc'), newSecretButton)
     ) : (
-      <section className="skl-group" aria-label="Secrets">
+      <section className="skl-group" aria-label={t('list.label')}>
         <div className="skl-lane">
-          <h3>{isTeam ? 'On this computer' : 'Secrets'}</h3>
+          <h3>{isTeam ? t('list.onThisComputer') : t('list.label')}</h3>
           <span className="skl-lane-count">{entries.length}</span>
-          <span className="skl-lane-hint">
-            {isTeam
-              ? 'Your values, for the app while it runs here. Values never show here.'
-              : 'Values never show here. To change one, set a new one.'}
-          </span>
+          <span className="skl-lane-hint">{isTeam ? t('list.teamHint') : t('list.hint')}</span>
         </div>
         <div className="sec-table">
           <div className="sec-cols" aria-hidden="true">
-            <span className="sec-cols-name">Secret</span>
-            <span className="sec-cell">Local value</span>
+            <span className="sec-cols-name">{t('list.secret')}</span>
+            <span className="sec-cell">{t('values.local')}</span>
             {publishedCheck && (
-              <span className="sec-cell sec-cell--published">Published value</span>
+              <span className="sec-cell sec-cell--published">{t('values.published')}</span>
             )}
             <span className="sec-cols-end" />
           </div>
@@ -528,9 +536,7 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
         <p className="skl-note sec-team-note">
           <Codicon name="info" />
           <span>
-            This app is in a team workspace, so Fabricator shows the secrets of its deployments but
-            can’t change them yet. Change them in the Fabric portal: use{' '}
-            <strong>Open in Fabric</strong> next to the published app or your preview.
+            <Trans t={t} i18nKey="teamNote" components={{ b: <strong /> }} />
           </span>
         </p>
         {groups.map(teamSection)}
@@ -538,12 +544,17 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
     )
   } else if (status === 'update-rayfin') {
     content = empty(
-      'Update Rayfin to use secrets',
-      <>
-        Secrets need Rayfin 1.36 or newer
-        {data.rayfinVersion ? `, and this app uses Rayfin ${data.rayfinVersion}` : ''}. Select
-        Rayfin in the status bar and choose <strong>Update with Copilot</strong>.
-      </>
+      t('updateRayfin.title'),
+      data.rayfinVersion ? (
+        <Trans
+          t={t}
+          i18nKey="updateRayfin.desc"
+          values={{ version: data.rayfinVersion }}
+          components={{ b: <strong /> }}
+        />
+      ) : (
+        <Trans t={t} i18nKey="updateRayfin.descNoVersion" components={{ b: <strong /> }} />
+      )
     )
   } else {
     content = (
@@ -557,23 +568,23 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
 
   const declared = entries.filter((entry) => entry.declared)
   const share = (count: number): string =>
-    declared.length > 0 ? `${count} of ${declared.length}` : '–'
+    declared.length > 0 ? t('facts.share', { part: count, total: declared.length }) : '–'
   const setHere: [string, string] = [
-    'Set on this computer',
+    t('facts.setHere'),
     localCheck === 'ok'
       ? share(declared.filter((entry) => entry.local && entry.local !== 'none').length)
       : '–'
   ]
   const facts: [string, string][] = isTeam
     ? [
-        ['Secrets', String(entries.length)],
+        [t('facts.secrets'), String(entries.length)],
         setHere,
         ...(data?.environments ?? []).map((env): [string, string] => [
-          ENVIRONMENT[env.kind]?.title ?? env.kind,
+          environmentText(env.kind, t).title,
           !env.deployed
             ? env.kind === 'published'
-              ? 'Not published'
-              : 'Not deployed'
+              ? t('facts.notPublished')
+              : t('facts.notDeployed')
             : env.error
               ? '–'
               : String(env.secrets.filter((s) => s.stored).length)
@@ -581,15 +592,15 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
       ]
     : withEntries
       ? [
-          ['Secrets', String(entries.length)],
+          [t('facts.secrets'), String(entries.length)],
           setHere,
           [
-            'Set on the published app',
+            t('facts.setPublished'),
             publishedCheck === 'ok'
               ? share(declared.filter((entry) => entry.published?.stored).length)
               : publishedCheck === 'failed'
                 ? '–'
-                : 'Not published yet'
+                : t('facts.notPublishedYet')
           ]
         ]
       : []
@@ -655,8 +666,8 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
           <span className="skl-head-glyph" aria-hidden="true">
             <Codicon name="key" />
           </span>
-          <h2 className="skl-title">Secrets</h2>
-          <span className="skl-subtitle">Keys and passwords your app’s functions use</span>
+          <h2 className="skl-title">{t('title')}</h2>
+          <span className="skl-subtitle">{t('subtitle')}</span>
         </div>
         <div className="skl-tools">
           <button
@@ -664,8 +675,8 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
             className="model-tool-btn"
             onClick={reload}
             disabled={loading}
-            aria-label="Refresh"
-            title="Refresh"
+            aria-label={t('actions.refresh')}
+            title={t('actions.refresh')}
           >
             <Codicon name="refresh" className={loading && data ? 'icon-spin' : undefined} />
           </button>
@@ -674,9 +685,9 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
             className="model-tool-btn"
             onClick={() => setDialog({ kind: 'new' })}
             disabled={!canAdd}
-            title="Add a secret"
+            title={t('addTitle')}
           >
-            <Codicon name="add" /> New secret
+            <Codicon name="add" /> {t('newSecret')}
           </button>
         </div>
       </header>
@@ -713,40 +724,41 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
         <Suspense fallback={null}>
           {confirm.kind === 'local' ? (
             <ConfirmModal
-              title="Remove local value?"
+              title={t('confirm.removeTitle')}
               message={
                 confirm.entry.declared ? (
-                  <>
-                    Remove the value of {removing} from this computer? Functions that read it fail
-                    when your app runs here, until you set it again.
-                  </>
+                  t('confirm.removeDeclared', { name: removing })
                 ) : (
-                  <>
-                    Remove the value of {removing} from this computer? <code>rayfin.yml</code>{' '}
-                    doesn’t list it, so your app doesn’t use it.
-                  </>
+                  <Trans
+                    t={t}
+                    i18nKey="confirm.removeUnused"
+                    values={{ name: removing }}
+                    components={{ code: <code /> }}
+                  />
                 )
               }
-              confirmLabel="Remove"
+              confirmLabel={t('actions.remove')}
               danger
               busy={confirmBusy}
-              busyLabel="Removing…"
+              busyLabel={t('confirm.removing')}
               onConfirm={() => void confirmChange()}
               onCancel={() => (confirmBusy ? undefined : setConfirm(null))}
             />
           ) : (
             <ConfirmModal
-              title="Delete secret?"
+              title={t('confirm.deleteTitle')}
               message={
-                <>
-                  Delete {removing} from your published app and from <code>rayfin.yml</code>?
-                  Functions that read it stop working until you add it again. You can’t undo this.
-                </>
+                <Trans
+                  t={t}
+                  i18nKey="confirm.deleteMessage"
+                  values={{ name: removing }}
+                  components={{ code: <code /> }}
+                />
               }
-              confirmLabel="Delete"
+              confirmLabel={t('actions.delete')}
               danger
               busy={confirmBusy}
-              busyLabel="Deleting…"
+              busyLabel={t('status.deleting')}
               onConfirm={() => void confirmChange()}
               onCancel={() => (confirmBusy ? undefined : setConfirm(null))}
             />

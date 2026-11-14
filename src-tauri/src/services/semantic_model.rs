@@ -238,14 +238,13 @@ async fn invoke_helper<T: DeserializeOwned>(request: &serde_json::Value) -> Resu
     if let Some(dir) = project_dir.as_deref() {
       exec::ensure_project_dependencies(dir, None)
         .await
-        .map_err(|error| format!("Could not install this project's dependencies: {error}"))?;
+        .map_err(|error| t!("services.semanticModel.depsFailed", error = error))?;
     }
-    exec::project_rayfin_auth_module(project_dir.as_deref()).ok_or_else(|| {
-      "Could not locate the Rayfin CLI. Open a Rayfin project to reach Fabric.".to_string()
-    })?
+    exec::project_rayfin_auth_module(project_dir.as_deref())
+      .ok_or_else(|| t!("services.semanticModel.noRayfinCli"))?
   };
   let script_path =
-    write_helper().map_err(|err| format!("Could not prepare the semantic-model helper: {err}"))?;
+    write_helper().map_err(|err| t!("services.semanticModel.helperFailed", error = err))?;
 
   let auth_str = auth_path.to_string_lossy().to_string();
   let script_str = script_path.to_string_lossy().to_string();

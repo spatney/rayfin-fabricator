@@ -5,7 +5,7 @@
  *
  * Text in square brackets is an ElevenLabs audio tag: it steers the delivery and is never
  * spoken, captioned or transcribed. Every claim is checked against README.md, against Ray's
- * own lines in src/renderer/src/components/mascot/lines.ts and, for Rayfin itself, against
+ * own lines in src/renderer/src/i18n/locales/en/mascot.json and, for Rayfin itself, against
  * https://rayfin.ai; keep them true when those change. No hype words ("simply", "easy",
  * "powerful", "seamless").
  */

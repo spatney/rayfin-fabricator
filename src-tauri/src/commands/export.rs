@@ -83,15 +83,33 @@ const MAX_ENTRIES: usize = 500_000;
 /// The most read of an export's record, `rayfin.yml` or publishing record before it's unpacked.
 const MAX_TEXT_BYTES: u64 = 4 * 1024 * 1024;
 
-const TEAM_APP: &str = "A team app is shared through its team workspace. Invite people to the workspace instead.";
-const MISSING: &str = "Fabricator can’t find this project’s folder.";
-const UNREADABLE: &str =
-  "Fabricator can’t read this file. Import a .fabricator file someone exported, or a .zip of a Rayfin project.";
-const NOT_AN_APP: &str = "This file doesn’t hold a Rayfin project: there’s no rayfin/rayfin.yml in it.";
-const MANY_APPS: &str =
-  "This file holds more than one Rayfin project. Unzip it, then open the one you want with Open folder.";
-const TOO_BIG: &str = "This file unpacks to more than 16 GB, so Fabricator didn’t import it.";
-const TOO_MANY: &str = "This file holds more than 500,000 files, so Fabricator didn’t import it.";
+fn team_app_error() -> String {
+  t!("commands.export.teamApp")
+}
+
+fn folder_missing() -> String {
+  t!("commands.export.missing")
+}
+
+fn unreadable() -> String {
+  t!("commands.export.unreadable")
+}
+
+fn not_an_app() -> String {
+  t!("commands.export.notAnApp")
+}
+
+fn many_apps() -> String {
+  t!("commands.export.manyApps")
+}
+
+fn too_big() -> String {
+  t!("commands.export.tooBig")
+}
+
+fn too_many() -> String {
+  t!("commands.export.tooMany")
+}
 
 /// Folders that never go in, at any depth: installed packages, git data (the
 /// history goes in only as the person exporting chooses), and what belongs to
@@ -567,7 +585,9 @@ fn plan(dir: &Path, listed: &[String], choice: ExportOptions, facts: &Facts, ski
 
 /* ------------------------------ as an app ------------------------------- */
 
-const BAD_ICON: &str = "Fabricator couldn’t make the app’s icon. Try exporting it again.";
+fn bad_icon() -> String {
+  t!("commands.export.badIcon")
+}
 
 /// A top-level `key: value` of `rayfin.yml`, unquoted.
 fn yaml_value(re: &Regex, text: &str) -> Option<String> {
@@ -730,17 +750,17 @@ fn checked_icons(icons: &[AppIconImage]) -> Result<Vec<(u32, Vec<u8>)>, String> 
   let mut out: Vec<(u32, Vec<u8>)> = Vec::new();
   for icon in icons {
     if !ICON_SIZES.contains(&icon.size) || out.iter().any(|(size, _)| *size == icon.size) {
-      return Err(BAD_ICON.into());
+      return Err(bad_icon());
     }
-    let png = base64::engine::general_purpose::STANDARD.decode(icon.png.trim()).map_err(|_| BAD_ICON.to_string())?;
+    let png = base64::engine::general_purpose::STANDARD.decode(icon.png.trim()).map_err(|_| bad_icon())?;
     if png.len() as u64 > MAX_ICON_BYTES || png_size(&png) != Some((icon.size, icon.size)) {
-      return Err(BAD_ICON.into());
+      return Err(bad_icon());
     }
     out.push((icon.size, png));
   }
   out.sort_by_key(|(size, _)| *size);
   if out.last().map(|(size, _)| *size) != ICON_SIZES.last().copied() {
-    return Err(BAD_ICON.into());
+    return Err(bad_icon());
   }
   Ok(out)
 }
@@ -799,7 +819,7 @@ fn write_zip(dest: &Path, items: &[Item], stop: &AtomicBool, mut progress: impl 
   let partial = partial_path(dest);
   let failed = |what: String| PackError::Failed(what);
   let written = (|| {
-    let file = File::create(&partial).map_err(|e| failed(format!("Couldn’t save {}: {e}", dest.display())))?;
+    let file = File::create(&partial).map_err(|e| failed(t!("commands.export.cantSave", path = dest.display(), error = e)))?;
     let mut writer = zip::ZipWriter::new(BufWriter::with_capacity(1 << 20, file));
     let total = items.iter().filter(|i| !i.folder).count() as u64;
     let mut done = 0u64;
@@ -813,7 +833,7 @@ fn write_zip(dest: &Path, items: &[Item], stop: &AtomicBool, mut progress: impl 
         .compression_method(if compressed(&item.name) { CompressionMethod::Stored } else { CompressionMethod::Deflated })
         .last_modified_time(zip_time(item.modified))
         .large_file(item.size >= zip::ZIP64_BYTES_THR);
-      let not_added = |e: &dyn std::fmt::Display| failed(format!("Couldn’t add {}: {e}", item.name));
+      let not_added = |e: &dyn std::fmt::Display| failed(t!("commands.export.cantAdd", name = item.name, error = e));
       if item.folder {
         writer.add_directory(item.name.as_str(), options).map_err(|e| not_added(&e))?;
         continue;
@@ -830,8 +850,8 @@ fn write_zip(dest: &Path, items: &[Item], stop: &AtomicBool, mut progress: impl 
         progress(done, total);
       }
     }
-    let mut out = writer.finish().map_err(|e| failed(format!("Couldn’t finish the file: {e}")))?;
-    out.flush().map_err(|e| failed(format!("Couldn’t finish the file: {e}")))?;
+    let mut out = writer.finish().map_err(|e| failed(t!("commands.export.cantFinish", error = e)))?;
+    out.flush().map_err(|e| failed(t!("commands.export.cantFinish", error = e)))?;
     Ok(())
   })();
   if let Err(error) = written {
@@ -840,7 +860,7 @@ fn write_zip(dest: &Path, items: &[Item], stop: &AtomicBool, mut progress: impl 
   }
   if let Err(e) = std::fs::rename(&partial, dest) {
     let _ = std::fs::remove_file(&partial);
-    return Err(failed(format!("Couldn’t save {}: {e}", dest.display())));
+    return Err(failed(t!("commands.export.cantSave", path = dest.display(), error = e)));
   }
   Ok(std::fs::metadata(dest).map(|m| m.len()).unwrap_or(0))
 }
@@ -895,8 +915,8 @@ fn app_prefix(files: &[&str]) -> Result<String, String> {
     .collect();
   match tops.as_slice() {
     [one] => Ok(format!("{one}/")),
-    [] => Err(NOT_AN_APP.into()),
-    _ => Err(MANY_APPS.into()),
+    [] => Err(not_an_app()),
+    _ => Err(many_apps()),
   }
 }
 
@@ -953,7 +973,7 @@ fn free_folder(root: &Path, slug: &str) -> Result<PathBuf, String> {
   (1..100)
     .map(|n| if n == 1 { root.join(slug) } else { root.join(format!("{slug}-{n}")) })
     .find(|path| !path.exists())
-    .ok_or_else(|| format!("Your projects folder already has folders named {slug} to {slug}-99."))
+    .ok_or_else(|| t!("commands.export.noFreeFolder", slug = slug))
 }
 
 /// One entry to unpack: where it is in the archive, its path in the app
@@ -978,10 +998,10 @@ struct Contents {
 }
 
 fn read_contents(source: &Path) -> Result<Contents, String> {
-  let file = File::open(source).map_err(|e| format!("Couldn’t open {}: {e}", source.display()))?;
-  let mut archive = zip::ZipArchive::new(BufReader::new(file)).map_err(|_| UNREADABLE.to_string())?;
+  let file = File::open(source).map_err(|e| t!("commands.export.cantOpen", path = source.display(), error = e))?;
+  let mut archive = zip::ZipArchive::new(BufReader::new(file)).map_err(|_| unreadable())?;
   if archive.len() > MAX_ENTRIES {
-    return Err(TOO_MANY.into());
+    return Err(too_many());
   }
   let mut all: Vec<Entry> = Vec::new();
   for index in 0..archive.len() {
@@ -1061,9 +1081,9 @@ fn inspect(source: &Path, root: &Path) -> Result<ImportPreview, String> {
 /// after it. On failure, nothing is left.
 fn unpack(source: &Path, root: &Path, progress: impl FnMut(u64, u64)) -> Result<PathBuf, String> {
   let mut contents = read_contents(source)?;
-  std::fs::create_dir_all(root).map_err(|e| format!("Couldn’t create your projects folder {}: {e}", root.display()))?;
+  std::fs::create_dir_all(root).map_err(|e| t!("commands.export.cantCreateRoot", path = root.display(), error = e))?;
   let target = contents.destination(source, root)?;
-  std::fs::create_dir(&target).map_err(|e| format!("Couldn’t create {}: {e}", target.display()))?;
+  std::fs::create_dir(&target).map_err(|e| t!("commands.export.cantCreate", path = target.display(), error = e))?;
   match extract(&mut contents, &target, |_| false, progress) {
     Ok(()) => Ok(target),
     Err(error) => {
@@ -1090,7 +1110,7 @@ fn extract(
       continue;
     }
     let out = entry.path.split('/').fold(target.to_path_buf(), |path, part| path.join(part));
-    let create = |dir: &Path| std::fs::create_dir_all(dir).map_err(|e| format!("Couldn’t create {}: {e}", dir.display()));
+    let create = |dir: &Path| std::fs::create_dir_all(dir).map_err(|e| t!("commands.export.cantCreate", path = dir.display(), error = e));
     if entry.folder {
       create(&out)?;
       continue;
@@ -1098,13 +1118,13 @@ fn extract(
     if let Some(parent) = out.parent() {
       create(parent)?;
     }
-    let mut from = contents.archive.by_index(entry.index).map_err(|_| UNREADABLE.to_string())?;
-    let mut file = File::create(&out).map_err(|e| format!("Couldn’t create {}: {e}", out.display()))?;
+    let mut from = contents.archive.by_index(entry.index).map_err(|_| unreadable())?;
+    let mut file = File::create(&out).map_err(|e| t!("commands.export.cantCreate", path = out.display(), error = e))?;
     let room = MAX_UNPACKED_BYTES - written;
     let copied =
-      std::io::copy(&mut (&mut from).take(room + 1), &mut file).map_err(|e| format!("Couldn’t unpack {}: {e}", entry.path))?;
+      std::io::copy(&mut (&mut from).take(room + 1), &mut file).map_err(|e| t!("commands.export.cantUnpack", path = entry.path, error = e))?;
     if copied > room {
-      return Err(TOO_BIG.to_string());
+      return Err(too_big());
     }
     written += copied;
     done += 1;
@@ -1114,16 +1134,20 @@ fn extract(
     }
   }
   if !target.join("rayfin").join("rayfin.yml").is_file() {
-    return Err(NOT_AN_APP.to_string());
+    return Err(not_an_app());
   }
   Ok(())
 }
 
 /* ---------------------------- reading an app ---------------------------- */
 
-const NOT_AN_APP_FILE: &str =
-  "This file isn’t an app Fabricator can install. Ask for the project to be exported again, as an app.";
-const DAMAGED_APP_FILE: &str = "This app file is damaged. Ask for it to be exported again.";
+fn not_an_app_file() -> String {
+  t!("commands.export.notAnAppFile")
+}
+
+fn damaged_app_file() -> String {
+  t!("commands.export.damagedAppFile")
+}
 
 /// An app file (`.rayfin`), read without unpacking it.
 pub(crate) struct AppFile {
@@ -1159,9 +1183,9 @@ pub(crate) fn read_app(source: &Path) -> Result<AppFile, String> {
   let manifest: AppManifest = contents
     .bytes_of(APP_MANIFEST, MAX_TEXT_BYTES)
     .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-    .ok_or_else(|| NOT_AN_APP_FILE.to_string())?;
+    .ok_or_else(not_an_app_file)?;
   if !valid_app_key(&manifest.key) || manifest.name.trim().is_empty() {
-    return Err(DAMAGED_APP_FILE.into());
+    return Err(damaged_app_file());
   }
   let icon_png = contents.bytes_of(APP_ICON_PNG, MAX_ICON_BYTES).filter(|png| png_size(png).is_some());
   let icon_ico = contents.bytes_of(APP_ICON_ICO, MAX_ICON_BYTES * 2);
@@ -1370,12 +1394,12 @@ pub fn projects_opened_exports() -> Vec<String> {
 
 /// The project, when it can be exported from here.
 fn exportable_project(id: &str) -> Result<StudioProject, String> {
-  let project = store::find_project(id).ok_or("Project not found.")?;
+  let project = store::find_project(id).ok_or_else(|| t!("commands.shared.projectNotFound"))?;
   if project.team.is_some() {
-    return Err(TEAM_APP.into());
+    return Err(team_app_error());
   }
   if !is_rayfin_project(&project.path) {
-    return Err(MISSING.into());
+    return Err(folder_missing());
   }
   Ok(project)
 }
@@ -1412,7 +1436,7 @@ pub async fn projects_export_preview(id: String) -> Result<ExportPreview, String
     }
   })
   .await
-  .map_err(|e| format!("Couldn’t look at the project: {e}"))
+  .map_err(|e| t!("commands.export.cantInspect", error = e))
 }
 
 /// Ask where to save the project's app file (`.rayfin`), then write it there,
@@ -1436,7 +1460,7 @@ pub async fn projects_export_app(
     Err(error) => return failed(error),
   };
   let slug = Some(slugify(&project.name)).filter(|s| !s.is_empty()).unwrap_or_else(|| "app".into());
-  let Some(dest) = pick_destination(&app, &format!("{slug}.{APP_EXTENSION}"), APP_EXTENSION, "Rayfin app").await else {
+  let Some(dest) = pick_destination(&app, &format!("{slug}.{APP_EXTENSION}"), APP_EXTENSION, &t!("commands.export.appFile")).await else {
     return Ok(ExportResult { cancelled: true, ..Default::default() });
   };
   let _lease = match state.mutations.export(&id) {
@@ -1481,7 +1505,7 @@ pub async fn projects_export_app(
     }
     Ok(Err(PackError::Stopped)) => Ok(ExportResult { cancelled: true, ..Default::default() }),
     Ok(Err(PackError::Failed(error))) => failed(error),
-    Err(error) => failed(format!("Couldn’t export the app: {error}")),
+    Err(error) => failed(t!("commands.export.cantExportApp", error = error)),
   }
 }
 
@@ -1502,7 +1526,7 @@ pub async fn projects_export(
     Err(error) => return failed(error),
   };
   let slug = Some(slugify(&project.name)).filter(|s| !s.is_empty()).unwrap_or_else(|| "app".into());
-  let Some(dest) = pick_destination(&app, &format!("{slug}.{EXTENSION}"), EXTENSION, "Fabricator project").await else {
+  let Some(dest) = pick_destination(&app, &format!("{slug}.{EXTENSION}"), EXTENSION, &t!("commands.export.projectFile")).await else {
     return Ok(ExportResult { cancelled: true, ..Default::default() });
   };
   let _lease = match state.mutations.export(&id) {
@@ -1556,7 +1580,7 @@ pub async fn projects_export(
     }
     Ok(Err(PackError::Stopped)) => Ok(ExportResult { cancelled: true, ..Default::default() }),
     Ok(Err(PackError::Failed(error))) => failed(error),
-    Err(error) => failed(format!("Couldn’t export the project: {error}")),
+    Err(error) => failed(t!("commands.export.cantExport", error = error)),
   }
 }
 
@@ -1573,7 +1597,7 @@ pub fn projects_export_stop(id: String) {
 pub fn projects_export_reveal(app: AppHandle, path: String) -> Result<(), String> {
   let file = PathBuf::from(&path);
   if !(is_export(&file) || is_app_file(&file)) || !file.is_file() {
-    return Err("That file isn’t there anymore.".into());
+    return Err(t!("commands.export.fileGone"));
   }
   app.opener().reveal_item_in_dir(&file).map_err(|e| e.to_string())
 }
@@ -1585,9 +1609,9 @@ pub async fn projects_import_pick(app: AppHandle) -> Option<String> {
   app
     .dialog()
     .file()
-    .set_title("Import a project")
-    .add_filter("Fabricator project", &[EXTENSION])
-    .add_filter("Zip archive", &["zip"])
+    .set_title(t!("commands.export.importTitle"))
+    .add_filter(t!("commands.export.projectFile"), &[EXTENSION])
+    .add_filter(t!("commands.export.zipArchive"), &["zip"])
     .pick_file(move |picked| {
       let _ = tx.send(picked);
     });
@@ -1601,7 +1625,7 @@ pub async fn projects_import_inspect(path: String) -> Result<ImportPreview, Stri
   let root = PathBuf::from(store::get_state().workspace_root);
   tokio::task::spawn_blocking(move || inspect(Path::new(&path), &root))
     .await
-    .map_err(|e| format!("Couldn’t read the file: {e}"))?
+    .map_err(|e| t!("commands.export.cantRead", error = e))?
 }
 
 /// Unpack the file into a new folder in the projects folder, and open it.
@@ -1643,7 +1667,7 @@ async fn pick_destination(app: &AppHandle, suggested: &str, extension: &str, kin
   app
     .dialog()
     .file()
-    .set_title("Export project")
+    .set_title(t!("commands.export.exportTitle"))
     .add_filter(kind, &[extension])
     .set_file_name(suggested)
     .save_file(move |picked| {
@@ -1778,9 +1802,9 @@ mod tests {
   fn an_import_finds_the_app_at_its_top_or_in_one_folder() {
     assert_eq!(app_prefix(&["rayfin/rayfin.yml", "src/a.ts"]), Ok(String::new()));
     assert_eq!(app_prefix(&["toy/rayfin/rayfin.yml", "__MACOSX/toy/rayfin/rayfin.yml"]), Ok("toy/".into()));
-    assert_eq!(app_prefix(&["src/a.ts"]), Err(NOT_AN_APP.into()));
-    assert_eq!(app_prefix(&["a/rayfin/rayfin.yml", "b/rayfin/rayfin.yml"]), Err(MANY_APPS.into()));
-    assert_eq!(app_prefix(&["a/b/rayfin/rayfin.yml"]), Err(NOT_AN_APP.into()));
+    assert_eq!(app_prefix(&["src/a.ts"]), Err(not_an_app()));
+    assert_eq!(app_prefix(&["a/rayfin/rayfin.yml", "b/rayfin/rayfin.yml"]), Err(many_apps()));
+    assert_eq!(app_prefix(&["a/b/rayfin/rayfin.yml"]), Err(not_an_app()));
     assert!(skip_on_open("node_modules/x/index.js") && skip_on_open(".git/hooks/pre-commit") && skip_on_open(".DS_Store"));
     assert!(!skip_on_open("src/hooks/useToy.ts") && !skip_on_open(".git/config"));
   }
@@ -1931,9 +1955,9 @@ mod tests {
     let broken = out.0.join("broken.fabricator");
     std::fs::write(&broken, "not a zip").unwrap();
     let projects = TempDir::new();
-    assert_eq!(inspect(&photos, &projects.0), Err(NOT_AN_APP.to_string()));
-    assert_eq!(unpack(&photos, &projects.0, |_, _| {}), Err(NOT_AN_APP.to_string()));
-    assert_eq!(unpack(&broken, &projects.0, |_, _| {}), Err(UNREADABLE.to_string()));
+    assert_eq!(inspect(&photos, &projects.0), Err(not_an_app()));
+    assert_eq!(unpack(&photos, &projects.0, |_, _| {}), Err(not_an_app()));
+    assert_eq!(unpack(&broken, &projects.0, |_, _| {}), Err(unreadable()));
     assert_eq!(std::fs::read_dir(&projects.0).unwrap().count(), 0);
     assert!(!out.0.parent().unwrap().join("escape.txt").exists());
   }
@@ -2051,13 +2075,13 @@ mod tests {
     assert_eq!(first, 6 + 16 * 3);
     assert!(ico[first..].starts_with(b"\x89PNG"));
 
-    assert_eq!(checked_icons(&icon_images(&[16, 32])), Err(BAD_ICON.to_string()), "no large icon");
-    assert_eq!(checked_icons(&icon_images(&[100, 256])), Err(BAD_ICON.to_string()), "not a size it draws");
+    assert_eq!(checked_icons(&icon_images(&[16, 32])), Err(bad_icon()), "no large icon");
+    assert_eq!(checked_icons(&icon_images(&[100, 256])), Err(bad_icon()), "not a size it draws");
     let mut lying = icon_images(&[32, 256]);
     lying[0].size = 48;
-    assert_eq!(checked_icons(&lying), Err(BAD_ICON.to_string()), "a 32px PNG said to be 48");
+    assert_eq!(checked_icons(&lying), Err(bad_icon()), "a 32px PNG said to be 48");
     let junk = AppIconImage { size: 256, png: "bm90IGEgcG5n".into() };
-    assert_eq!(checked_icons(&[junk]), Err(BAD_ICON.to_string()));
+    assert_eq!(checked_icons(&[junk]), Err(bad_icon()));
   }
 
   #[test]
@@ -2094,7 +2118,7 @@ mod tests {
     // A project export isn't an app to install.
     let project = out.0.join("toy.fabricator");
     export(&app.0, ExportOptions::default(), &facts(None), &project);
-    assert_eq!(read_app(&project).err(), Some(NOT_AN_APP_FILE.to_string()));
+    assert_eq!(read_app(&project).err(), Some(not_an_app_file()));
   }
 
   #[tokio::test]

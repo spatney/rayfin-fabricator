@@ -1,0 +1,104 @@
+{
+  "startup": {
+    "verifySignIn": "Could not verify sign-in. Please retry.",
+    "checkTools": "Could not check the installed tools. Please retry.",
+    "loadSettings": "Could not load app settings. Please retry.",
+    "settingsUnavailable": "Settings unavailable"
+  },
+  "appBar": {
+    "tabs": {
+      "build": "Build",
+      "code": "Code",
+      "blueprint": "Blueprint",
+      "advisor": "Advisor"
+    },
+    "views": "Project views",
+    "advisorIssues_one": "Advisor — {{count}} open high or medium issue",
+    "advisorIssues_other": "Advisor — {{count}} open high or medium issues",
+    "openIssues_one": "{{count}} open issue",
+    "openIssues_other": "{{count}} open issues",
+    "allProjects": "All projects",
+    "allProjectsLabel": "{{name}} — All projects",
+    "allProjectsTitle": "{{path}}\nAll projects",
+    "switchProjects": "Switch projects",
+    "switchProjectsLabel": "{{name}} — Switch projects",
+    "recentProjects": "Recent projects",
+    "noRecentProjects": "No other recent projects",
+    "team": "Team",
+    "back": "Back to {{name}}",
+    "backToProjects": "Back to projects",
+    "backTitle": "Return to {{name}} — it kept running while you browsed projects"
+  },
+  "splash": {
+    "stages": {
+      "tools": "Checking your tools",
+      "accounts": "Checking your sign-ins",
+      "ready": "All set",
+      "setup": "A few things to set up first",
+      "error": "Something needs a look"
+    },
+    "opening": "Opening <b>{{name}}</b>",
+    "openingProjects": "Opening your projects",
+    "firstLaunch": "Hi, I’m Ray! Welcome back."
+  },
+  "crash": {
+    "title": "Something went wrong",
+    "body": "Fabricator hit an unexpected error. Reloading usually fixes it; your projects and chat history are saved.",
+    "details": "Technical details",
+    "reload": "Reload",
+    "openLogs": "Open logs"
+  },
+  "update": {
+    "title": "Update available",
+    "lead": "A new update is ready to install.",
+    "leadVersion": "Fabricator {{version}} is ready to install.",
+    "hint": "You can install now, or choose Later to keep using this version and update anytime.",
+    "updateNow": "Update now",
+    "later": "Later",
+    "installingShort": "Installing…",
+    "downloading": "Downloading update…",
+    "downloadingVersion": "Downloading update {{version}}…",
+    "ready": "Update is ready to install",
+    "readyVersion": "Update {{version}} is ready to install",
+    "installing": "Installing update…",
+    "installingVersion": "Installing update {{version}}…",
+    "starting": "Starting…",
+    "restartToApply": "Fabricator will restart to apply it.",
+    "restartsAutomatically": "Fabricator will restart automatically.",
+    "restartAndUpdate": "Restart & update",
+    "required": "A required update must be installed to continue."
+  },
+  "attention": {
+    "notSignedIn": "Not signed in to {{names}}.",
+    "toolsMissing_one": "{{tools}} is missing or out of date.",
+    "toolsMissing_other": "{{tools}} are missing or out of date.",
+    "manageAccounts": "Manage accounts",
+    "reviewSetup": "Review setup"
+  },
+  "toast": {
+    "region": "Notifications",
+    "dismiss": "Dismiss notification"
+  },
+  "touchUp": {
+    "label": "Point & Edit",
+    "labelPicked_one": "{{label}}, {{count}} picked",
+    "labelPicked_other": "{{label}}, {{count}} picked",
+    "turnOff": "Turn off",
+    "turnOn": "Turn on",
+    "clip": "Clip a screenshot",
+    "shiftKey": "Shift",
+    "drag": "drag"
+  },
+  "pick": {
+    "display_one": "Touch this up",
+    "display_other": "Touch these {{count}} up",
+    "toSend": "Picked elements to send",
+    "sent": "Picked elements",
+    "number": "Pick {{n}}",
+    "draw": "Draw on the picture of {{label}}",
+    "drawTitle": "Show it larger and draw on it",
+    "remove": "Remove {{label}}",
+    "show": "Show the picture of {{label}}",
+    "showTitle": "Show it larger"
+  }
+}

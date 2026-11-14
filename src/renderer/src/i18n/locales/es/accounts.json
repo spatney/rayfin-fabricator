@@ -1,0 +1,164 @@
+{
+  "tenantShort": "Inquilino {{id}}…",
+  "fabricNeedsProject": "El inicio de sesión de Fabric usa la CLI de Rayfin de un proyecto, así que primero crea o abre un proyecto.",
+  "azureSignInFailed": "No se completó el inicio de sesión en Azure. Inténtalo de nuevo.",
+  "copilotSignInFailed": "No se completó el inicio de sesión en Copilot. Inténtalo de nuevo.",
+  "signingIn": "Iniciando sesión…",
+  "signingOut": "Cerrando sesión…",
+  "switching": "Cambiando…",
+  "addAccount": "Agregar cuenta",
+  "installFromSetup": "Instalar desde Configuración inicial",
+  "stopWaiting": "Dejar de esperar",
+  "githubSignIn": "Iniciar sesión en GitHub",
+  "state": {
+    "ok": "Sesión iniciada",
+    "off": "Sin iniciar sesión",
+    "error": "Requiere atención"
+  },
+  "host": {
+    "label": "Host de GitHub",
+    "placeholder": "github.com o empresa.ghe.com",
+    "hint": "Usa github.com o el host de Enterprise Cloud (empresa.ghe.com). También se acepta una URL https://."
+  },
+  "copilotNotice": {
+    "title": "Copilot requiere tu atención",
+    "signInHere": "Inicia sesión en GitHub Copilot aquí y vuelve a enviar tu mensaje.",
+    "signingIn": "Iniciando sesión en Copilot…",
+    "signIn": "Iniciar sesión en Copilot",
+    "help": "Ayuda para iniciar sesión",
+    "inBrowser": "Completa el inicio de sesión en el explorador o sigue las instrucciones del código de dispositivo que aparecen abajo."
+  },
+  "menu": {
+    "refreshTitle": "Borrar las credenciales compartidas de la CLI de Rayfin y volver a iniciar sesión",
+    "refreshing": "Actualizando la autenticación…",
+    "refresh": "Actualizar la autenticación de Fabric",
+    "accountChecking": "Cuenta: comprobando el inicio de sesión",
+    "accountUser": "Cuenta: {{user}}",
+    "account": "Cuenta",
+    "checkingTitle": "Comprobando tu inicio de sesión en Microsoft Fabric…",
+    "signedInAs": "Sesión iniciada en Fabric como {{user}}",
+    "signedIn": "Sesión iniciada en Fabric",
+    "unconfirmed": "No se pudo confirmar en este momento",
+    "signIn": "Iniciar sesión en Fabric",
+    "settingsAndAccounts": "Configuración y cuentas",
+    "checkingFabric": "Comprobando tu inicio de sesión en Fabric…",
+    "notSignedIn": "No has iniciado sesión en Fabric",
+    "refreshHint": "Al actualizar, se borran las credenciales obsoletas y se vuelve a iniciar sesión.",
+    "fabricAccount": "Cuenta de Fabric",
+    "manageTitle": "Ver y cambiar todas las cuentas que usa Fabricator",
+    "manage": "Administrar cuentas…",
+    "settingsTitle": "Tema, tamaño del texto, experimentos y más",
+    "settings": "Configuración"
+  },
+  "modal": {
+    "title": "Cuentas",
+    "close": "Cerrar cuentas",
+    "lead": "Las cuentas que Fabricator usa en este dispositivo. Los cambios se aplican a todos tus proyectos.",
+    "errors": {
+      "listFabric": "No se pudieron obtener tus cuentas de Fabric.",
+      "listAzure": "No se pudieron obtener tus cuentas de Azure. Vuelve a intentarlo.",
+      "listGithub": "No se pudieron obtener tus cuentas de GitHub. Vuelve a intentarlo.",
+      "generic": "No funcionó. Inténtalo de nuevo.",
+      "copilotSignOut": "No se completó el cierre de sesión en Copilot. Inténtalo de nuevo.",
+      "fabricSignIn": "No se completó el inicio de sesión en Fabric. Inténtalo de nuevo.",
+      "fabricSwitch": "No se pudo cambiar de cuenta de Fabric.",
+      "fabricSignOut": "No se completó el cierre de sesión en Fabric. Inténtalo de nuevo.",
+      "azureSwitch": "No se pudo cambiar de cuenta de Azure.",
+      "azureSignOut": "No se completó el cierre de sesión en Azure. Inténtalo de nuevo.",
+      "githubSwitch": "No se pudo cambiar a {{login}}.",
+      "githubSignOut": "No se pudo cerrar la sesión de {{login}}.",
+      "githubSignIn": "No se pudo empezar a iniciar sesión en GitHub."
+    },
+    "fabricNote": {
+      "browser": "Termina de iniciar sesión en la ventana del explorador que se abrió.",
+      "shared": "En este Mac, al cerrar la sesión de una cuenta de Fabric se cierran todas hasta que vuelvas a iniciar sesión."
+    },
+    "mismatch": {
+      "title": "Fabric y la CLI de Azure están en organizaciones diferentes",
+      "text": "Fabric usa <b>{{fabricTenant}}</b> y la CLI de Azure usa <b>{{azureTenant}}</b>. Para compartir una aplicación y conectar datos se buscan personas a través de la CLI de Azure, así que usa la misma organización en ambos.",
+      "useAzure": "Usar {{user}} en la CLI de Azure",
+      "signInOrg": "Iniciar sesión en {{org}} en la CLI de Azure",
+      "signInFabricOrg": "Iniciar sesión en la organización de Fabric en la CLI de Azure"
+    },
+    "inUse": "En uso",
+    "copilot": {
+      "purpose": "Escribe y edita el código de tu aplicación.",
+      "signIn": "Iniciar sesión en GitHub Copilot",
+      "waiting": "Esperando a GitHub…",
+      "signOut": "Cerrar sesión en GitHub Copilot",
+      "signOutTitle": "Para usar otra cuenta de GitHub, cierra sesión y luego inicia sesión con esa cuenta."
+    },
+    "fabric": {
+      "purpose": "Publica, hospeda y comparte tus aplicaciones.",
+      "unconfirmed": "No se pudo confirmar",
+      "signIn": "Iniciar sesión en Microsoft Fabric",
+      "inUseTitle": "La publicación, las listas de áreas de trabajo, el uso compartido y los secretos usan esta cuenta.",
+      "refresh": "Actualizar inicio de sesión",
+      "signOut": "Cerrar sesión en Microsoft Fabric",
+      "others": "Otras cuentas de Fabric",
+      "add": "Agregar una cuenta de Fabric"
+    },
+    "azure": {
+      "purpose": "Opcional. Busca personas cuando compartes una aplicación, lee los informes de Power BI que migras, configura áreas de trabajo de equipo y permite que tu aplicación lea datos de Fabric mientras la creas. Se comparte con tu terminal.",
+      "signIn": "Iniciar sesión en la CLI de Azure",
+      "inUseTitle": "La CLI de Azure usa ahora esta cuenta.",
+      "signOut": "Cerrar sesión en la CLI de Azure",
+      "others": "Otras cuentas de Azure",
+      "add": "Agregar una cuenta de la CLI de Azure"
+    },
+    "github": {
+      "purpose": "Clona repositorios y ejecuta áreas de trabajo de equipo. Es opcional y se comparte con tu terminal.",
+      "list": "Cuentas de GitHub",
+      "default": "Predeterminada",
+      "defaultTitle": "La clonación desde GitHub y tu terminal usan esta cuenta. Las áreas de trabajo de equipo recuerdan la suya.",
+      "expired": "Sesión expirada",
+      "makeDefault": "Establecer como predeterminada",
+      "signOutTitle": "También cierra la sesión de la CLI de GitHub en tu terminal.",
+      "missing": "La CLI de GitHub no está instalada. Solo la necesitas para clonar repositorios o usar áreas de trabajo de equipo.",
+      "waiting": "Termina de iniciar sesión en la ventana de terminal que se abrió. Tu cuenta predeterminada no cambia."
+    },
+    "help": "Ayuda sobre las cuentas",
+    "recheck": "Volver a comprobar"
+  },
+  "row": {
+    "use": "Usar",
+    "confirmSignOut": "¿Cerrar la sesión de {{name}}?",
+    "useAccount": "{{action}}: {{name}}",
+    "signOut": "Cerrar la sesión de {{name}}"
+  },
+  "addForm": {
+    "organization": "Organización (opcional)",
+    "placeholder": "contoso.onmicrosoft.com o un id. de inquilino",
+    "hint": "Déjalo vacío para usar la organización de tu cuenta, o escribe una en la que tengas acceso como invitado.",
+    "waiting": "Esperando a Microsoft…"
+  },
+  "progress": {
+    "enterCode": "Escribe este código en {{service}}:",
+    "copyCode": "Copiar código",
+    "open": "Abrir {{service}}",
+    "inBrowser": "Termina de iniciar sesión en {{service}} en el explorador."
+  },
+  "githubRepo": {
+    "errors": {
+      "listAccounts": "No se pudieron obtener tus cuentas de GitHub.",
+      "listOwners": "No se pudo obtener dónde puedes crear repositorios.",
+      "signIn": "No se pudo empezar a iniciar sesión en GitHub."
+    },
+    "finishInTerminal": "Termina de iniciar sesión en la ventana de terminal que se abrió. Esto se actualiza solo.",
+    "checking": "Comprobando tus cuentas de GitHub…",
+    "noCli": "Fabricator crea el repositorio con la CLI de GitHub, que no está instalada.",
+    "signInFirst": "Inicia sesión en GitHub para crear el repositorio.",
+    "waiting": "Esperando…",
+    "account": "Cuenta de GitHub",
+    "owner": "Propietario",
+    "you": "{{login}} (tú)",
+    "visibility": "Visibilidad",
+    "private": "Privado",
+    "public": "Público",
+    "privateBlocked": "{{owner}} no te permite crear repositorios privados. Elige Público u otro propietario.",
+    "name": "Nombre del repositorio",
+    "invalidName": "Usa solo letras, números, guiones, guiones bajos y puntos en el nombre del repositorio.",
+    "noName": "Escribe un nombre para el repositorio.",
+    "taken": "Ese nombre ya está en uso."
+  }
+}

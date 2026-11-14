@@ -11,6 +11,7 @@ import {
 } from 'react'
 import type { ChatFusion } from '@shared/ipc'
 import { useAutoTiers, useCopilotModels } from '@renderer/copilotModels'
+import { formatList, Trans, useTranslation } from '../../i18n'
 import { ClockIcon, Codicon, ReloadIcon } from '../icons'
 import { CopyButton } from './CopyButton'
 import { DiffView } from './DiffView'
@@ -31,7 +32,11 @@ import type { UIChatMessage } from './types'
 const CHIP_LIMIT = 4
 
 const STATUS_ICON = { created: 'create', edited: 'edit', deleted: 'delete' } as const
-const STATUS_WORD = { created: 'Created', edited: 'Edited', deleted: 'Deleted' } as const
+const STATUS_WORD = {
+  created: 'turnFooter.created',
+  edited: 'turnFooter.edited',
+  deleted: 'turnFooter.deleted'
+} as const
 
 function Stats({ added, removed }: { added?: number; removed?: number }): JSX.Element | null {
   if (!added && !removed) return null
@@ -62,26 +67,28 @@ export function FilesChanged({
   onToggle: (path: string) => void
   onOpenFile?: (path: string) => void
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   const [all, setAll] = useState(false)
   const visible = all ? files : files.slice(0, CHIP_LIMIT)
   return (
     <div
       className="files-changed"
       role="group"
-      aria-label={`Changed ${files.length} ${files.length === 1 ? 'file' : 'files'}`}
+      aria-label={t('turnFooter.changedFiles', { count: files.length })}
     >
       <span className="files-changed-label" aria-hidden="true">
-        Changed
+        {t('turnFooter.changed')}
       </span>
       {visible.map((f) => {
         const hasDiff = f.diff != null
         const open = hasDiff && shown === f.path
         const clickable = hasDiff || (Boolean(onOpenFile) && f.status !== 'deleted')
-        const hint = hasDiff
-          ? ` — ${open ? 'hide' : 'show'} the changes`
+        const what = t(STATUS_WORD[f.status], { path: f.path })
+        const title = hasDiff
+          ? t(open ? 'turnFooter.hideChanges' : 'turnFooter.showChanges', { what })
           : clickable
-            ? ' — open in the Code tab'
-            : ''
+            ? t('turnFooter.openInCode', { what })
+            : what
         return (
           <button
             key={f.path}
@@ -91,7 +98,7 @@ export function FilesChanged({
             aria-expanded={hasDiff ? open : undefined}
             aria-controls={open ? panelId : undefined}
             onClick={() => (hasDiff ? onToggle(f.path) : onOpenFile?.(f.path))}
-            title={`${STATUS_WORD[f.status]} ${f.path}${hint}`}
+            title={title}
           >
             <ToolKindIcon kind={STATUS_ICON[f.status]} className="file-chip-ico" />
             <span className="file-chip-name">{basename(f.path)}</span>
@@ -101,7 +108,7 @@ export function FilesChanged({
       })}
       {!all && files.length > CHIP_LIMIT && (
         <button type="button" className="file-chip file-chip--more" onClick={() => setAll(true)}>
-          +{files.length - CHIP_LIMIT} more
+          {t('format.more', { count: files.length - CHIP_LIMIT })}
         </button>
       )}
     </div>
@@ -120,15 +127,16 @@ function FileDiff({
   projectPath: string
   onOpenFile?: (path: string) => void
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   const ref = useRef<HTMLDivElement>(null)
   // Opening a chip on the newest turn adds the diff below the fold.
   useEffect(() => {
     ref.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
   }, [])
   const note = file.partial
-    ? 'Some edits to this file weren’t recorded — open it to see all of them.'
+    ? t('turnFooter.partial')
     : file.stepwise
-      ? 'Shown edit by edit — these edits couldn’t be combined into one diff.'
+      ? t('turnFooter.stepwise')
       : undefined
   return (
     <div
@@ -136,21 +144,21 @@ function FileDiff({
       id={id}
       className="file-diff"
       role="region"
-      aria-label={`Changes to ${file.path}`}
+      aria-label={t('turnFooter.changesTo', { path: file.path })}
     >
       {file.diff ? (
         <DiffView diff={file.diff} note={note} projectPath={projectPath} onOpenFile={onOpenFile} />
       ) : (
         <div className="file-diff-empty">
-          <span>No net change — later edits undid the earlier ones.</span>
+          <span>{t('turnFooter.noNetChange')}</span>
           {onOpenFile && file.status !== 'deleted' && (
             <button
               type="button"
               className="diff-open"
               onClick={() => onOpenFile(file.path)}
-              title={`Open ${file.path} in the Code tab`}
+              title={t('files.openInCode', { path: file.path })}
             >
-              <Codicon name="go-to-file" /> Open
+              <Codicon name="go-to-file" /> {t('actions.open')}
             </button>
           )}
         </div>
@@ -181,19 +189,28 @@ function FusionLine({ fusion }: { fusion: ChatFusion }): JSX.Element {
  * with what it did to follow each on hover.
  */
 function InstructionsLine({ followed }: { followed: FollowedInstruction[] }): JSX.Element {
+  const { t } = useTranslation('chat')
+  // The language joins stand-ins for the instructions, so each keeps its own hover.
+  const parts = formatList(followed.map((_, i) => `\u0000${i}\u0000`)).split('\u0000')
+  const list = parts.map((part, i) => {
+    if (i % 2 === 0) return <Fragment key={i}>{part}</Fragment>
+    const f = followed[Number(part)]
+    return (
+      <span key={i} className="turn-instruction" title={f.how}>
+        {t('format.quoted', { text: f.instruction })}
+      </span>
+    )
+  })
   return (
     <div className="turn-instructions">
       <Codicon name="note" />
       <span>
-        {followed.length === 1 ? 'Followed your instruction ' : 'Followed your instructions '}
-        {followed.map((f, i) => (
-          <Fragment key={f.instruction}>
-            {i > 0 && (i === followed.length - 1 ? ' and ' : ', ')}
-            <span className="turn-instruction" title={f.how}>
-              “{f.instruction}”
-            </span>
-          </Fragment>
-        ))}
+        <Trans
+          t={t}
+          i18nKey="turnFooter.followed"
+          count={followed.length}
+          components={{ list: <>{list}</> }}
+        />
       </span>
     </div>
   )
@@ -218,6 +235,7 @@ export const TurnFooter = memo(function TurnFooter({
   onOpenFile?: (path: string) => void
   onTryAgain?: () => void
 }): JSX.Element | null {
+  const { t } = useTranslation('chat')
   const files = useMemo(() => filesChanged(m.tools, projectPath), [m.tools, projectPath])
   const copy = useMemo(() => answerText(m), [m])
   const [shown, setShown] = useState<string | null>(null)
@@ -254,7 +272,7 @@ export const TurnFooter = memo(function TurnFooter({
       {copy && (
         <CopyButton
           text={copy}
-          title="Copy answer"
+          title={t('turnFooter.copyAnswer')}
           compact
           className="turn-action turn-action--icon"
         />
@@ -264,13 +282,13 @@ export const TurnFooter = memo(function TurnFooter({
           type="button"
           className="turn-action"
           onClick={onTryAgain}
-          title="Run your last message again for a fresh attempt"
+          title={t('turnFooter.tryAgainTitle')}
         >
-          <ReloadIcon /> Try again
+          <ReloadIcon /> {t('actions.tryAgain')}
         </button>
       )}
       {m.elapsedMs != null && (
-        <span className="turn-meta" title="How long this took">
+        <span className="turn-meta" title={t('turnFooter.durationTitle')}>
           <ClockIcon className="turn-meta-ico" />
           {formatTurnDuration(m.elapsedMs)}
         </span>

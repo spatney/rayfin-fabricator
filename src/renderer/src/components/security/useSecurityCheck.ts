@@ -8,6 +8,7 @@ import type {
   SecurityReport
 } from '@shared/ipc'
 import { errorMessage } from '../../errorReport'
+import { translator } from '../../i18n'
 
 /** What's being checked: a project to import, or an app to install. */
 export type SecurityCheckKind = 'project' | 'app'
@@ -159,7 +160,7 @@ export function useSecurityCheck(path: string, kind: SecurityCheckKind): Securit
         files: 0,
         readable: 0,
         durationMs: Date.now() - progress.startedAt,
-        error: errorMessage(reason, 'Fabricator couldn’t check this file.')
+        error: errorMessage(reason, translator('security')('errors.cantCheck'))
       })
     )
   }, [path, kind])

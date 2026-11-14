@@ -1,0 +1,90 @@
+{
+  "title": "MCP サーバー",
+  "close": "MCP サーバーを閉じる",
+  "lead": "MCP サーバーを追加すると、ドキュメントの検索、グラフの描画、課題管理システムの読み取りなど、チャットで使えるツールが増えます。ここでサーバーを追加し、チャットの <b>[プラグイン]</b> でオンにしてください。チャットは、リクエストで必要な場合にのみサーバーを使用します。",
+  "empty": "まだサーバーを追加していません。サーバーを起動するコマンドまたは URL で追加するか、サーバーの手順に記載されている構成を貼り付けてください。",
+  "tryExample": "試すには、Microsoft Learn を追加してください。Fabric や Power BI など、Microsoft のドキュメントを検索できます。",
+  "add": "サーバーの追加",
+  "addExample": "Microsoft Learn の追加",
+  "addServer": "MCP サーバーの追加",
+  "editServer": "{{name}} の編集",
+  "help": "MCP サーバーのヘルプ",
+  "errors": {
+    "read": "MCP サーバーを読み取れませんでした。",
+    "check": "Fabricator はサーバーを確認できませんでした。",
+    "save": "サーバーを保存できませんでした。",
+    "remove": "サーバーを削除できませんでした。"
+  },
+  "card": {
+    "readOnly": "読み取り専用",
+    "connected": "接続済み",
+    "signsIn": "使用時にサインイン",
+    "failed": "接続できませんでした",
+    "checkLabel": "{{name}} のチェック",
+    "checkTitle": "起動または接続して、ツールを一覧表示します",
+    "check": "チェック",
+    "removeLabel": "{{name}} の削除",
+    "removing": "削除しています…",
+    "confirmRemove": "{{name}} を削除しますか? このサーバーをオンにしているチャットでは使用されなくなります。",
+    "noTools": "接続しましたが、ツールはありません。",
+    "tools_other": "接続しました。{{count}} 個のツールがあります:",
+    "toolsLabel": "{{name}} のツール",
+    "showAll": "{{total}} 個すべて表示",
+    "needsSignIn": "サインインが必要です。チャットのメッセージで初めて使用するときに、Fabricator がブラウザーでサインイン ページを開きます。"
+  },
+  "form": {
+    "paste": "構成の貼り付け…",
+    "configuration": "構成",
+    "pasteHint": "サーバーの手順に記載されている JSON、コマンド、または URL を貼り付けてください。Fabricator がフォームに入力するので、内容を確認してください。",
+    "choicesLabel": "構成内のサーバー",
+    "choose": "{{total}} 個のサーバーがあります。追加するサーバーを選択してください:",
+    "fillIn": "入力",
+    "name": "名前",
+    "namePlaceholder": "グラフ",
+    "startsWith": "起動方法",
+    "kind": {
+      "command": "コマンド",
+      "url": "URL"
+    },
+    "command": "コマンド",
+    "commandHint": "サーバーを起動するコマンドです。ターミナルで入力するときと同じように引数も含めます。Fabricator は、このコンピューター上のアプリのフォルダーでコマンドを実行します。",
+    "url": "URL",
+    "sse": "Server-Sent Events (SSE) を使用する (一部の古いサーバーと同様)",
+    "values": {
+      "env": {
+        "title": "環境変数",
+        "nameLabel": "変数名",
+        "valueLabel": "変数の値",
+        "removeLabel": "変数の削除",
+        "add": "変数の追加"
+      },
+      "header": {
+        "title": "ヘッダー",
+        "nameLabel": "ヘッダー名",
+        "valueLabel": "ヘッダーの値",
+        "removeLabel": "ヘッダーの削除",
+        "add": "ヘッダーの追加"
+      },
+      "value": "値",
+      "saved": "保存済み",
+      "change": "変更",
+      "changeLabel": "{{name}} の値の変更",
+      "valueOf": "{{name}} の値",
+      "newValue": "新しい値",
+      "remove": "{{name}} の削除"
+    },
+    "secrets": {
+      "windows": "キーやトークン用です。Fabricator は値を設定ではなく Windows 資格情報マネージャーに保存し、二度と表示しません。",
+      "mac": "キーやトークン用です。Fabricator は値を設定ではなくキーチェーンに保存し、二度と表示しません。"
+    },
+    "readOnly": "読み取りツールのみ",
+    "readOnlyHint": "チャットは、サーバーが読み取り専用としてマークしているツールしか呼び出せないため、サーバーを使って何かを変更することはできません。チームのアプリでは常にこの設定になります。",
+    "trust": "サーバーは、このコンピューターとアカウントに対するあなたのアクセス権で実行され、チャットがサーバーに送信した内容は Fabricator の外部に送られます。信頼できるサーバーのみを追加してください。"
+  },
+  "parse": {
+    "empty": "先に構成を貼り付けてください。",
+    "unreadable": "Fabricator が読み取れる構成ではありません。サーバーの手順に記載されている JSON を貼り付けてください。",
+    "noServer": "その構成には、コマンドまたは URL を持つサーバーがありません。"
+  },
+  "defaultName": "MCP サーバー"
+}

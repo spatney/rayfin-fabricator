@@ -89,7 +89,8 @@ portable-pty = "0.9"
 # tauri-plugin-single-instance: opening a .fabricator or .rayfin file, or an installed app's
 # shortcut, while Fabricator runs hands it to the running app instead of starting a second one
 # (lib.rs; release builds only). The shell features give an installed app its own taskbar button
-# and Start menu shortcut (services/apps/shell.rs).
+# and Start menu shortcut (services/apps/shell.rs). Win32_Globalization reads the user's display
+# languages, for Settings' System language (i18n.rs).
 [target.'cfg(windows)'.dependencies]
 tauri-plugin-single-instance = "2.5"
 webview2-com = "0.39"
@@ -98,6 +99,7 @@ windows-core = "0.62"
 windows = { version = "0.62", features = [
   "Wdk_System_Threading",
   "Win32_Foundation",
+  "Win32_Globalization",
   "Win32_NetworkManagement_IpHelper",
   "Win32_Security_Credentials",
   "Win32_Storage_EnhancedStorage",
@@ -115,6 +117,7 @@ windows = { version = "0.62", features = [
 # macOS-only: capture the native WKWebView preview to a PNG via
 # -[WKWebView takeSnapshotWithConfiguration:completionHandler:]. objc2 versions are
 # pinned to what the vendored wry resolves to so Cargo unifies them. See services/preview.rs.
+# NSLocale reads the user's languages, for Settings' System language (i18n.rs).
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 block2 = "0.6"
@@ -127,6 +130,7 @@ objc2-foundation = { version = "0.3", default-features = false, features = [
   "NSEnumerator",
   "NSRunLoop",
   "NSError",
+  "NSLocale",
   "NSString",
   "NSURL",
 ] }

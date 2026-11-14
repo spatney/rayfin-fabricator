@@ -3,8 +3,8 @@ import { severityRank } from '@shared/advisor/catalog'
 import { isUnder, relativeTo } from '../../model/projectLayout'
 import type { QuickContext } from '../context'
 import { maskEnvValues, maskSecrets } from '../mask'
-import type { QuickHit, QuickRuleImpl } from '../quick'
-import { excerptWindow } from '../quick'
+import type { QuickHit, QuickRuleImpl, Words } from '../quick'
+import { excerptWindow, listSome, say } from '../quick'
 import {
   envEntries,
   isPlaceholderValue,
@@ -13,7 +13,7 @@ import {
   matchAll,
   type SourceFile
 } from '../source'
-import { andList, code, lineContaining } from './util'
+import { code, lineContaining } from './util'
 
 /** Local env files the CLI and frameworks read (root and `rayfin/`). */
 const ENV_FILE = /^(rayfin\/)?\.env(\.[^/]+)?$/
@@ -24,20 +24,32 @@ const HIGH_SECRET_NAME =
 const MEDIUM_SECRET_NAME = /(API_?KEY|ACCESS_KEY|ACCESS_TOKEN|AUTH_TOKEN|BEARER|_TOKEN$|^TOKEN$)/
 const PUBLISHABLE_KEYS = new Set(['VITE_RAYFIN_PUBLISHABLE_KEY', 'RAYFIN_PUBLIC_PUBLISHABLE_KEY'])
 
-const CREDENTIAL_PATTERNS: { re: RegExp; what: string }[] = [
-  { re: /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/, what: 'a private key' },
-  { re: /AccountKey=[A-Za-z0-9+/=]{20,}/, what: 'an Azure storage account key' },
+/** What a credential pattern finds, by its name in the `advisorChecks` catalog. */
+type Credential =
+  | 'privateKey'
+  | 'storageAccountKey'
+  | 'sqlPassword'
+  | 'githubToken'
+  | 'apiSecretKey'
+  | 'slackToken'
+  | 'awsAccessKey'
+  | 'clientSecret'
+  | 'rayfinToken'
+
+const CREDENTIAL_PATTERNS: { re: RegExp; what: Credential }[] = [
+  { re: /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/, what: 'privateKey' },
+  { re: /AccountKey=[A-Za-z0-9+/=]{20,}/, what: 'storageAccountKey' },
   {
     re: /(?:Server|Data Source)=[^'"`\n]*?(?:Password|Pwd)=(?!\$\{)[^;'"`\s]{4,}/i,
-    what: 'a SQL connection string with a password'
+    what: 'sqlPassword'
   },
-  { re: /\bgh[pousr]_[A-Za-z0-9]{36,}\b/, what: 'a GitHub token' },
-  { re: /\bgithub_pat_[A-Za-z0-9_]{40,}\b/, what: 'a GitHub token' },
-  { re: /\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}\b/, what: 'an API secret key' },
-  { re: /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/, what: 'a Slack token' },
-  { re: /\bAKIA[0-9A-Z]{16}\b/, what: 'an AWS access key' },
-  { re: /--client-secret(?:=|\s+)["']?(?![$%{])[^\s"'$%{]{8,}/, what: 'a service principal client secret' },
-  { re: /\bRAYFIN_TOKEN\s*[=:]\s*["']?(?![$%{])[A-Za-z0-9._-]{20,}/, what: 'a Rayfin CLI token' }
+  { re: /\bgh[pousr]_[A-Za-z0-9]{36,}\b/, what: 'githubToken' },
+  { re: /\bgithub_pat_[A-Za-z0-9_]{40,}\b/, what: 'githubToken' },
+  { re: /\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}\b/, what: 'apiSecretKey' },
+  { re: /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/, what: 'slackToken' },
+  { re: /\bAKIA[0-9A-Z]{16}\b/, what: 'awsAccessKey' },
+  { re: /--client-secret(?:=|\s+)["']?(?![$%{])[^\s"'$%{]{8,}/, what: 'clientSecret' },
+  { re: /\bRAYFIN_TOKEN\s*[=:]\s*["']?(?![$%{])[A-Za-z0-9._-]{20,}/, what: 'rayfinToken' }
 ]
 
 const FAKE_VALUE = /(example|dummy|fake|placeholder|sample|xxxx)/i
@@ -45,20 +57,22 @@ const FAKE_VALUE = /(example|dummy|fake|placeholder|sample|xxxx)/i
 /** The local backend's state folder, which its own `.gitignore` (`*`) keeps out of git. */
 const LOCAL_STATE = '.rayfin-local'
 const LOCAL_GITIGNORE = `${LOCAL_STATE}/.gitignore`
+/** What a part of `.rayfin-local/` holds, by its name in the `advisorChecks` catalog. */
+type LocalHolds = 'secrets' | 'keys' | 'database' | 'uploads' | 'ids'
 /** What the local backend keeps in `.rayfin-local/`, by name, most sensitive first. */
-const LOCAL_STATE_PARTS: { name: string; holds: string; severity: AdvisorSeverity }[] = [
-  { name: 'secrets.json', holds: "your secrets' local values", severity: 'high' },
-  { name: 'keys', holds: "the local backend's signing keys", severity: 'high' },
-  { name: 'db.sqlite', holds: "the app's local database", severity: 'high' },
-  { name: 'storage', holds: 'files uploaded to the local app', severity: 'medium' },
-  { name: 'state.json', holds: "the local app's IDs", severity: 'low' }
+const LOCAL_STATE_PARTS: { name: string; holds: LocalHolds; severity: AdvisorSeverity }[] = [
+  { name: 'secrets.json', holds: 'secrets', severity: 'high' },
+  { name: 'keys', holds: 'keys', severity: 'high' },
+  { name: 'db.sqlite', holds: 'database', severity: 'high' },
+  { name: 'storage', holds: 'uploads', severity: 'medium' },
+  { name: 'state.json', holds: 'ids', severity: 'low' }
 ]
 const MAX_LOCAL_PARTS = 6
 
 /** A part of `.rayfin-local/` that git can commit. */
 interface LocalPart {
   label: string
-  holds?: string
+  holds?: LocalHolds
   severity: AdvisorSeverity
   /** Its place in {@link LOCAL_STATE_PARTS}; unknown parts come last. */
   rank: number
@@ -125,7 +139,12 @@ export const secretRules: QuickRuleImpl[] = [
             label: entry.key,
             severity,
             excerpt: envExcerpt(file, entry.line),
-            message: `${code(entry.key)} in ${code(file.path)} looks like a secret, but its prefix exposes it to the browser.`
+            ...say((w) =>
+              w.t('secrets/secret-in-public-env.inEnvFile', {
+                key: code(entry.key),
+                file: code(file.path)
+              })
+            )
           })
         }
       }
@@ -140,7 +159,9 @@ export const secretRules: QuickRuleImpl[] = [
             line: lineOf(src, m.index),
             label: name,
             severity,
-            message: `${code(src.path)} reads ${code(name)}, which looks like a secret, from browser-visible environment variables.`
+            ...say((w) =>
+              w.t('secrets/secret-in-public-env.inCode', { file: code(src.path), name: code(name) })
+            )
           })
         }
       }
@@ -160,7 +181,7 @@ export const secretRules: QuickRuleImpl[] = [
             line: 1,
             label: f.path,
             excerpt: src ? envExcerpt(src, 1) : undefined,
-            message: `${code(f.path)} isn't git-ignored, so its values can be committed.`
+            ...say((w) => w.t('secrets/env-file-not-ignored.hit', { file: code(f.path) }))
           }
         })
     }
@@ -198,7 +219,12 @@ export const secretRules: QuickRuleImpl[] = [
               line,
               label: src.path,
               excerpt: { text: maskSecrets(win.text), start: win.start },
-              message: `${code(src.path)} contains ${what}.`
+              ...say((w) =>
+                w.t('secrets/hardcoded-credential.hit', {
+                  file: code(src.path),
+                  credential: w.t(`secrets/hardcoded-credential.credentials.${what}`)
+                })
+              )
             })
           }
         }
@@ -215,13 +241,13 @@ export const secretRules: QuickRuleImpl[] = [
       for (const raw of uris) {
         if (typeof raw !== 'string') continue
         const uri = raw.trim()
-        let problem: string | undefined
-        if (uri.includes('*')) problem = 'is a wildcard'
+        let problem: 'wildcard' | 'plainHttp' | undefined
+        if (uri.includes('*')) problem = 'wildcard'
         else {
           try {
             const url = new URL(uri)
             const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
-            if (url.protocol === 'http:' && !local) problem = 'uses plain http on a non-local host'
+            if (url.protocol === 'http:' && !local) problem = 'plainHttp'
           } catch {
             problem = undefined
           }
@@ -231,7 +257,7 @@ export const secretRules: QuickRuleImpl[] = [
           file: ctx.yml.path,
           line: lineContaining(ctx.yml.text, uri),
           label: uri,
-          message: `The allowed redirect URI ${code(uri)} ${problem}.`
+          ...say((w) => w.t(`secrets/redirect-uri-scope.${problem}`, { uri: code(uri) }))
         })
       }
       return hits
@@ -250,7 +276,13 @@ export const secretRules: QuickRuleImpl[] = [
             line: entry.line,
             label: `${file.path} ${entry.key}`,
             excerpt: envExcerpt(file, entry.line),
-            message: `${code(entry.key)} in ${code(file.path)} doesn't hold a publishable key (they start with ${code('pk-')}).`
+            ...say((w) =>
+              w.t('secrets/publishable-key-mismatch.hit', {
+                key: code(entry.key),
+                file: code(file.path),
+                prefix: code('pk-')
+              })
+            )
           })
         }
       }
@@ -267,7 +299,7 @@ export const secretRules: QuickRuleImpl[] = [
         {
           file: file.path,
           label: file.path,
-          message: `${code(file.path)} isn't git-ignored, so your workspace and item IDs can be committed.`
+          ...say((w) => w.t('secrets/deployments-file-tracked.hit', { file: code(file.path) }))
         }
       ]
     }
@@ -296,26 +328,31 @@ export const secretRules: QuickRuleImpl[] = [
       }
       if (parts.size === 0) return []
       const exposed = [...parts.values()].sort((a, b) => a.rank - b.rank)
-      const holds = exposed.flatMap((p) => (p.holds ? [p.holds] : []))
-      if (exposed.some((p) => !p.holds)) {
-        holds.push(holds.length ? "the local backend's other files" : "the local backend's files")
-      }
-      const shown = exposed.slice(0, MAX_LOCAL_PARTS).map((p) => p.label)
-      const more = exposed.length - shown.length
-      const what = `${andList(holds)} (${shown.join(', ')}${more > 0 ? `, and ${more} more` : ''})`
+      const holds: (LocalHolds | 'otherFiles' | 'files')[] = exposed.flatMap((p) =>
+        p.holds ? [p.holds] : []
+      )
+      if (exposed.some((p) => !p.holds)) holds.push(holds.length ? 'otherFiles' : 'files')
+      const labels = exposed.map((p) => p.label)
+      const what = (w: Words): string =>
+        w.t('secrets/local-backend-not-ignored.what', {
+          holds: w.list(holds.map((h) => w.t(`secrets/local-backend-not-ignored.holds.${h}`))),
+          files: listSome(labels, w, MAX_LOCAL_PARTS)
+        })
       const gitignore = ctx.fileInfo(LOCAL_GITIGNORE)
       const text = ctx.snapshot.contents[LOCAL_GITIGNORE]
       const changed = text !== undefined && !ignoresEverything(text)
-      let message: string
-      if (!gitignore) {
-        message = `${code(LOCAL_GITIGNORE)} is missing, so git can commit ${what}.`
-      } else if (changed) {
-        message = `${code(LOCAL_GITIGNORE)} no longer ignores everything in the folder, so git can commit ${what}.`
-      } else if (text !== undefined) {
-        message = `Git tracks files in ${code(`${LOCAL_STATE}/`)} even though ${code(LOCAL_GITIGNORE)} ignores the folder, so commits include ${what}.`
-      } else {
-        message = `Git can commit ${what}.`
-      }
+      const said = say((w) => {
+        const values = { gitignore: code(LOCAL_GITIGNORE), what: what(w) }
+        if (!gitignore) return w.t('secrets/local-backend-not-ignored.missing', values)
+        if (changed) return w.t('secrets/local-backend-not-ignored.changed', values)
+        if (text !== undefined) {
+          return w.t('secrets/local-backend-not-ignored.tracked', {
+            ...values,
+            folder: code(`${LOCAL_STATE}/`)
+          })
+        }
+        return w.t('secrets/local-backend-not-ignored.unknown', values)
+      })
       return [
         {
           file: changed ? LOCAL_GITIGNORE : undefined,
@@ -325,7 +362,7 @@ export const secretRules: QuickRuleImpl[] = [
             (worst, p) => (severityRank(p.severity) < severityRank(worst) ? p.severity : worst),
             'low'
           ),
-          message
+          ...said
         }
       ]
     }
@@ -352,7 +389,7 @@ export const secretRules: QuickRuleImpl[] = [
           file: src.path,
           line: lineOf(src, m.index),
           label: src.path,
-          message: `${code(src.path)} turns on plaintext CLI token caching.`
+          ...say((w) => w.t('secrets/encryption-fallback-committed.hit', { file: code(src.path) }))
         })
       }
       return hits

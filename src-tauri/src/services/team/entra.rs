@@ -48,15 +48,15 @@ static NOT_FOUND_RE: Lazy<Regex> =
 
 fn classify(res: &RunResult) -> AzError {
   if res.not_found {
-    return AzError { kind: AzErrorKind::Missing, message: "The Azure CLI (az) isn't installed.".into() };
+    return AzError { kind: AzErrorKind::Missing, message: t!("team.az.missingCli") };
   }
   let text = res.stderr.trim();
   let message = text
     .lines()
     .map(|l| l.trim().trim_start_matches("ERROR:").trim())
     .find(|l| !l.is_empty() && !l.starts_with("WARNING"))
-    .unwrap_or("The Azure CLI command failed.")
-    .to_string();
+    .map(String::from)
+    .unwrap_or_else(|| t!("team.az.commandFailed"));
   let kind = if LOGIN_RE.is_match(text) {
     AzErrorKind::NeedsLogin
   } else if BLOCKED_RE.is_match(text) {
@@ -72,8 +72,8 @@ fn classify(res: &RunResult) -> AzError {
 impl AzError {
   pub fn describe(&self, action: &str) -> String {
     match self.kind {
-      AzErrorKind::Missing => format!("{action}: the Azure CLI isn't installed."),
-      AzErrorKind::NeedsLogin => format!("{action}: your Azure sign-in has expired. Sign in to Azure again from setup."),
+      AzErrorKind::Missing => t!("team.az.describe.missingCli", action = action),
+      AzErrorKind::NeedsLogin => t!("team.az.describe.expired", action = action),
       _ => format!("{action}: {}", self.message),
     }
   }
@@ -103,14 +103,14 @@ async fn az_json(args: &[&str]) -> Result<Value, AzError> {
     return Ok(Value::Null);
   }
   serde_json::from_str(out.trim())
-    .map_err(|e| AzError { kind: AzErrorKind::Other, message: format!("Unexpected Azure CLI output: {e}") })
+    .map_err(|e| AzError { kind: AzErrorKind::Other, message: t!("team.az.unexpectedOutput", error = e) })
 }
 
 /// Write a JSON parameter file for `az … --parameters @file`.
 fn param_file(value: &Value) -> Result<std::path::PathBuf, AzError> {
   let file = std::env::temp_dir().join(format!("fabricator-az-{}.json", uuid::Uuid::new_v4()));
   std::fs::write(&file, serde_json::to_vec(value).unwrap_or_default())
-    .map_err(|e| AzError { kind: AzErrorKind::Other, message: format!("Could not prepare the Azure request: {e}") })?;
+    .map_err(|e| AzError { kind: AzErrorKind::Other, message: t!("team.az.cantPrepareRequest", error = e) })?;
   Ok(file)
 }
 
@@ -121,7 +121,8 @@ fn str_of(v: &Value, key: &str) -> Option<String> {
 /// The signed-in account: (tenant id, user name).
 pub async fn account() -> Result<(String, String), AzError> {
   let v = az_json(&["account", "show", "--output", "json"]).await?;
-  let tenant = str_of(&v, "tenantId").ok_or(AzError { kind: AzErrorKind::NeedsLogin, message: "Not signed in.".into() })?;
+  let tenant =
+    str_of(&v, "tenantId").ok_or_else(|| AzError { kind: AzErrorKind::NeedsLogin, message: t!("team.az.notSignedIn") })?;
   let user = v.get("user").and_then(|u| str_of(u, "name")).unwrap_or_default();
   Ok((tenant, user))
 }
@@ -135,7 +136,7 @@ pub async fn token(resource: &str) -> Result<String, AzError> {
   .await?;
   let token = out.trim().to_string();
   if token.is_empty() {
-    return Err(AzError { kind: AzErrorKind::NeedsLogin, message: "The Azure CLI returned no token.".into() });
+    return Err(AzError { kind: AzErrorKind::NeedsLogin, message: t!("team.az.noToken") });
   }
   Ok(token)
 }
@@ -152,10 +153,10 @@ pub async fn token_until(resource: &str) -> Result<(String, Option<SystemTime>),
 fn token_of(out: &str) -> Result<(String, Option<SystemTime>), AzError> {
   let v: Value = serde_json::from_str(out.trim()).map_err(|_| AzError {
     kind: AzErrorKind::Other,
-    message: "The Azure CLI answered in a way Fabricator didn't understand.".into(),
+    message: t!("team.az.unreadableToken"),
   })?;
   let token = str_of(&v, "accessToken")
-    .ok_or(AzError { kind: AzErrorKind::NeedsLogin, message: "The Azure CLI returned no token.".into() })?;
+    .ok_or_else(|| AzError { kind: AzErrorKind::NeedsLogin, message: t!("team.az.noToken") })?;
   let expires = v
     .get("expires_on")
     .and_then(|e| e.as_u64().or_else(|| e.as_str().and_then(|s| s.trim().parse().ok())))
@@ -194,7 +195,7 @@ pub async fn create_app(display_name: &str) -> Result<AppRegistration, AzError> 
     "json",
   ])
   .await?;
-  app_of(&v).ok_or(AzError { kind: AzErrorKind::Other, message: "Azure returned no application.".into() })
+  app_of(&v).ok_or_else(|| AzError { kind: AzErrorKind::Other, message: t!("team.az.noApplication") })
 }
 
 /// The application with this client ID, or `None` when it doesn't exist.
@@ -221,7 +222,7 @@ pub async fn ensure_service_principal(app_id: &str) -> Result<String, AzError> {
     return Ok(id);
   }
   let v = az_json(&["ad", "sp", "create", "--id", app_id, "--output", "json"]).await?;
-  str_of(&v, "id").ok_or(AzError { kind: AzErrorKind::Other, message: "Azure returned no service principal.".into() })
+  str_of(&v, "id").ok_or_else(|| AzError { kind: AzErrorKind::Other, message: t!("team.az.noServicePrincipal") })
 }
 
 /// The application's federated credentials as (name, subject).

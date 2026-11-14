@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type ReactNo
 import { createPortal } from 'react-dom'
 import { moveMenuFocus } from '@renderer/menuFocus'
 import { menuLayout, type MenuLayout } from '@renderer/menuLayout'
+import { useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import '../models/modelPicker.css'
 
@@ -34,6 +35,7 @@ export function GalleryMenu({
   /** The menu's items. `close` closes it and gives the button the focus back. */
   children: (close: () => void) => ReactNode
 }): JSX.Element {
+  const { t } = useTranslation('gallery')
   const [open, setOpen] = useState(false)
   const [layout, setLayout] = useState<MenuLayout>({ side: 'left', style: {} })
   const rootRef = useRef<HTMLDivElement>(null)
@@ -117,8 +119,8 @@ export function GalleryMenu({
         className={`gallery-menu-btn${open ? ' is-open' : ''}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`${name}: ${value}`}
-        title={`${name}: ${value}`}
+        aria-label={t('menu.current', { name, value })}
+        title={t('menu.current', { name, value })}
         onClick={toggle}
       >
         <Codicon name={icon} className="gallery-menu-icon" />

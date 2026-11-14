@@ -9,6 +9,7 @@ import {
   type KeyboardEvent
 } from 'react'
 import { createPortal } from 'react-dom'
+import { Trans, useTranslation } from '../../i18n'
 import { useSuppressPreview } from '../../overlay'
 import { Codicon, CloudIcon, DesktopIcon } from '../icons'
 import './local.css'
@@ -47,6 +48,7 @@ export default function LocalPublishedInfo({
   /** The note opened. */
   onOpen?: () => void
 }): JSX.Element {
+  const { t } = useTranslation('preview')
   const [open, setOpen] = useState(false)
   const [placement, setPlacement] = useState<CSSProperties>({})
   // Said once the note is open, so opening it (which settles `fresh`) doesn't change it.
@@ -113,14 +115,10 @@ export default function LocalPublishedInfo({
         ref={triggerRef}
         type="button"
         className={`lpi-trigger${fresh ? ' is-fresh' : ''}${open ? ' is-open' : ''}`}
-        aria-label="About Local and Published"
+        aria-label={t('info.label')}
         aria-expanded={open}
         aria-controls={open ? popId : undefined}
-        title={
-          fresh
-            ? `${name} now runs on this computer, with its own data. Select to learn more.`
-            : 'About Local and Published'
-        }
+        title={fresh ? t('info.freshTitle', { name }) : t('info.label')}
         onClick={toggle}
       >
         <Codicon name="info" />
@@ -137,30 +135,26 @@ export default function LocalPublishedInfo({
             style={placement}
           >
             <p className="lpi-title" id={titleId}>
-              {name} runs in two places
+              {t('info.title', { name })}
             </p>
             <div className="lpi-row">
               <DesktopIcon className="lpi-ico" />
               <p className="lpi-text">
-                <strong>Local</strong> is your app on this computer, with its own data, apart from
-                the published app’s.{startsEmpty ? ' That data starts empty.' : ''} Copilot’s
-                changes show here first.
+                <Trans
+                  t={t}
+                  i18nKey={startsEmpty ? 'info.localEmpty' : 'info.local'}
+                  components={{ b: <strong /> }}
+                />
               </p>
             </div>
             <div className="lpi-row">
               <CloudIcon className="lpi-ico" />
               <p className="lpi-text">
-                {team ? (
-                  <>
-                    <strong>Published</strong> is the app your team uses on Microsoft Fabric, with
-                    its data. Your changes reach it when you publish them.
-                  </>
-                ) : (
-                  <>
-                    <strong>Published</strong> is your app on Microsoft Fabric, with its data. Your
-                    changes reach it when you publish them.
-                  </>
-                )}
+                <Trans
+                  t={t}
+                  i18nKey={team ? 'info.publishedTeam' : 'info.published'}
+                  components={{ b: <strong /> }}
+                />
               </p>
             </div>
           </div>,

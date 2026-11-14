@@ -1,0 +1,164 @@
+{
+  "tenantShort": "テナント {{id}}…",
+  "fabricNeedsProject": "Fabric へのサインインにはプロジェクトの Rayfin CLI を使用するため、先にプロジェクトを作成するか開いてください。",
+  "azureSignInFailed": "Azure へのサインインが完了しませんでした。もう一度お試しください。",
+  "copilotSignInFailed": "Copilot へのサインインが完了しませんでした。もう一度お試しください。",
+  "signingIn": "サインインしています…",
+  "signingOut": "サインアウトしています…",
+  "switching": "切り替えています…",
+  "addAccount": "アカウントの追加",
+  "installFromSetup": "セットアップからインストール",
+  "stopWaiting": "待機を停止",
+  "githubSignIn": "GitHub にサインイン",
+  "state": {
+    "ok": "サインイン済み",
+    "off": "未サインイン",
+    "error": "要対応"
+  },
+  "host": {
+    "label": "GitHub ホスト",
+    "placeholder": "github.com または company.ghe.com",
+    "hint": "github.com または Enterprise Cloud のホスト (company.ghe.com) を使用します。https:// で始まる URL も使用できます。"
+  },
+  "copilotNotice": {
+    "title": "Copilot で対応が必要です",
+    "signInHere": "ここで GitHub Copilot にサインインしてから、メッセージを再送信してください。",
+    "signingIn": "Copilot にサインインしています…",
+    "signIn": "Copilot にサインイン",
+    "help": "サインインのヘルプ",
+    "inBrowser": "ブラウザーでサインインを完了するか、下に表示されるデバイス コードの手順に従ってください。"
+  },
+  "menu": {
+    "refreshTitle": "共有の Rayfin CLI 資格情報をクリアして、もう一度サインインします",
+    "refreshing": "認証を更新しています…",
+    "refresh": "Fabric の認証を更新",
+    "accountChecking": "アカウント: サインインを確認中",
+    "accountUser": "アカウント: {{user}}",
+    "account": "アカウント",
+    "checkingTitle": "Microsoft Fabric のサインインを確認しています…",
+    "signedInAs": "{{user}} として Fabric にサインイン済み",
+    "signedIn": "Fabric にサインイン済み",
+    "unconfirmed": "今は確認できませんでした",
+    "signIn": "Fabric にサインイン",
+    "settingsAndAccounts": "設定とアカウント",
+    "checkingFabric": "Fabric のサインインを確認しています…",
+    "notSignedIn": "Fabric にサインインしていません",
+    "refreshHint": "更新すると、古い資格情報をクリアしてから、もう一度サインインします。",
+    "fabricAccount": "Fabric アカウント",
+    "manageTitle": "Fabricator が使用するすべてのアカウントを表示して変更します",
+    "manage": "アカウントの管理…",
+    "settingsTitle": "テーマ、テキスト サイズ、試験的機能など",
+    "settings": "設定"
+  },
+  "modal": {
+    "title": "アカウント",
+    "close": "アカウントを閉じる",
+    "lead": "このコンピューターで Fabricator が使用するアカウントです。変更はすべてのプロジェクトに適用されます。",
+    "errors": {
+      "listFabric": "Fabric アカウントを一覧表示できませんでした。",
+      "listAzure": "Azure アカウントを一覧表示できませんでした。もう一度お試しください。",
+      "listGithub": "GitHub アカウントを一覧表示できませんでした。もう一度お試しください。",
+      "generic": "うまくいきませんでした。もう一度お試しください。",
+      "copilotSignOut": "Copilot からのサインアウトが完了しませんでした。もう一度お試しください。",
+      "fabricSignIn": "Fabric へのサインインが完了しませんでした。もう一度お試しください。",
+      "fabricSwitch": "Fabric アカウントを切り替えられませんでした。",
+      "fabricSignOut": "Fabric からのサインアウトが完了しませんでした。もう一度お試しください。",
+      "azureSwitch": "Azure アカウントを切り替えられませんでした。",
+      "azureSignOut": "Azure からのサインアウトが完了しませんでした。もう一度お試しください。",
+      "githubSwitch": "{{login}} に切り替えられませんでした。",
+      "githubSignOut": "{{login}} からサインアウトできませんでした。",
+      "githubSignIn": "GitHub へのサインインを開始できませんでした。"
+    },
+    "fabricNote": {
+      "browser": "開いたブラウザー ウィンドウでサインインを完了してください。",
+      "shared": "この Mac では、1 つの Fabric アカウントからサインアウトすると、もう一度サインインするまですべてのアカウントがサインアウトされます。"
+    },
+    "mismatch": {
+      "title": "Fabric と Azure CLI の組織が異なります",
+      "text": "Fabric は <b>{{fabricTenant}}</b> を、Azure CLI は <b>{{azureTenant}}</b> を使用しています。アプリの共有とデータの接続では Azure CLI でユーザーを検索するため、両方で同じ組織を使用してください。",
+      "useAzure": "Azure CLI で {{user}} を使用",
+      "signInOrg": "Azure CLI で {{org}} にサインイン",
+      "signInFabricOrg": "Azure CLI で Fabric の組織にサインイン"
+    },
+    "inUse": "使用中",
+    "copilot": {
+      "purpose": "アプリのコードを作成、編集します。",
+      "signIn": "GitHub Copilot にサインイン",
+      "waiting": "GitHub を待っています…",
+      "signOut": "GitHub Copilot からサインアウト",
+      "signOutTitle": "別の GitHub アカウントを使うには、サインアウトしてから、そのアカウントでサインインしてください。"
+    },
+    "fabric": {
+      "purpose": "アプリを公開、ホスト、共有します。",
+      "unconfirmed": "確認できませんでした",
+      "signIn": "Microsoft Fabric にサインイン",
+      "inUseTitle": "公開、ワークスペースの一覧、共有、シークレットにはこのアカウントが使用されます。",
+      "refresh": "サインインの更新",
+      "signOut": "Microsoft Fabric からサインアウト",
+      "others": "その他の Fabric アカウント",
+      "add": "Fabric アカウントの追加"
+    },
+    "azure": {
+      "purpose": "省略可能です。アプリを共有するときにユーザーを検索し、移行する Power BI レポートを読み取り、チーム ワークスペースを設定し、作成中のアプリが Fabric のデータを読み取れるようにします。ターミナルと共有されます。",
+      "signIn": "Azure CLI にサインイン",
+      "inUseTitle": "Azure CLI は現在このアカウントを使用しています。",
+      "signOut": "Azure CLI からサインアウト",
+      "others": "その他の Azure アカウント",
+      "add": "Azure CLI アカウントの追加"
+    },
+    "github": {
+      "purpose": "リポジトリを複製し、チーム ワークスペースを実行します。省略可能で、ターミナルと共有されます。",
+      "list": "GitHub アカウント",
+      "default": "既定",
+      "defaultTitle": "GitHub からの複製とターミナルでは、このアカウントが使用されます。チーム ワークスペースは、それぞれのアカウントを記憶します。",
+      "expired": "サインインの期限切れ",
+      "makeDefault": "既定に設定",
+      "signOutTitle": "ターミナルの GitHub CLI からもサインアウトします。",
+      "missing": "GitHub CLI がインストールされていません。GitHub CLI が必要なのは、リポジトリを複製する場合か、チーム ワークスペースを使用する場合だけです。",
+      "waiting": "開いたターミナル ウィンドウでサインインを完了してください。既定のアカウントは変わりません。"
+    },
+    "help": "アカウントのヘルプ",
+    "recheck": "再確認"
+  },
+  "row": {
+    "use": "使用",
+    "confirmSignOut": "{{name}} からサインアウトしますか?",
+    "useAccount": "{{action}}: {{name}}",
+    "signOut": "{{name}} からサインアウト"
+  },
+  "addForm": {
+    "organization": "組織 (省略可能)",
+    "placeholder": "contoso.onmicrosoft.com またはテナント ID",
+    "hint": "アカウント自体の組織を使う場合は空のままにします。ゲストとして参加している組織を使う場合は、その組織を入力してください。",
+    "waiting": "Microsoft を待っています…"
+  },
+  "progress": {
+    "enterCode": "{{service}} で次のコードを入力してください:",
+    "copyCode": "コードのコピー",
+    "open": "{{service}} を開く",
+    "inBrowser": "ブラウザーで {{service}} へのサインインを完了してください。"
+  },
+  "githubRepo": {
+    "errors": {
+      "listAccounts": "GitHub アカウントを一覧表示できませんでした。",
+      "listOwners": "リポジトリを作成できる場所を一覧表示できませんでした。",
+      "signIn": "GitHub へのサインインを開始できませんでした。"
+    },
+    "finishInTerminal": "開いたターミナル ウィンドウでサインインを完了してください。この表示は自動的に更新されます。",
+    "checking": "GitHub アカウントを確認しています…",
+    "noCli": "Fabricator は GitHub CLI でリポジトリを作成しますが、GitHub CLI がインストールされていません。",
+    "signInFirst": "リポジトリを作成するには、GitHub にサインインしてください。",
+    "waiting": "待機しています…",
+    "account": "GitHub アカウント",
+    "owner": "所有者",
+    "you": "{{login}} (自分)",
+    "visibility": "可視性",
+    "private": "プライベート",
+    "public": "パブリック",
+    "privateBlocked": "{{owner}} ではプライベート リポジトリを作成できません。[パブリック] または別の所有者を選択してください。",
+    "name": "リポジトリ名",
+    "invalidName": "リポジトリ名には、英字、数字、ハイフン、アンダースコア、ピリオドのみを使用してください。",
+    "noName": "リポジトリの名前を入力してください。",
+    "taken": "その名前は既に使用されています。"
+  }
+}

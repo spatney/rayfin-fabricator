@@ -5,16 +5,38 @@ import type {
   ChatPlanPhase,
   ChatPlanTodo
 } from '@shared/ipc'
+import { translator } from './i18n'
 
-export const PLAN_ACTION_LABELS: Record<string, string> = {
-  interactive: 'Build plan',
-  autopilot: 'Run in Autopilot',
-  autopilot_fleet: 'Run with fleet',
-  exit_only: 'Approve plan'
+/** Whether `key` is one of `table`'s own keys (never one it inherits, like "constructor"). */
+function own<T extends object>(table: T, key: PropertyKey): key is keyof T {
+  return Object.prototype.hasOwnProperty.call(table, key)
 }
 
+/** The catalog keys (`plan` namespace) of the continuation actions' labels. */
+export const PLAN_ACTION_LABELS = {
+  interactive: 'actionLabels.interactive',
+  autopilot: 'actionLabels.autopilot',
+  autopilot_fleet: 'actionLabels.autopilotFleet',
+  exit_only: 'actionLabels.exitOnly'
+} as const satisfies Record<string, string>
+
 export function planActionLabel(action: string): string {
-  return PLAN_ACTION_LABELS[action] ?? action.replace(/_/g, ' ')
+  return own(PLAN_ACTION_LABELS, action)
+    ? translator('plan')(PLAN_ACTION_LABELS[action])
+    : action.replace(/_/g, ' ')
+}
+
+// A plan's own errors are saved with it in English, and shown in the interface's language.
+const PLANNING_INCOMPLETE = 'Planning did not complete.'
+const EXECUTION_INCOMPLETE = 'Plan execution did not complete.'
+const PLAN_ERRORS = {
+  [PLANNING_INCOMPLETE]: 'errors.planningIncomplete',
+  [EXECUTION_INCOMPLETE]: 'errors.executionIncomplete'
+} as const
+
+/** A plan's error to show: its own in the interface's language, any other as it came. */
+export function planErrorText(error: string): string {
+  return own(PLAN_ERRORS, error) ? translator('plan')(PLAN_ERRORS[error]) : error
 }
 
 export function modeForPlanAction(action: string): ChatMode {
@@ -128,7 +150,7 @@ export function reducePlanEvent(
               ...plan,
               phase: 'failed',
               liveRequestId: undefined,
-              error: plan.error || 'Planning did not complete.'
+              error: plan.error || PLANNING_INCOMPLETE
             }
       }
       return {
@@ -136,7 +158,7 @@ export function reducePlanEvent(
         phase: event.ok ? 'completed' : 'failed',
         liveRequestId: undefined,
         todos: event.ok ? completedPlanTodos(plan.todos) : plan.todos,
-        error: event.ok ? undefined : plan.error || 'Plan execution did not complete.'
+        error: event.ok ? undefined : plan.error || EXECUTION_INCOMPLETE
       }
     default:
       return plan

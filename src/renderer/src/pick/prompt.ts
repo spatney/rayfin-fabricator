@@ -1,4 +1,5 @@
 import type { PickLocateResult, PickTarget } from '@shared/pick'
+import { translator } from '../i18n'
 
 /** What a pick contributes to a message. */
 export interface PromptPick {
@@ -11,7 +12,7 @@ export interface PromptPick {
 export function picksDisplay(note: string, count: number): string {
   const text = note.trim()
   if (text) return text
-  return count === 1 ? 'Touch this up' : `Touch these ${count} up`
+  return translator('app')('pick.display', { count })
 }
 
 function quote(text: string): string {

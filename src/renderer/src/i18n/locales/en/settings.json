@@ -1,0 +1,108 @@
+{
+  "title": "Settings",
+  "close": "Close settings",
+  "general": {
+    "title": "General",
+    "accounts": {
+      "title": "Accounts",
+      "desc": "See who you’re signed in as for GitHub Copilot, Microsoft Fabric, the Azure CLI, and GitHub, and sign in or out.",
+      "action": "Manage accounts"
+    },
+    "apiKeys": {
+      "title": "API keys",
+      "desc": "Use models from Anthropic, OpenAI, xAI and Google with your own API keys, next to your Copilot models. The provider bills you for them.",
+      "action": "Manage API keys"
+    },
+    "mcpServers": {
+      "title": "MCP servers",
+      "desc": "Add the MCP servers chat can turn on in its Plugins, such as a command that runs on this computer or a server’s URL.",
+      "action": "Manage MCP servers"
+    },
+    "chatDefaults": {
+      "title": "Chat defaults",
+      "desc": "The model and plugins a new project’s chat starts with.",
+      "action": "Manage chat defaults"
+    },
+    "customInstructions": {
+      "title": "Custom instructions",
+      "desc": "What Copilot follows in every app you build, such as “Use the system theme by default.”",
+      "action": "Edit instructions"
+    },
+    "setup": {
+      "title": "Setup",
+      "desc": "Check the tools Fabricator needs and install missing ones, such as the GitHub CLI.",
+      "action": "Open setup"
+    },
+    "workspaceFolder": {
+      "title": "Workspace folder",
+      "desc": "New projects are created here."
+    }
+  },
+  "appearance": {
+    "title": "Appearance",
+    "theme": {
+      "title": "Theme",
+      "desc": "System follows your computer’s light or dark setting.",
+      "system": "System",
+      "dark": "Dark",
+      "light": "Light"
+    },
+    "language": {
+      "title": "Language",
+      "desc": "System uses your computer’s language when Fabricator comes in it, and English otherwise.",
+      "system": "System",
+      "systemNamed": "System ({{language}})"
+    },
+    "textSize": {
+      "title": "Text size",
+      "desc": "Scale the whole interface — handy on large monitors."
+    }
+  },
+  "diagnostics": {
+    "title": "Diagnostics",
+    "usage": {
+      "title": "Usage stats",
+      "desc": "We send your sign-in domain and a hashed email so we can see how the product is used. Your email, code, and apps stay on this device."
+    },
+    "full": {
+      "title": "Full diagnostics",
+      "desc": "Also capture prompts, responses, and tool output for each chat turn. Off by default — only lightweight metadata (timing, tools used, errors) is recorded. Turn on to include more detail in a bug report."
+    },
+    "logs": {
+      "title": "Logs",
+      "desc": "Diagnostics for your chat sessions are saved on this device. Export them to attach to a bug report.",
+      "export": "Export diagnostics",
+      "exporting": "Exporting…",
+      "openFolder": "Open logs folder"
+    }
+  },
+  "experiments": {
+    "title": "Experiments",
+    "desc": "These features are experimental and off by default. They may be unstable, change, or be removed in a future update.",
+    "teamWorkspaces": {
+      "title": "Team workspaces",
+      "desc": "Build apps with your team in a private GitHub repository. Everyone works on their own copy, and a pipeline publishes to Fabric with a deploy identity that Fabricator sets up. Team apps never deploy from this computer. Needs the GitHub CLI."
+    },
+    "reportMigration": {
+      "title": "Migrate Power BI reports",
+      "desc": "Turn a Power BI report into a new app from Home. The app reads the report's semantic model live, and Copilot rebuilds the report's pages, visuals and filters one page at a time. Needs the Azure CLI."
+    },
+    "workIq": {
+      "title": "Work IQ",
+      "desc": "Add Work IQ to chat's plugins. Turned on in a chat, it lets chat look up your Microsoft 365 email, meetings, files, Teams messages and people, with Microsoft's Work IQ, and use what it finds while it builds. Read-only. You sign in with your work account in your browser. Needs a Microsoft 365 Copilot license and your organization's approval."
+    }
+  },
+  "about": {
+    "title": "About",
+    "version": "Version {{version}}",
+    "copyVersion": "Copy version info",
+    "copilotBundled": "{{version}} (bundled {{bundled}})",
+    "unknownVersion": "unknown",
+    "help": {
+      "title": "Help",
+      "desc": "Guides for every part of Fabricator, and fixes for common problems.",
+      "docs": "Documentation",
+      "troubleshooting": "Troubleshooting"
+    }
+  }
+}

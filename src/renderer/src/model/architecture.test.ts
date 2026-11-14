@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { setLanguage } from '../i18n'
 import {
   buildArchitecture,
   classifyHost,
@@ -469,6 +470,36 @@ udf.func('openai', async () => fetch('https://api.openai.com/v1/responses'), [])
     expect(arch.sources.find((s) => s.title === 'Azure OpenAI')).toMatchObject({
       identity: 'key',
       suggestedAudience: 'AzureAI'
+    })
+  })
+})
+
+describe('buildArchitecture in another language', () => {
+  afterEach(async () => {
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('describes the app in German, keeping the access label prompts quote in English', async () => {
+    await setLanguage('de')
+    const arch = await sample()
+    expect(arch.services.map((s) => s.summary)).toEqual([
+      'In Fabric gehostet',
+      'Microsoft Entra ID, über Fabric',
+      '2 Tabellen · 1 Beziehung',
+      '2 Connectors zu Fabric-Daten',
+      '2 serverseitige Funktionen',
+      '1 Geheimnis, mit der App gespeichert'
+    ])
+    expect(arch.services.find((s) => s.kind === 'database')!.meta).toBe(
+      '1 zeilenbezogen · 1 öffentlich'
+    )
+    expect(arch.services.find((s) => s.kind === 'functions')!.meta).toBe(
+      'Erreicht Azure AI Foundry, Fabric SQL & Azure SQL und Fabric REST APIs'
+    )
+    expect(arch.database!.tables.find((t) => t.name === 'Report')).toMatchObject({
+      label: 'Public',
+      accessLabel: 'Öffentlich'
     })
   })
 })

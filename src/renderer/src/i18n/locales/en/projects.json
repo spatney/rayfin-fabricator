@@ -1,0 +1,261 @@
+{
+  "file": {
+    "progress_one": "{{processed, number}} of {{count, number}} file",
+    "progress_other": "{{processed, number}} of {{count, number}} files",
+    "files_one": "{{count, number}} file",
+    "files_other": "{{count, number}} files",
+    "versions_one": "{{count, number}} version",
+    "versions_other": "{{count, number}} versions"
+  },
+  "parts": {
+    "code": "App code",
+    "history": "Version history",
+    "published": "Published app",
+    "secrets": "Secrets",
+    "from": "From {{from}}",
+    "version": "Version {{version}}"
+  },
+  "installedApps": {
+    "title": "Installed apps",
+    "count_one": "{{count}} app",
+    "count_other": "{{count}} apps",
+    "openName": "Open {{name}}",
+    "isOpen": "Open",
+    "fromFile": "Installed from a .rayfin file",
+    "confirm": "Remove it and its data?",
+    "removing": "Removing…",
+    "keep": "Keep",
+    "removeName": "Remove {{name}}",
+    "cantRemove": "Fabricator couldn’t remove {{name}}."
+  },
+  "guard": {
+    "cantPrepare": "Could not prepare this project. Check its dependencies and try again.",
+    "cantInstall": "Could not install this project's dependencies.",
+    "failedLabel": "Could not prepare {{name}}",
+    "preparing": "Preparing {{name}}",
+    "failedTitle": "Couldn't install project dependencies",
+    "retry": "Retry installation",
+    "switchProjects": "Switch projects",
+    "checking": "Checking the project's Rayfin CLI and installing missing dependencies..."
+  },
+  "remove": {
+    "title": "Remove project",
+    "lead": "Choose what to remove for <strong>{{name}}</strong>.",
+    "folder": {
+      "title": "Local project folder",
+      "badge": "Recoverable",
+      "desc": "Move to <strong>system trash</strong>. Restore it from there."
+    },
+    "app": {
+      "title": "Published Fabric app",
+      "badge": "Permanent",
+      "desc": "Delete {{name}} and all app data in {{workspace}}.",
+      "descNoWorkspace": "Delete {{name}} and all app data in its Fabric workspace.",
+      "warn": "This cannot be undone."
+    },
+    "note": {
+      "noApp": "No published Fabric app is linked to this project.",
+      "keepsWorkspace": "Your Fabric workspace will be kept.",
+      "keepsApp": "The published app and its data stay in Fabric."
+    },
+    "confirmBoth": "Trash folder & delete app",
+    "confirmFolder": "Move folder to trash"
+  },
+  "manage": {
+    "title": "Manage project",
+    "close": "Close project management",
+    "nameLabel": "Project name",
+    "renameHint": "Also renames it in <code>rayfin/rayfin.yml</code>.",
+    "actionsHeading": "Project actions",
+    "errors": {
+      "cantRename": "Could not rename the project. Please try again.",
+      "cantMove": "Could not move the project.",
+      "noName": "Enter a project name."
+    },
+    "move": {
+      "title": "Move to a team workspace",
+      "desc": "Copies this app and its chat into the team workspace so your team can work on it. The team pipeline deploys it as a new app, without the data in this project's published app. This local project stays as it is.",
+      "workspaceLabel": "Team workspace",
+      "moving": "Moving…",
+      "move": "Move"
+    },
+    "export": {
+      "button": "Export"
+    },
+    "recents": {
+      "title": "Recent projects",
+      "remove": "Remove from recent projects",
+      "team": "Hide from your recent list. Your work on GitHub stays, and you can open it again from its team workspace.",
+      "missing": "Fabricator can’t find this project on this computer. Remove it from your recent list.",
+      "withApp": "Hide from your recent list. Files and the Fabric app stay intact.",
+      "filesOnly": "Hide from your recent list. Files stay intact."
+    },
+    "team": {
+      "title": "Team app",
+      "desc": "This app belongs to the team workspace <strong>{{team}}</strong>. Its owners can remove it for everyone from the workspace's settings.",
+      "descUnknown": "This app belongs to the team workspace it was opened from. Its owners can remove it for everyone from the workspace's settings."
+    },
+    "remove": {
+      "review": "Review options",
+      "withApp": "Trash the folder, and optionally its published app.",
+      "folderOnly": "Trash the folder. No Fabric app is changed."
+    }
+  },
+  "import": {
+    "title": "Import project",
+    "reading": "Reading {{file}}…",
+    "exportedByOn": "Exported by {{from}} on {{date}}",
+    "exportedBy": "Exported by {{from}}",
+    "fromFile": "From {{file}}",
+    "importingFrom": "Importing it from {{file}}.",
+    "importingName": "Importing {{name}}…",
+    "progress": "Import progress",
+    "bringsIn": "What it brings in",
+    "code": {
+      "desc": "Fabricator installs its packages when you open it."
+    },
+    "history": {
+      "desc": "Every version saved before, so History and Restore work."
+    },
+    "published": {
+      "askFrom": "Publishing updates this same app. Ask {{from}} for workspace access.",
+      "needAccess": "Publishing updates this same app, once you have access to its workspace."
+    },
+    "secrets": {
+      "desc": "Their values don’t come with it. Set your own in Code → Secrets."
+    },
+    "folder": "It goes in a new folder, <code>{{folder}}</code>.",
+    "trust": "Only import projects from people you trust. Their code runs on this computer.",
+    "importing": "Importing…",
+    "importAnyway": "Import anyway",
+    "import": "Import",
+    "errors": {
+      "cantRead": "Fabricator couldn’t read {{file}}.",
+      "cantImport": "Fabricator couldn’t import {{file}}."
+    }
+  },
+  "export": {
+    "title": "Export project",
+    "lead": {
+      "project": "Save a copy someone else can import into Fabricator.",
+      "app": "Save it as an app someone else can install and use.",
+      "done": "It’s exported and ready to send."
+    },
+    "format": {
+      "label": "Export it as",
+      "project": "Project",
+      "projectDesc": "To keep building it in Fabricator · .fabricator",
+      "app": "App",
+      "appDesc": "To use it, in a window of its own · .rayfin"
+    },
+    "checking": "Checking what to include…",
+    "includes": "What the export includes",
+    "code": {
+      "desc": "Source and settings. Installed packages and build output stay out."
+    },
+    "app": {
+      "desc": "It opens in a window of its own, with this name and icon. Its data stays on the computer it’s installed on."
+    },
+    "history": {
+      "desc": "Every saved version, so History and Restore work for them too."
+    },
+    "published": {
+      "include": "Their publishes update this same app. They’ll need access to its workspace.",
+      "exclude": "They’ll publish it as a new app, in a workspace they choose."
+    },
+    "never": {
+      "project": "Never included: your chat, secret values, local app data or sign-ins.",
+      "projectSecrets": "Never included: your chat, secret values ({{secrets}}), local app data or sign-ins.",
+      "app": "Never included: your chat, version history, where it’s published, secret values, local app data or sign-ins.",
+      "appSecrets": "Never included: your chat, version history, where it’s published, secret values ({{secrets}}), local app data or sign-ins."
+    },
+    "keptOut": "Also left out in case they hold secrets: {{files}}.",
+    "keptOutMore_one": "{{count}} more",
+    "keptOutMore_other": "{{count}} more",
+    "secretsWarning": "It uses secrets that don’t come with it, so what needs them won’t work where it’s installed.",
+    "exportingName": "Exporting {{name}}…",
+    "progress": "Export progress",
+    "saved": "Saved {{file}}",
+    "next": {
+      "title": "What happens next",
+      "send": "Send them the file, by email, chat or a shared folder.",
+      "openApp": "They double-click it. Fabricator asks before it installs the app, then opens it in a window of its own. The first time takes a minute or two. Don’t have Fabricator?",
+      "openProject": "They double-click it to import it into Fabricator, or select <strong>Open existing</strong>, then <strong>Import a project</strong>. New to Fabricator?",
+      "copyLink": "Copy the install link",
+      "linkCopied": "Install link copied",
+      "afterApp": "After that it opens like any app. On Windows it’s in the Start menu, under Rayfin apps.",
+      "access": "So they can publish, give them Contributor access to <strong>{{workspace}}</strong> in Fabric.",
+      "openWorkspace": "Open the workspace"
+    },
+    "showInFolder": "Show in folder",
+    "exporting": "Exporting…",
+    "export": "Export…",
+    "errors": {
+      "cantLook": "Fabricator couldn’t look at this project.",
+      "cantExportApp": "Fabricator couldn’t export the app.",
+      "cantExportProject": "Fabricator couldn’t export the project.",
+      "cantCopy": "Fabricator couldn’t copy the link.",
+      "cantShow": "Fabricator couldn’t show the file."
+    }
+  },
+  "appWindow": {
+    "defaultName": "Rayfin app",
+    "installText": "Install it to use it on this computer. It opens in a window of its own and keeps its data on this computer.",
+    "update": {
+      "noDates": "{{name}} is installed. This file has another version. Updating replaces the app and keeps its data.",
+      "installedDate": "{{name}} is installed (exported {{installedOn}}). This file has another version. Updating replaces the app and keeps its data.",
+      "fileDate": "{{name}} is installed. This file has another version, exported {{fileOn}}. Updating replaces the app and keeps its data.",
+      "bothDates": "{{name}} is installed (exported {{installedOn}}). This file has another version, exported {{fileOn}}. Updating replaces the app and keeps its data."
+    },
+    "bringsIn": "What it brings",
+    "codeDesc": "The first time it opens, Fabricator installs its packages and builds it.",
+    "secretsDesc": "Their values don’t come with it, so what needs them won’t work.",
+    "trust": "Only install apps from people you trust. Its code runs on this computer, as you.",
+    "openInstalled": "Open the installed one",
+    "updateAnyway": "Update anyway",
+    "installAnyway": "Install anyway",
+    "installingName": "Installing {{name}}…",
+    "progress": "Install progress",
+    "gettingReady": "Getting {{name}} ready…",
+    "building": "Building {{name}}…",
+    "starting": "Starting {{name}}…",
+    "packagesHint": "Installing its packages. The first time takes a minute or two.",
+    "needsNode": "This app needs Node.js",
+    "didntStart": "{{name}} didn’t start",
+    "restartForNode": "Once Node.js is installed, restart to use it.",
+    "noOutput": "There’s no output yet.",
+    "showDetails": "Show details",
+    "installNode": "Install Node.js",
+    "installingNode": "Installing Node.js…",
+    "cantOpenTitle": "Fabricator can’t open this app",
+    "errors": {
+      "didntStart": "The app didn’t start.",
+      "cantOpen": "Fabricator couldn’t open this app.",
+      "nothingToOpen": "There’s nothing to open.",
+      "cantInstall": "Fabricator couldn’t install the app."
+    }
+  },
+  "appIcon": {
+    "unreadable": "The icon couldn’t be read.",
+    "cantDraw": "Fabricator couldn’t draw the app’s icon."
+  },
+  "removals": {
+    "waitingSignIn": "Waiting for you to sign in to Fabric…",
+    "deletingApp": "Deleting the published app…",
+    "deletingAppFrom": "Deleting the published app from {{workspace}}…",
+    "trashing": "Moving the folder to trash…",
+    "counting": "Counting files… {{processed, number}}",
+    "moving_one": "Moving {{count, number}} files to trash…",
+    "moving_other": "Moving {{count, number}} files to trash…",
+    "movingFor_one": "Moving {{count, number}} files to trash… {{seconds}}s",
+    "movingFor_other": "Moving {{count, number}} files to trash… {{seconds}}s",
+    "sessionExpired": "Your Fabric session expired. Sign in to Fabric and try again.",
+    "cantDeleteApp": "Couldn’t delete the published app.",
+    "cantDeleteAppRetry": "Couldn’t delete the published app. Please try again.",
+    "tooLong": "Deleting the published app is taking too long. It may be a slow connection; try again.",
+    "cantTrash": "Couldn’t move the folder to trash. Please try again.",
+    "signInUnfinished": "Fabric sign-in didn’t finish. Please try again.",
+    "cantConfirmSignIn": "Couldn’t confirm the Fabric sign-in. Please try again.",
+    "closedBeforeSignIn": "Fabricator closed before the sign-in finished."
+  }
+}

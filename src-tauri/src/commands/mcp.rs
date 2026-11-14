@@ -42,7 +42,7 @@ pub async fn mcp_check(state: State<'_, AppState>, id: String) -> Result<McpChec
   let entry = store::mcp_servers()
     .into_iter()
     .find(|s| s.id == id)
-    .ok_or("That server isn't in Fabricator anymore.")?;
+    .ok_or_else(|| t!("commands.mcp.serverGone"))?;
   let values = if entry.env.is_empty() && entry.headers.is_empty() { Default::default() } else { mcp::secrets::load(&id)? };
   let command = entry.transport == McpTransport::Stdio;
   let cwd = check_folder();

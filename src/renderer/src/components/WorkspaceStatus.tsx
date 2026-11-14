@@ -1,6 +1,7 @@
 import type { StudioProject } from '@shared/ipc'
 import { Codicon } from './icons'
 import { fabricWorkspaceUrl, publishedItem } from '../fabric'
+import { useTranslation } from '../i18n'
 
 import type { JSX } from 'react'
 
@@ -16,6 +17,7 @@ export default function WorkspaceStatus({
 }: {
   project: StudioProject
 }): JSX.Element | null {
+  const { t } = useTranslation('publish')
   const name = project.workspaceName || project.workspace
   if (!name) return null
 
@@ -24,7 +26,7 @@ export default function WorkspaceStatus({
   if (!url) {
     // No GUID to deep-link with yet — show the name as a plain readout.
     return (
-      <span className="statusbar-item" title="Fabric workspace">
+      <span className="statusbar-item" title={t('workspaceStatus.title')}>
         {name}
       </span>
     )
@@ -36,8 +38,8 @@ export default function WorkspaceStatus({
       onClick={() => void window.api.openExternal(url)}
       title={
         item
-          ? `Open the published app in the Fabric portal, in workspace “${name}”`
-          : `Open workspace “${name}” in the Fabric portal`
+          ? t('workspaceStatus.openItem', { name })
+          : t('workspaceStatus.openWorkspace', { name })
       }
     >
       <Codicon name="link-external" className="statusbar-ico" />

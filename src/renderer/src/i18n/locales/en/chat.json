@@ -1,0 +1,354 @@
+{
+  "format": {
+    "quoted": "“{{text}}”",
+    "more": "+{{count}} more",
+    "dateTime": "{{date}}, {{time}}"
+  },
+  "duration": {
+    "underSecond": "<1s",
+    "seconds": "{{s}}s",
+    "minutes": "{{m}}m",
+    "minutesSeconds": "{{m}}m {{s}}s"
+  },
+  "steps": {
+    "count_one": "{{count}} step",
+    "count_other": "{{count}} steps",
+    "showEarlier_one": "Show {{count}} earlier step",
+    "showEarlier_other": "Show {{count}} earlier steps",
+    "failed": "failed",
+    "exit": "exit {{code}}",
+    "copyCommand": "Copy command",
+    "open": "Open {{name}}"
+  },
+  "code": {
+    "text": "text",
+    "wrap": "Wrap",
+    "wrapLines": "Wrap long lines",
+    "noWrapLines": "Don’t wrap long lines",
+    "copyCode": "Copy code",
+    "showAll_one": "Show {{count}} line",
+    "showAll_other": "Show all {{count}} lines"
+  },
+  "files": {
+    "openInCode": "Open {{path}} in the Code tab"
+  },
+  "agentRow": {
+    "agent": "Agent",
+    "hideSteps": "Hide its steps",
+    "showSteps": "Show its steps"
+  },
+  "agentStatus": {
+    "waitingFor": "Waiting for {{agent}}",
+    "agentsWorking_one": "{{agents}} is working",
+    "agentsWorking_other": "{{agents}} are working",
+    "thinking": "Thinking",
+    "writing": "Writing the answer",
+    "working": "Working",
+    "waitingDecision": "Waiting for your decision",
+    "waitingAnswer": "Waiting for your answer"
+  },
+  "assistant": {
+    "needsInput": "Fabricator needs your input",
+    "youAdded": "You added"
+  },
+  "copyButton": {
+    "copyMessage": "Copy message"
+  },
+  "tray": {
+    "removeItem": "Remove {{name}}"
+  },
+  "dataTray": {
+    "toConnect": "Fabric data to connect",
+    "data": "Data",
+    "chipTitle": "{{kind}} in {{workspace}}. Copilot connects it when you send. Click to change the data.",
+    "sent": "Fabric data",
+    "sentTitle": "{{kind}} in {{workspace}}",
+    "setup": "Setup",
+    "wrapUp": "Wrap-up",
+    "page": "Page {{index}} of {{total}}: {{name}}",
+    "setupAndPage": "Setup and page {{index}} of {{total}}: {{name}}",
+    "migration": "Power BI migration",
+    "migrating": "Migrating “{{report}}” from Power BI"
+  },
+  "fileTray": {
+    "toSend": "Files and folders to send",
+    "sent": "Files and folders"
+  },
+  "diffView": {
+    "added": "New file",
+    "deleted": "Deleted",
+    "renamed": "Renamed",
+    "line": "⋯ Line {{line}}",
+    "shortened": "Diff shortened — open the file to see everything."
+  },
+  "imageViewer": {
+    "picture": "Picture",
+    "pictureOf": "Picture {{index}} of {{total}}",
+    "closeTitle": "Close (Esc)",
+    "previous": "Previous picture",
+    "previousTitle": "Previous (←)",
+    "next": "Next picture",
+    "nextTitle": "Next (→)",
+    "showLarger": "Show it larger",
+    "attachment": "Screenshot attachment"
+  },
+  "messageRow": {
+    "screenshots_one": "{{count}} screenshot",
+    "screenshots_other": "{{count}} screenshots",
+    "resend": "Re-send this message",
+    "interrupted": "This response was interrupted when the app closed.",
+    "resumeTitle": "Re-run this prompt and continue",
+    "resume": "Resume",
+    "resumeApprovedPlan": "Resume the approved plan",
+    "reviseRecoveredPlan": "Revise the recovered plan",
+    "resumePlanning": "Resume planning"
+  },
+  "thinking": {
+    "live": "Thinking…",
+    "thoughtItThrough": "Thought it through",
+    "thoughtFor": "Thought for {{duration}}"
+  },
+  "workLog": {
+    "working": "Working",
+    "worked": "Worked",
+    "workedFor": "Worked for {{duration}}",
+    "hideSteps": "Hide steps",
+    "showSteps": "Show steps",
+    "showEarlierNotes": "Show earlier notes"
+  },
+  "welcome": {
+    "title": "Let’s build {{name}}",
+    "sub": "Describe what you want in plain language. I’ll write the code and show it running in the preview — no coding required.",
+    "tailoring": "Tailoring ideas to your app…",
+    "ideas": "Ideas to start with",
+    "refreshTitle": "Generate fresh ideas from your app's code",
+    "tips": "Tips",
+    "tipScreenshot": "Paste or drop a screenshot",
+    "tipMention": "Type <kbd>@</kbd> to reference a file",
+    "tipData": "Use <kbd>+</kbd> to connect data"
+  },
+  "paths": {
+    "projectFolder": "project folder"
+  },
+  "fusion": {
+    "modelDid": "{{model}} {{did}}",
+    "did": {
+      "primary": "answered",
+      "draft": "drafted",
+      "critic": "reviewed",
+      "revision": "revised",
+      "judge": "checked",
+      "repair": "repaired",
+      "followUp": "continued"
+    }
+  },
+  "plugins": {
+    "fabricIq": "Explore the Power BI reports and semantic models you can open.",
+    "workIq": "Find your Microsoft 365 email, meetings, files, Teams messages and people."
+  },
+  "markup": {
+    "pen": "Pen",
+    "highlighter": "Highlighter",
+    "arrow": "Arrow",
+    "box": "Box",
+    "red": "Red",
+    "yellow": "Yellow",
+    "green": "Green",
+    "blue": "Blue",
+    "white": "White"
+  },
+  "usage": {
+    "unit": {
+      "aiCredits_one": "AI credit",
+      "aiCredits_other": "AI credits",
+      "credits_one": "credit",
+      "credits_other": "credits",
+      "premiumRequests_one": "premium request",
+      "premiumRequests_other": "premium requests"
+    },
+    "unlimited": {
+      "aiCredits": "Unlimited AI credits",
+      "premiumRequests": "Unlimited premium requests"
+    },
+    "amount": "{{amount}} {{unit}}",
+    "tokens": "{{tokens}} tokens",
+    "tokenLine": "{{input}} in · {{output}} out",
+    "tokenDetail": "{{input}} input tokens and {{output}} output tokens",
+    "tokenDetailCached": "{{input}} input tokens ({{cached}} from the prompt cache) and {{output}} output tokens",
+    "left": "{{left}} of {{total}} {{unit}} left",
+    "resets": "Resets {{day}}",
+    "overage": "{{amount}} {{unit}} of additional usage"
+  },
+  "usageMeter": {
+    "providerKey": "On your {{provider}} key, which its provider bills",
+    "ownKey": "On your own key, which its provider bills",
+    "yourKey": "Your key",
+    "plan": "Copilot plan",
+    "percentLeft": "{{percent}} left",
+    "planFailed": "Couldn’t check your Copilot plan.",
+    "planChecking": "Checking your plan…",
+    "remaining": "<strong>{{left}}</strong> of {{total}} {{unit}} remaining",
+    "planLeft": "Copilot plan left",
+    "tokens": "tokens",
+    "sessionCredits": "Session credits",
+    "sessionUsage": "Session usage",
+    "columnTokens": "Tokens",
+    "columnCredits": "Credits",
+    "columnRequests": "Requests",
+    "chipLabel": "Chat usage: {{summary}}",
+    "chipTitle": "What this chat has used: {{summary}}",
+    "howCounted": "How usage is counted",
+    "usedTokens": "tokens used",
+    "usedCredits_one": "credit used",
+    "usedCredits_other": "credits used",
+    "usedRequests_one": "premium request used",
+    "usedRequests_other": "premium requests used",
+    "costTitle": "At US$0.01 an AI credit",
+    "approx": "≈ {{cost}}",
+    "partial": "Some replies didn’t report their credits, so this is a minimum.",
+    "byModel": "Usage by model",
+    "tokenDetails": "Token details",
+    "viewUsage": "View usage",
+    "otherModels": "Other models"
+  },
+  "imageMarkup": {
+    "hint": "Draw on it to show Copilot what you mean",
+    "cancelTitle": "Cancel (Esc)",
+    "failed": "This picture couldn’t be opened.",
+    "area": {
+      "pen": "Drawing area: draw with the pen",
+      "highlighter": "Drawing area: draw with the highlighter",
+      "arrow": "Drawing area: draw with the arrow",
+      "box": "Drawing area: draw with the box"
+    },
+    "opening": "Opening the picture…",
+    "discard": "Press Esc again to throw the drawing away",
+    "tools": "Drawing tools",
+    "tool": "Tool",
+    "color": "Color",
+    "withKey": "{{label}} ({{key}})",
+    "undoTitle": "Undo ({{mod}}+Z)",
+    "redo": "Redo",
+    "redoTitle": "Redo ({{mod}}+Shift+Z)",
+    "clear": "Clear the drawing",
+    "keepTitle": "Keep the drawing (Enter)",
+    "closeTitle": "Close (Enter)"
+  },
+  "access": {
+    "readOnly": "Read-only",
+    "readWrite": "Read & write"
+  },
+  "addMenu": {
+    "title": "Add images, files or data",
+    "image": "Image",
+    "orPaste": "Or paste",
+    "files": "Files and folders…",
+    "fabricData": "Fabric data",
+    "dax": "DAX",
+    "browseAll": "Browse all Fabric data…"
+  },
+  "pluginsMenu": {
+    "plugins": "Plugins",
+    "pluginsOn": "Plugins: {{names}}",
+    "disabled": "Plugins can’t be changed while the assistant is working",
+    "title": "Plugins & tools",
+    "sub": "Choose what this chat can use.",
+    "enabled_one": "{{count}} enabled",
+    "enabled_other": "{{count}} enabled",
+    "experiment": "Experiment",
+    "mcpServers": "MCP servers",
+    "mcpNote": "An MCP server can do whatever its tools do.",
+    "manage": "Manage MCP servers…",
+    "addServer": "Add an MCP server…",
+    "note": "Chat uses these only when a request needs them.",
+    "learn": "Learn about plugins"
+  },
+  "turnFooter": {
+    "changedFiles_one": "Changed {{count}} file",
+    "changedFiles_other": "Changed {{count}} files",
+    "changed": "Changed",
+    "created": "Created {{path}}",
+    "edited": "Edited {{path}}",
+    "deleted": "Deleted {{path}}",
+    "hideChanges": "{{what}} — hide the changes",
+    "showChanges": "{{what}} — show the changes",
+    "openInCode": "{{what}} — open in the Code tab",
+    "partial": "Some edits to this file weren’t recorded — open it to see all of them.",
+    "stepwise": "Shown edit by edit — these edits couldn’t be combined into one diff.",
+    "changesTo": "Changes to {{path}}",
+    "noNetChange": "No net change — later edits undid the earlier ones.",
+    "followed_one": "Followed your instruction <list/>",
+    "followed_other": "Followed your instructions <list/>",
+    "copyAnswer": "Copy answer",
+    "tryAgainTitle": "Run your last message again for a fresh attempt",
+    "durationTitle": "How long this took"
+  },
+  "markdown": {
+    "note": "Note",
+    "tip": "Tip",
+    "important": "Important",
+    "warning": "Warning",
+    "caution": "Caution"
+  },
+  "suggestions": {
+    "list": "Show all my {{things}} on a clean page",
+    "create": "Add a form to create and edit a {{thing}}",
+    "search": "Add search and filters to my {{things}}",
+    "chart": "Add a dashboard that charts my {{things}}",
+    "auth": "Require sign-in so everyone gets their own {{things}}",
+    "photo": "Let me attach a photo to each {{thing}}",
+    "design": "Give the whole app a fresh, modern look"
+  },
+  "panel": {
+    "exitFocusTitle": "Exit focus — show the preview again",
+    "focusTitle": "Focus the chat — hide the preview",
+    "exitFocus": "Exit focus",
+    "focus": "Focus the chat",
+    "newChatTitle": "Clear this conversation and start fresh",
+    "newChat": "New chat",
+    "jumpTitle": "Jump to the latest message",
+    "newMessages": "New messages",
+    "jump": "Jump to latest",
+    "newChatConfirm": "Start a new chat?",
+    "newChatMessage": "This clears the conversation and starts Fabricator fresh. Your app and its files stay exactly as they are."
+  },
+  "mention": {
+    "filesAndFolders": "Files and folders",
+    "projectFiles": "Project files",
+    "referenceFileOrFolder": "Reference a file or folder",
+    "referenceFile": "Reference a file",
+    "loading": "Loading files…",
+    "nothingHere": "Nothing here matches “{{query}}”",
+    "noFiles": "No files match “{{query}}”",
+    "outsideHint": "To reference something outside the project, type ../ or a full path."
+  },
+  "composer": {
+    "cantReadImages": "{{model}} can’t read images",
+    "imagesBlocked": "{{note}}. Remove the images, or choose a model that can.",
+    "screenshot": "Screenshot",
+    "chooseAnswerToPlan": "Choose one of the available answers before planning can continue.",
+    "chooseAnswer": "Choose one of the available answers to continue.",
+    "thisFolder": "This folder",
+    "dropToAttach": "Drop to attach",
+    "showLargerDraw": "Show it larger and draw on it",
+    "screenshotToSend": "Screenshot to send",
+    "removeScreenshot": "Remove screenshot",
+    "addingImage": "Adding image",
+    "placeholderPick": "Say how to change {{label}}, or press Enter to polish it",
+    "placeholderPicks": "Say how to change these {{count}}, or press Enter to polish them",
+    "placeholderData": "Say what to build with this data, or just press Enter to connect it",
+    "placeholderFiles": "Say what to do with these, or just press Enter to send them",
+    "placeholder": "Message Fabricator about {{name}}…",
+    "enterToSend": "<kbd>Enter</kbd> to send",
+    "interjectTitle": "Interject — send this now without waiting",
+    "interject": "Interject this message",
+    "stop": "Stop generating",
+    "publishing": "Publishing — sending resumes when it goes live",
+    "sendPicks_one": "Send, with the picked element (Enter)",
+    "sendPicks_other": "Send, with the {{count}} picked elements (Enter)",
+    "sendData_one": "Send, and connect this data (Enter)",
+    "sendData_other": "Send, and connect these {{count}} data sources (Enter)",
+    "sendTitle": "Send (Enter)",
+    "send": "Send"
+  }
+}

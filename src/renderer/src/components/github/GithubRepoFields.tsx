@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type JSX } from 'react'
 import type { GithubAccountsResult, ProjectNameCheck, TeamOwner } from '@shared/ipc'
+import { useTranslation } from '../../i18n'
 import './githubRepo.css'
 
 /** Who creates a project's GitHub repository, who owns it, and who can see it. */
@@ -75,6 +76,7 @@ export default function GithubRepoFields({
   compact = false,
   onReviewSetup
 }: Props): JSX.Element {
+  const { t } = useTranslation('accounts')
   const accountId = useId()
   const ownerId = useId()
   const nameId = useId()
@@ -103,7 +105,7 @@ export default function GithubRepoFields({
       setAccounts({
         ghInstalled: true,
         accounts: [],
-        error: errorText(reason, 'Couldn’t list your GitHub accounts.')
+        error: errorText(reason, t('githubRepo.errors.listAccounts'))
       })
     }
   }
@@ -131,9 +133,7 @@ export default function GithubRepoFields({
         setOwners({
           account,
           list: result.owners,
-          error: result.ok
-            ? undefined
-            : (result.error ?? 'Couldn’t list where you can create repositories.')
+          error: result.ok ? undefined : (result.error ?? t('githubRepo.errors.listOwners'))
         })
         const current = valueRef.current
         const first = result.owners[0]?.login
@@ -146,7 +146,7 @@ export default function GithubRepoFields({
           setOwners({
             account,
             list: [],
-            error: errorText(reason, 'Couldn’t list where you can create repositories.')
+            error: errorText(reason, t('githubRepo.errors.listOwners'))
           })
         }
       }
@@ -196,12 +196,12 @@ export default function GithubRepoFields({
     try {
       const result = await window.api.github.addAccount()
       if (!result.ok) {
-        setSignInError(result.error ?? 'Couldn’t start GitHub sign-in.')
+        setSignInError(result.error ?? t('githubRepo.errors.signIn'))
         return
       }
       setWaiting(before)
     } catch (reason) {
-      setSignInError(errorText(reason, 'Couldn’t start GitHub sign-in.'))
+      setSignInError(errorText(reason, t('githubRepo.errors.signIn')))
     }
   }
 
@@ -243,9 +243,9 @@ export default function GithubRepoFields({
   const className = `gh-repo${compact ? ' gh-repo--compact' : ''}`
   const waitingNote = waiting && (
     <p className="gh-repo-note">
-      Finish signing in in the terminal window that opened. This updates by itself.{' '}
+      {t('githubRepo.finishInTerminal')}{' '}
       <button type="button" className="link-btn" onClick={() => setWaiting(null)}>
-        Stop waiting
+        {t('stopWaiting')}
       </button>
     </p>
   )
@@ -255,7 +255,7 @@ export default function GithubRepoFields({
         {text}
         {retry && (
           <button type="button" className="link-btn" disabled={disabled} onClick={retry}>
-            Try again
+            {t('actions.tryAgain')}
           </button>
         )}
       </span>
@@ -266,7 +266,7 @@ export default function GithubRepoFields({
       <div className={className}>
         <span className="gh-repo-status" role="status">
           <span className="ws-spinner" aria-hidden="true" />
-          Checking your GitHub accounts…
+          {t('githubRepo.checking')}
         </span>
       </div>
     )
@@ -276,10 +276,10 @@ export default function GithubRepoFields({
     return (
       <div className={className}>
         <p className="gh-repo-note">
-          Fabricator creates the repository with the GitHub CLI, which isn’t installed.{' '}
+          {t('githubRepo.noCli')}{' '}
           {onReviewSetup && (
             <button type="button" className="link-btn" disabled={disabled} onClick={onReviewSetup}>
-              Install from setup
+              {t('installFromSetup')}
             </button>
           )}
         </p>
@@ -291,14 +291,14 @@ export default function GithubRepoFields({
     return (
       <div className={className}>
         <div className="gh-repo-signin">
-          <span className="gh-repo-note">Sign in to GitHub to create the repository.</span>
+          <span className="gh-repo-note">{t('githubRepo.signInFirst')}</span>
           <button
             type="button"
             className="btn btn--sm"
             disabled={disabled || Boolean(waiting)}
             onClick={() => void signIn()}
           >
-            {waiting ? 'Waiting…' : 'Sign in to GitHub'}
+            {waiting ? t('githubRepo.waiting') : t('githubSignIn')}
           </button>
         </div>
         {waitingNote}
@@ -314,7 +314,7 @@ export default function GithubRepoFields({
     <div className={className}>
       <div className="gh-repo-field">
         <label className="gh-repo-label" htmlFor={accountId}>
-          GitHub account
+          {t('githubRepo.account')}
         </label>
         <div className="gh-repo-account">
           <select
@@ -336,7 +336,7 @@ export default function GithubRepoFields({
             disabled={disabled || Boolean(waiting)}
             onClick={() => void signIn()}
           >
-            {waiting ? 'Waiting…' : 'Add account'}
+            {waiting ? t('githubRepo.waiting') : t('addAccount')}
           </button>
         </div>
       </div>
@@ -346,7 +346,7 @@ export default function GithubRepoFields({
       <div className="gh-repo-row">
         <div className="gh-repo-field gh-repo-field--grow">
           <label className="gh-repo-label" htmlFor={ownerId}>
-            Owner
+            {t('githubRepo.owner')}
           </label>
           {owners?.account === value.account ? (
             <select
@@ -358,19 +358,19 @@ export default function GithubRepoFields({
             >
               {owners.list.map((o) => (
                 <option key={o.login} value={o.login}>
-                  {o.isOrg ? o.login : `${o.login} (you)`}
+                  {o.isOrg ? o.login : t('githubRepo.you', { login: o.login })}
                 </option>
               ))}
             </select>
           ) : (
             <select id={ownerId} className="field-input" disabled>
-              <option>Loading…</option>
+              <option>{t('status.loading')}</option>
             </select>
           )}
         </div>
         <div className="gh-repo-field">
           <span className="gh-repo-label" id={visibilityId}>
-            Visibility
+            {t('githubRepo.visibility')}
           </span>
           <div className="seg" role="radiogroup" aria-labelledby={visibilityId}>
             {[true, false].map((isPrivate) => (
@@ -383,22 +383,19 @@ export default function GithubRepoFields({
                 disabled={disabled}
                 onClick={() => onChange({ ...value, private: isPrivate })}
               >
-                {isPrivate ? 'Private' : 'Public'}
+                {isPrivate ? t('githubRepo.private') : t('githubRepo.public')}
               </button>
             ))}
           </div>
         </div>
       </div>
       {owners?.account === value.account && problem(owners.error, () => setOwnersTry((n) => n + 1))}
-      {privateBlocked &&
-        problem(
-          `${value.owner} doesn’t let you create private repositories. Choose Public, or another owner.`
-        )}
+      {privateBlocked && problem(t('githubRepo.privateBlocked', { owner: value.owner }))}
 
       {onNameChange && (
         <div className="gh-repo-field">
           <label className="gh-repo-label" htmlFor={nameId}>
-            Repository name
+            {t('githubRepo.name')}
           </label>
           <input
             id={nameId}
@@ -418,13 +415,9 @@ export default function GithubRepoFields({
       </span>
       {!nameValid
         ? (name.trim() || onNameChange) &&
-          problem(
-            name.trim()
-              ? 'Use only letters, numbers, hyphens, underscores and periods in the repository name.'
-              : 'Enter a name for the repository.'
-          )
+          problem(name.trim() ? t('githubRepo.invalidName') : t('githubRepo.noName'))
         : checked && !checked.ok
-          ? problem(checked.message ?? 'That name is taken.')
+          ? problem(checked.message ?? t('githubRepo.taken'))
           : checked?.message && <span className="field-hint">{checked.message}</span>}
     </div>
   )

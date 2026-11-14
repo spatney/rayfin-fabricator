@@ -150,7 +150,7 @@ pub(super) struct Outcome {
   pub signals: Vec<Signal>,
   pub facts: Facts,
   /// Areas the files alone show are clear, with why.
-  pub clear: Vec<(&'static str, &'static str)>,
+  pub clear: Vec<(&'static str, String)>,
 }
 
 /* -------------------------------- helpers -------------------------------- */
@@ -269,15 +269,23 @@ fn short(text: &str, max: usize) -> String {
   format!("{cut}…")
 }
 
-/// `a`, `a and b`, `a, b and c`, `a, b, c and 2 more`.
+/// `a`, `a and b`, `a, b and c`, `a, b, c and 2 more`, in the language the core's text is in.
 fn listing(items: &[String]) -> String {
   let named = &items[..items.len().min(MAX_NAMED)];
   let more = items.len() - named.len();
+  let joined = |parts: &[String]| {
+    parts[1..]
+      .iter()
+      .fold(parts[0].clone(), |list, next| t!("assist.security.checks.list.next", items = list, next = next))
+  };
   match (named, more) {
     ([], _) => String::new(),
     ([one], 0) => one.clone(),
-    (_, 0) => format!("{} and {}", named[..named.len() - 1].join(", "), named[named.len() - 1]),
-    (_, n) => format!("{} and {n} more", named.join(", ")),
+    (_, 0) => {
+      let (rest, last) = named.split_at(named.len() - 1);
+      t!("assist.security.checks.list.last", items = joined(rest), last = last[0])
+    }
+    (_, n) => t!("assist.security.checks.list.more", items = joined(named), count = n),
   }
 }
 
@@ -317,8 +325,8 @@ struct Rule {
   area: &'static str,
   severity: &'static str,
   floor: &'static str,
-  title: &'static str,
-  advice: &'static str,
+  title: String,
+  advice: String,
 }
 
 /// One finding for all of a rule's hits: it points at the first, and lists the others' places.
@@ -336,9 +344,9 @@ fn signal(rule: Rule, detail: String, hits: &[Hit]) -> Signal {
       area: rule.area.into(),
       severity: rule.severity.into(),
       source: "fabricator".into(),
-      title: rule.title.into(),
+      title: rule.title,
       detail,
-      advice: rule.advice.into(),
+      advice: rule.advice,
       file: Some(first.file.clone()),
       line: first.line,
       excerpt: first.excerpt.as_ref().map(|(text, _)| text.clone()),
@@ -841,7 +849,6 @@ fn install_scripts(manifests: &[Manifest<'_>], files: &[PackageFile], facts: &mu
   let mut hits = Vec::new();
   for m in manifests {
     let dir = folder_of(&m.file.path);
-    let where_ = if dir.is_empty() { String::new() } else { format!(" in {}", code(dir)) };
     let scripts = m.json.get("scripts").and_then(Value::as_object);
     let mut builds_itself = false;
     for name in LIFECYCLE {
@@ -850,7 +857,16 @@ fn install_scripts(manifests: &[Manifest<'_>], files: &[PackageFile], facts: &mu
       };
       builds_itself |= matches!(name, "install" | "preinstall");
       let line = line_of_key(&m.text, "scripts", name);
-      let what = format!("{}{where_}: {}", code(name), code(command));
+      let what = if dir.is_empty() {
+        t!("assist.security.checks.installScripts.script", script = code(name), command = code(command))
+      } else {
+        t!(
+          "assist.security.checks.installScripts.scriptIn",
+          script = code(name),
+          folder = code(dir),
+          command = code(command)
+        )
+      };
       hits.push(Hit::new(&m.file.path, Some(m.text.as_str()), line, what));
       facts.install_scripts.push(format!("{}: {name} → {}", m.file.path, short(command, 300)));
     }
@@ -859,21 +875,25 @@ fn install_scripts(manifests: &[Manifest<'_>], files: &[PackageFile], facts: &mu
     let gyp_file =
       m.json.get("gypfile") == Some(&Value::Bool(true)) || files.iter().any(|f| f.path.eq_ignore_ascii_case(&gyp));
     if gyp_file && !builds_itself {
-      let what = format!("{}{where_}, to build native code", code("node-gyp rebuild"));
+      let build = code("node-gyp rebuild");
+      let what = if dir.is_empty() {
+        t!("assist.security.checks.installScripts.nativeBuild", command = build)
+      } else {
+        t!("assist.security.checks.installScripts.nativeBuildIn", command = build, folder = code(dir))
+      };
       hits.push(Hit::new(&m.file.path, None, None, what));
       facts.install_scripts.push(format!("{}: install → node-gyp rebuild (implicit, for {gyp})", m.file.path));
     }
   }
   (!hits.is_empty()).then(|| {
-    let detail =
-      format!("npm runs {} when Fabricator installs its packages, before the app opens.", listing(&whats(&hits)));
+    let detail = t!("assist.security.checks.installScripts.detail", list = listing(&whats(&hits)));
     let rule = Rule {
       id: "install-scripts",
       area: "install",
       severity: "medium",
       floor: "low",
-      title: "Runs commands when its packages install",
-      advice: "Read what these commands do before you go ahead. Rayfin apps don’t need commands of their own to install.",
+      title: t!("assist.security.checks.installScripts.title"),
+      advice: t!("assist.security.advice.installScripts"),
     };
     signal(rule, detail, &hits)
   })
@@ -894,11 +914,11 @@ fn package_sources(manifests: &[Manifest<'_>]) -> Vec<Signal> {
         let line = line_of_key(&m.text, section, name);
         match source_of(name, spec, dir) {
           Some(Source::Outside) => {
-            let what = format!("{} comes from {}", code(name), code(spec));
+            let what = t!("assist.security.checks.packageSources.what", name = code(name), source = code(spec));
             outside.push(Hit::new(&m.file.path, Some(m.text.as_str()), line, what));
           }
           Some(Source::Alias(target)) => {
-            let what = format!("{} is really {}", code(name), code(&target));
+            let what = t!("assist.security.checks.packageAliases.what", name = code(name), target = code(&target));
             aliases.push(Hit::new(&m.file.path, Some(m.text.as_str()), line, what));
           }
           None => {}
@@ -908,29 +928,26 @@ fn package_sources(manifests: &[Manifest<'_>]) -> Vec<Signal> {
   }
   let mut signals = Vec::new();
   if !outside.is_empty() {
-    let detail = format!(
-      "{}. npm doesn’t check code that comes from git, a website or a folder, and it can change at any time.",
-      listing(&whats(&outside))
-    );
+    let detail = t!("assist.security.checks.packageSources.detail", list = listing(&whats(&outside)));
     let rule = Rule {
       id: "package-sources",
       area: "packages",
       severity: "medium",
       floor: "low",
-      title: "Gets packages from outside npm",
-      advice: "Make sure you know who publishes these packages, and why they don’t come from npm.",
+      title: t!("assist.security.checks.packageSources.title"),
+      advice: t!("assist.security.advice.packageSources"),
     };
     signals.push(signal(rule, detail, &outside));
   }
   if !aliases.is_empty() {
-    let detail = format!("{}: npm installs one package under another’s name.", listing(&whats(&aliases)));
+    let detail = t!("assist.security.checks.packageAliases.detail", list = listing(&whats(&aliases)));
     let rule = Rule {
       id: "package-aliases",
       area: "packages",
       severity: "low",
       floor: "low",
-      title: "Installs packages under other names",
-      advice: "Check that each one is the package it stands in for.",
+      title: t!("assist.security.checks.packageAliases.title"),
+      advice: t!("assist.security.advice.packageAliases"),
     };
     signals.push(signal(rule, detail, &aliases));
   }
@@ -964,7 +981,7 @@ fn package_hosts(locks: &[Manifest<'_>], npmrcs: &[(&PackageFile, String)]) -> O
         continue;
       };
       if !registries.contains(&host) {
-        let what = format!("{} points npm at {}", code(&file.path), code(&host));
+        let what = t!("assist.security.checks.packageHosts.registry", file = code(&file.path), host = code(&host));
         hits.push(Hit::new(&file.path, Some(text.as_str()), Some(line), what));
         registries.push(host);
       }
@@ -981,8 +998,8 @@ fn package_hosts(locks: &[Manifest<'_>], npmrcs: &[(&PackageFile, String)]) -> O
       }
     }
     for (host, count) in hosts {
-      let packages = if count == 1 { "package" } else { "packages" };
-      let what = format!("{} gets {count} {packages} from {}", code(&file.path), code(&host));
+      let what =
+        t!("assist.security.checks.packageHosts.lockfile", file = code(&file.path), count = count, host = code(&host));
       hits.push(Hit::new(&file.path, Some(text.as_str()), line_of(&text, &host), what));
     }
   }
@@ -992,10 +1009,10 @@ fn package_hosts(locks: &[Manifest<'_>], npmrcs: &[(&PackageFile, String)]) -> O
       area: "packages",
       severity: "medium",
       floor: "low",
-      title: "Downloads packages from other servers",
-      advice: "A company’s own package registry is fine. Otherwise, find out why it doesn’t use npm’s.",
+      title: t!("assist.security.checks.packageHosts.title"),
+      advice: t!("assist.security.advice.packageHosts"),
     };
-    signal(rule, format!("{}, not npm’s registry.", listing(&whats(&hits))), &hits)
+    signal(rule, t!("assist.security.checks.packageHosts.detail", list = listing(&whats(&hits))), &hits)
   })
 }
 
@@ -1004,7 +1021,12 @@ fn npm_settings(npmrcs: &[(&PackageFile, String)]) -> Option<Signal> {
   for (file, text) in npmrcs {
     for (line, keys, value) in npmrc_entries(text) {
       if let Some(key) = keys.iter().find(|key| NPM_PROGRAM_KEYS.contains(&key.as_str())) {
-        let what = format!("{} sets {} to {}", code(&file.path), code(key), code(&evidence::mask_secrets(&value)));
+        let what = t!(
+          "assist.security.checks.npmSettings.what",
+          file = code(&file.path),
+          key = code(key),
+          value = code(&evidence::mask_secrets(&value))
+        );
         hits.push(Hit::new(&file.path, Some(text.as_str()), Some(line), what));
       }
     }
@@ -1015,10 +1037,10 @@ fn npm_settings(npmrcs: &[(&PackageFile, String)]) -> Option<Signal> {
       area: "system",
       severity: "high",
       floor: "medium",
-      title: "Changes the programs npm runs",
-      advice: "Don’t go ahead unless you know why it does this. Projects don’t need these settings.",
+      title: t!("assist.security.checks.npmSettings.title"),
+      advice: t!("assist.security.advice.npmSettings"),
     };
-    let detail = format!("{}. npm would use them while it installs packages and runs scripts.", listing(&whats(&hits)));
+    let detail = t!("assist.security.checks.npmSettings.detail", list = listing(&whats(&hits)));
     signal(rule, detail, &hits)
   })
 }
@@ -1052,14 +1074,15 @@ fn git_settings(root: &Path, files: &[PackageFile], kind: Kind, more: &[String])
       area: "system",
       severity: if always { "high" } else { "medium" },
       floor: "medium",
-      title: "Has git settings that run programs",
-      advice: "Don’t go ahead unless you know why they’re there. A project shared with you doesn’t need them.",
+      title: t!("assist.security.checks.gitSettings.title"),
+      advice: t!("assist.security.advice.gitSettings"),
     };
-    let when = match kind {
-      Kind::Project => "Git runs them when it works in the folder, which Fabricator does each time it saves a version.",
-      Kind::App => "Git runs them when it works in the folder.",
+    let list = listing(&whats(&hits));
+    let detail = match kind {
+      Kind::Project => t!("assist.security.checks.gitSettings.detailProject", list = list),
+      Kind::App => t!("assist.security.checks.gitSettings.detailApp", list = list),
     };
-    signal(rule, format!("Its git settings set {}. {when}", listing(&whats(&hits))), &hits)
+    signal(rule, detail, &hits)
   })
 }
 
@@ -1078,14 +1101,11 @@ fn unreadable_settings(root: &Path, files: &[PackageFile], more: &[String]) -> O
       area: "system",
       severity: "high",
       floor: "high",
-      title: "Has settings Fabricator can’t read",
-      advice: "Don’t go ahead unless you can see what they set: npm or git may still run programs they name.",
+      title: t!("assist.security.checks.unreadableSettings.title"),
+      advice: t!("assist.security.advice.unreadableSettings"),
     };
-    let (it, is) = if hits.len() == 1 { ("it", "it’s") } else { ("them", "they’re") };
-    let detail = format!(
-      "Fabricator can’t read {}: {is} too large or not plain text, so it can’t tell what npm or git would run from {it}.",
-      listing(&whats(&hits))
-    );
+    let detail =
+      t!("assist.security.checks.unreadableSettings.detail", list = listing(&whats(&hits)), count = hits.len());
     signal(rule, detail, &hits)
   })
 }
@@ -1118,8 +1138,8 @@ fn git_dirs(root: &Path, files: &[PackageFile]) -> (Option<Signal>, Vec<String>)
   let mut gitdirs: Vec<String> = Vec::new();
   let mut point = |file: &PackageFile, text: Option<String>, target: Option<String>, gitdirs: &mut Vec<String>| {
     let what = match &target {
-      Some(target) => format!("{} points git at {}", code(&file.path), code(target)),
-      None => format!("{} points git at another folder", code(&file.path)),
+      Some(target) => t!("assist.security.checks.gitDir.pointsAt", file = code(&file.path), folder = code(target)),
+      None => t!("assist.security.checks.gitDir.pointsElsewhere", file = code(&file.path)),
     };
     pointers.push(Hit::new(&file.path, text.as_deref(), Some(1), what));
     let Some(dir) = target.and_then(|target| join_rel(folder_of(&file.path), &target)) else {
@@ -1161,20 +1181,19 @@ fn git_dirs(root: &Path, files: &[PackageFile]) -> (Option<Signal>, Vec<String>)
   if pointers.is_empty() {
     return (None, configs);
   }
-  let mut detail = format!(
-    "{}. Git takes its settings and hooks from there, and they can run programs whenever git works in the folder.",
-    listing(&whats(&pointers))
-  );
-  if !hooks.is_empty() {
-    detail.push_str(&format!(" Its hooks there are {}.", listing(&whats(&hooks))));
-  }
+  let pointed = t!("assist.security.checks.gitDir.detail", list = listing(&whats(&pointers)));
+  let detail = if hooks.is_empty() {
+    pointed
+  } else {
+    t!("assist.security.checks.gitDir.hooks", detail = pointed, hooks = listing(&whats(&hooks)), count = hooks.len())
+  };
   let rule = Rule {
     id: "git-dir",
     area: "system",
     severity: "high",
     floor: "medium",
-    title: "Points git at another folder",
-    advice: "Don’t go ahead unless you know why it’s there. A project shared with you doesn’t need it.",
+    title: t!("assist.security.checks.gitDir.title"),
+    advice: t!("assist.security.advice.gitDir"),
   };
   pointers.extend(hooks);
   (Some(signal(rule, detail, &pointers)), configs)
@@ -1184,20 +1203,16 @@ fn git_dirs(root: &Path, files: &[PackageFile]) -> (Option<Signal>, Vec<String>)
 fn unreadable_manifests(unreadable: &[&PackageFile]) -> Option<Signal> {
   let hits: Vec<Hit> = unreadable.iter().map(|f| Hit::new(&f.path, None, None, code(&f.path))).collect();
   (!hits.is_empty()).then(|| {
-    let one = hits.len() == 1;
     let rule = Rule {
       id: "unreadable-manifest",
       area: "install",
       severity: "medium",
       floor: "medium",
-      title: if one { "Has an npm file Fabricator can’t read" } else { "Has npm files Fabricator can’t read" },
-      advice: "Don’t go ahead unless you can see what’s in them: npm may still run scripts or download packages from them.",
+      title: t!("assist.security.checks.unreadableManifest.title", count = hits.len()),
+      advice: t!("assist.security.advice.unreadableManifest"),
     };
-    let (it, is) = if one { ("it", "it’s") } else { ("them", "they’re") };
-    let detail = format!(
-      "Fabricator can’t read {}: {is} too large or not plain JSON, so it can’t tell what npm would run or download from {it}.",
-      listing(&whats(&hits))
-    );
+    let detail =
+      t!("assist.security.checks.unreadableManifest.detail", list = listing(&whats(&hits)), count = hits.len());
     signal(rule, detail, &hits)
   })
 }
@@ -1218,13 +1233,10 @@ fn git_hooks(root: &Path, files: &[PackageFile]) -> Option<Signal> {
       area: "system",
       severity: "medium",
       floor: "low",
-      title: "Sets up git hooks",
-      advice: "Read what the hooks run before you go ahead.",
+      title: t!("assist.security.checks.gitHooks.title"),
+      advice: t!("assist.security.advice.gitHooks"),
     };
-    let detail = format!(
-      "Once its packages are installed, git runs {} each time a version is saved, and Fabricator saves one after each chat turn.",
-      listing(&whats(&hits))
-    );
+    let detail = t!("assist.security.checks.gitHooks.detail", list = listing(&whats(&hits)));
     signal(rule, detail, &hits)
   })
 }
@@ -1240,10 +1252,10 @@ fn editor_tasks(root: &Path, files: &[PackageFile]) -> Option<Signal> {
     area: "system",
     severity: "low",
     floor: "low",
-    title: "Runs a task when the folder opens in VS Code",
-    advice: "Check what the task runs before you open the project in VS Code.",
+    title: t!("assist.security.checks.editorTasks.title"),
+    advice: t!("assist.security.advice.editorTasks"),
   };
-  let detail = format!("{} starts a task as soon as the folder opens in VS Code, once you allow it.", hit.what);
+  let detail = t!("assist.security.checks.editorTasks.detail", file = hit.what);
   Some(signal(rule, detail, &[hit]))
 }
 
@@ -1268,10 +1280,11 @@ fn mcp_servers(root: &Path, files: &[PackageFile], facts: &mut Facts) -> Option<
       area: "agents",
       severity: "low",
       floor: "low",
-      title: "Adds MCP servers for coding agents",
-      advice: "Check what these programs are before you let a coding agent start them.",
+      title: t!("assist.security.checks.mcpServers.title"),
+      advice: t!("assist.security.advice.mcpServers"),
     };
-    let detail = format!("{} starts {} for coding agents that use it.", code(&hits[0].file), listing(&whats(&hits)));
+    let detail =
+      t!("assist.security.checks.mcpServers.detail", file = code(&hits[0].file), list = listing(&whats(&hits)));
     signal(rule, detail, &hits)
   })
 }
@@ -1288,13 +1301,10 @@ fn programs(files: &[PackageFile]) -> Option<Signal> {
       area: "system",
       severity: "medium",
       floor: "low",
-      title: "Includes programs",
-      advice: "Find out what they’re for before you go ahead.",
+      title: t!("assist.security.checks.programs.title"),
+      advice: t!("assist.security.advice.programs"),
     };
-    let detail = format!(
-      "It holds {}. Rayfin apps don’t need programs of their own, and Copilot can’t read them.",
-      listing(&whats(&hits))
-    );
+    let detail = t!("assist.security.checks.programs.detail", list = listing(&whats(&hits)));
     signal(rule, detail, &hits)
   })
 }
@@ -1304,7 +1314,7 @@ fn aimed_at_ai(files: &[PackageFile], texts: &[(&PackageFile, String)]) -> Optio
   let named = files.iter().filter_map(|file| {
     let words = file.path.replace(['/', '\\', '-', '_', '.'], " ");
     let found = AIMED_AT_AI.find(&words)?;
-    let what = format!("{} is named “{}”", code(&file.path), short(found.as_str(), 60));
+    let what = t!("assist.security.checks.aimedAtAi.named", file = code(&file.path), name = short(found.as_str(), 60));
     Some(Hit::new(&file.path, None, None, what))
   });
   let said = texts.iter().filter_map(|(file, text)| {
@@ -1313,7 +1323,7 @@ fn aimed_at_ai(files: &[PackageFile], texts: &[(&PackageFile, String)]) -> Optio
     let start = text[..found.start()].rfind('\n').map_or(0, |at| at + 1);
     let end = text[found.end()..].find('\n').map_or(text.len(), |at| found.end() + at);
     let line = text[start..end].trim().trim_start_matches(['#', '/', '*', '<', '!', '-', ' ']).trim();
-    let what = format!("{} says “{}”", code(&file.path), short(line, 90));
+    let what = t!("assist.security.checks.aimedAtAi.says", file = code(&file.path), text = short(line, 90));
     Some(Hit::new(&file.path, Some(text.as_str()), Some(line_at(text, found.start())), what))
   });
   let hits: Vec<Hit> = said.chain(named).collect();
@@ -1323,11 +1333,10 @@ fn aimed_at_ai(files: &[PackageFile], texts: &[(&PackageFile, String)]) -> Optio
       area: "hidden",
       severity: "medium",
       floor: "medium",
-      title: "Has text aimed at AI tools",
-      advice: "Don’t rely on an AI’s review of this package, this one included. Read the code yourself or ask who sent it.",
+      title: t!("assist.security.checks.aimedAtAi.title"),
+      advice: t!("assist.security.advice.aimedAtAi"),
     };
-    let detail =
-      format!("{}. Text that tries to steer AI reviewers or coding agents is a warning sign.", listing(&whats(&hits)));
+    let detail = t!("assist.security.checks.aimedAtAi.detail", list = listing(&whats(&hits)));
     signal(rule, detail, &hits)
   })
 }
@@ -1343,16 +1352,18 @@ fn hidden_code(texts: &[(&PackageFile, String)], facts: &mut Facts) -> Option<Si
       facts.minified.push(file.path.clone());
     }
     let found = if OBFUSCATOR_NAME.find_iter(text).count() >= 20 {
-      OBFUSCATOR_NAME.find(text).map(|m| (m.start(), "names like `_0x1a2b`, an obfuscator’s"))
+      OBFUSCATOR_NAME
+        .find(text)
+        .map(|m| (m.start(), t!("assist.security.checks.hiddenCode.how.obfuscatorNames", example = code("_0x1a2b"))))
     } else {
       DECODE_AND_RUN
         .find(text)
-        .map(|m| (m.start(), "runs code it decodes"))
-        .or_else(|| CHAR_CODES.find(text).map(|m| (m.start(), "builds code from character codes")))
-        .or_else(|| HEX_RUN.find(text).map(|m| (m.start(), "long runs of escaped bytes")))
+        .map(|m| (m.start(), t!("assist.security.checks.hiddenCode.how.decodesAndRuns")))
+        .or_else(|| CHAR_CODES.find(text).map(|m| (m.start(), t!("assist.security.checks.hiddenCode.how.charCodes"))))
+        .or_else(|| HEX_RUN.find(text).map(|m| (m.start(), t!("assist.security.checks.hiddenCode.how.escapedBytes"))))
     };
     if let Some((at, how)) = found {
-      let what = format!("{} ({how})", code(&file.path));
+      let what = t!("assist.security.checks.hiddenCode.what", file = code(&file.path), how = how);
       hits.push(Hit::new(&file.path, Some(text.as_str()), Some(line_at(text, at)), what));
     }
   }
@@ -1362,10 +1373,10 @@ fn hidden_code(texts: &[(&PackageFile, String)], facts: &mut Facts) -> Option<Si
       area: "hidden",
       severity: "medium",
       floor: "low",
-      title: "Has hidden or encoded code",
-      advice: "An app’s own code has no reason to hide what it does. Ask who sent it what this is.",
+      title: t!("assist.security.checks.hiddenCode.title"),
+      advice: t!("assist.security.advice.hiddenCode"),
     };
-    signal(rule, format!("{}: code written so people can’t read it.", listing(&whats(&hits))), &hits)
+    signal(rule, t!("assist.security.checks.hiddenCode.detail", list = listing(&whats(&hits))), &hits)
   })
 }
 
@@ -1459,10 +1470,10 @@ pub(super) fn run(root: &Path, files: &[PackageFile], kind: Kind) -> Outcome {
 
   let mut clear = Vec::new();
   if !installs {
-    clear.push(("install", "No install scripts."));
+    clear.push(("install", t!("assist.security.clear.install")));
   }
   if kind == Kind::Project && facts.agent_files.is_empty() {
-    clear.push(("agents", "No instructions or tools for coding agents."));
+    clear.push(("agents", t!("assist.security.clear.agents")));
   }
   Outcome { signals, facts, clear }
 }
@@ -1530,7 +1541,8 @@ mod tests {
       );
     let outcome = pkg.run(Kind::Project);
     assert!(outcome.signals.is_empty(), "{:?}", outcome.signals);
-    assert_eq!(outcome.clear, [("install", "No install scripts."), ("agents", "No instructions or tools for coding agents.")]);
+    let clear: Vec<(&str, &str)> = outcome.clear.iter().map(|(area, note)| (*area, note.as_str())).collect();
+    assert_eq!(clear, [("install", "No install scripts."), ("agents", "No instructions or tools for coding agents.")]);
     assert_eq!(outcome.facts.configs, ["rayfin/rayfin.yml", "vite.config.ts"]);
     assert_eq!(outcome.facts.manifests, ["package.json"]);
     assert_eq!((outcome.facts.files, outcome.facts.readable), (5, 5), "git's settings aren't one of the app's files");

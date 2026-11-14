@@ -1,0 +1,544 @@
+{
+  "export": {
+    "importTitle": "Projekt importieren",
+    "exportTitle": "Projekt exportieren",
+    "projectFile": "Fabricator-Projekt",
+    "appFile": "Rayfin-App",
+    "zipArchive": "ZIP-Archiv",
+    "cantRead": "Die Datei konnte nicht gelesen werden: {{error}}",
+    "teamApp": "Eine Team-App wird über ihren Team-Arbeitsbereich geteilt. Lade stattdessen Personen in den Arbeitsbereich ein.",
+    "missing": "Fabricator findet den Ordner dieses Projekts nicht.",
+    "unreadable": "Fabricator kann diese Datei nicht lesen. Importiere eine .fabricator-Datei, die jemand exportiert hat, oder eine .zip-Datei eines Rayfin-Projekts.",
+    "notAnApp": "Diese Datei enthält kein Rayfin-Projekt: Es gibt darin keine rayfin/rayfin.yml.",
+    "manyApps": "Diese Datei enthält mehr als ein Rayfin-Projekt. Entpacke sie und öffne dann das gewünschte Projekt mit „Ordner öffnen“.",
+    "tooBig": "Entpackt ist diese Datei größer als 16 GB, deshalb hat Fabricator sie nicht importiert.",
+    "tooMany": "Diese Datei enthält mehr als 500.000 Dateien, deshalb hat Fabricator sie nicht importiert.",
+    "badIcon": "Fabricator konnte das Symbol der App nicht erstellen. Versuche, sie erneut zu exportieren.",
+    "cantSave": "{{path}} konnte nicht gespeichert werden: {{error}}",
+    "cantAdd": "{{name}} konnte nicht hinzugefügt werden: {{error}}",
+    "cantFinish": "Die Datei konnte nicht fertiggestellt werden: {{error}}",
+    "noFreeFolder": "Dein Projektordner enthält bereits Ordner mit den Namen {{slug}} bis {{slug}}-99.",
+    "cantOpen": "{{path}} konnte nicht geöffnet werden: {{error}}",
+    "cantCreateRoot": "Dein Projektordner {{path}} konnte nicht erstellt werden: {{error}}",
+    "cantCreate": "{{path}} konnte nicht erstellt werden: {{error}}",
+    "cantUnpack": "{{path}} konnte nicht entpackt werden: {{error}}",
+    "notAnAppFile": "Diese Datei ist keine App, die Fabricator installieren kann. Bitte darum, das Projekt erneut als App zu exportieren.",
+    "damagedAppFile": "Diese App-Datei ist beschädigt. Bitte darum, sie erneut zu exportieren.",
+    "cantInspect": "Das Projekt konnte nicht untersucht werden: {{error}}",
+    "cantExportApp": "Die App konnte nicht exportiert werden: {{error}}",
+    "cantExport": "Das Projekt konnte nicht exportiert werden: {{error}}",
+    "fileGone": "Diese Datei ist nicht mehr vorhanden."
+  },
+  "accounts": {
+    "fabricBusy": "Es läuft bereits eine Anmeldung, Abmeldung oder ein Kontowechsel bei Fabric.",
+    "azureBusy": "Es läuft bereits eine Anmeldung, Abmeldung oder ein Kontowechsel bei Azure.",
+    "azureMissing": "Die Azure CLI ist nicht installiert, daher kann Fabricator dich nicht bei Azure anmelden. Installiere sie über die Einrichtung (öffne die Einstellungen und wähle „Einrichtung öffnen“) und versuche es dann erneut.",
+    "badTenant": "Gib die Organisation als Mandanten-ID oder als Domäne ein, z. B. contoso.onmicrosoft.com.",
+    "alreadySignedIn": "Dieses Konto war hier bereits angemeldet, daher verwendet Fabricator es.",
+    "fabricAccountGone": "Dieses Fabric-Konto ist nicht mehr auf diesem Computer. Prüfe deine Konten erneut.",
+    "signOutAgain": "Versuche erneut, dich abzumelden.",
+    "recheckOrSignInAzure": "Prüfe es erneut oder melde dich erneut bei Azure an.",
+    "unreadableList": "Die Azure CLI hat eine Kontoliste zurückgegeben, die Fabricator nicht lesen konnte. Prüfe deine Konten erneut.",
+    "badSubscription": "Das ist keine Azure-Abonnement- oder Mandanten-ID.",
+    "recheckAndRetry": "Prüfe deine Konten erneut und versuche es noch einmal.",
+    "sharedSubscription": "Die Azure CLI konnte nicht zu {{user}} wechseln, weil ein anderes Konto dasselbe Abonnement verwendet. Füge {{user}} erneut hinzu, um es zu verwenden.",
+    "startingAzureSignIn": "Anmeldung bei Azure wird gestartet…",
+    "finishBrowserSignIn": "Schließe die Anmeldung im Browser ab und versuche es erneut.",
+    "signingOutAzure": "Abmeldung von Azure...",
+    "nowUses": "Die Azure CLI verwendet jetzt {{user}}.",
+    "signedOutAzure": "Von Azure abgemeldet.",
+    "recheckStatusOrSignOut": "Prüfe deinen Kontostatus erneut oder versuche noch einmal, dich abzumelden.",
+    "invalidListAfterSignOut": "Azure hat nach der Abmeldung eine ungültige Kontoliste zurückgegeben. Prüfe deinen Kontostatus erneut.",
+    "stillSignedIn": "{{user}} ist in der Azure CLI noch angemeldet. Versuche erneut, dich abzumelden.",
+    "stillSignedInAny": "In der Azure CLI sind noch Konten angemeldet. Versuche erneut, dich abzumelden.",
+    "actions": {
+      "fabricSignOut": "Abmeldung von Fabric",
+      "listAzure": "Abrufen deiner Azure-Konten",
+      "switchAzure": "Wechsel des Azure-Kontos",
+      "azureSignIn": "Anmeldung bei Azure",
+      "azureSignOut": "Abmeldung von Azure",
+      "azureSignOutCheck": "Überprüfung der Abmeldung von Azure"
+    }
+  },
+  "auth": {
+    "unconfirmed": "Deine Anmeldung bei Fabric konnte gerade nicht bestätigt werden. {{reason}}",
+    "unrecognizedStatus": "Die Rayfin CLI hat einen unbekannten Anmeldestatus zurückgegeben. {{hint}}",
+    "unknownProvider": "Unbekannter Anmeldeanbieter: {{provider}}.",
+    "copilotBusy": "Es läuft bereits eine Anmeldung oder Abmeldung bei Copilot.",
+    "copilotTasksSignIn": "Warte, bis die aktiven Copilot-Aufgaben abgeschlossen sind, oder beende sie, und melde dich dann erneut an.",
+    "copilotTasksSignOut": "Warte, bis die aktiven Copilot-Aufgaben abgeschlossen sind, oder beende sie, und melde dich dann erneut ab.",
+    "startingCopilot": "Anmeldung bei GitHub Copilot unter {{host}} wird gestartet...",
+    "bundledCliUnavailableHere": "Die mitgelieferte Copilot CLI ist auf dieser Plattform nicht verfügbar.",
+    "bundledCliUnavailable": "Die mitgelieferte Copilot CLI ist nicht verfügbar. Starte Fabricator neu oder installiere es neu, und versuche es dann erneut.",
+    "verifyingCopilot": "Zugriff in der Copilot-Chat-Engine wird überprüft...",
+    "invalidHost": "Gib github.com oder einen GitHub Enterprise Cloud-Hostnamen wie company.ghe.com ein (optional mit https://). Gib keinen Pfad, keine Anmeldeinformationen und keinen Nicht-HTTPS-Port an.",
+    "wrongHost": "Die Anmeldung bei Copilot wurde abgeschlossen, aber die Chat-Engine verwendet nicht {{host}}. Prüfe, ob COPILOT_GITHUB_TOKEN, GH_TOKEN oder GITHUB_TOKEN überschrieben werden, entferne ungewollte Überschreibungen und melde dich erneut an.",
+    "signingOutCopilot": "Abmeldung von GitHub Copilot...",
+    "signedOutCopilot": "Von GitHub Copilot abgemeldet.",
+    "unverified": "Die Anmeldung bei {{provider}} wurde abgeschlossen, aber die Authentifizierung konnte nicht überprüft werden. Prüfe deine Verbindung und versuche erneut, dich anzumelden.",
+    "cliFailed": "{{action}} fehlgeschlagen. {{reason}} {{hint}}",
+    "cliNotFound": "Die erforderliche CLI wurde nicht gefunden.",
+    "cliExited": "Die CLI wurde mit Code {{code}} beendet.",
+    "cliTimedOut": "Bei der CLI ist ein Timeout aufgetreten, oder sie konnte nicht gestartet werden.",
+    "incompleteProfile": "Azure hat ein unvollständiges Kontoprofil zurückgegeben. Prüfe es erneut oder melde dich erneut bei Azure an.",
+    "rayfinNotFound": "Die Rayfin CLI wurde nicht gefunden. Öffne das Projekt, damit seine Abhängigkeiten installiert werden (oder installiere Node.js und die Rayfin CLI), und versuche dann erneut, dich anzumelden.",
+    "loginExited": "Die Anmeldung wurde mit Code {{code}} beendet, ohne ein Anmeldefenster zu öffnen oder einen Grund zu melden. Versuche es erneut. Wenn das weiterhin passiert, führe `npx rayfin login` im Projektordner aus, um den vollständigen Fehler zu sehen.",
+    "loginEnded": "Die Anmeldung wurde beendet, ohne ein Anmeldefenster zu öffnen oder einen Grund zu melden (möglicherweise ist ein Timeout aufgetreten oder sie wurde blockiert). Versuche es erneut. Wenn das weiterhin passiert, führe `npx rayfin login` im Projektordner aus, um den vollständigen Fehler zu sehen.",
+    "fabricBusy": "Es läuft bereits eine Anmeldung, Abmeldung oder Aktualisierung der Anmeldeinformationen bei Fabric.",
+    "startingFabric": "Anmeldung bei Fabric / Rayfin wird gestartet…",
+    "verifyingFabric": "Die aktualisierten Anmeldeinformationen werden bei Fabric überprüft...",
+    "signedInUnverified": "Angemeldet. {{reason}}",
+    "fabricVerified": "Fabric-Authentifizierung überprüft.",
+    "waitingForOperations": "Warten, bis laufende Fabric-Vorgänge abgeschlossen sind, bevor die Anmeldeinformationen aktualisiert werden...",
+    "clearingCredentials": "Die gemeinsamen Fabric-/Rayfin-Anmeldeinformationen werden mit rayfin logout gelöscht...",
+    "actions": {
+      "fabricCheck": "Prüfung der Fabric-Authentifizierung",
+      "azureCheck": "Prüfung der Azure-Authentifizierung",
+      "copilotSignIn": "Anmeldung bei GitHub Copilot",
+      "azureAccountCheck": "Prüfung des Azure-Kontos",
+      "fabricReset": "Zurücksetzen der Fabric-Anmeldeinformationen"
+    },
+    "hints": {
+      "recheckSoon": "Prüfe deine Konten gleich noch einmal.",
+      "recheckOrSignInFabric": "Prüfe es erneut oder melde dich erneut bei Fabric an.",
+      "openProjectAndSignIn": "Öffne ein Rayfin-Projekt und melde dich erneut bei Fabric an.",
+      "checkConnectionAzure": "Prüfe deine Verbindung und melde dich erneut bei Azure an.",
+      "copilotSignInAgain": "Versuche erneut, dich anzumelden, und folge den oben angezeigten Anweisungen für den Browser oder den Gerätecode.",
+      "signInAzureAgain": "Melde dich erneut bei Azure an.",
+      "updateRayfin": "Es wurde nichts wiederholt. Aktualisiere die Rayfin CLI und das SDK dieses Projekts auf Version 1.35.1 oder neuer, und versuche dann erneut, die Anmeldeinformationen zu aktualisieren."
+    }
+  },
+  "chat": {
+    "copilotError": "Copilot hat einen Fehler gemeldet.",
+    "taskFailed": "Die Chataufgabe ist fehlgeschlagen: {{error}}",
+    "busy": "Für dieses Projekt wird bereits eine Nachricht verarbeitet.",
+    "turnRunning": "Copilot antwortet bereits.",
+    "sessionGone": "Die gespeicherte Copilot-Sitzung ist nicht mehr verfügbar. Es wurde eine neue Sitzung gestartet; dein Fabricator-Chatverlauf ist weiterhin vorhanden.",
+    "sessionUnavailable": "Die gespeicherte Sitzung von Copilot ist nicht verfügbar. Es wurde eine neue Sitzung gestartet; dein Fabricator-Chatverlauf ist weiterhin vorhanden.",
+    "reconnecting": "Verbindung zur Copilot-Sitzung wird wiederhergestellt...",
+    "continuing": "Das Modell hat vor dem Abschluss angehalten. Es wird gebeten, fortzufahren…",
+    "retrying": "Copilot hatte einen Aussetzer – neuer Versuch ({{attempt}}/{{max}})…",
+    "timedOut": "Bei Copilot ist nach zwei Stunden eine Zeitüberschreitung aufgetreten.",
+    "endedUnexpectedly": "Copilot wurde unerwartet beendet.",
+    "turnFailed": "Die Antwort ist fehlgeschlagen.",
+    "cantInterject": "Einwurf nicht möglich: {{error}}",
+    "noPendingPlan": "Es gibt keinen ausstehenden Plan, der beantwortet werden kann.",
+    "planNotThisProject": "Diese Plananfrage gehört nicht zu diesem Projekt.",
+    "noSession": "Für dieses Projekt gibt es keine aktive Copilot-Sitzung.",
+    "cantUpdatePlan": "Der Plan konnte nicht aktualisiert werden: {{error}}",
+    "answerRequired": "Eine Antwort ist erforderlich.",
+    "noPendingQuestion": "Es gibt keine ausstehende Frage, die beantwortet werden kann.",
+    "noFreeform": "Diese Frage akzeptiert keine freie Antwort.",
+    "cantSavePlan": "Der Plan konnte nicht gespeichert werden: {{error}}",
+    "pickPathsTitle": "Dateien oder Ordner auswählen, die Copilot lesen soll",
+    "unknownPlugin": "Fabricator hat das Plug-In {{plugin}} nicht.",
+    "serverGone": "Dieser MCP-Server ist nicht mehr in Fabricator."
+  },
+  "chatTools": {
+    "localCall": {
+      "function": "die Funktion {{name}}",
+      "aFunction": "eine Funktion",
+      "connector": "der Connector {{name}}",
+      "connectorApi": "die Daten-API des Connectors {{name}}",
+      "aConnector": "ein Connector",
+      "appApi": "die Daten-API der App",
+      "asYou": "in deinem Namen",
+      "signedOut": "ohne Anmeldung",
+      "asUser": "als {{user}}",
+      "title": "{{what}} {{who}}"
+    }
+  },
+  "commitMessage": {
+    "nothingToCommit": "Es gibt nichts zu committen.",
+    "noMessage": "Copilot hat keine Nachricht geschrieben. Versuche es noch einmal.",
+    "cantWrite": "Die Nachricht konnte nicht geschrieben werden: {{error}}"
+  },
+  "customSkills": {
+    "noFrontmatter": "Ein Skill muss mit einem YAML-Frontmatter-Block (--- … ---) beginnen.",
+    "badFrontmatter": "Ungültiges Skill-Frontmatter: {{error}}",
+    "needsName": "Das Frontmatter des Skills braucht ein nicht leeres Feld `name`.",
+    "needsDescription": "Das Frontmatter des Skills braucht ein nicht leeres Feld `description`.",
+    "fileError": "Dateifehler: {{error}}",
+    "fallbackDescription": "Ein benutzerdefinierter Skill.",
+    "needsTitle": "Gib dem Skill einen Titel.",
+    "noIdFromTitle": "Aus diesem Titel ließ sich keine ID bilden – verwende Buchstaben oder Zahlen.",
+    "reservedTitle": "„{{id}}“ ist die ID eines integrierten Skills – wähle einen anderen Titel.",
+    "existsInApp": "In dieser App gibt es bereits einen Skill „{{id}}“.",
+    "inLibrary": "Ein benutzerdefinierter Skill „{{id}}“ ist bereits in deiner Bibliothek.",
+    "gone": "Dieser benutzerdefinierte Skill existiert nicht mehr.",
+    "noIdFromName": "Aus dem Namen des Skills ließ sich keine ID ableiten – er braucht Buchstaben oder Zahlen.",
+    "reservedName": "„{{id}}“ ist die ID eines integrierten Skills – benenne den Skill um, bevor du ihn hinzufügst.",
+    "cantReadZip": "Diese .zip-Datei konnte nicht gelesen werden: {{error}}",
+    "zipNoSkill": "Die .zip-Datei enthält keine SKILL.md.",
+    "folderNoSkill": "Dieser Ordner hat keine SKILL.md auf oberster Ebene.",
+    "unknown": "Unbekannter benutzerdefinierter Skill.",
+    "cantRemove": "Der Skill konnte nicht entfernt werden: {{error}}",
+    "builtInId": "Das ist die ID eines integrierten Skills.",
+    "alreadyInLibrary": "Dieser Skill ist bereits in deiner Bibliothek.",
+    "notInApp": "Dieser Skill ist nicht in dieser App.",
+    "filter": "Skill (SKILL.md oder .zip)",
+    "noSource": "Dieser benutzerdefinierte Skill hat keine SKILL.md."
+  },
+  "deploy": {
+    "unsupported": {
+      "nameRegion": "Fabric-Apps sind in „{{name}}“ nicht verfügbar, einem Arbeitsbereich auf einer Kapazität in {{region}}.",
+      "region": "Fabric-Apps sind in diesem Arbeitsbereich auf einer Kapazität in {{region}} nicht verfügbar.",
+      "name": "Fabric-Apps sind in „{{name}}“ nicht verfügbar.",
+      "none": "Fabric-Apps sind in diesem Arbeitsbereich nicht verfügbar.",
+      "message": "{{headline}} Sie sind noch nicht in jeder Region verfügbar. Veröffentliche daher in einem Arbeitsbereich auf einer Kapazität in einer anderen Region. Wenn keiner funktioniert, bitte deinen Fabric-Administrator, Fabric Apps zu aktivieren."
+    },
+    "cantCheckChanges": "Nicht veröffentlichte Änderungen konnten nicht geprüft werden. {{error}}",
+    "gitStatusFailed": "git status ist fehlgeschlagen.",
+    "cantCompare": "Das Projekt konnte nicht mit seiner zuletzt veröffentlichten Version verglichen werden. {{error}}",
+    "gitDiffFailed": "git diff ist fehlgeschlagen.",
+    "taskFailed": "Die Veröffentlichungsaufgabe ist fehlgeschlagen: {{error}}",
+    "settingsPushFailed": "rayfin up konnte die Anmeldeeinstellungen nicht übertragen. Sieh dir das Protokoll oben an.",
+    "cliNotStarted": "Die Rayfin CLI des Projekts konnte nicht gestartet werden.",
+    "exitedWithoutReason": "rayfin up wurde mit Code {{code}} ohne detaillierten Fehlergrund beendet. Sieh dir das Veröffentlichungsprotokoll an. Wenn die Fabric-Anmeldung erfolgreich aussieht, das Veröffentlichen aber weiterhin fehlschlägt, verwende „Fabric-Authentifizierung aktualisieren“ und aktualisiere die Rayfin CLI und das SDK des Projekts auf 1.35.1 oder höher.",
+    "unknownCode": "unbekannt",
+    "authCache": "{{detail}} Verwende „Fabric-Authentifizierung aktualisieren“, um die Anmeldeinformationen der CLI zu löschen und dich erneut anzumelden. Die Rayfin CLI und das SDK dieses Projekts sollten Version 1.35.1 oder höher haben.",
+    "cantStartHistory": "Der Versionsverlauf dieser App konnte nicht gestartet werden, daher kann Fabricator nicht erkennen, was sich geändert hat. {{error}}",
+    "cantReadPublished": "Die veröffentlichten Apps dieses Projekts konnten nicht gelesen werden. {{error}}",
+    "invalidListResponse": "Die veröffentlichten Apps dieses Projekts konnten nicht gelesen werden: ungültige CLI-Antwort. Es wurde nichts gelöscht.",
+    "cliNotOnPath": "Die rayfin CLI wurde im PATH nicht gefunden.",
+    "switchFailed": "rayfin up switch ist fehlgeschlagen.",
+    "cantReadFile": "{{path}} konnte nicht gelesen werden: {{error}}",
+    "noDeployments": "sie enthält keine Bereitstellungen",
+    "cantUpdateFile": "{{path}} konnte nicht aktualisiert werden: {{error}}",
+    "deleteFailed": "Die veröffentlichte App konnte nicht gelöscht werden: {{error}}",
+    "notRecorded": "Diese veröffentlichte App ist in diesem Projekt nicht mehr erfasst.",
+    "fabricDidntDelete": "Fabric hat die App nicht gelöscht.",
+    "stillRecorded": "Fabric hat die App gelöscht, aber dieses Projekt führt sie noch. {{error}}"
+  },
+  "doctor": {
+    "hints": {
+      "node": "Installiere Node.js 22.12 oder höher (enthält npm).",
+      "npm": "npm ist in Node.js enthalten.",
+      "git": "Installiere Git für die Versionskontrolle deiner Apps.",
+      "az": "Optional. Melde dich bei Azure an, um veröffentlichte Apps zu teilen, Fabric-Daten hinzuzufügen und Power BI-Berichte zu migrieren, und damit die Funktionen und Connectors deiner App während der Entwicklung deinen Azure-Zugriff verwenden können.",
+      "gh": "Optionales Durchsuchen von Repositorys mit gh – unabhängig von der mitgelieferten GitHub Copilot-Engine."
+    },
+    "check": {
+      "noVersion": "{{name}} wurde gefunden, aber die Versionsprüfung hat keine erkennbare Version zurückgegeben.",
+      "failed": "{{name}} wurde gefunden, aber die Versionsprüfung ist fehlgeschlagen: {{detail}}.",
+      "exitCode": "{{name}} wurde gefunden, aber die Versionsprüfung ist mit dem Exitcode {{code}} fehlgeschlagen.",
+      "unfinished": "{{name}} wurde gefunden, aber die Versionsprüfung konnte nicht abgeschlossen werden (möglicherweise ist eine Zeitüberschreitung aufgetreten, oder sie konnte nicht gestartet werden).",
+      "fix": "{{problem}} Prüfe erneut, oder führe {{command}} in einem Terminal aus, um die vorhandene Installation zu diagnostizieren."
+    },
+    "install": {
+      "viaWinget": "{{name}} wird über winget installiert (möglicherweise wird eine Berechtigungsabfrage angezeigt)…",
+      "installed": "{{name}} wurde installiert. Starte Fabricator neu, um die Einrichtung abzuschließen.",
+      "wingetFailed": "winget konnte {{name}} nicht installieren (Exit {{code}}). Das offizielle Installationsprogramm wird geöffnet…",
+      "noWinget": "winget ist nicht verfügbar. Das offizielle Installationsprogramm für {{name}} wird geöffnet…",
+      "viaHomebrew": "{{name}} wird über Homebrew installiert…",
+      "brewFailed": "Homebrew konnte {{name}} nicht installieren (Exit {{code}}). Das offizielle Installationsprogramm wird geöffnet…",
+      "noHomebrew": "Homebrew ist nicht verfügbar. Das offizielle Installationsprogramm für {{name}} wird geöffnet…",
+      "cantOpenInstaller": "Das Installationsprogramm für {{name}} konnte nicht geöffnet werden: {{error}}",
+      "opened": "{{url}} wurde geöffnet. Installiere {{name}}, und klicke dann auf „Neu starten“.",
+      "unknownTool": "Unbekannte Voraussetzung: {{id}}.",
+      "alreadyAvailable": "{{name}} ist bereits verfügbar.",
+      "notAutomatic": "{{name}} kann auf dieser Plattform nicht automatisch installiert werden.",
+      "resolveCheckFirst": "Behebe den vorhandenen CLI-Prüfungsfehler, bevor du alle Voraussetzungen installierst. {{error}}",
+      "remainingManual": "Die übrigen Voraussetzungen können nicht automatisch installiert werden. Folge ihren Einrichtungshinweisen.",
+      "installing": "{{name}} wird installiert",
+      "incomplete": "Mindestens eine Installation wurde nicht abgeschlossen. Details findest du in der Prozessausgabe."
+    }
+  },
+  "fabric": {
+    "cantPrepareAppLookup": "Die Suche nach Fabric-Apps konnte nicht vorbereitet werden: {{error}}",
+    "cantListApps": "Die Apps in diesem Arbeitsbereich konnten nicht aufgelistet werden.",
+    "noCliForWorkspace": "Die Rayfin CLI zum Abfragen des Arbeitsbereichs wurde nicht gefunden.",
+    "cantPrepareWorkspaceLookup": "Die Abfrage des Arbeitsbereichs konnte nicht vorbereitet werden: {{error}}",
+    "cantLookUpWorkspace": "Der Arbeitsbereich konnte nicht abgefragt werden.",
+    "cantInstallDeps": "Die Abhängigkeiten dieses Projekts konnten nicht installiert werden: {{error}}",
+    "noCli": "Die Rayfin CLI wurde nicht gefunden. Öffne ein Rayfin-Projekt, um Fabric zu erreichen.",
+    "noAuthModule": "Das Authentifizierungsmodul der Rayfin CLI wurde nicht gefunden. Öffne ein Rayfin-Projekt, um Fabric zu erreichen.",
+    "cantPrepareAuthCheck": "Die Fabric-Authentifizierungsprüfung konnte nicht vorbereitet werden: {{error}}",
+    "cantVerifySession": "Die aktuelle Fabric-Sitzung konnte nicht überprüft werden.",
+    "cantPrepareWorkspacesHelper": "Das Hilfsskript für die Suche nach Arbeitsbereichen konnte nicht vorbereitet werden: {{error}}",
+    "cantPrepareCapacitiesHelper": "Das Hilfsskript für die Suche nach Kapazitäten konnte nicht vorbereitet werden: {{error}}",
+    "cantPrepareCreateHelper": "Das Hilfsskript zum Erstellen von Arbeitsbereichen konnte nicht vorbereitet werden: {{error}}",
+    "unrecordedApps": "Für einige veröffentlichte Apps dieses Projekts sind kein Fabric-Arbeitsbereich oder keine Element-ID gespeichert. Es wurde nichts gelöscht.",
+    "cantPrepareDeleteHelper": "Das Hilfsskript zum Löschen konnte nicht vorbereitet werden: {{error}}",
+    "enterEmail": "Gib mindestens eine E-Mail-Adresse ein, mit der geteilt werden soll.",
+    "noWorkspaceId": "Diese veröffentlichte App hat noch keine Fabric-Arbeitsbereichs-ID. Veröffentliche sie, bevor du sie teilst.",
+    "cantPrepareShareHelper": "Das Hilfsskript zum Teilen konnte nicht vorbereitet werden: {{error}}",
+    "cantPrepareDirectoryHelper": "Das Hilfsskript für das Verzeichnis konnte nicht vorbereitet werden: {{error}}"
+  },
+  "files": {
+    "notAFile": "Keine Datei.",
+    "notFound": "Datei nicht gefunden.",
+    "cantRead": "Die Datei konnte nicht gelesen werden.",
+    "isFile": "Das ist eine Datei, kein Ordner.",
+    "noFolder": "Hier gibt es keinen Ordner.",
+    "noAccess": "Du hast keinen Zugriff auf diesen Ordner.",
+    "cantOpenFolder": "Dieser Ordner konnte nicht geöffnet werden."
+  },
+  "gallery": {
+    "teamApp": "Eine Team-App wird von der Pipeline ihres Teams veröffentlicht.",
+    "notPublished": "Diese App ist noch nicht veröffentlicht.",
+    "noDescription": "Copilot hat keine Beschreibung geschrieben. Versuche es noch einmal.",
+    "cantWrite": "Die Beschreibung konnte nicht geschrieben werden: {{error}}"
+  },
+  "git": {
+    "enterMessage": "Gib eine Commit-Nachricht ein.",
+    "stillConflicted": "Einige Dateien haben noch Konflikte. Löse sie zuerst oder brich den Merge ab.",
+    "addFailed": "git add ist fehlgeschlagen.",
+    "nothingToCommit": "Nichts zu committen.",
+    "commitFailed": "git commit ist fehlgeschlagen.",
+    "noSubject": "(keine Nachricht)",
+    "cantReadPath": "{{path}} konnte nicht gelesen werden: {{error}}",
+    "cantSaveBeforeRestore": "Deine aktuellen Änderungen konnten vor dem Wiederherstellen nicht gespeichert werden.",
+    "cantReadCurrent": "Die aktuelle Version konnte nicht gelesen werden.",
+    "versionWithoutApp": "Diese Version enthält diese App nicht und kann daher nicht wiederhergestellt werden.",
+    "cantSaveRestored": "Die wiederhergestellte Version konnte nicht gespeichert werden.",
+    "pickVersion": "Wähle eine gespeicherte Version zum Wiederherstellen aus.",
+    "notTrackedRestore": "Dieses Projekt wird nicht von git verfolgt, daher gibt es nichts wiederherzustellen.",
+    "versionGone": "Diese Version existiert nicht mehr.",
+    "cantRestore": "Diese Version konnte nicht wiederhergestellt werden.",
+    "cantReachRemote": "Das Remote-Repository ist nicht erreichbar.",
+    "teamSync": "Fabricator speichert diese Team-App nach jeder Änderung für dich auf GitHub. Verwende stattdessen „Aktualisieren“ und „Veröffentlichen“.",
+    "merging": "Ein Merge wartet darauf, abgeschlossen zu werden. Schließe ihn zuerst ab oder brich ihn ab.",
+    "overlap": "Deine Änderungen und die neuesten Änderungen überschneiden sich und konnten nicht automatisch zusammengeführt werden.",
+    "noReason": "git hat keinen Grund angegeben.",
+    "overlapIn_one": "Deine Änderungen und die neuesten Änderungen überschneiden sich in {{count}} Datei.",
+    "overlapIn_other": "Deine Änderungen und die neuesten Änderungen überschneiden sich in {{count}} Dateien.",
+    "notTracked": "Dieses Projekt wird nicht von git verfolgt.",
+    "noUpstream": "Dieser Branch ist noch mit keinem Remote-Branch verknüpft.",
+    "cantSaveBeforeUpdate": "Deine aktuellen Änderungen konnten vor dem Aktualisieren nicht gespeichert werden.",
+    "cantCombine": "Die neuesten Änderungen konnten nicht zusammengeführt werden: {{reason}}",
+    "cantFinish": "Der Merge konnte nicht abgeschlossen werden: {{reason}}",
+    "cantCancel": "Der Merge konnte nicht abgebrochen werden: {{reason}}",
+    "noBranch": "Es gibt keinen Branch namens {{branch}}.",
+    "cantSaveBeforeSwitch": "Deine aktuellen Änderungen konnten vor dem Wechseln nicht gespeichert werden.",
+    "cantSwitch": "Es konnte nicht zu {{name}} gewechselt werden: {{reason}}",
+    "rejected": "Das Remote-Repository enthält Änderungen, die du noch nicht hast. Rufe zuerst die neuesten Änderungen ab und pushe dann erneut.",
+    "cantPush": "Deine Änderungen konnten nicht gepusht werden."
+  },
+  "github": {
+    "cantListAccounts": "Deine GitHub-Konten konnten nicht aufgelistet werden",
+    "ghMissingSetup": "Die GitHub CLI (gh) ist nicht installiert. Installiere sie über die Einrichtung und versuche es dann erneut.",
+    "cantOpenTerminal": "Es konnte kein Terminal geöffnet werden. Führe `{{command}}` selbst aus und komm dann zurück.",
+    "notAccountName": "{{login}} ist kein GitHub-Kontoname.",
+    "cantSwitch": "Der Wechsel zu {{login}} ist fehlgeschlagen",
+    "cantSignOut": "{{login}} konnte nicht abgemeldet werden",
+    "ghMissingPath": "Die GitHub CLI (gh) ist nicht installiert oder nicht im PATH.",
+    "cantOpenLoginTerminal": "Für die GitHub-Anmeldung konnte kein Terminal geöffnet werden. Führe `gh auth login --hostname github.com` in deinem Terminal aus.",
+    "authExpired": "{{operation}}: Eine GitHub-Authentifizierung ist erforderlich oder abgelaufen. Melde dich erneut bei github.com an.",
+    "exitCode": "{{operation}} (Exit-Code {{code}}).",
+    "cantReadRepoList": "Die Repository-Liste konnte nicht gelesen werden: {{error}}",
+    "ghMissingBrowse": "Die GitHub CLI (gh) wurde nicht gefunden. Installiere sie, um Repositorys zu durchsuchen.",
+    "cantListRepos": "Deine Repositorys konnten nicht aufgelistet werden",
+    "enterRepository": "Gib ein Repository als Besitzer/Name oder als GitHub-URL ein.",
+    "cantCreateWorkspaceFolder": "Der Arbeitsbereichsordner konnte nicht erstellt werden: {{error}}",
+    "folderExists": "In deinem Arbeitsbereich gibt es bereits einen Ordner namens „{{name}}“.",
+    "ghMissingClone": "Die GitHub CLI (gh) wurde nicht gefunden. Installiere sie und versuche dann erneut zu klonen.",
+    "cloneFailed": "Klonen fehlgeschlagen",
+    "notRayfin": "Dieses Repository ist kein Rayfin-Projekt (keine rayfin/rayfin.yml).",
+    "npmMissing": "In {{path}} geklont, aber npm wurde im PATH nicht gefunden. Installiere Node.js (enthält npm), führe in diesem Ordner „npm install“ aus und öffne das Projekt dann über „Vorhandenes Projekt öffnen“ → „Ordner öffnen“.",
+    "installFailed": "In {{path}} geklont, aber die Installation der Abhängigkeiten ist fehlgeschlagen: {{cause}}. Sieh dir die Details unten an, führe dann in diesem Ordner „npm install“ aus und öffne das Projekt über „Vorhandenes Projekt öffnen“ → „Ordner öffnen“.",
+    "installExited": "In {{path}} geklont, aber die Installation der Abhängigkeiten ist fehlgeschlagen (npm install wurde mit Code {{code}} beendet). Sieh dir die Details unten an, führe dann in diesem Ordner „npm install“ aus und öffne das Projekt über „Vorhandenes Projekt öffnen“ → „Ordner öffnen“."
+  },
+  "githubRepo": {
+    "nameRule": "Verwende im Repository-Namen nur Buchstaben, Ziffern, Bindestriche, Unterstriche und Punkte.",
+    "notAccountOrOrg": "{{owner}} ist kein Name eines GitHub-Kontos oder einer GitHub-Organisation.",
+    "listOwners": "Auflisten, wo du Repositorys erstellen kannst",
+    "taken": "github.com/{{name}} existiert bereits. Wähle einen anderen Namen.",
+    "adoptEmpty": "github.com/{{name}} ist leer, daher legt Fabricator die App dort ab.",
+    "teamApp": "Team-Apps sind bereits auf GitHub, im Repository ihres Team-Arbeitsbereichs.",
+    "folderMissing": "Der Ordner des Projekts fehlt.",
+    "pushFailed": "Fabricator hat github.com/{{name}} erstellt, konnte die App aber nicht dorthin pushen. {{message}}",
+    "notTracked": "Dieses Projekt wird nicht von git verfolgt und hat daher keine Versionen, die auf GitHub gestellt werden könnten.",
+    "partOfRepo": "Diese App gehört zum git-Repository unter {{path}} und kann daher kein eigenes GitHub-Repository haben.",
+    "hasRemote": "Dieses Projekt hat bereits ein Remote-Repository.",
+    "saveFirst": "Speichere eine erste Version der App und versuche es dann erneut.",
+    "unexpectedRepo": "GitHub hat ein unerwartetes Repository zurückgegeben.",
+    "useExisting": "Vorhandenes GitHub-Repository verwenden",
+    "createRepo": "GitHub-Repository erstellen",
+    "noReason": "Git hat keinen Grund genannt.",
+    "connect": "Mit GitHub verbinden"
+  },
+  "local": {
+    "notIdentity": "{{who}} ist keine Anmeldeidentität.",
+    "useIdentities": "Verwende developer, none oder user:<Benutzername>.",
+    "useKinds": "Verwende developer, user oder none.",
+    "enterUsername": "Gib einen Benutzernamen ein, z. B. eine E-Mail-Adresse.",
+    "chooseUser": "Wähle den Benutzer aus, als der angemeldet werden soll.",
+    "cantSave": "Die Datei konnte nicht gespeichert werden: {{error}}",
+    "chooseFolder": "Wähle einen anderen Ordner aus.",
+    "enterValue": "Gib einen Wert für das Geheimnis ein.",
+    "badReason": "{{code}} ist kein Grund, das veröffentlichte Back-End zu verwenden."
+  },
+  "mcp": {
+    "serverGone": "Dieser Server ist nicht mehr in Fabricator."
+  },
+  "migration": {
+    "turnOnFirst": "Aktiviere zuerst „Power BI-Berichte migrieren“ unter „Einstellungen“ → „Experimente“."
+  },
+  "pick": {
+    "lookupFailed": "Die Suche im Quellcode ist fehlgeschlagen: {{error}}"
+  },
+  "projects": {
+    "enterRepoUrl": "Gib die URL eines GitHub-Repositorys ein, z. B. https://github.com/microsoft/awesome-rayfin",
+    "cantReachGallery": "{{owner}}/{{repo}} war nicht erreichbar. Prüfe, ob du online bist und ob das Repository eine rayfin-template.yml im Stammverzeichnis hat.",
+    "galleryUnreadable": "Die rayfin-template.yml dieser Galerie konnte nicht gelesen werden.",
+    "noTemplates": "In dieser Galerie wurden keine Vorlagen gefunden.",
+    "nameCharacters": "Verwende nur Buchstaben (a–z), Ziffern, Leerzeichen, Bindestriche und Unterstriche.",
+    "nameLetterOrNumber": "Verwende mindestens einen Buchstaben oder eine Ziffer.",
+    "nameNeedsLetters": "Verwende Buchstaben oder Ziffern im Namen.",
+    "nameTaken": "In {{place}} gibt es bereits einen Ordner namens „{{slug}}“. Wähle einen anderen Namen.",
+    "folderExists": "In {{place}} gibt es bereits einen Ordner namens „{{slug}}“.",
+    "place": {
+      "thatFolder": "diesem Ordner",
+      "projectsFolder": "deinem Projektordner",
+      "workspace": "deinem Arbeitsbereich"
+    },
+    "enterFullPath": "Gib den vollständigen Pfad des Ordners ein oder wähle ihn mit „Durchsuchen“ aus.",
+    "notAFolder": "Das ist eine Datei, kein Ordner.",
+    "folderMissing": "Dieser Ordner existiert noch nicht.",
+    "cantCreateFolder": "Der Ordner konnte nicht erstellt werden: {{error}}",
+    "enterName": "Gib einen Projektnamen ein.",
+    "nameNeedsLettersOrNumbers": "Der Projektname muss Buchstaben oder Ziffern enthalten.",
+    "npmMissingCreate": "npm wurde im PATH nicht gefunden. Installiere Node.js (enthält npm), um Projekte zu erstellen.",
+    "createFromUrlFailed": "Das Projekt konnte nicht aus der Vorlagen-URL erstellt werden (Exitcode {{code}}). Prüfe, ob die URL eine gültige Rayfin-Vorlage ist.",
+    "createFailed": "Das Projekt konnte nicht erstellt werden (Exitcode {{code}}).",
+    "creatingFrom": "„{{folder}}“ wird aus der Vorlage {{template}} mit Rayfin {{release}} erstellt…",
+    "creatingFromCommunity": "„{{folder}}“ wird aus der Community-Vorlage mit Rayfin {{release}} erstellt…",
+    "noSkipInstall": "Diese Rayfin-Version unterstützt --skip-install nicht und installiert die Pakete daher selbst.",
+    "pinned": "Die Rayfin-Pakete wurden auf {{range}} festgelegt.",
+    "keptVersions": "Die Vorlage verlangt {{name}} {{spec}}, nicht Rayfin {{major}}.{{minor}}.x, und behält daher ihre Versionen. Fabricator führt auf diesem Computer Rayfin {{supported}} aus: Mit anderen Versionen funktioniert manches möglicherweise nicht wie erwartet.",
+    "npmMissingRetry": "npm wurde im PATH nicht gefunden. Installiere Node.js (enthält npm) und versuche es erneut.",
+    "theProject": "dem Projekt",
+    "chooseAnotherFolder": "Wähle einen anderen Ordner für das Projekt.",
+    "cantCreateWorkspaceFolder": "Der Arbeitsbereichsordner konnte nicht erstellt werden: {{error}}",
+    "ready": "Projekt bereit.",
+    "folderGone": "Dieser Ordner existiert nicht mehr.",
+    "notRayfinProject": "Dieser Ordner ist kein Rayfin-Projekt (keine rayfin/rayfin.yml).",
+    "noLongerRayfinProject": "Dieser Ordner ist kein Rayfin-Projekt mehr (keine rayfin/rayfin.yml).",
+    "cantTrash": "Der Ordner konnte nicht in den Papierkorb verschoben werden: {{error}}",
+    "trashHint": "Schließe alle Programme, die seine Dateien verwenden, etwa einen Editor, ein Terminal oder einen Entwicklungsserver, und versuche es erneut.",
+    "cantTrashHint": "Der Ordner konnte nicht in den Papierkorb verschoben werden. {{hint}}",
+    "cantTrashReason": "Der Ordner konnte nicht in den Papierkorb verschoben werden: {{reason}}. {{hint}}"
+  },
+  "screenshot": {
+    "pending": "Bildschirmaufnahmen sind im Tauri-Build noch nicht verfügbar.",
+    "onlyImages": "Nur PNG-, JPEG-, GIF-, WebP- und BMP-Bilder können angehängt werden.",
+    "cantRead": "Das Bild konnte nicht gelesen werden: {{error}}",
+    "tooLarge": "Das Bild ist zu groß zum Anhängen: Das Limit liegt bei 20 MB."
+  },
+  "secrets": {
+    "timedOut": "Die Rayfin CLI ist nicht rechtzeitig fertig geworden. Überprüfe deine Verbindung, und versuche es dann erneut.",
+    "notDeployed": "Veröffentliche zuerst deine App. Veröffentlichte Werte werden mit der veröffentlichten App gespeichert.",
+    "enterName": "Gib einen Namen für das Geheimnis ein.",
+    "nameTooLong": "Verwende einen Namen mit höchstens 128 Zeichen.",
+    "nameRule": "Beginne den Namen mit einem Buchstaben, und verwende danach nur Buchstaben, Ziffern und Unterstriche.",
+    "teamApp": "Fabricator kann die veröffentlichten Geheimnisse einer Team-App noch nicht ändern. Ändere sie im Fabric-Portal.",
+    "needsRayfin": "Geheimnisse erfordern Rayfin {{version}} oder höher. Wähle in der Statusleiste Rayfin und dann „Mit Copilot aktualisieren“ aus.",
+    "notConfirmed": "Die Rayfin CLI hat die Änderung nicht bestätigt.",
+    "cliFailed": "Die Rayfin CLI ist fehlgeschlagen (Exitcode {{code}}).",
+    "cantRead": "Die Geheimnisse konnten nicht gelesen werden",
+    "notAList": "Fabricator kann {{name}} nicht hinzufügen: Der Eintrag secrets: in rayfin/rayfin.yml ist keine Liste. Korrigiere die Datei, und versuche es dann erneut.",
+    "noConfig": "Fabricator findet rayfin/rayfin.yml in diesem Projekt nicht.",
+    "cantAdd": "{{name}} konnte nicht zu rayfin.yml hinzugefügt werden: {{detail}}",
+    "enterValue": "Gib einen Wert für das Geheimnis ein."
+  },
+  "shared": {
+    "projectNotFound": "Projekt nicht gefunden.",
+    "projectGone": "Dieses Projekt ist nicht mehr in Fabricator.",
+    "projectFolderNotFound": "Projektordner nicht gefunden.",
+    "pathOutside": "Der Pfad liegt außerhalb des Projekts.",
+    "unknown": "unbekannt",
+    "retryOnOpen": "Fabricator versucht es erneut, wenn die App geöffnet wird.",
+    "projectFolderGone": "Der Ordner des Projekts ist nicht mehr vorhanden.",
+    "teamWorkspaceGone": "Dieser Team-Arbeitsbereich ist nicht mehr auf diesem Computer.",
+    "nodeMissing": "Node.js wurde im PATH nicht gefunden."
+  },
+  "skills": {
+    "cards": {
+      "polishedUi": {
+        "title": "Moderne, ausgefeilte Oberfläche",
+        "description": "Ein klares, einheitliches Erscheinungsbild: Abstände, Schrift, Farben und Komponenten, die zusammenpassen."
+      },
+      "butteryAnimations": {
+        "title": "Butterweiche Animationen",
+        "description": "Schnelle, gezielte Bewegung, die nie im Weg ist."
+      },
+      "responsiveLayout": {
+        "title": "Responsiv auf jedem Bildschirm",
+        "description": "Layouts, die auf Smartphones, Tablets und breiten Desktops funktionieren."
+      },
+      "easyNavigation": {
+        "title": "Einfache Navigation",
+        "description": "Klare Menüs und Seitentitel sowie Links, die du teilen kannst."
+      },
+      "clearCopy": {
+        "title": "Klare, freundliche Formulierungen",
+        "description": "Beschriftungen, Schaltflächen, Meldungen und leere Zustände in einfacher Sprache."
+      },
+      "loadingEmptyStates": {
+        "title": "Lade- und Leerzustände",
+        "description": "Jeder Bildschirm berücksichtigt Laden, Leere, Fehler und Erfolg."
+      },
+      "friendlyForms": {
+        "title": "Freundliche Formulare und Validierung",
+        "description": "Formulare, die Menschen anleiten, Eingaben früh prüfen und nie verlieren."
+      },
+      "dataModeling": {
+        "title": "Solide Datenmodellierung",
+        "description": "Gut strukturierte Rayfin-Entitäten, -Beziehungen und -Abfragen."
+      },
+      "searchAndFilter": {
+        "title": "Suchen, Sortieren und Filtern",
+        "description": "Datensätze in langen Listen schnell finden, gefiltert direkt in der Abfrage."
+      },
+      "dataViz": {
+        "title": "Ansprechende Diagramme und Dashboards",
+        "description": "Das passende Diagramm für jede Frage, mit den wichtigsten Zahlen zuerst."
+      },
+      "accessibility": {
+        "title": "Barrierefrei für alle",
+        "description": "Funktioniert mit Tastatur und Sprachausgabe, mit gut lesbarem Kontrast."
+      },
+      "secureByDefault": {
+        "title": "Standardmäßig sicher",
+        "description": "Datenregeln pro Benutzer, Seiten nur nach Anmeldung und keine Geheimnisse im Browser."
+      },
+      "performance": {
+        "title": "Schnell und flüssig",
+        "description": "Lädt schnell und bleibt flüssig, auch wenn die App wächst."
+      },
+      "rayfin": {
+        "title": "Rayfin-Grundlagen",
+        "description": "Grundwissen zu Rayfin: Datenmodelle, Anmeldung, Veröffentlichung und die CLI."
+      },
+      "rayfinFunctions": {
+        "description": "Serverseitige Funktionen, die deine App aufrufen kann."
+      },
+      "rayfinConnectors": {
+        "description": "Verwende vorhandene Fabric-Daten: Lakehouses, Warehouses, SQL-Datenbanken, semantische Modelle und KQL."
+      },
+      "rayfinStorage": {
+        "description": "Dateispeicher für deine App. Experimentell."
+      }
+    },
+    "inThisApp": "Ein Skill in dieser App.",
+    "noPreview": "Für diesen Skill gibt es keine Vorschau.",
+    "nameTaken": "Diese App hat bereits einen eigenen Skill mit diesem Namen.",
+    "unknown": "Unbekannter Skill.",
+    "managed": "Dieser Skill wird von Rayfin verwaltet.",
+    "managedCantRemove": "Dieser Skill wird von Rayfin verwaltet und kann nicht entfernt werden.",
+    "cantUpdate": "Die Skills konnten nicht aktualisiert werden: {{error}}"
+  },
+  "suggest": {
+    "busy": "Für dieses Projekt werden bereits Vorschläge erstellt."
+  },
+  "terminal": {
+    "notHere": "Terminals sind nur im Fenster von Fabricator verfügbar.",
+    "badId": "Das ist keine Terminal-ID.",
+    "noShell": "Fabricator hat auf diesem Computer keine Shell gefunden."
+  },
+  "transient": {
+    "cantReach": "Das Modell war nicht erreichbar.",
+    "cantSend": "Die Anfrage konnte nicht an das Modell gesendet werden."
+  }
+}

@@ -1,4 +1,5 @@
 import type { ChatToolCall } from '@shared/ipc'
+import { translator } from '../../i18n'
 import { displayPath, looksLikePath, type DisplayPath } from './paths'
 
 /** Coarse classification of a Copilot tool call, used for labels and icons. */
@@ -93,99 +94,119 @@ export function toolKind(name: string): ToolKind {
   return 'other'
 }
 
-const VERBS: Record<ToolKind, [running: string, done: string]> = {
-  read: ['Reading', 'Read'],
-  edit: ['Editing', 'Edited'],
-  create: ['Creating', 'Created'],
-  delete: ['Removing', 'Removed'],
-  search: ['Searching for', 'Searched for'],
-  find: ['Finding files matching', 'Found files matching'],
-  run: ['Running', 'Ran'],
-  'shell-io': ['Checking on a command', 'Checked on a command'],
-  web: ['Reading', 'Read'],
-  'web-search': ['Searching the web for', 'Searched the web for'],
-  skill: ['Loading the skill', 'Used the skill'],
-  todo: ['Updating the task list', 'Updated the task list'],
-  agent: ['Delegating', 'Delegated'],
-  deploy: ['Publishing the app', 'Published the app'],
-  navigate: ['Opening in the preview', 'Opened in the preview'],
-  screenshot: ['Taking a screenshot', 'Took a screenshot'],
-  console: ['Reading the preview console', 'Read the preview console'],
-  scroll: ['Scrolling the preview', 'Scrolled the preview'],
-  model: ['Looking up a semantic model', 'Looked up a semantic model'],
-  'local-status': ['Checking the local backend', 'Checked the local backend'],
-  'local-call': ['Calling', 'Called'],
-  'local-seed': ['Checking the seed data', 'Checked the seed data'],
-  'fabric-iq': ['Looking up in Fabric IQ', 'Looked up in Fabric IQ'],
-  'work-iq': ['Looking up in Work IQ', 'Looked up in Work IQ'],
-  mcp: ['Using', 'Used'],
-  other: ['Using', 'Used']
+/** A verb's catalog keys (the `tools` namespace): while the step runs, and once it's done. */
+type VerbKeys = readonly [running: string, done: string]
+
+/** Whether `key` is one of `table`'s own keys (never one it inherits, like "constructor"). */
+function own<T extends object>(table: T, key: PropertyKey): key is keyof T {
+  return Object.prototype.hasOwnProperty.call(table, key)
 }
+
+const VERBS = {
+  read: ['verbs.read.running', 'verbs.read.done'],
+  edit: ['verbs.edit.running', 'verbs.edit.done'],
+  create: ['verbs.create.running', 'verbs.create.done'],
+  delete: ['verbs.delete.running', 'verbs.delete.done'],
+  search: ['verbs.search.running', 'verbs.search.done'],
+  find: ['verbs.find.running', 'verbs.find.done'],
+  run: ['verbs.run.running', 'verbs.run.done'],
+  'shell-io': ['verbs.shellIo.running', 'verbs.shellIo.done'],
+  web: ['verbs.web.running', 'verbs.web.done'],
+  'web-search': ['verbs.webSearch.running', 'verbs.webSearch.done'],
+  skill: ['verbs.skill.running', 'verbs.skill.done'],
+  todo: ['verbs.todo.running', 'verbs.todo.done'],
+  agent: ['verbs.agent.running', 'verbs.agent.done'],
+  deploy: ['verbs.deploy.running', 'verbs.deploy.done'],
+  navigate: ['verbs.navigate.running', 'verbs.navigate.done'],
+  screenshot: ['verbs.screenshot.running', 'verbs.screenshot.done'],
+  console: ['verbs.console.running', 'verbs.console.done'],
+  scroll: ['verbs.scroll.running', 'verbs.scroll.done'],
+  model: ['verbs.model.running', 'verbs.model.done'],
+  'local-status': ['verbs.localStatus.running', 'verbs.localStatus.done'],
+  'local-call': ['verbs.localCall.running', 'verbs.localCall.done'],
+  'local-seed': ['verbs.localSeed.running', 'verbs.localSeed.done'],
+  'fabric-iq': ['verbs.fabricIq.running', 'verbs.fabricIq.done'],
+  'work-iq': ['verbs.workIq.running', 'verbs.workIq.done'],
+  mcp: ['verbs.mcp.running', 'verbs.mcp.done'],
+  other: ['verbs.other.running', 'verbs.other.done']
+} as const satisfies Record<ToolKind, VerbKeys>
 
 /** Phrasing for a step with nothing to point at (older transcripts saved no args). */
-const BARE_VERBS: Partial<Record<ToolKind, [running: string, done: string]>> = {
-  read: ['Reading a file', 'Read a file'],
-  edit: ['Editing files', 'Edited files'],
-  create: ['Creating a file', 'Created a file'],
-  delete: ['Removing a file', 'Removed a file'],
-  search: ['Searching the project', 'Searched the project'],
-  find: ['Finding files', 'Found files'],
-  run: ['Running a command', 'Ran a command'],
-  web: ['Reading a web page', 'Read a web page'],
-  'web-search': ['Searching the web', 'Searched the web'],
-  skill: ['Loading a skill', 'Used a skill'],
-  agent: ['Delegating a task', 'Delegated a task'],
-  'local-call': ['Calling the app', 'Called the app']
-}
+const BARE_VERBS = {
+  read: ['bareVerbs.read.running', 'bareVerbs.read.done'],
+  edit: ['bareVerbs.edit.running', 'bareVerbs.edit.done'],
+  create: ['bareVerbs.create.running', 'bareVerbs.create.done'],
+  delete: ['bareVerbs.delete.running', 'bareVerbs.delete.done'],
+  search: ['bareVerbs.search.running', 'bareVerbs.search.done'],
+  find: ['bareVerbs.find.running', 'bareVerbs.find.done'],
+  run: ['bareVerbs.run.running', 'bareVerbs.run.done'],
+  web: ['bareVerbs.web.running', 'bareVerbs.web.done'],
+  'web-search': ['bareVerbs.webSearch.running', 'bareVerbs.webSearch.done'],
+  skill: ['bareVerbs.skill.running', 'bareVerbs.skill.done'],
+  agent: ['bareVerbs.agent.running', 'bareVerbs.agent.done'],
+  'local-call': ['bareVerbs.localCall.running', 'bareVerbs.localCall.done']
+} as const satisfies Partial<Record<ToolKind, VerbKeys>>
 
 /** Present-tense phrase for the live status line ("Running a command"). */
-const PHASES: Record<ToolKind, string> = {
-  read: 'Reading files',
-  edit: 'Editing code',
-  create: 'Creating files',
-  delete: 'Removing files',
-  search: 'Searching the project',
-  find: 'Searching the project',
-  run: 'Running a command',
-  'shell-io': 'Running a command',
-  web: 'Reading the web',
-  'web-search': 'Searching the web',
-  skill: 'Loading a skill',
-  todo: 'Updating the task list',
-  agent: 'Delegating a task',
-  deploy: 'Publishing the app',
-  navigate: 'Opening the preview',
-  screenshot: 'Taking a screenshot',
-  console: 'Reading the preview console',
-  scroll: 'Scrolling the preview',
-  model: 'Looking up a semantic model',
-  'local-status': 'Checking the local backend',
-  'local-call': 'Calling the app',
-  'local-seed': 'Checking the seed data',
-  'fabric-iq': 'Looking up Power BI data',
-  'work-iq': 'Looking up Microsoft 365',
-  mcp: 'Using an MCP server',
-  other: 'Working'
-}
+const PHASES = {
+  read: 'phases.read',
+  edit: 'phases.edit',
+  create: 'phases.create',
+  delete: 'phases.delete',
+  search: 'phases.search',
+  find: 'phases.search',
+  run: 'phases.run',
+  'shell-io': 'phases.run',
+  web: 'phases.web',
+  'web-search': 'phases.webSearch',
+  skill: 'phases.skill',
+  todo: 'phases.todo',
+  agent: 'phases.agent',
+  deploy: 'phases.deploy',
+  navigate: 'phases.navigate',
+  screenshot: 'phases.screenshot',
+  console: 'phases.console',
+  scroll: 'phases.scroll',
+  model: 'phases.model',
+  'local-status': 'phases.localStatus',
+  'local-call': 'phases.localCall',
+  'local-seed': 'phases.localSeed',
+  'fabric-iq': 'phases.fabricIq',
+  'work-iq': 'phases.workIq',
+  mcp: 'phases.mcp',
+  other: 'phases.other'
+} as const satisfies Record<ToolKind, string>
 
 /** The tools that manage agents already started, which delegate nothing new. */
-const AGENT_IO_VERBS: Record<string, [string, string]> = {
-  read_agent: ['Waiting for an agent', 'Checked on an agent'],
-  write_agent: ['Messaging an agent', 'Messaged an agent'],
-  list_agents: ['Listing agents', 'Listed agents']
-}
+const AGENT_IO_VERBS = {
+  read_agent: ['agentIoVerbs.read.running', 'agentIoVerbs.read.done'],
+  write_agent: ['agentIoVerbs.write.running', 'agentIoVerbs.write.done'],
+  list_agents: ['agentIoVerbs.list.running', 'agentIoVerbs.list.done']
+} as const satisfies Record<string, VerbKeys>
 
 /** Present-tense phrase for the live status line; `server` names the MCP server a tool came from. */
 export function phaseLabel(name: string, server?: string): string {
-  if (server) return `Using ${server}`
-  return AGENT_IO_VERBS[name.toLowerCase()]?.[0] ?? PHASES[toolKind(name)]
+  const t = translator('tools')
+  if (server) return t('phases.server', { server })
+  const lower = name.toLowerCase()
+  if (own(AGENT_IO_VERBS, lower)) return t(AGENT_IO_VERBS[lower][0])
+  return t(PHASES[toolKind(name)])
 }
 
-const SHELL_IO_VERBS: Record<string, [string, string]> = {
-  write: ['Sending input to a command', 'Sent input to a command'],
-  stop: ['Stopping a command', 'Stopped a command'],
-  list: ['Listing running commands', 'Listed running commands']
-}
+const SHELL_IO_VERBS = {
+  write: ['shellIoVerbs.write.running', 'shellIoVerbs.write.done'],
+  stop: ['shellIoVerbs.stop.running', 'shellIoVerbs.stop.done'],
+  list: ['shellIoVerbs.list.running', 'shellIoVerbs.list.done']
+} as const satisfies Record<string, VerbKeys>
+
+const SEED_LOAD_VERBS = ['seedLoad.running', 'seedLoad.done'] as const satisfies VerbKeys
+
+type StepVerbs =
+  | (typeof VERBS)[keyof typeof VERBS]
+  | (typeof BARE_VERBS)[keyof typeof BARE_VERBS]
+  | (typeof AGENT_IO_VERBS)[keyof typeof AGENT_IO_VERBS]
+  | (typeof SHELL_IO_VERBS)[keyof typeof SHELL_IO_VERBS]
+  | typeof SEED_LOAD_VERBS
 
 /** What a step's one-line target shows. */
 export type StepTarget =
@@ -225,18 +246,17 @@ function webTarget(title: string): string {
 }
 
 export function describeStep(tool: ChatToolCall, projectPath: string): StepView {
+  const t = translator('tools')
   const kind = kindOf(tool)
   const running = tool.state === 'running'
-  let [verbRunning, verbDone] = VERBS[kind]
+  let verbs: StepVerbs = VERBS[kind]
   if (kind === 'shell-io') {
-    const io = SHELL_IO_VERBS[tool.name.toLowerCase().split('_')[0]]
-    if (io) [verbRunning, verbDone] = io
+    const io = tool.name.toLowerCase().split('_')[0]
+    if (own(SHELL_IO_VERBS, io)) verbs = SHELL_IO_VERBS[io]
   }
   const title = tool.title?.trim() ?? ''
   // The seed tool's title is what it did (see chat_tools.rs).
-  if (kind === 'local-seed' && title === 'load') {
-    ;[verbRunning, verbDone] = ['Loading the seed data', 'Loaded the seed data']
-  }
+  if (kind === 'local-seed' && title === 'load') verbs = SEED_LOAD_VERBS
   const hasTitle = title !== '' && title.toLowerCase() !== tool.name.toLowerCase()
   const paths = tool.paths?.length ? tool.paths : hasTitle && looksLikePath(title) ? [title] : []
   let target: StepTarget | undefined
@@ -262,7 +282,10 @@ export function describeStep(tool: ChatToolCall, projectPath: string): StepView 
       if (hasTitle) target = { kind: 'text', text: webTarget(title) }
       break
     case 'mcp':
-      target = { kind: 'text', text: `${title || humanize(tool.name)} from ${tool.server}` }
+      target = {
+        kind: 'text',
+        text: t('label.fromServer', { tool: title || humanize(tool.name), server: tool.server })
+      }
       break
     case 'todo':
     case 'shell-io':
@@ -283,13 +306,12 @@ export function describeStep(tool: ChatToolCall, projectPath: string): StepView 
     tool.startedAt != null && tool.endedAt != null && tool.endedAt >= tool.startedAt
       ? tool.endedAt - tool.startedAt
       : undefined
-  const bare = !target ? BARE_VERBS[kind] : undefined
-  if (bare) [verbRunning, verbDone] = bare
-  const agentIo = kind === 'agent' ? AGENT_IO_VERBS[tool.name.toLowerCase()] : undefined
-  if (agentIo) [verbRunning, verbDone] = agentIo
+  if (!target && own(BARE_VERBS, kind)) verbs = BARE_VERBS[kind]
+  const name = tool.name.toLowerCase()
+  if (kind === 'agent' && own(AGENT_IO_VERBS, name)) verbs = AGENT_IO_VERBS[name]
   return {
     kind,
-    verb: running ? verbRunning : verbDone,
+    verb: t(running ? verbs[0] : verbs[1]),
     target,
     moreFiles,
     added: tool.added,
@@ -301,15 +323,16 @@ export function describeStep(tool: ChatToolCall, projectPath: string): StepView 
 
 /** Plain-text label for a step (tooltips, aria labels, tests). */
 export function stepLabel(step: StepView): string {
-  const t = step.target
-  const target = !t
+  const t = translator('tools')
+  const at = step.target
+  const target = !at
     ? ''
-    : t.kind === 'path'
-      ? t.path.rel || t.path.base
-      : t.kind === 'quote'
-        ? `“${t.text}”`
-        : t.text
-  return target ? `${step.verb} ${target}` : step.verb
+    : at.kind === 'path'
+      ? at.path.rel || at.path.base
+      : at.kind === 'quote'
+        ? t('label.quoted', { text: at.text })
+        : at.text
+  return target ? t('label.withTarget', { verb: step.verb, target }) : step.verb
 }
 
 /** Per-kind counts shown in a work log header. */
@@ -319,13 +342,11 @@ export interface KindCount {
   label: string
 }
 
-const n = (count: number, one: string, many: string): string =>
-  `${count} ${count === 1 ? one : many}`
-
 export function summarizeKinds(tools: readonly ChatToolCall[]): KindCount[] {
+  const t = translator('tools')
   const c = { read: 0, edit: 0, create: 0, run: 0, search: 0, web: 0 }
-  for (const t of tools) {
-    const k = kindOf(t)
+  for (const tool of tools) {
+    const k = kindOf(tool)
     if (k === 'read') c.read++
     else if (k === 'edit') c.edit++
     else if (k === 'create') c.create++
@@ -334,15 +355,13 @@ export function summarizeKinds(tools: readonly ChatToolCall[]): KindCount[] {
     else if (k === 'web') c.web++
   }
   const out: KindCount[] = []
-  if (c.read) out.push({ kind: 'read', count: c.read, label: `Read ${n(c.read, 'file', 'files')}` })
-  if (c.edit) out.push({ kind: 'edit', count: c.edit, label: `Made ${n(c.edit, 'edit', 'edits')}` })
+  if (c.read) out.push({ kind: 'read', count: c.read, label: t('summary.read', { count: c.read }) })
+  if (c.edit) out.push({ kind: 'edit', count: c.edit, label: t('summary.edit', { count: c.edit }) })
   if (c.create)
-    out.push({ kind: 'create', count: c.create, label: `Created ${n(c.create, 'file', 'files')}` })
-  if (c.run)
-    out.push({ kind: 'run', count: c.run, label: `Ran ${n(c.run, 'command', 'commands')}` })
+    out.push({ kind: 'create', count: c.create, label: t('summary.create', { count: c.create }) })
+  if (c.run) out.push({ kind: 'run', count: c.run, label: t('summary.run', { count: c.run }) })
   if (c.search)
-    out.push({ kind: 'search', count: c.search, label: `Ran ${n(c.search, 'search', 'searches')}` })
-  if (c.web)
-    out.push({ kind: 'web', count: c.web, label: `Read ${n(c.web, 'web page', 'web pages')}` })
+    out.push({ kind: 'search', count: c.search, label: t('summary.search', { count: c.search }) })
+  if (c.web) out.push({ kind: 'web', count: c.web, label: t('summary.web', { count: c.web }) })
   return out
 }

@@ -10,6 +10,7 @@ import { UpdateProvider } from './update'
 import { ToastProvider } from './toast'
 import { applyRememberedAppearance } from './theme'
 import { installGlobalErrorCapture } from './errorReport'
+import { startLanguage } from './i18n'
 import '@vscode/codicons/dist/codicon.css'
 import './assets/main.css'
 
@@ -32,23 +33,25 @@ function isAppWindow(): boolean {
   }
 }
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      {isAppWindow() ? (
-        <AppWindow />
-      ) : (
-        <OverlayProvider>
-          <UpdateProvider>
-            <ToastProvider>
-              <App />
-            </ToastProvider>
-          </UpdateProvider>
-        </OverlayProvider>
-      )}
-    </ErrorBoundary>
-  </React.StrictMode>
-)
+function render(): void {
+  ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        {isAppWindow() ? (
+          <AppWindow />
+        ) : (
+          <OverlayProvider>
+            <UpdateProvider>
+              <ToastProvider>
+                <App />
+              </ToastProvider>
+            </UpdateProvider>
+          </OverlayProvider>
+        )}
+      </ErrorBoundary>
+    </React.StrictMode>
+  )
+}
 
 /** `rgb(r, g, b)` as `#rrggbb`, or undefined for anything else. */
 function hexColor(css: string): string | undefined {
@@ -69,5 +72,12 @@ function reveal(): void {
   revealed = true
   void api.revealWindow(hexColor(getComputedStyle(document.body).backgroundColor)).catch(() => {})
 }
-requestAnimationFrame(() => requestAnimationFrame(reveal))
-window.setTimeout(reveal, 120)
+
+// The first screen renders in the user's language, once it has loaded.
+void startLanguage()
+  .catch(() => {})
+  .then(() => {
+    render()
+    requestAnimationFrame(() => requestAnimationFrame(reveal))
+    window.setTimeout(reveal, 120)
+  })

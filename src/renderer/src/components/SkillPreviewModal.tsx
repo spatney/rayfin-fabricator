@@ -6,6 +6,7 @@ import Editor from '@monaco-editor/react'
 // this in too, but a user can open this preview before ever visiting that tab.
 import '../monaco'
 import type { SkillInfo, SkillSource } from '@shared/ipc'
+import { useTranslation } from '../i18n'
 import { SkillMark } from './skills/presentation'
 import './skills/skills.css'
 
@@ -33,6 +34,7 @@ function useEditorTheme(): string {
  * exactly what guidance a skill gives the agent before turning it on.
  */
 export default function SkillPreviewModal({ projectId, skill, onClose }: Props): JSX.Element {
+  const { t } = useTranslation('skills')
   const [source, setSource] = useState<SkillSource | null>(null)
   const theme = useEditorTheme()
   const titleId = useId()
@@ -71,17 +73,17 @@ export default function SkillPreviewModal({ projectId, skill, onClose }: Props):
               <h2 id={titleId}>{skill.title}</h2>
               <p className="modal-sub">
                 <code>.agents/skills/{skill.id}/SKILL.md</code>
-                {source && !source.installed && ' · not in this app yet'}
+                {source && !source.installed && ` · ${t('preview.notInstalled')}`}
               </p>
             </div>
           </div>
-          <button className="icon-btn" onClick={onClose} aria-label="Close preview">
+          <button className="icon-btn" onClick={onClose} aria-label={t('preview.close')}>
             ✕
           </button>
         </div>
         <div className="modal-body skill-preview-body">
           {!source ? (
-            <div className="code-empty">Loading…</div>
+            <div className="code-empty">{t('status.loading')}</div>
           ) : !source.ok ? (
             <div className="code-empty code-empty--err">{source.error}</div>
           ) : (
@@ -91,7 +93,7 @@ export default function SkillPreviewModal({ projectId, skill, onClose }: Props):
                 theme={theme}
                 language="markdown"
                 value={source.content ?? ''}
-                loading={<div className="code-empty">Loading editor…</div>}
+                loading={<div className="code-empty">{t('editor.loading')}</div>}
                 options={{
                   readOnly: true,
                   domReadOnly: true,

@@ -1,4 +1,5 @@
 import { memo, useMemo, type JSX } from 'react'
+import { useTranslation } from '../../i18n'
 import { highlightLines, langFromPath } from '../../syntax'
 
 /**
@@ -21,11 +22,16 @@ export const EvidenceView = memo(function EvidenceView({
   /** Last flagged line. */
   to?: number
 }): JSX.Element {
+  const { t } = useTranslation('advisor')
   const lines = useMemo(() => text.replace(/\s+$/, '').split('\n'), [text])
   const html = useMemo(() => highlightLines(lines, file ? langFromPath(file) : undefined), [lines, file])
   const last = to ?? from
   return (
-    <div className="adv-evidence" role="group" aria-label={file ? `Code from ${file}` : 'Code'}>
+    <div
+      className="adv-evidence"
+      role="group"
+      aria-label={file ? t('evidence.codeFrom', { file }) : t('evidence.code')}
+    >
       <pre className="adv-evidence-pre">
         {lines.map((line, i) => {
           const n = start + i

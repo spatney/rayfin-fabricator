@@ -6,7 +6,13 @@
  */
 import { parse as parseYaml } from 'yaml'
 import type { TeamMap, TeamMapApp, TeamMapCopy, TeamResourceRequest, TeamResourceSource } from '@shared/ipc'
-import { maskComments, parseDataModel, type AccessLevel } from '../../../model/parseSchema'
+import { formatList, translator } from '../../../i18n'
+import {
+  accessText,
+  maskComments,
+  parseDataModel,
+  type AccessLevel
+} from '../../../model/parseSchema'
 import { layoutOf } from '../../../model/projectLayout'
 
 type Obj = Record<string, unknown>
@@ -99,7 +105,7 @@ export async function parseAppConfig(files: Record<string, string>): Promise<App
     name: e.customName ?? e.name,
     fields: e.fields.length,
     access: e.access.level,
-    accessLabel: e.access.label,
+    accessLabel: accessText(e).label,
     shape: `${e.fields.map((f) => `${f.name}:${f.type}${f.optional ? '?' : ''}`).join(',')}|${e.access.level}`
   }))
 
@@ -128,17 +134,27 @@ export interface KindLabel {
   icon: string
 }
 
-const CONNECTOR_KINDS: Record<string, KindLabel> = {
-  'fabric-semanticmodel': { label: 'Semantic model', icon: 'graph' },
-  'fabric-warehouse': { label: 'Warehouse', icon: 'table' },
-  'fabric-sqldatabase': { label: 'SQL database', icon: 'server' },
-  'fabric-sqlanalytics': { label: 'Lakehouse', icon: 'folder-library' },
-  kusto: { label: 'Eventhouse', icon: 'pulse' }
+type ConnectorKindKey =
+  | 'kinds.semanticModel'
+  | 'kinds.warehouse'
+  | 'kinds.sqlDatabase'
+  | 'kinds.lakehouse'
+  | 'kinds.eventhouse'
+
+const CONNECTOR_KINDS: Record<string, { key: ConnectorKindKey; icon: string }> = {
+  'fabric-semanticmodel': { key: 'kinds.semanticModel', icon: 'graph' },
+  'fabric-warehouse': { key: 'kinds.warehouse', icon: 'table' },
+  'fabric-sqldatabase': { key: 'kinds.sqlDatabase', icon: 'server' },
+  'fabric-sqlanalytics': { key: 'kinds.lakehouse', icon: 'folder-library' },
+  kusto: { key: 'kinds.eventhouse', icon: 'pulse' }
 }
 
 /** A connector type in plain words, with its icon. */
 export function connectorKind(type: string): KindLabel {
-  return CONNECTOR_KINDS[type] ?? { label: type.replace(/^fabric-/, ''), icon: 'plug' }
+  const kind = CONNECTOR_KINDS[type]
+  return kind
+    ? { label: translator('teamMap')(kind.key), icon: kind.icon }
+    : { label: type.replace(/^fabric-/, ''), icon: 'plug' }
 }
 
 const SERVICES: Record<string, KindLabel> = {
@@ -161,17 +177,19 @@ export function serviceKind(audience: string): KindLabel {
 
 /** What a connector can do, from its operations. */
 export function connectorAbility(c: ConnectorInfo): string {
+  const t = translator('teamMap')
   const ops = c.operations.map((o) => o.toLowerCase())
-  if (ops.some((o) => o === 'create' || o === 'update' || o === 'delete')) return 'Reads and writes'
-  if (ops.includes('executequery')) return 'Runs queries'
-  if (ops.includes('read')) return 'Reads'
+  if (ops.some((o) => o === 'create' || o === 'update' || o === 'delete'))
+    return t('abilities.readWrite')
+  if (ops.includes('executequery')) return t('abilities.query')
+  if (ops.includes('read')) return t('abilities.read')
   return c.operations.join(', ')
 }
 
 /** Who a connector signs in as. */
 export function connectorSignIn(c: ConnectorInfo): string | undefined {
   if (!c.auth) return undefined
-  return c.auth === 'delegated' ? 'The person using the app' : c.auth
+  return c.auth === 'delegated' ? translator('teamMap')('signIn.delegated') : c.auth
 }
 
 /** `coffee-shop-sales` → "Coffee shop sales". */
@@ -327,13 +345,13 @@ export const dataIds = {
 
 const ORDER: Record<ResourceKind, number> = { database: 0, files: 1, functions: 2, connector: 3 }
 
-function plural(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`
-}
-
 function list(names: string[]): string {
-  if (names.length <= 2) return names.join(' and ')
-  return `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`
+  if (names.length <= 2) return formatList(names)
+  return translator('teamMap')('list.more', {
+    first: names[0],
+    second: names[1],
+    count: names.length - 2
+  })
 }
 
 function connectorSource(c: ConnectorInfo): string {
@@ -346,6 +364,7 @@ function serviceSource(audience: string): string {
 
 /** The resources one copy of an app's config describes. */
 function itemsOf(folder: string, config: AppConfig): ResourceItem[] {
+  const t = translator('teamMap')
   const make = (item: Omit<ResourceItem, 'id' | 'folder' | 'published' | 'changes'>): ResourceItem => ({
     ...item,
     id: dataIds.item(folder, item.key),
@@ -360,8 +379,8 @@ function itemsOf(folder: string, config: AppConfig): ResourceItem[] {
       make({
         key: 'database',
         kind: 'database',
-        title: 'Database',
-        detail: n ? plural(n, 'table') : 'No tables yet',
+        title: t('items.database'),
+        detail: n ? t('items.tables', { count: n }) : t('items.noTables'),
         icon: 'database',
         tables: config.database.tables,
         relations: config.database.relations,
@@ -370,7 +389,16 @@ function itemsOf(folder: string, config: AppConfig): ResourceItem[] {
     )
   }
   if (config.files) {
-    items.push(make({ key: 'files', kind: 'files', title: 'File storage', detail: 'Uploaded files', icon: 'file-media', links: [] }))
+    items.push(
+      make({
+        key: 'files',
+        kind: 'files',
+        title: t('items.files'),
+        detail: t('items.uploadedFiles'),
+        icon: 'file-media',
+        links: []
+      })
+    )
   }
   if (config.functions) {
     const { names, audiences } = config.functions
@@ -378,8 +406,10 @@ function itemsOf(folder: string, config: AppConfig): ResourceItem[] {
       make({
         key: 'functions',
         kind: 'functions',
-        title: 'Functions',
-        detail: names.length ? plural(names.length, 'function') : 'No functions yet',
+        title: t('items.functions'),
+        detail: names.length
+          ? t('items.functionCount', { count: names.length })
+          : t('items.noFunctions'),
         icon: 'symbol-method',
         functions: names,
         audiences,
@@ -405,64 +435,72 @@ function itemsOf(folder: string, config: AppConfig): ResourceItem[] {
 }
 
 function addedWhat(item: ResourceItem): string {
+  const t = translator('teamMap')
   switch (item.kind) {
     case 'database':
-      return item.tables?.length ? `adds a database with ${list(item.tables.map((t) => t.name))}` : 'adds a database'
+      return item.tables?.length
+        ? t('what.addsDatabaseWith', { names: list(item.tables.map((table) => table.name)) })
+        : t('what.addsDatabase')
     case 'files':
-      return 'adds file storage'
+      return t('what.addsFiles')
     case 'functions':
-      return item.functions?.length ? `adds ${list(item.functions)}` : 'adds functions'
+      return item.functions?.length
+        ? t('what.adds', { names: list(item.functions) })
+        : t('what.addsFunctions')
     case 'connector':
-      return `connects to ${item.title}`
+      return t('what.connectsTo', { name: item.title })
   }
 }
 
 function removedWhat(item: ResourceItem): string {
+  const t = translator('teamMap')
   switch (item.kind) {
     case 'database':
-      return 'removes the database'
+      return t('what.removesDatabase')
     case 'files':
-      return 'removes file storage'
+      return t('what.removesFiles')
     case 'functions':
-      return 'removes the functions'
+      return t('what.removesFunctions')
     case 'connector':
-      return `disconnects ${item.title}`
+      return t('what.disconnects', { name: item.title })
   }
 }
 
 /** How a copy's version of a resource differs from the published one, if at all. */
 function changedWhat(before: ResourceItem, after: ResourceItem): string | null {
+  const t = translator('teamMap')
   const parts: string[] = []
   const diff = (old: string[], now: string[]): [string[], string[]] => [
     now.filter((n) => !old.includes(n)),
     old.filter((n) => !now.includes(n))
   ]
   if (after.kind === 'database') {
-    const old = new Map((before.tables ?? []).map((t) => [t.name, t]))
-    const now = new Map((after.tables ?? []).map((t) => [t.name, t]))
+    const old = new Map((before.tables ?? []).map((table) => [table.name, table]))
+    const now = new Map((after.tables ?? []).map((table) => [table.name, table]))
     const [added, removed] = diff([...old.keys()], [...now.keys()])
     const changed = [...now.keys()].filter((n) => old.has(n) && old.get(n)?.shape !== now.get(n)?.shape)
-    if (added.length) parts.push(`adds ${list(added)}`)
-    if (changed.length) parts.push(`changes ${list(changed)}`)
-    if (removed.length) parts.push(`removes ${list(removed)}`)
+    if (added.length) parts.push(t('what.adds', { names: list(added) }))
+    if (changed.length) parts.push(t('what.changes', { names: list(changed) }))
+    if (removed.length) parts.push(t('what.removes', { names: list(removed) }))
   } else if (after.kind === 'functions') {
     const [added, removed] = diff(before.functions ?? [], after.functions ?? [])
     const [reaches] = diff(before.audiences ?? [], after.audiences ?? [])
-    if (added.length) parts.push(`adds ${list(added)}`)
-    if (removed.length) parts.push(`removes ${list(removed)}`)
-    if (reaches.length) parts.push(`now reaches ${list(reaches.map((a) => serviceKind(a).label))}`)
+    if (added.length) parts.push(t('what.adds', { names: list(added) }))
+    if (removed.length) parts.push(t('what.removes', { names: list(removed) }))
+    if (reaches.length)
+      parts.push(t('what.nowReaches', { names: list(reaches.map((a) => serviceKind(a).label)) }))
   } else if (after.kind === 'connector' && before.connector && after.connector) {
     const a = before.connector
     const b = after.connector
     if (a.type !== b.type || a.itemId !== b.itemId || a.workspaceId !== b.workspaceId || a.database !== b.database) {
-      parts.push('points it at a different source')
+      parts.push(t('what.pointsElsewhere'))
     } else if (a.operations.join() !== b.operations.join()) {
-      parts.push('changes what it can do')
+      parts.push(t('what.changesAbility'))
     } else if (a.auth !== b.auth) {
-      parts.push('changes how it signs in')
+      parts.push(t('what.changesSignIn'))
     }
   }
-  return parts.length ? parts.join(', ') : null
+  return parts.length ? parts.join(t('what.separator')) : null
 }
 
 function sourceFor(id: string, item: ResourceItem): SourceItem {
@@ -484,7 +522,16 @@ function sourceFor(id: string, item: ResourceItem): SourceItem {
   }
   const audience = id.slice(dataIds.source('service:').length)
   const kind = serviceKind(audience)
-  return { id, kind: 'service', title: kind.label, detail: 'Reached by functions', icon: kind.icon, audience, users: [], published: false }
+  return {
+    id,
+    kind: 'service',
+    title: kind.label,
+    detail: translator('teamMap')('items.reachedByFunctions'),
+    icon: kind.icon,
+    audience,
+    users: [],
+    published: false
+  }
 }
 
 /**
@@ -502,7 +549,7 @@ export function buildResourceView(map: TeamMap, parsed: ParsedSource[]): Resourc
       if (base?.config) {
         for (const item of itemsOf(app.folder, base.config)) items.set(item.key, { ...item, published: true })
       } else if (base) {
-        error = base.error ?? 'Could not read this app.'
+        error = base.error ?? translator('teamMap')('items.unreadable')
       }
     }
     for (const copy of app.copies) {
@@ -561,5 +608,7 @@ export function buildResourceView(map: TeamMap, parsed: ParsedSource[]): Resourc
 
 /** "Your copy" or "amy's copy", for change sentences. */
 export function copyName(change: Pick<ResourceChange, 'author' | 'mine'>): string {
-  return change.mine ? 'Your copy' : `${change.author || 'A teammate'}’s copy`
+  const t = translator('teamMap')
+  if (change.mine) return t('copyName.yours')
+  return change.author ? t('copyName.theirs', { author: change.author }) : t('copyName.teammate')
 }

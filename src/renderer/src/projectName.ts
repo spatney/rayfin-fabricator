@@ -1,3 +1,5 @@
+import { translator } from './i18n'
+
 /**
  * Project names follow the Rayfin CLI's rule (`isValidProjectName`), which
  * rejects anything else when the project is created: letters, numbers, spaces,
@@ -9,8 +11,8 @@ const ALLOWED = /^[A-Za-z0-9\s_-]+$/
 export function projectNameProblem(name: string): string | null {
   const trimmed = name.trim()
   if (!trimmed) return null
-  if (!ALLOWED.test(trimmed)) return 'Use only letters, numbers, spaces, hyphens and underscores.'
-  if (!/[A-Za-z0-9]/.test(trimmed)) return 'Include at least one letter or number.'
+  if (!ALLOWED.test(trimmed)) return translator('home')('projectName.characters')
+  if (!/[A-Za-z0-9]/.test(trimmed)) return translator('home')('projectName.letterOrNumber')
   return null
 }
 

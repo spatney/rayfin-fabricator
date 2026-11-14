@@ -1,4 +1,5 @@
 import type { AuthProvider, AuthStatus, DoctorReport } from '@shared/ipc'
+import { currentLanguage, formatList } from './i18n'
 
 /** Set once setup has passed on this computer; later launches open straight into the app. */
 const SETUP_DONE_KEY = 'fabricator.setupComplete'
@@ -84,8 +85,9 @@ export function setupAttention(
   return tools.length > 0 || signIns.length > 0 || error ? { tools, signIns, error } : null
 }
 
-/** "a", "a and b", "a, b, and c". */
+/** "a", "a and b", "a, b, and c"; a translation lists them its own way. */
 export function listText(items: string[]): string {
+  if (currentLanguage() !== 'en') return formatList(items)
   if (items.length <= 2) return items.join(' and ')
   return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`
 }

@@ -56,11 +56,7 @@ pub fn rayfin_supported(version: &str) -> bool {
 /// An app whose version can't be read passes; the pipeline checks it again.
 pub fn rayfin_update_needed(project_dir: &Path, name: &str) -> Option<String> {
   let version = deploy_cli_version(project_dir)?;
-  (!rayfin_supported(&version)).then(|| {
-    format!(
-      "{name} uses Rayfin {version}, and team workspaces need Rayfin {MIN_RAYFIN} or newer. Open the app, select Rayfin in the status bar, choose Update with Copilot, then move it again."
-    )
-  })
+  (!rayfin_supported(&version)).then(|| t!("team.services.rayfinUpdateNeeded", name = name, version = version, min = MIN_RAYFIN))
 }
 
 /// The client ID pull requests sign in with (the deploy identity's when one
@@ -139,29 +135,24 @@ pub async fn trusted_targets(ws: &TeamWorkspace) -> Result<TrustedTargets, Strin
   );
   let targets = combine([deploy, preview, tenant, production, previews], ws.setup.as_ref());
   if targets.deploy_client_id.is_empty() || targets.production_workspace_id.is_empty() || targets.previews_workspace_id.is_empty() {
-    return Err(
-      "The workspace's pipeline settings are missing on GitHub. The owner who set the workspace up can repair them from its settings.".into(),
-    );
+    return Err(t!("team.services.settingsMissing"));
   }
   Ok(targets)
 }
-
-/// Message for team commands while the experiment is off.
-pub const DISABLED: &str =
-  "Team workspaces are an experimental feature. Turn them on in Settings → Experiments.";
 
 /// Fail when the Team workspaces experiment is off.
 pub fn require_enabled() -> Result<(), String> {
   if store::team_workspaces_enabled() {
     Ok(())
   } else {
-    Err(DISABLED.to_string())
+    Err(t!("team.services.disabled"))
   }
 }
 
 /// Message for local deploy commands on team projects.
-pub const NO_LOCAL_DEPLOY: &str =
-  "This project belongs to a team workspace, so the team pipeline deploys it. Use Publish instead.";
+pub fn no_local_deploy() -> String {
+  t!("team.services.noLocalDeploy")
+}
 
 /// True when the project lives in a team workspace (whatever the experiment says).
 pub fn is_team_project(project: &StudioProject) -> bool {
@@ -183,10 +174,10 @@ pub struct TeamProject {
 /// Resolve a project id to its team binding and workspace.
 pub fn team_project(id: &str) -> Result<TeamProject, String> {
   require_enabled()?;
-  let project = store::find_project(id).ok_or("Project not found.")?;
-  let binding = project.team.clone().ok_or("This project isn't in a team workspace.")?;
-  let workspace = store::find_team_workspace(&binding.workspace_id)
-    .ok_or("This project's team workspace is no longer on this machine.")?;
+  let project = store::find_project(id).ok_or_else(|| t!("team.services.projectNotFound"))?;
+  let binding = project.team.clone().ok_or_else(|| t!("team.services.notTeamProject"))?;
+  let workspace =
+    store::find_team_workspace(&binding.workspace_id).ok_or_else(|| t!("team.services.workspaceGone"))?;
   Ok(TeamProject { project, binding, workspace })
 }
 
@@ -234,11 +225,9 @@ pub fn deploy_info(record: &TeamDeployRecord) -> DeployInfo {
     status: Some(status.to_string()),
     outcome: Some(if status == "error" { "error".to_string() } else { "success".to_string() }),
     error: (status == "error").then(|| match record.reason.as_deref() {
-      Some("data-loss") => "The pipeline stopped because this change would delete data in the published app.".to_string(),
-      Some("rayfin-update") => format!(
-        "The pipeline needs Rayfin {MIN_RAYFIN} or newer to deploy this app. Select Rayfin in the status bar and choose Update with Copilot; the pipeline deploys again once the update is saved."
-      ),
-      _ => "The team pipeline couldn't deploy this version. Open the run on GitHub for details.".to_string(),
+      Some("data-loss") => t!("team.services.deploy.dataLoss"),
+      Some("rayfin-update") => t!("team.services.deploy.rayfinUpdate", min = MIN_RAYFIN),
+      _ => t!("team.services.deploy.failed"),
     }),
     at: record.updated_at.clone(),
     commit: record.sha.clone(),

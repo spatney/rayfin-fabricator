@@ -1,0 +1,91 @@
+{
+  "title": "MCP-Server",
+  "close": "MCP-Server schließen",
+  "lead": "MCP-Server geben dem Chat weitere Tools, etwa zum Durchsuchen von Dokumentation, zum Zeichnen von Diagrammen oder zum Lesen deines Issue-Trackers. Füge hier einen Server hinzu, und aktiviere ihn dann in den <b>Plug-Ins</b> eines Chats. Der Chat verwendet ihn nur, wenn eine Anfrage ihn braucht.",
+  "empty": "Du hast noch keinen Server hinzugefügt. Füge einen mit dem Befehl, der ihn startet, oder mit seiner URL hinzu, oder füge die Konfiguration aus seiner Anleitung ein.",
+  "tryExample": "Füge zum Ausprobieren Microsoft Learn hinzu. Es durchsucht die Dokumentation von Microsoft, etwa zu Fabric und Power BI.",
+  "add": "Server hinzufügen",
+  "addExample": "Microsoft Learn hinzufügen",
+  "addServer": "MCP-Server hinzufügen",
+  "editServer": "{{name}} bearbeiten",
+  "help": "Hilfe zu MCP-Servern",
+  "errors": {
+    "read": "Deine MCP-Server konnten nicht gelesen werden.",
+    "check": "Fabricator konnte ihn nicht prüfen.",
+    "save": "Der Server konnte nicht gespeichert werden.",
+    "remove": "Der Server konnte nicht entfernt werden."
+  },
+  "card": {
+    "readOnly": "Schreibgeschützt",
+    "connected": "Verbunden",
+    "signsIn": "Anmeldung bei Verwendung",
+    "failed": "Keine Verbindung",
+    "checkLabel": "{{name}} prüfen",
+    "checkTitle": "Starten oder verbinden und seine Tools auflisten",
+    "check": "Prüfen",
+    "removeLabel": "{{name}} entfernen",
+    "removing": "Wird entfernt…",
+    "confirmRemove": "{{name}} entfernen? Chats, in denen er aktiviert ist, verwenden ihn nicht mehr.",
+    "noTools": "Verbunden, aber er bietet keine Tools an.",
+    "tools_one": "Verbunden. Er bietet {{count}} Tool an:",
+    "tools_other": "Verbunden. Er bietet {{count}} Tools an:",
+    "toolsLabel": "Tools von {{name}}",
+    "showAll": "Alle {{total}} anzeigen",
+    "needsSignIn": "Du musst dich dafür anmelden. Wenn eine Nachricht in einem Chat ihn zum ersten Mal verwendet, öffnet Fabricator seine Anmeldeseite in deinem Browser."
+  },
+  "form": {
+    "paste": "Konfiguration einfügen…",
+    "configuration": "Konfiguration",
+    "pasteHint": "Füge den JSON-Code aus der Anleitung des Servers, seinen Befehl oder seine URL ein. Fabricator füllt das Formular aus, damit du es prüfen kannst.",
+    "choicesLabel": "Server in der Konfiguration",
+    "choose": "Sie enthält {{total}} Server. Wähle den aus, den du hinzufügen möchtest:",
+    "fillIn": "Ausfüllen",
+    "name": "Name",
+    "namePlaceholder": "Diagramme",
+    "startsWith": "Startet mit",
+    "kind": {
+      "command": "Befehl",
+      "url": "URL"
+    },
+    "command": "Befehl",
+    "commandHint": "Der Befehl, der den Server startet, mit seinen Argumenten, so wie du ihn in einem Terminal eingeben würdest. Fabricator führt ihn auf diesem Computer im Ordner der App aus.",
+    "url": "URL",
+    "sse": "Er verwendet Server-Sent Events (SSE), wie einige ältere Server",
+    "values": {
+      "env": {
+        "title": "Umgebungsvariablen",
+        "nameLabel": "Variablenname",
+        "valueLabel": "Wert der Variablen",
+        "removeLabel": "Variable entfernen",
+        "add": "Variable hinzufügen"
+      },
+      "header": {
+        "title": "Header",
+        "nameLabel": "Headername",
+        "valueLabel": "Wert des Headers",
+        "removeLabel": "Header entfernen",
+        "add": "Header hinzufügen"
+      },
+      "value": "Wert",
+      "saved": "Gespeichert",
+      "change": "Ändern",
+      "changeLabel": "Wert von {{name}} ändern",
+      "valueOf": "Wert von {{name}}",
+      "newValue": "Neuer Wert",
+      "remove": "{{name}} entfernen"
+    },
+    "secrets": {
+      "windows": "Für Schlüssel und Token. Fabricator speichert ihre Werte in der Windows-Anmeldeinformationsverwaltung, nicht in seinen Einstellungen, und zeigt sie nie wieder an.",
+      "mac": "Für Schlüssel und Token. Fabricator speichert ihre Werte in deinem Schlüsselbund, nicht in seinen Einstellungen, und zeigt sie nie wieder an."
+    },
+    "readOnly": "Nur lesende Tools",
+    "readOnlyHint": "Der Chat kann nur die Tools aufrufen, die der Server als schreibgeschützt kennzeichnet, und daher über den Server nichts ändern. In einer Team-App ist das immer so.",
+    "trust": "Ein Server läuft mit deinem Zugriff auf diesen Computer und deine Konten, und was der Chat ihm sendet, verlässt Fabricator. Füge nur Server hinzu, denen du vertraust."
+  },
+  "parse": {
+    "empty": "Füge zuerst eine Konfiguration ein.",
+    "unreadable": "Diese Konfiguration kann Fabricator nicht lesen. Füge den JSON-Code aus der Anleitung des Servers ein.",
+    "noServer": "Diese Konfiguration enthält keinen Server mit einem Befehl oder einer URL."
+  },
+  "defaultName": "MCP-Server"
+}

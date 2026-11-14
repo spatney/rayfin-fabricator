@@ -1,0 +1,179 @@
+{
+  "common": {
+    "copilotError": "Copilot reported an error."
+  },
+  "security": {
+    "signInRequired": "GitHub Copilot isn’t signed in. Sign in to Copilot in Fabricator, then check again.",
+    "timedOut": "Copilot didn’t finish in {{minutes}} minutes.",
+    "stopped": "Copilot stopped before it finished.",
+    "noReport": "Copilot ended without reporting what it found.",
+    "summary": {
+      "danger": "It has code that could harm this computer or your data.",
+      "caution": "It has things worth a look before you go ahead.",
+      "clear": "Nothing in it looks risky."
+    },
+    "cantMakeFolder": "Fabricator couldn’t make a folder to check it in: {{error}}",
+    "invalidCheck": "That isn’t a check Fabricator can run.",
+    "unsupportedFile": "Fabricator checks .fabricator, .rayfin and .zip files.",
+    "fileMissing": "That file isn’t there anymore.",
+    "alreadyRunning": "This check is already running.",
+    "clear": {
+      "install": "No install scripts.",
+      "agents": "No instructions or tools for coding agents."
+    },
+    "advice": {
+      "installScripts": "Read what these commands do before you go ahead. Rayfin apps don’t need commands of their own to install.",
+      "packageSources": "Make sure you know who publishes these packages, and why they don’t come from npm.",
+      "packageAliases": "Check that each one is the package it stands in for.",
+      "packageHosts": "A company’s own package registry is fine. Otherwise, find out why it doesn’t use npm’s.",
+      "npmSettings": "Don’t go ahead unless you know why it does this. Projects don’t need these settings.",
+      "gitSettings": "Don’t go ahead unless you know why they’re there. A project shared with you doesn’t need them.",
+      "unreadableSettings": "Don’t go ahead unless you can see what they set: npm or git may still run programs they name.",
+      "gitDir": "Don’t go ahead unless you know why it’s there. A project shared with you doesn’t need it.",
+      "unreadableManifest": "Don’t go ahead unless you can see what’s in them: npm may still run scripts or download packages from them.",
+      "gitHooks": "Read what the hooks run before you go ahead.",
+      "editorTasks": "Check what the task runs before you open the project in VS Code.",
+      "mcpServers": "Check what these programs are before you let a coding agent start them.",
+      "programs": "Find out what they’re for before you go ahead.",
+      "aimedAtAi": "Don’t rely on an AI’s review of this package, this one included. Read the code yourself or ask who sent it.",
+      "hiddenCode": "An app’s own code has no reason to hide what it does. Ask who sent it what this is."
+    },
+    "checks": {
+      "list": {
+        "next": "{{items}}, {{next}}",
+        "last": "{{items}} and {{last}}",
+        "more_one": "{{items}} and {{count}} more",
+        "more_other": "{{items}} and {{count}} more"
+      },
+      "installScripts": {
+        "title": "Runs commands when its packages install",
+        "script": "{{script}}: {{command}}",
+        "scriptIn": "{{script}} in {{folder}}: {{command}}",
+        "nativeBuild": "{{command}}, to build native code",
+        "nativeBuildIn": "{{command}} in {{folder}}, to build native code",
+        "detail": "npm runs {{list}} when Fabricator installs its packages, before the app opens."
+      },
+      "packageSources": {
+        "title": "Gets packages from outside npm",
+        "what": "{{name}} comes from {{source}}",
+        "detail": "{{list}}. npm doesn’t check code that comes from git, a website or a folder, and it can change at any time."
+      },
+      "packageAliases": {
+        "title": "Installs packages under other names",
+        "what": "{{name}} is really {{target}}",
+        "detail": "{{list}}: npm installs one package under another’s name."
+      },
+      "packageHosts": {
+        "title": "Downloads packages from other servers",
+        "registry": "{{file}} points npm at {{host}}",
+        "lockfile_one": "{{file}} gets {{count}} package from {{host}}",
+        "lockfile_other": "{{file}} gets {{count}} packages from {{host}}",
+        "detail": "{{list}}, not npm’s registry."
+      },
+      "npmSettings": {
+        "title": "Changes the programs npm runs",
+        "what": "{{file}} sets {{key}} to {{value}}",
+        "detail": "{{list}}. npm would use them while it installs packages and runs scripts."
+      },
+      "gitSettings": {
+        "title": "Has git settings that run programs",
+        "detailProject": "Its git settings set {{list}}. Git runs them when it works in the folder, which Fabricator does each time it saves a version.",
+        "detailApp": "Its git settings set {{list}}. Git runs them when it works in the folder."
+      },
+      "unreadableSettings": {
+        "title": "Has settings Fabricator can’t read",
+        "detail_one": "Fabricator can’t read {{list}}: it’s too large or not plain text, so it can’t tell what npm or git would run from it.",
+        "detail_other": "Fabricator can’t read {{list}}: they’re too large or not plain text, so it can’t tell what npm or git would run from them."
+      },
+      "gitDir": {
+        "title": "Points git at another folder",
+        "pointsAt": "{{file}} points git at {{folder}}",
+        "pointsElsewhere": "{{file}} points git at another folder",
+        "detail": "{{list}}. Git takes its settings and hooks from there, and they can run programs whenever git works in the folder.",
+        "hooks_one": "{{detail}} Its hooks there are {{hooks}}.",
+        "hooks_other": "{{detail}} Its hooks there are {{hooks}}."
+      },
+      "unreadableManifest": {
+        "title_one": "Has an npm file Fabricator can’t read",
+        "title_other": "Has npm files Fabricator can’t read",
+        "detail_one": "Fabricator can’t read {{list}}: it’s too large or not plain JSON, so it can’t tell what npm would run or download from it.",
+        "detail_other": "Fabricator can’t read {{list}}: they’re too large or not plain JSON, so it can’t tell what npm would run or download from them."
+      },
+      "gitHooks": {
+        "title": "Sets up git hooks",
+        "detail": "Once its packages are installed, git runs {{list}} each time a version is saved, and Fabricator saves one after each chat turn."
+      },
+      "editorTasks": {
+        "title": "Runs a task when the folder opens in VS Code",
+        "detail": "{{file}} starts a task as soon as the folder opens in VS Code, once you allow it."
+      },
+      "mcpServers": {
+        "title": "Adds MCP servers for coding agents",
+        "detail": "{{file}} starts {{list}} for coding agents that use it."
+      },
+      "programs": {
+        "title": "Includes programs",
+        "detail": "It holds {{list}}. Rayfin apps don’t need programs of their own, and Copilot can’t read them."
+      },
+      "aimedAtAi": {
+        "title": "Has text aimed at AI tools",
+        "says": "{{file}} says “{{text}}”",
+        "named": "{{file}} is named “{{name}}”",
+        "detail": "{{list}}. Text that tries to steer AI reviewers or coding agents is a warning sign."
+      },
+      "hiddenCode": {
+        "title": "Has hidden or encoded code",
+        "what": "{{file}} ({{how}})",
+        "how": {
+          "obfuscatorNames": "names like {{example}}, an obfuscator’s",
+          "decodesAndRuns": "runs code it decodes",
+          "charCodes": "builds code from character codes",
+          "escapedBytes": "long runs of escaped bytes"
+        },
+        "detail": "{{list}}: code written so people can’t read it."
+      }
+    }
+  },
+  "advisor": {
+    "projectNotFound": "Project not found.",
+    "invalidState": "Invalid Advisor state.",
+    "stateTooLarge": "Advisor state is too large to save.",
+    "reviewIncomplete": "Couldn't complete the review: {{detail}}",
+    "reviewTimedOut": "Couldn't complete the review: the review timed out after 10 minutes.",
+    "reviewNoResults": "Couldn't complete the review: Copilot ended without reporting any results.",
+    "notEvaluated": "Not evaluated in this review.",
+    "noIssues": "No issues found in the rules Copilot reviewed.",
+    "foundIssues_one": "Copilot found {{count}} issue.",
+    "foundIssues_other": "Copilot found {{count}} issues.",
+    "stoppedTimedOut": "{{summary}} The review stopped early (it timed out), so some rules may not have been checked.",
+    "stoppedError": "{{summary}} The review stopped early (Copilot reported an error), so some rules may not have been checked.",
+    "stoppedClosed": "{{summary}} The review stopped early (the session ended), so some rules may not have been checked.",
+    "timedOut": "It timed out.",
+    "cantStartReview": "Couldn't start the review. {{error}}",
+    "cantStartExplanation": "Couldn't start the explanation. {{error}}",
+    "noExplanation": "Copilot ended without an explanation.",
+    "explanationIncomplete": "Couldn't complete the explanation. {{detail}}",
+    "cantStartVerification": "Couldn't start the verification. {{error}}",
+    "noVerdict": "Copilot ended without a verdict.",
+    "verificationIncomplete": "Couldn't complete the verification. {{detail}}",
+    "reviewRunning": "A review is already running for this project.",
+    "explanationRunning": "An explanation is already being generated for this project.",
+    "verificationRunning": "A verification is already running for this project."
+  },
+  "help": {
+    "emptyQuestion": "Type a question first.",
+    "questionTooLong": "That question is too long. Attach the file instead of pasting it.",
+    "tookTooLong": "That took too long. Try asking something more specific.",
+    "connectionClosed": "The connection to Copilot closed before an answer arrived. Try again.",
+    "noAnswer": "No answer came back. Try again.",
+    "signInRequired": "You need to be signed in to GitHub Copilot to use Help. Open the account menu in the app bar and sign in, then ask again.",
+    "quotaUsed": "Your Copilot quota is used up right now, so Help can't answer. Try again later.",
+    "cantReachCopilot": "Help couldn't reach Copilot: {{error}}",
+    "localOutput": {
+      "all": "Read the local backend's output",
+      "from": "Read the local backend's output from {{source}}",
+      "problems": "Read the local backend's output (warnings and errors)",
+      "fromProblems": "Read the local backend's output from {{source}} (warnings and errors)"
+    }
+  }
+}

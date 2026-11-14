@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import type { GalleryApp } from '@shared/ipc'
 import { errorMessage } from '../../errorReport'
+import { translator, useTranslation } from '../../i18n'
 import { topLayerOpen } from '../../overlay'
 import { measurePreviewBounds, watchPreviewPixelRatio } from '../../previewBounds'
 import { CloseIcon, Codicon } from '../icons'
@@ -26,6 +27,7 @@ export default function QuickLook({
   onOpenApp: () => void
   onOpenFabric: () => void
 }): JSX.Element {
+  const { t } = useTranslation('gallery')
   const bodyRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   const [failed, setFailed] = useState<string | null>(null)
@@ -55,7 +57,7 @@ export default function QuickLook({
       }
       shown = true
       window.api.gallery.quickLook.show(url, bounds).catch((reason: unknown) => {
-        if (live) setFailed(errorMessage(reason, 'Couldn’t open the quick look.'))
+        if (live) setFailed(errorMessage(reason, translator('gallery')('quickLook.failed')))
       })
     }
     place()
@@ -83,7 +85,7 @@ export default function QuickLook({
         className="gquick"
         role="dialog"
         aria-modal="true"
-        aria-label={`Quick look at ${app.name}`}
+        aria-label={t('quickLook.label', { name: app.name })}
       >
         <div className="gquick-bar">
           <span className="gquick-title">
@@ -95,18 +97,18 @@ export default function QuickLook({
           <span className="gquick-tools">
             <button type="button" className="btn btn--sm" onClick={onOpenApp}>
               <Codicon name="link-external" />
-              Open app
+              {t('app.openApp')}
             </button>
             <button type="button" className="btn btn--sm" onClick={onOpenFabric}>
               <Codicon name="globe" />
-              Open in Fabric
+              {t('app.openInFabric')}
             </button>
             <button
               ref={closeRef}
               type="button"
               className="icon-btn gquick-close"
-              aria-label="Close quick look"
-              title="Close (Space or Esc)"
+              aria-label={t('quickLook.close')}
+              title={t('quickLook.closeTitle')}
               onClick={onClose}
             >
               <CloseIcon />
@@ -119,7 +121,7 @@ export default function QuickLook({
               {failed}
             </p>
           ) : (
-            <p className="gquick-note">Loading {app.name}…</p>
+            <p className="gquick-note">{t('quickLook.loading', { name: app.name })}</p>
           )}
         </div>
       </div>

@@ -1,0 +1,254 @@
+{
+  "file": {
+    "progress_other": "{{processed, number}} / {{count, number}} ファイル",
+    "files_other": "{{count, number}} 個のファイル",
+    "versions_other": "{{count, number}} 個のバージョン"
+  },
+  "parts": {
+    "code": "アプリのコード",
+    "history": "バージョン履歴",
+    "published": "公開済みのアプリ",
+    "secrets": "シークレット",
+    "from": "提供元: {{from}}",
+    "version": "バージョン {{version}}"
+  },
+  "installedApps": {
+    "title": "インストール済みのアプリ",
+    "count_other": "{{count}} 個のアプリ",
+    "openName": "{{name}} を開く",
+    "isOpen": "起動中",
+    "fromFile": ".rayfin ファイルからインストール",
+    "confirm": "アプリとそのデータを削除しますか?",
+    "removing": "削除しています…",
+    "keep": "残す",
+    "removeName": "{{name}} を削除",
+    "cantRemove": "Fabricator で {{name}} を削除できませんでした。"
+  },
+  "guard": {
+    "cantPrepare": "このプロジェクトを準備できませんでした。依存関係を確認して、もう一度お試しください。",
+    "cantInstall": "このプロジェクトの依存関係をインストールできませんでした。",
+    "failedLabel": "{{name}} を準備できませんでした",
+    "preparing": "{{name}} を準備しています",
+    "failedTitle": "プロジェクトの依存関係をインストールできませんでした",
+    "retry": "インストールを再試行",
+    "switchProjects": "プロジェクトを切り替える",
+    "checking": "プロジェクトの Rayfin CLI を確認し、不足している依存関係をインストールしています..."
+  },
+  "remove": {
+    "title": "プロジェクトを削除",
+    "lead": "<strong>{{name}}</strong> について、削除するものを選んでください。",
+    "folder": {
+      "title": "ローカルのプロジェクト フォルダー",
+      "badge": "復元可能",
+      "desc": "<strong>システムのごみ箱</strong>に移動します。そこから復元できます。"
+    },
+    "app": {
+      "title": "公開済みの Fabric アプリ",
+      "badge": "完全削除",
+      "desc": "{{name}} と、{{workspace}} 内のすべてのアプリ データを削除します。",
+      "descNoWorkspace": "{{name}} と、その Fabric ワークスペース内のすべてのアプリ データを削除します。",
+      "warn": "この操作は元に戻せません。"
+    },
+    "note": {
+      "noApp": "このプロジェクトにリンクされている公開済みの Fabric アプリはありません。",
+      "keepsWorkspace": "Fabric ワークスペースは残ります。",
+      "keepsApp": "公開済みのアプリとそのデータは Fabric に残ります。"
+    },
+    "confirmBoth": "フォルダーをごみ箱に移動してアプリを削除",
+    "confirmFolder": "フォルダーをごみ箱に移動"
+  },
+  "manage": {
+    "title": "プロジェクトの管理",
+    "close": "プロジェクトの管理を閉じる",
+    "nameLabel": "プロジェクト名",
+    "renameHint": "<code>rayfin/rayfin.yml</code> 内の名前も変更されます。",
+    "actionsHeading": "プロジェクトの操作",
+    "errors": {
+      "cantRename": "プロジェクトの名前を変更できませんでした。もう一度お試しください。",
+      "cantMove": "プロジェクトを移動できませんでした。",
+      "noName": "プロジェクト名を入力してください。"
+    },
+    "move": {
+      "title": "チーム ワークスペースに移動",
+      "desc": "このアプリとそのチャットをチーム ワークスペースにコピーして、チームで作業できるようにします。チームのパイプラインは、このプロジェクトの公開済みアプリのデータを含めずに、新しいアプリとしてデプロイします。このローカル プロジェクトはそのまま残ります。",
+      "workspaceLabel": "チーム ワークスペース",
+      "moving": "移動しています…",
+      "move": "移動"
+    },
+    "export": {
+      "button": "エクスポート"
+    },
+    "recents": {
+      "title": "最近使ったプロジェクト",
+      "remove": "最近使ったプロジェクトから削除",
+      "team": "最近使った項目の一覧に表示しないようにします。GitHub 上の作業は残り、チーム ワークスペースからもう一度開くことができます。",
+      "missing": "このコンピューターでこのプロジェクトが見つかりません。最近使った項目の一覧から削除してください。",
+      "withApp": "最近使った項目の一覧に表示しないようにします。ファイルと Fabric アプリはそのまま残ります。",
+      "filesOnly": "最近使った項目の一覧に表示しないようにします。ファイルはそのまま残ります。"
+    },
+    "team": {
+      "title": "チーム アプリ",
+      "desc": "このアプリはチーム ワークスペース <strong>{{team}}</strong> に属しています。ワークスペースの所有者は、ワークスペースの設定から全員を対象に削除できます。",
+      "descUnknown": "このアプリは、開いたときのチーム ワークスペースに属しています。ワークスペースの所有者は、ワークスペースの設定から全員を対象に削除できます。"
+    },
+    "remove": {
+      "review": "オプションを確認",
+      "withApp": "フォルダーをごみ箱に移動します。必要に応じて、公開済みのアプリも削除できます。",
+      "folderOnly": "フォルダーをごみ箱に移動します。Fabric アプリは変更されません。"
+    }
+  },
+  "import": {
+    "title": "プロジェクトをインポート",
+    "reading": "{{file}} を読み込んでいます…",
+    "exportedByOn": "{{from}} が {{date}} にエクスポート",
+    "exportedBy": "{{from}} がエクスポート",
+    "fromFile": "{{file}} から",
+    "importingFrom": "{{file}} からインポートしています。",
+    "importingName": "{{name}} をインポートしています…",
+    "progress": "インポートの進行状況",
+    "bringsIn": "含まれるもの",
+    "code": {
+      "desc": "開くときに、Fabricator がパッケージをインストールします。"
+    },
+    "history": {
+      "desc": "これまでに保存されたすべてのバージョン。[履歴] と [復元] を使えます。"
+    },
+    "published": {
+      "askFrom": "公開すると、この同じアプリが更新されます。ワークスペースへのアクセス権を {{from}} に依頼してください。",
+      "needAccess": "ワークスペースへのアクセス権を取得すると、公開でこの同じアプリが更新されるようになります。"
+    },
+    "secrets": {
+      "desc": "値は含まれません。[コード] → [シークレット] で自分の値を設定してください。"
+    },
+    "folder": "新しいフォルダー <code>{{folder}}</code> に保存されます。",
+    "trust": "信頼できる人のプロジェクトだけをインポートしてください。そのコードはこのコンピューターで実行されます。",
+    "importing": "インポートしています…",
+    "importAnyway": "このままインポート",
+    "import": "インポート",
+    "errors": {
+      "cantRead": "Fabricator で {{file}} を読み取れませんでした。",
+      "cantImport": "Fabricator で {{file}} をインポートできませんでした。"
+    }
+  },
+  "export": {
+    "title": "プロジェクトをエクスポート",
+    "lead": {
+      "project": "ほかの人が Fabricator にインポートできるコピーを保存します。",
+      "app": "ほかの人がインストールして使えるアプリとして保存します。",
+      "done": "エクスポートが完了し、送る準備ができました。"
+    },
+    "format": {
+      "label": "エクスポート形式",
+      "project": "プロジェクト",
+      "projectDesc": "Fabricator で開発を続ける · .fabricator",
+      "app": "アプリ",
+      "appDesc": "専用のウィンドウで使う · .rayfin"
+    },
+    "checking": "含めるものを確認しています…",
+    "includes": "エクスポートに含まれるもの",
+    "code": {
+      "desc": "ソースと設定。インストール済みのパッケージとビルド出力は含まれません。"
+    },
+    "app": {
+      "desc": "この名前とアイコンで、専用のウィンドウで開きます。データは、インストールしたコンピューターに保存されます。"
+    },
+    "history": {
+      "desc": "保存されたすべてのバージョン。受け取った人も [履歴] と [復元] を使えます。"
+    },
+    "published": {
+      "include": "受け取った人が公開すると、この同じアプリが更新されます。そのワークスペースへのアクセス権が必要です。",
+      "exclude": "受け取った人は、自分で選んだワークスペースに新しいアプリとして公開します。"
+    },
+    "never": {
+      "project": "含まれないもの: チャット、シークレットの値、ローカルのアプリ データ、サインイン情報。",
+      "projectSecrets": "含まれないもの: チャット、シークレットの値 ({{secrets}})、ローカルのアプリ データ、サインイン情報。",
+      "app": "含まれないもの: チャット、バージョン履歴、公開先、シークレットの値、ローカルのアプリ データ、サインイン情報。",
+      "appSecrets": "含まれないもの: チャット、バージョン履歴、公開先、シークレットの値 ({{secrets}})、ローカルのアプリ データ、サインイン情報。"
+    },
+    "keptOut": "シークレットが含まれている可能性があるため、次のファイルも除外されます: {{files}}。",
+    "keptOutMore_other": "ほか {{count}} 件",
+    "secretsWarning": "含まれないシークレットを使用しているため、インストール先では、それを必要とする機能が動作しません。",
+    "exportingName": "{{name}} をエクスポートしています…",
+    "progress": "エクスポートの進行状況",
+    "saved": "{{file}} を保存しました",
+    "next": {
+      "title": "次の手順",
+      "send": "メール、チャット、共有フォルダーなどでファイルを送ります。",
+      "openApp": "受け取った人がファイルをダブルクリックします。Fabricator はアプリをインストールする前に確認してから、専用のウィンドウで開きます。初回は 1、2 分かかります。Fabricator をお持ちでない場合:",
+      "openProject": "受け取った人がファイルをダブルクリックして Fabricator にインポートするか、<strong>既存のプロジェクトを開く</strong>、<strong>プロジェクトをインポート</strong> の順に選びます。Fabricator を初めて使う場合:",
+      "copyLink": "インストール リンクをコピー",
+      "linkCopied": "インストール リンクをコピーしました",
+      "afterApp": "その後は、ほかのアプリと同じように開けます。Windows では、スタート メニューの「Rayfin apps」にあります。",
+      "access": "受け取った人が公開できるように、Fabric で <strong>{{workspace}}</strong> への共同作成者のアクセス権を付与してください。",
+      "openWorkspace": "ワークスペースを開く"
+    },
+    "showInFolder": "フォルダーに表示",
+    "exporting": "エクスポートしています…",
+    "export": "エクスポート…",
+    "errors": {
+      "cantLook": "Fabricator でこのプロジェクトを確認できませんでした。",
+      "cantExportApp": "Fabricator でアプリをエクスポートできませんでした。",
+      "cantExportProject": "Fabricator でプロジェクトをエクスポートできませんでした。",
+      "cantCopy": "Fabricator でリンクをコピーできませんでした。",
+      "cantShow": "Fabricator でファイルを表示できませんでした。"
+    }
+  },
+  "appWindow": {
+    "defaultName": "Rayfin アプリ",
+    "installText": "このコンピューターで使うには、インストールしてください。専用のウィンドウで開き、データはこのコンピューターに保存されます。",
+    "update": {
+      "noDates": "{{name}} はインストール済みです。このファイルには別のバージョンが含まれています。更新すると、データはそのままでアプリが置き換えられます。",
+      "installedDate": "{{name}} はインストール済みです ({{installedOn}} にエクスポート)。このファイルには別のバージョンが含まれています。更新すると、データはそのままでアプリが置き換えられます。",
+      "fileDate": "{{name}} はインストール済みです。このファイルには、{{fileOn}} にエクスポートされた別のバージョンが含まれています。更新すると、データはそのままでアプリが置き換えられます。",
+      "bothDates": "{{name}} はインストール済みです ({{installedOn}} にエクスポート)。このファイルには、{{fileOn}} にエクスポートされた別のバージョンが含まれています。更新すると、データはそのままでアプリが置き換えられます。"
+    },
+    "bringsIn": "含まれるもの",
+    "codeDesc": "初めて開くときに、Fabricator がパッケージをインストールしてビルドします。",
+    "secretsDesc": "値は含まれないため、それを必要とする機能は動作しません。",
+    "trust": "信頼できる人のアプリだけをインストールしてください。そのコードは、このコンピューター上であなたとして実行されます。",
+    "openInstalled": "インストール済みのものを開く",
+    "updateAnyway": "このまま更新",
+    "installAnyway": "このままインストール",
+    "installingName": "{{name}} をインストールしています…",
+    "progress": "インストールの進行状況",
+    "gettingReady": "{{name}} を準備しています…",
+    "building": "{{name}} をビルドしています…",
+    "starting": "{{name}} を起動しています…",
+    "packagesHint": "パッケージをインストールしています。初回は 1、2 分かかります。",
+    "needsNode": "このアプリには Node.js が必要です",
+    "didntStart": "{{name}} を起動できませんでした",
+    "restartForNode": "Node.js をインストールしたら、再起動して使ってください。",
+    "noOutput": "まだ出力はありません。",
+    "showDetails": "詳細を表示",
+    "installNode": "Node.js をインストール",
+    "installingNode": "Node.js をインストールしています…",
+    "cantOpenTitle": "Fabricator でこのアプリを開けません",
+    "errors": {
+      "didntStart": "アプリを起動できませんでした。",
+      "cantOpen": "Fabricator でこのアプリを開けませんでした。",
+      "nothingToOpen": "開くものがありません。",
+      "cantInstall": "Fabricator でアプリをインストールできませんでした。"
+    }
+  },
+  "appIcon": {
+    "unreadable": "アイコンを読み取れませんでした。",
+    "cantDraw": "Fabricator でアプリのアイコンを描画できませんでした。"
+  },
+  "removals": {
+    "waitingSignIn": "Fabric へのサインインを待っています…",
+    "deletingApp": "公開済みのアプリを削除しています…",
+    "deletingAppFrom": "{{workspace}} から公開済みのアプリを削除しています…",
+    "trashing": "フォルダーをごみ箱に移動しています…",
+    "counting": "ファイルを数えています… {{processed, number}}",
+    "moving_other": "{{count, number}} 個のファイルをごみ箱に移動しています…",
+    "movingFor_other": "{{count, number}} 個のファイルをごみ箱に移動しています… {{seconds}} 秒",
+    "sessionExpired": "Fabric のセッションの有効期限が切れました。Fabric にサインインして、もう一度お試しください。",
+    "cantDeleteApp": "公開済みのアプリを削除できませんでした。",
+    "cantDeleteAppRetry": "公開済みのアプリを削除できませんでした。もう一度お試しください。",
+    "tooLong": "公開済みのアプリの削除に時間がかかりすぎています。接続が遅い可能性があります。もう一度お試しください。",
+    "cantTrash": "フォルダーをごみ箱に移動できませんでした。もう一度お試しください。",
+    "signInUnfinished": "Fabric へのサインインが完了しませんでした。もう一度お試しください。",
+    "cantConfirmSignIn": "Fabric へのサインインを確認できませんでした。もう一度お試しください。",
+    "closedBeforeSignIn": "サインインが完了する前に Fabricator が閉じられました。"
+  }
+}

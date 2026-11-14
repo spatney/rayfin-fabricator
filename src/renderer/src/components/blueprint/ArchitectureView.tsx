@@ -11,6 +11,7 @@ import {
   type JSX,
 } from 'react'
 import type { StudioProject } from '@shared/ipc'
+import { translator, useTranslation } from '../../i18n'
 import {
   ids,
   portsOf,
@@ -26,7 +27,17 @@ import { Codicon } from '../icons'
 import ArchitectureInspector from './ArchitectureInspector'
 import type { ChatPrompt } from './prompts'
 import { loadFabricInfo, type FabricInfo } from './fabricInfo'
-import { appIdentityName, appWorkspaceId, deployState, FabricMark, host, hueOf, IDENTITY_ICON, PORT_LABEL } from './util'
+import {
+  appIdentityName,
+  appWorkspaceId,
+  deployState,
+  FabricMark,
+  host,
+  hueOf,
+  IDENTITY_ICON,
+  PORT_ARIA,
+  PORT_LABEL
+} from './util'
 import './blueprint.css'
 
 interface Props {
@@ -115,6 +126,7 @@ function curve(x1: number, y1: number, x2: number, y2: number): string {
 
 /** Group the sources by where they live, the app's own workspace first. */
 export function zonesOf(arch: AppArchitecture, info: FabricInfo | null, appWs?: string): Zone[] {
+  const t = translator('blueprint')
   const zones = new Map<string, Zone>()
   const add = (id: string, make: () => Omit<Zone, 'id' | 'sources'>, src: SourceNode): void => {
     const zone = zones.get(id) ?? { id, ...make(), sources: [] }
@@ -128,11 +140,11 @@ export function zonesOf(arch: AppArchitecture, info: FabricInfo | null, appWs?: 
         `zone:ws:${wsId}`,
         () => {
           const ws = info?.workspaces.get(wsId)
-          const kind = wsId === appWs ? 'This app’s workspace' : 'Fabric workspace'
+          const kind = wsId === appWs ? t('view.zone.appWorkspace') : t('view.zone.fabricWorkspace')
           const where = ws?.sku ? `${ws.sku}${ws.region ? ` · ${ws.region}` : ''}` : undefined
           return ws?.displayName
             ? { kind: 'workspace', title: ws.displayName, meta: where ? `${kind} · ${where}` : kind }
-            : { kind: 'workspace', title: kind, meta: `ID ${wsId.slice(0, 8)}…` }
+            : { kind: 'workspace', title: kind, meta: t('view.zone.id', { id: wsId.slice(0, 8) }) }
         },
         src
       )
@@ -141,12 +153,12 @@ export function zonesOf(arch: AppArchitecture, info: FabricInfo | null, appWs?: 
     } else if (src.vendor === 'azure') {
       add('zone:azure', () => ({ kind: 'azure', title: 'Azure' }), src)
     } else {
-      add('zone:web', () => ({ kind: 'web', title: 'Web APIs' }), src)
+      add('zone:web', () => ({ kind: 'web', title: t('view.zone.webApis') }), src)
     }
   }
   for (const zone of zones.values()) {
     if (zone.kind !== 'workspace' && zone.sources.every((s) => s.kind === 'audience' || s.kind === 'api')) {
-      zone.meta = 'Called from functions'
+      zone.meta = t('view.zone.calledFromFunctions')
     }
   }
   const rank = (z: Zone): number =>
@@ -166,6 +178,7 @@ export default function ArchitectureView({
   onOpenFabricData,
   onOpenSecrets
 }: Props): JSX.Element {
+  const { t, i18n } = useTranslation('blueprint')
   const [selected, setSelected] = useState<string | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -189,7 +202,9 @@ export default function ArchitectureView({
   const ports = useMemo(() => portsOf(arch), [arch])
   const usesApp = arch.routes.some((r) => r.identity === 'app')
   const appWs = appWorkspaceId(project)
-  const zones = useMemo(() => zonesOf(arch, info, appWs), [arch, info, appWs])
+  // zonesOf names the zones in the language shown, so a new language renames them.
+  const language = i18n.language
+  const zones = useMemo(() => zonesOf(arch, info, appWs), [arch, info, appWs, language])
 
   // A node that no longer exists (after the app changed) can't stay selected.
   const nodeIds = useMemo(() => {
@@ -478,7 +493,8 @@ export default function ArchitectureView({
   const matched = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return null
-    const hit = (...texts: (string | undefined)[]): boolean => texts.some((t) => t?.toLowerCase().includes(q))
+    const hit = (...texts: (string | undefined)[]): boolean =>
+      texts.some((text) => text?.toLowerCase().includes(q))
     const s = new Set<string>()
     for (const svc of arch.services) if (hit(svc.title, svc.summary, svc.meta)) s.add(svc.id)
     for (const src of arch.sources) {
@@ -560,12 +576,16 @@ export default function ArchitectureView({
           <input
             className="model-search-input"
             value={query}
-            placeholder="Search the app and its connections"
-            aria-label="Search the app and its connections"
+            placeholder={t('view.search')}
+            aria-label={t('view.search')}
             onChange={(e) => setQuery(e.target.value)}
           />
           {query && (
-            <button className="model-search-clear" aria-label="Clear search" onClick={() => setQuery('')}>
+            <button
+              className="model-search-clear"
+              aria-label={t('view.clearSearch')}
+              onClick={() => setQuery('')}
+            >
               <Codicon name="close" />
             </button>
           )}
@@ -576,9 +596,9 @@ export default function ArchitectureView({
             type="button"
             className="model-tool-btn"
             onClick={() => void window.api.openExternal(deploy.url!)}
-            title={`Open ${host(deploy.url)}`}
+            title={t('actions.openNamed', { name: host(deploy.url) })}
           >
-            <Codicon name="globe" /> Open the app
+            <Codicon name="globe" /> {t('view.openApp')}
           </button>
         )}
         {deploy.portalUrl && (
@@ -586,23 +606,36 @@ export default function ArchitectureView({
             type="button"
             className="model-tool-btn"
             onClick={() => void window.api.openExternal(deploy.portalUrl!)}
-            title="Open the app in the Fabric portal"
+            title={t('view.openInPortal')}
           >
-            <Codicon name="link-external" /> Open in Fabric
+            <Codicon name="link-external" /> {t('view.openInFabric')}
           </button>
         )}
-        <div className="model-zoom" role="group" aria-label="Zoom">
-          <button className="model-zoom-btn" onClick={() => zoomBy(0.8)} aria-label="Zoom out">
+        <div className="model-zoom" role="group" aria-label={t('view.zoom')}>
+          <button
+            className="model-zoom-btn"
+            onClick={() => zoomBy(0.8)}
+            aria-label={t('view.zoomOut')}
+          >
             <Codicon name="zoom-out" />
           </button>
-          <button className="model-zoom-label" onClick={fit} title="Fit to view">
+          <button className="model-zoom-label" onClick={fit} title={t('view.fit')}>
             {Math.round(view.scale * 100)}%
           </button>
-          <button className="model-zoom-btn" onClick={() => zoomBy(1.25)} aria-label="Zoom in">
+          <button
+            className="model-zoom-btn"
+            onClick={() => zoomBy(1.25)}
+            aria-label={t('view.zoomIn')}
+          >
             <Codicon name="zoom-in" />
           </button>
         </div>
-        <button className="model-tool-btn" onClick={fit} title="Fit to view" aria-label="Fit to view">
+        <button
+          className="model-tool-btn"
+          onClick={fit}
+          title={t('view.fit')}
+          aria-label={t('view.fit')}
+        >
           <Codicon name="screen-full" />
         </button>
       </div>
@@ -630,7 +663,7 @@ export default function ArchitectureView({
                   className={cls('bp-node bp-people', ids.people)}
                   style={enter()}
                   ref={setNodeRef(ids.people)}
-                  {...handlers(ids.people, 'People who use the app')}
+                  {...handlers(ids.people, t('view.people.aria'))}
                 >
                   <div className="bp-people-head">
                     <div className="bp-faces" aria-hidden="true">
@@ -641,14 +674,18 @@ export default function ArchitectureView({
                       ))}
                     </div>
                     <div className="bp-titles">
-                      <strong>People</strong>
-                      <span>who use the app</span>
+                      <strong>{t('view.people.title')}</strong>
+                      <span>{t('view.people.subtitle')}</span>
                     </div>
                   </div>
                   <ul className="bp-facts">
                     <li className={arch.config.auth.enabled ? '' : 'bp-fact--danger'}>
                       <Codicon name={arch.config.auth.enabled ? 'shield' : 'unlock'} />
-                      <span>{arch.config.auth.enabled ? 'Sign in with Microsoft Entra ID' : 'Sign-in is off'}</span>
+                      <span>
+                        {arch.config.auth.enabled
+                          ? t('view.people.signIn')
+                          : t('view.people.signInOff')}
+                      </span>
                     </li>
                   </ul>
                 </div>
@@ -659,13 +696,24 @@ export default function ArchitectureView({
               <div className="bp-col bp-col--app">
                 <div className={cls('bp-node bp-app', ids.app)} style={enter()} ref={setNodeRef(ids.app)}>
                   <div className="bp-app-top">
-                    <div className="bp-app-head" {...handlers(ids.app, `${arch.name}, the Fabric app`)}>
-                      <span className="bp-mark" style={{ '--hue': hueOf(arch.name) } as CSSProperties} aria-hidden="true">
+                    <div
+                      className="bp-app-head"
+                      {...handlers(ids.app, t('view.app.aria', { name: arch.name }))}
+                    >
+                      <span
+                        className="bp-mark"
+                        style={{ '--hue': hueOf(arch.name) } as CSSProperties}
+                        aria-hidden="true"
+                      >
                         {arch.name.trim()[0]?.toUpperCase() ?? '?'}
                       </span>
                       <div className="bp-titles">
                         <strong>{arch.name}</strong>
-                        <span>{workspaceName ? `Fabric app in ${workspaceName}` : 'Fabric app'}</span>
+                        <span>
+                          {workspaceName
+                            ? t('view.app.inWorkspace', { workspace: workspaceName })
+                            : t('view.app.fabricApp')}
+                        </span>
                       </div>
                     </div>
                     {usesApp && (
@@ -674,7 +722,10 @@ export default function ArchitectureView({
                         servicePrincipal={appIdentity.kind === 'service-principal'}
                         className={cls('bp-row bp-whois', ids.identity('app'))}
                         elRef={setNodeRef(ids.identity('app'))}
-                        {...handlers(ids.identity('app'), `App identity: ${appWho}`)}
+                        {...handlers(
+                          ids.identity('app'),
+                          t('view.appIdentityAria', { who: appWho })
+                        )}
                       />
                     )}
                   </div>
@@ -692,7 +743,10 @@ export default function ArchitectureView({
                             svc={svc}
                             hasPorts={svcPorts.length > 0}
                             counts={svc.kind === 'database' ? arch.database?.counts : undefined}
-                            {...handlers(svc.id, `${svc.title}: ${svc.summary}`)}
+                            {...handlers(
+                              svc.id,
+                              t('view.serviceAria', { title: svc.title, summary: svc.summary })
+                            )}
                           />
                           {svcPorts.length > 0 && (
                             <div className="bp-ports">
@@ -707,7 +761,7 @@ export default function ArchitectureView({
                                       !svcDim && dim(id) ? ' bp-is-dim' : ''
                                     }`}
                                     elRef={setNodeRef(id)}
-                                    {...handlers(id, `${svc.title}, ${PORT_LABEL[p.identity].toLowerCase()}`)}
+                                    {...handlers(id, t(PORT_ARIA[p.identity], { part: svc.title }))}
                                   />
                                 )
                               })}
@@ -745,7 +799,10 @@ export default function ArchitectureView({
                           name={nameOf(src)}
                           className={cls('bp-row bp-src', src.id)}
                           elRef={setNodeRef(src.id)}
-                          {...handlers(src.id, `${nameOf(src)}, ${src.typeLabel}`)}
+                          {...handlers(
+                            src.id,
+                            t('view.sourceAria', { name: nameOf(src), type: src.typeLabel })
+                          )}
                         />
                       ))}
                     </section>
@@ -755,18 +812,15 @@ export default function ArchitectureView({
                     <span className="bp-ghost-ico" aria-hidden="true">
                       <Codicon name="plug" />
                     </span>
-                    <strong>No outside data yet</strong>
-                    <span>
-                      Bring in a Fabric warehouse, SQL database, lakehouse or semantic model, or call Azure
-                      services from functions.
-                    </span>
+                    <strong>{t('view.ghost.title')}</strong>
+                    <span>{t('view.ghost.body')}</span>
                     {onConnectData && (
                       <button
                         type="button"
                         className="btn btn--xs btn--ghost"
                         onClick={onConnectData}
                       >
-                        Add Fabric data…
+                        {t('view.ghost.add')}
                       </button>
                     )}
                   </div>
@@ -821,11 +875,15 @@ type RowProps = Omit<JSX.IntrinsicElements['div'], 'ref'> & {
   elRef: (el: HTMLElement | null) => void
 }
 
-const ACCESS_WORDS: [keyof NonNullable<AppArchitecture['database']>['counts'], string][] = [
-  ['ok', 'row-scoped'],
-  ['warn', 'any signed-in'],
-  ['danger', 'public']
-]
+/** How each table count reads: keys into the `blueprint` catalog. */
+const ACCESS_WORDS = [
+  ['ok', 'model.database.scoped'],
+  ['warn', 'model.database.signedIn'],
+  ['danger', 'model.database.public']
+] as const satisfies readonly (readonly [
+  keyof NonNullable<AppArchitecture['database']>['counts'],
+  string
+])[]
 
 function ServiceMain({
   svc,
@@ -837,8 +895,9 @@ function ServiceMain({
   counts?: { ok: number; warn: number; danger: number }
   hasPorts: boolean
 } & Omit<JSX.IntrinsicElements['div'], 'ref'>): JSX.Element {
+  const { t } = useTranslation('blueprint')
   const danger = svc.issues.find((i) => i.tone === 'danger')
-  const shown = counts ? ACCESS_WORDS.filter(([t]) => counts[t] > 0) : []
+  const shown = counts ? ACCESS_WORDS.filter(([tone]) => counts[tone] > 0) : []
   // Its lines already say where functions and connectors reach.
   const meta = hasPorts && (svc.kind === 'functions' || svc.kind === 'connectors') ? undefined : svc.meta
   return (
@@ -863,10 +922,10 @@ function ServiceMain({
         )}
         {shown.length > 0 ? (
           <span className="bp-access" title={svc.meta}>
-            {shown.map(([t, word]) => (
-              <span key={t} className="bp-access-item">
-                <span className={`bp-dot bp-dot--${t}`} />
-                {counts![t]} {word}
+            {shown.map(([tone, word]) => (
+              <span key={tone} className="bp-access-item">
+                <span className={`bp-dot bp-dot--${tone}`} />
+                {t(word, { count: counts![tone] })}
               </span>
             ))}
           </span>
@@ -887,13 +946,14 @@ function PortRow({
   elRef,
   ...rest
 }: { identity: Identity; count: number } & RowProps): JSX.Element {
+  const { t } = useTranslation('blueprint')
   return (
     <div className={className} ref={elRef} {...rest}>
       <span className="bp-port-ico" aria-hidden="true">
         <Codicon name={IDENTITY_ICON[identity]} />
       </span>
-      <span className="bp-port-label">{PORT_LABEL[identity]}</span>
-      <span className="bp-port-count" title={`${count} ${count === 1 ? 'connection' : 'connections'}`}>
+      <span className="bp-port-label">{t(PORT_LABEL[identity])}</span>
+      <span className="bp-port-count" title={t('view.connections', { count })}>
         {count}
       </span>
     </div>
@@ -908,13 +968,14 @@ function AppIdentityRow({
   elRef,
   ...rest
 }: { who: string; servicePrincipal: boolean } & RowProps): JSX.Element {
+  const { t } = useTranslation('blueprint')
   return (
     <div className={className} ref={elRef} {...rest}>
       <span className="bp-tile bp-tile--id" aria-hidden="true">
         <Codicon name={servicePrincipal ? 'server-process' : IDENTITY_ICON.app} />
       </span>
       <div className="bp-row-text">
-        <span className="bp-row-kicker">App identity</span>
+        <span className="bp-row-kicker">{t('identity.app')}</span>
         <strong title={who}>{who}</strong>
       </div>
     </div>
@@ -928,10 +989,11 @@ function SourceRow({
   elRef,
   ...rest
 }: { src: SourceNode; name: string } & RowProps): JSX.Element {
+  const { t } = useTranslation('blueprint')
   const danger = src.issues.find((i) => i.tone === 'danger')
   const second =
     (src.kind === 'audience' || src.kind === 'api') && src.functions.length
-      ? `Called by ${src.functions.join(', ')}`
+      ? t('view.calledBy', { functions: src.functions.join(', ') })
       : [src.typeLabel, src.ability].filter(Boolean).join(' · ')
   return (
     <div className={className} ref={elRef} {...rest}>

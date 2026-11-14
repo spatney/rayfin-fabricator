@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type JSX } from 'react'
 import type { SecretInfo } from '@shared/ipc'
+import { Trans, translator, useTranslation } from '../../i18n'
 import { toLocalBackendError } from '../../localBackend'
 import { useModalFocus } from '../../modalFocus'
 import { useSuppressPreview } from '../../overlay'
@@ -21,7 +22,7 @@ export function toSecretName(text: string): string {
 /** Why a name won't do, or null. */
 export function nameProblem(name: string): string | null {
   if (!name) return null
-  return NAME_RE.test(name) ? null : 'Start the name with a letter.'
+  return NAME_RE.test(name) ? null : translator('secrets')('dialog.nameProblem')
 }
 
 /** What the dialog sets. */
@@ -48,11 +49,6 @@ interface Props {
   onDeclared?: (name: string) => void
 }
 
-const LOCAL_VALUE_HINT =
-  'Saved on this computer, where your app runs while you build it. It never goes into your code or History.'
-const PUBLISHED_VALUE_HINT =
-  'Sent straight to your published app. Fabricator doesn’t keep it, and nobody can read it back.'
-
 /** A failed call's message, with its hint when there is one. */
 function failure(reason: unknown): string {
   const error = toLocalBackendError(reason)
@@ -74,6 +70,7 @@ export default function SecretDialog({
   onSaved,
   onDeclared
 }: Props): JSX.Element {
+  const { t } = useTranslation('secrets')
   useSuppressPreview()
   const dialogRef = useModalFocus<HTMLDivElement>()
   const titleId = useId()
@@ -109,21 +106,21 @@ export default function SecretDialog({
   let title: string
   let subtitle: string
   let action: string
-  let valueHint = LOCAL_VALUE_HINT
+  let valueHint = t('dialog.localHint')
   if (target.kind === 'published') {
     const stored = target.secret.stored
-    title = stored ? 'Replace published value' : 'Set published value'
-    subtitle = `A new value for ${name} on your published app. Functions get it from their next run.`
-    action = stored ? 'Replace value' : 'Set value'
-    valueHint = PUBLISHED_VALUE_HINT
+    title = stored ? t('dialog.replacePublishedTitle') : t('dialog.setPublishedTitle')
+    subtitle = t('dialog.publishedSubtitle', { name })
+    action = stored ? t('dialog.replaceValue') : t('dialog.setValue')
+    valueHint = t('dialog.publishedHint')
   } else if (target.kind === 'local') {
-    title = target.replacing ? 'Change local value' : 'Set local value'
-    subtitle = `A value for ${name} on this computer. Functions get it from their next run.`
-    action = target.replacing ? 'Change value' : 'Set value'
+    title = target.replacing ? t('dialog.changeLocalTitle') : t('dialog.setLocalTitle')
+    subtitle = t('dialog.localSubtitle', { name })
+    action = target.replacing ? t('dialog.changeValue') : t('dialog.setValue')
   } else {
-    title = 'New secret'
-    subtitle = 'An API key, password or connection string your functions need.'
-    action = match?.declared ? 'Set value' : 'Add secret'
+    title = t('dialog.newTitle')
+    subtitle = t('dialog.newSubtitle')
+    action = match?.declared ? t('dialog.setValue') : t('dialog.add')
   }
 
   const save = async (): Promise<void> => {
@@ -141,7 +138,7 @@ export default function SecretDialog({
           declared ? undefined : description.trim() || undefined
         )
         if (!result.ok) {
-          setError(result.error ?? 'Couldn’t save the secret.')
+          setError(result.error ?? t('dialog.saveFailed'))
           setSignIn(Boolean(result.signIn))
           return
         }
@@ -155,7 +152,7 @@ export default function SecretDialog({
             description.trim() || undefined
           )
           if (!result.ok) {
-            setError(result.error ?? 'Couldn’t add the secret.')
+            setError(result.error ?? t('dialog.addFailed'))
             return
           }
           onDeclared?.(name)
@@ -188,7 +185,12 @@ export default function SecretDialog({
             <h2 id={titleId}>{title}</h2>
             <p className="modal-sub">{subtitle}</p>
           </div>
-          <button className="icon-btn" onClick={onClose} aria-label="Close" disabled={busy}>
+          <button
+            className="icon-btn"
+            onClick={onClose}
+            aria-label={t('actions.close')}
+            disabled={busy}
+          >
             ✕
           </button>
         </div>
@@ -204,14 +206,13 @@ export default function SecretDialog({
             {error && (
               <div className="alert alert--error" role="alert">
                 {error}
-                {signIn &&
-                  ' Your Fabric sign-in may have expired: open the account menu and select Refresh Fabric authentication.'}
+                {signIn && ` ${t('dialog.signInHint')}`}
               </div>
             )}
 
             {!fixedName && (
               <div className="sec-field">
-                <label htmlFor={nameId}>Name</label>
+                <label htmlFor={nameId}>{t('dialog.name')}</label>
                 <input
                   id={nameId}
                   className="field-input sec-mono"
@@ -232,15 +233,15 @@ export default function SecretDialog({
                   {problem ??
                     (match
                       ? match.declared
-                        ? `This app already has ${match.name}. Saving sets its value on this computer.`
-                        : `rayfin.yml doesn’t list ${match.name} yet. Saving adds it and sets its value on this computer.`
-                      : 'Letters, numbers and underscores. Functions read it by this name.')}
+                        ? t('dialog.existing', { name: match.name })
+                        : t('dialog.undeclared', { name: match.name })
+                      : t('dialog.nameHint'))}
                 </span>
               </div>
             )}
 
             <div className="sec-field">
-              <label htmlFor={valueId}>Value</label>
+              <label htmlFor={valueId}>{t('dialog.value')}</label>
               <div className="sec-value">
                 <input
                   id={valueId}
@@ -258,9 +259,9 @@ export default function SecretDialog({
                   type="button"
                   className="sec-reveal"
                   onClick={() => setReveal((r) => !r)}
-                  aria-label={reveal ? 'Hide value' : 'Show value'}
+                  aria-label={reveal ? t('dialog.hideValue') : t('dialog.showValue')}
                   aria-pressed={reveal}
-                  title={reveal ? 'Hide value' : 'Show value'}
+                  title={reveal ? t('dialog.hideValue') : t('dialog.showValue')}
                 >
                   <Codicon name={reveal ? 'eye-closed' : 'eye'} />
                 </button>
@@ -273,20 +274,20 @@ export default function SecretDialog({
             {!declared && (
               <div className="sec-field">
                 <label htmlFor={describeId}>
-                  What it’s for <span className="sec-optional">(optional)</span>
+                  {t('dialog.purpose')} <span className="sec-optional">{t('dialog.optional')}</span>
                 </label>
                 <input
                   id={describeId}
                   className="field-input"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Key for the chat function"
+                  placeholder={t('dialog.purposePlaceholder')}
                   maxLength={200}
                   disabled={busy}
                   aria-describedby={`${describeId}-hint`}
                 />
                 <span id={`${describeId}-hint`} className="sec-hint">
-                  Saved with the name in <code>rayfin/rayfin.yml</code>. Never put the value here.
+                  <Trans t={t} i18nKey="dialog.purposeHint" components={{ code: <code /> }} />
                 </span>
               </div>
             )}
@@ -294,13 +295,13 @@ export default function SecretDialog({
 
           <div className="modal-footer">
             <button type="button" className="btn btn--ghost" onClick={onClose} disabled={busy}>
-              Cancel
+              {t('actions.cancel')}
             </button>
             <button type="submit" className="btn btn--primary" disabled={!canSave}>
               {busy ? (
                 <span className="btn-busy">
                   <span className="btn-spin" aria-hidden="true" />
-                  Saving…
+                  {t('status.saving')}
                 </span>
               ) : (
                 action

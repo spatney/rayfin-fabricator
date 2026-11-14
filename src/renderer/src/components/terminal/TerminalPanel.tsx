@@ -11,9 +11,10 @@ import {
 } from 'react'
 import type { StudioProject, TerminalShell } from '@shared/ipc'
 import { useFileDrop } from '../../fileDrop'
+import { translator, useTranslation } from '../../i18n'
 import { localStateLabel, localTone, runningProblems, type LocalBackend } from '../../localBackend'
 import { uiZoom } from '../../menuLayout'
-import { isMac } from '../../platform'
+import { isMac, modKey, shortcut } from '../../platform'
 import {
   DEFAULT_HEIGHT,
   MIN_HEIGHT,
@@ -53,21 +54,22 @@ function shellIcon(id: string | undefined): string {
 }
 
 function statusText(tab: TerminalTab): string {
+  const t = translator('code')
   switch (tab.status) {
     case 'starting':
-      return 'Starting'
+      return t('panel.state.starting')
     case 'running':
-      return 'Running'
+      return t('panel.state.running')
     case 'failed':
-      return tab.error ? `Couldn’t start: ${tab.error}` : 'Couldn’t start'
+      return tab.error ? t('panel.state.failedWith', { error: tab.error }) : t('panel.state.failed')
     case 'exited':
       return tab.exitCode === null || tab.exitCode === undefined
-        ? 'Ended'
-        : `Exited with code ${tab.exitCode}`
+        ? t('panel.state.ended')
+        : t('panel.state.exited', { code: tab.exitCode })
   }
 }
 
-const shortcut = (key: string): string => (isMac() ? `⌃${key}` : `Ctrl+${key}`)
+const ctrlShortcut = (key: string): string => (isMac() ? `⌃${key}` : `${modKey()}+${key}`)
 
 /** The Output tab's dot for the app's state, in the shells' colors. */
 const OUTPUT_DOTS = {
@@ -96,6 +98,7 @@ interface Props {
  * running; closing a tab ends that shell and what it started.
  */
 export default function TerminalPanel({ project, hidden, onOpenFile, local }: Props): JSX.Element {
+  const { t } = useTranslation('code')
   const state = useTerminalState()
   const terminals = projectTerminals(state, project.id)
   /** The app runs on this computer, so it has an Output tab. */
@@ -104,7 +107,11 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
   const activeTab = showingOutput
     ? null
     : (terminals.tabs.find((tab) => tab.key === terminals.active) ?? null)
-  const labels = useMemo(() => tabLabels(terminals.tabs), [terminals.tabs])
+  const fallbackLabel = t('panel.tab')
+  const labels = useMemo(
+    () => tabLabels(terminals.tabs, fallbackLabel),
+    [terminals.tabs, fallbackLabel]
+  )
   const panelRef = useRef<HTMLElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
@@ -295,9 +302,9 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
     : [
         {
           id: 'copy',
-          label: 'Copy',
+          label: t('actions.copy'),
           icon: 'copy',
-          detail: isMac() ? '⌘C' : 'Ctrl+C',
+          detail: shortcut('C'),
           disabled: !view.hasSelection(),
           run: () => view.copy()
         },
@@ -305,40 +312,40 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
           ? [
               {
                 id: 'paste',
-                label: 'Paste',
+                label: t('panel.paste'),
                 icon: 'clippy',
-                detail: isMac() ? '⌘V' : 'Ctrl+V',
+                detail: shortcut('V'),
                 run: () => session.paste()
               }
             ]
           : []),
         {
           id: 'select-all',
-          label: 'Select all',
+          label: t('panel.selectAll'),
           icon: 'list-selection',
           run: () => view.selectAll()
         },
         'separator',
         {
           id: 'find',
-          label: 'Find…',
+          label: t('panel.findMenu'),
           icon: 'search',
-          detail: isMac() ? '⌘F' : 'Ctrl+F',
+          detail: shortcut('F'),
           run: () => setFinding(true)
         },
-        { id: 'clear', label: 'Clear', icon: 'clear-all', run: () => view.clear() },
+        { id: 'clear', label: t('actions.clear'), icon: 'clear-all', run: () => view.clear() },
         ...(session
           ? ([
               'separator',
               {
                 id: 'restart',
-                label: session.shellRunning ? 'Restart shell' : 'Start shell',
+                label: session.shellRunning ? t('panel.restartShell') : t('panel.startShell'),
                 icon: 'debug-restart',
                 run: () => session.restart()
               },
               {
                 id: 'close',
-                label: 'Close terminal',
+                label: t('panel.closeTerminal'),
                 icon: 'trash',
                 run: () => activeKey && closeTab(activeKey)
               }
@@ -350,13 +357,14 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
     id: shell.id,
     label: shell.name,
     icon: shellIcon(shell.id),
-    detail: shell.id === nextShell?.id ? 'Default' : undefined,
+    detail: shell.id === nextShell?.id ? t('panel.defaultShell') : undefined,
     run: () => terminalStore.add(project.id, shell.id)
   }))
 
   const folder = project.path.split(/[\\/]/).filter(Boolean).pop() ?? project.path
   const height = dragHeight ?? state.height
   const style = { '--terminal-height': `${height}px` } as CSSProperties
+  const newTerminalShortcut = ctrlShortcut('Shift+`')
 
   return (
     <section
@@ -366,7 +374,7 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
       }${risen || state.maximized ? '' : ' terminal-panel--rise'}`}
       style={style}
       hidden={hidden}
-      aria-label="Terminal"
+      aria-label={t('panel.label')}
       onAnimationEnd={(event) => {
         if (event.target === event.currentTarget) setRisen(true)
       }}
@@ -377,8 +385,8 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
             className="terminal-resize"
             role="separator"
             aria-orientation="horizontal"
-            aria-label="Resize the terminal"
-            title="Drag to resize · double-click to reset"
+            aria-label={t('panel.resize')}
+            title={t('panel.resizeTitle')}
             onPointerDown={onResizeStart}
             onDoubleClick={() => terminalStore.setHeight(DEFAULT_HEIGHT)}
           />
@@ -389,7 +397,7 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
             if (event.target === event.currentTarget) toggleMaximized()
           }}
         >
-          <div className="terminal-tabs" role="tablist" aria-label="Terminals">
+          <div className="terminal-tabs" role="tablist" aria-label={t('panel.tabs')}>
             {local && (
               <div className={`terminal-tab${showingOutput ? ' terminal-tab--active' : ''}`}>
                 <button
@@ -397,11 +405,11 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
                   role="tab"
                   aria-selected={showingOutput}
                   className="terminal-tab-main terminal-tab-main--solo"
-                  title={`Your app’s backend, Vite and functions on this computer\n${localStateLabel(local.status, !local.status || local.busy)}`}
+                  title={`${t('panel.outputTitle')}\n${localStateLabel(local.status, !local.status || local.busy)}`}
                   onClick={() => terminalStore.showOutput(project.id)}
                 >
                   <Codicon name="output" className="terminal-tab-icon" />
-                  <span className="terminal-tab-label">Output</span>
+                  <span className="terminal-tab-label">{t('panel.output')}</span>
                   <span
                     className={`terminal-dot terminal-dot--${OUTPUT_DOTS[localTone(local.status, !local.status || local.busy)]}`}
                     aria-label={localStateLabel(local.status, !local.status || local.busy)}
@@ -410,7 +418,7 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
               </div>
             )}
             {terminals.tabs.map((tab) => {
-              const label = labels.get(tab.key) ?? 'terminal'
+              const label = labels.get(tab.key) ?? fallbackLabel
               const active = tab.key === activeKey
               return (
                 <div
@@ -440,13 +448,15 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
                       className={`terminal-dot terminal-dot--${dotOf(tab)}`}
                       aria-label={statusText(tab)}
                     />
-                    {tab.unread && <span className="terminal-unread" aria-label="New output" />}
+                    {tab.unread && (
+                      <span className="terminal-unread" aria-label={t('panel.newOutput')} />
+                    )}
                   </button>
                   <button
                     type="button"
                     className="terminal-tab-close"
-                    aria-label={`Close ${label}`}
-                    title="Close terminal"
+                    aria-label={t('panel.closeTab', { label })}
+                    title={t('panel.closeTerminal')}
                     onClick={() => closeTab(tab.key)}
                   >
                     <Codicon name="close" />
@@ -458,8 +468,15 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
               <button
                 type="button"
                 className="terminal-btn"
-                aria-label="New terminal"
-                title={`New terminal${nextShell ? ` (${nextShell.name})` : ''} · ${shortcut('Shift+`')}`}
+                aria-label={t('panel.newTerminal')}
+                title={
+                  nextShell
+                    ? t('panel.newShellTitle', {
+                        shell: nextShell.name,
+                        shortcut: newTerminalShortcut
+                      })
+                    : t('panel.newTerminalTitle', { shortcut: newTerminalShortcut })
+                }
                 onClick={() => terminalStore.add(project.id)}
               >
                 <Codicon name="add" />
@@ -467,10 +484,10 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
               <button
                 type="button"
                 className="terminal-btn terminal-btn--narrow"
-                aria-label="Choose a shell"
+                aria-label={t('panel.chooseShell')}
                 aria-haspopup="menu"
                 aria-expanded={Boolean(picker)}
-                title="Choose a shell"
+                title={t('panel.chooseShell')}
                 disabled={!shells?.length}
                 onClick={(event) => {
                   const box = event.currentTarget.getBoundingClientRect()
@@ -489,9 +506,9 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
             <button
               type="button"
               className={`terminal-btn${finding ? ' terminal-btn--on' : ''}`}
-              aria-label="Find"
+              aria-label={t('panel.find')}
               aria-pressed={finding}
-              title={`Find (${isMac() ? '⌘F' : 'Ctrl+F'})`}
+              title={t('panel.findTitle', { shortcut: shortcut('F') })}
               disabled={!view}
               onClick={() => (finding ? closeFind() : setFinding(true))}
             >
@@ -501,8 +518,8 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
               <button
                 type="button"
                 className="terminal-btn"
-                aria-label={copied ? 'Copied' : 'Copy output'}
-                title={copied ? 'Copied' : 'Copy output'}
+                aria-label={copied ? t('actions.copied') : t('panel.copyOutput')}
+                title={copied ? t('actions.copied') : t('panel.copyOutput')}
                 disabled={!view}
                 onClick={copyOutput}
               >
@@ -512,8 +529,8 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
             <button
               type="button"
               className="terminal-btn"
-              aria-label="Clear"
-              title="Clear"
+              aria-label={t('actions.clear')}
+              title={t('actions.clear')}
               disabled={!view}
               onClick={() => view?.clear()}
             >
@@ -523,8 +540,8 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
               <button
                 type="button"
                 className="terminal-btn"
-                aria-label={restarting ? 'Restarting app' : 'Restart app'}
-                title="Restart app: stop your app’s backend and Vite on this computer and start them again"
+                aria-label={restarting ? t('panel.restartingApp') : t('panel.restartApp')}
+                title={t('panel.restartAppTitle')}
                 disabled={restarting || !local || local.busy || local.state !== 'running'}
                 onClick={restartApp}
               >
@@ -534,8 +551,12 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
               <button
                 type="button"
                 className="terminal-btn"
-                aria-label={session?.shellRunning === false ? 'Start shell' : 'Restart shell'}
-                title={session?.shellRunning === false ? 'Start shell' : 'Restart shell'}
+                aria-label={
+                  session?.shellRunning === false ? t('panel.startShell') : t('panel.restartShell')
+                }
+                title={
+                  session?.shellRunning === false ? t('panel.startShell') : t('panel.restartShell')
+                }
                 disabled={!session}
                 onClick={() => session?.restart()}
               >
@@ -545,9 +566,9 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
             <button
               type="button"
               className="terminal-btn"
-              aria-label={state.maximized ? 'Restore size' : 'Maximize'}
+              aria-label={state.maximized ? t('panel.restoreSize') : t('panel.maximize')}
               aria-pressed={state.maximized}
-              title={state.maximized ? 'Restore size' : 'Maximize'}
+              title={state.maximized ? t('panel.restoreSize') : t('panel.maximize')}
               onClick={toggleMaximized}
             >
               <Codicon name={state.maximized ? 'screen-normal' : 'screen-full'} />
@@ -555,8 +576,8 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
             <button
               type="button"
               className="terminal-btn"
-              aria-label="Hide terminal"
-              title={`Hide terminal · ${shortcut('`')}`}
+              aria-label={t('panel.hide')}
+              title={t('panel.hideTitle', { shortcut: ctrlShortcut('`') })}
               onClick={() => terminalStore.close(project.id)}
             >
               <Codicon name="chevron-down" />
@@ -564,7 +585,7 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
           </div>
         </header>
         {problems.length > 0 && (
-          <ul className="terminal-problems" aria-label="Problems">
+          <ul className="terminal-problems" aria-label={t('panel.problems')}>
             {problems.map((problem) => (
               <li key={problem.kind} className="terminal-problem">
                 <span className="terminal-problem-dot" aria-hidden="true" />
@@ -607,7 +628,7 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
         <ContextMenu
           x={menu.x}
           y={menu.y}
-          label="Terminal"
+          label={t('panel.label')}
           entries={menuEntries}
           onClose={() => {
             setMenu(null)
@@ -619,7 +640,7 @@ export default function TerminalPanel({ project, hidden, onOpenFile, local }: Pr
         <ContextMenu
           x={picker.x}
           y={picker.y}
-          label="New terminal with"
+          label={t('panel.newWith')}
           entries={pickerEntries}
           onClose={() => setPicker(null)}
         />

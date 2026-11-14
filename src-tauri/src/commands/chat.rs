@@ -841,8 +841,8 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
         .and_then(|v| v.as_str())
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or("Copilot reported an error.")
-        .to_string();
+        .map(str::to_string)
+        .unwrap_or_else(|| t!("commands.chat.copilotError"));
       if ctx.saw_activity || !is_recoverable_session_error(&msg) {
         // A provider's error on the user's own key, in plain language.
         let shown = ctx
@@ -986,7 +986,7 @@ pub async fn chat_send(
   tokio::spawn(async move {
     let state = app.state::<AppState>();
     run_turn(app.clone(), state.inner(), project_id, turn_id, text, attachments, mode).await
-  }).await.map_err(|e| format!("Chat task failed: {e}"))?
+  }).await.map_err(|e| t!("commands.chat.taskFailed", error = e))?
 }
 
 /// The turn engine behind `chat_send`. Drives one Copilot invocation and streams
@@ -1014,22 +1014,22 @@ pub(crate) async fn run_turn(
   };
 
   let Some(project) = store::find_project(&project_id) else {
-    emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: "Project not found.".into() });
+    emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: t!("commands.shared.projectNotFound") });
     screenshot::cleanup(&attachments);
     return Ok(ChatTurnResult {
       ok: false,
-      error: Some("Project not found.".into()),
+      error: Some(t!("commands.shared.projectNotFound")),
       files_modified: vec![],
       ran_deploy: false,
     });
   };
 
   let Some(ctx_info) = resolve_context(&project_id) else {
-    emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: "Project not found.".into() });
+    emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: t!("commands.shared.projectNotFound") });
     screenshot::cleanup(&attachments);
     return Ok(ChatTurnResult {
       ok: false,
-      error: Some("Project not found.".into()),
+      error: Some(t!("commands.shared.projectNotFound")),
       files_modified: vec![],
       ran_deploy: false,
     });
@@ -1041,11 +1041,11 @@ pub(crate) async fn run_turn(
       &app,
       &project_id,
       &turn_id,
-      ChatEvent::Error { text: "A message is already being processed for this project.".into() },
+      ChatEvent::Error { text: t!("commands.chat.busy") },
     );
     return Ok(ChatTurnResult {
       ok: false,
-      error: Some("Turn already running.".into()),
+      error: Some(t!("commands.chat.turnRunning")),
       files_modified: vec![],
       ran_deploy: false,
     });
@@ -1152,7 +1152,7 @@ pub(crate) async fn run_turn(
   };
   if opened.recreated && project.copilot_session_id.is_some() {
     emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Notice {
-      text: "The saved Copilot session is no longer available. Started a new session; your Fabricator chat history is still here.".into(),
+      text: t!("commands.chat.sessionGone"),
     });
   }
   let mut session = opened.session;
@@ -1243,7 +1243,7 @@ pub(crate) async fn run_turn(
           session = opened.session;
           if opened.recreated {
             emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Notice {
-              text: "Copilot's saved session is unavailable. Started a new session; your Fabricator chat history is still here.".into(),
+              text: t!("commands.chat.sessionUnavailable"),
             });
           }
           if let Err(e) = session.rpc().mode().set(ModeSetRequest { mode: session_mode.clone(), ..Default::default() }).await {
@@ -1293,7 +1293,7 @@ pub(crate) async fn run_turn(
         reconnected = true;
         attempt += 1;
         emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Notice {
-          text: "Reconnecting to the Copilot session...".into(),
+          text: t!("commands.chat.reconnecting"),
         });
         continue;
       }
@@ -1387,14 +1387,15 @@ pub(crate) async fn run_turn(
       if continues < byok::MAX_CONTINUES {
         continues += 1;
         emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Notice {
-          text: "The model stopped before finishing. Asking it to continue…".into(),
+          text: t!("commands.chat.continuing"),
         });
         continuation = Some(byok::CONTINUE_PROMPT);
         ctx.saw_result = false;
         ctx.ended_empty = false;
         continue;
       }
-      let error = byok::STOPPED_EARLY.to_string();
+      // A model that keeps stopping without finishing.
+      let error = t!("services.byok.stoppedEarly");
       emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: error.clone() });
       ctx.errored = Some(error);
       break;
@@ -1407,7 +1408,7 @@ pub(crate) async fn run_turn(
       reconnected = true;
       attempt += 1;
       emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Notice {
-        text: "Reconnecting to the Copilot session...".into(),
+        text: t!("commands.chat.reconnecting"),
       });
       continue;
     }
@@ -1430,7 +1431,7 @@ pub(crate) async fn run_turn(
       &app,
       &project_id,
       &turn_id,
-      ChatEvent::Notice { text: format!("Copilot hiccup — retrying ({}/{})…", attempt, MAX_ATTEMPTS - 1) },
+      ChatEvent::Notice { text: t!("commands.chat.retrying", attempt = attempt, max = MAX_ATTEMPTS - 1) },
     );
     tokio::time::sleep(Duration::from_millis(attempt as u64 * 1000)).await;
     attempt += 1;
@@ -1511,9 +1512,9 @@ pub(crate) async fn run_turn(
   // `session.error` already emitted its own Error; cancellation is user-initiated.
   if !ok && !cancelled && ctx.errored.is_none() {
     let detail = if timed_out {
-      "Copilot timed out after two hours.".to_string()
+      t!("commands.chat.timedOut")
     } else {
-      "Copilot ended unexpectedly.".to_string()
+      t!("commands.chat.endedUnexpectedly")
     };
     emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: detail });
   }
@@ -1526,7 +1527,7 @@ pub(crate) async fn run_turn(
   );
   Ok(ChatTurnResult {
     ok,
-    error: if ok || cancelled { None } else { ctx.errored.or_else(|| Some("Turn failed.".into())) },
+    error: if ok || cancelled { None } else { ctx.errored.or_else(|| Some(t!("commands.chat.turnFailed"))) },
     files_modified: ctx.files_modified,
     ran_deploy: ctx.ran_deploy,
   })
@@ -1649,7 +1650,7 @@ pub async fn chat_steer(
   }
   if let Err(e) = session.send(opts).await {
     if let Some(turn) = &active_turn {
-      emit_chat_event(&app, &project_id, turn, ChatEvent::Error { text: format!("Couldn't interject: {e}") });
+      emit_chat_event(&app, &project_id, turn, ChatEvent::Error { text: t!("commands.chat.cantInterject", error = e) });
     }
     screenshot::cleanup(&attachments);
     // Handled (with an error shown) — don't start a competing turn.
@@ -1720,21 +1721,21 @@ pub async fn chat_resolve_plan(
   plan_content: String,
   feedback: Option<String>,
 ) -> Result<(), String> {
-  let owner = state.plan.plan_owner(&request_id).ok_or_else(|| "No pending plan to resolve.".to_string())?;
+  let owner = state.plan.plan_owner(&request_id).ok_or_else(|| t!("commands.chat.noPendingPlan"))?;
   if owner.project_id != project_id {
-    return Err("That plan request doesn't belong to this project.".into());
+    return Err(t!("commands.chat.planNotThisProject"));
   }
   let session = state
     .copilot
     .peek_session(&project_id)
     .await
-    .ok_or_else(|| "No active Copilot session for this project.".to_string())?;
+    .ok_or_else(|| t!("commands.chat.noSession"))?;
   session
     .rpc()
     .plan()
     .update(PlanUpdateRequest { content: plan_content })
     .await
-    .map_err(|e| format!("Failed to update the plan: {e}"))?;
+    .map_err(|e| t!("commands.chat.cantUpdatePlan", error = e))?;
 
   let result = match action.as_str() {
     "interactive" | "autopilot" | "autopilot_fleet" | "exit_only" => {
@@ -1745,7 +1746,7 @@ pub async fn chat_resolve_plan(
   if state.plan.resolve_plan(&request_id, result) {
     Ok(())
   } else {
-    Err("No pending plan to resolve.".into())
+    Err(t!("commands.chat.noPendingPlan"))
   }
 }
 
@@ -1765,20 +1766,20 @@ pub fn chat_resolve_question(
 ) -> Result<(), String> {
   let trimmed = answer.trim();
   if trimmed.is_empty() {
-    return Err("An answer is required.".into());
+    return Err(t!("commands.chat.answerRequired"));
   }
   let owner = state
     .plan
     .question_owner(&request_id)
-    .ok_or_else(|| "No pending question to resolve.".to_string())?;
+    .ok_or_else(|| t!("commands.chat.noPendingQuestion"))?;
   if was_freeform && !owner.allow_freeform {
-    return Err("This question doesn't accept a free-form answer.".into());
+    return Err(t!("commands.chat.noFreeform"));
   }
   if !state
     .plan
     .resolve_question(&request_id, Some(UserInputResponse { answer: trimmed.to_string(), was_freeform }))
   {
-    return Err("No pending question to resolve.".into());
+    return Err(t!("commands.chat.noPendingQuestion"));
   }
   emit_chat_event(
     &app,
@@ -1815,7 +1816,7 @@ pub async fn chat_export_plan(app: AppHandle, suggested_name: String, content: S
   let Some(path) = picked.into_path().ok() else {
     return Ok(None);
   };
-  std::fs::write(&path, content.as_bytes()).map_err(|e| format!("Couldn't save the plan: {e}"))?;
+  std::fs::write(&path, content.as_bytes()).map_err(|e| t!("commands.chat.cantSavePlan", error = e))?;
   Ok(Some(path.display().to_string()))
 }
 
@@ -1824,7 +1825,7 @@ pub async fn chat_export_plan(app: AppHandle, suggested_name: String, content: S
 /// dialog is closed.
 #[tauri::command]
 pub async fn chat_pick_paths(app: AppHandle) -> Vec<String> {
-  crate::services::path_picker::pick_files_and_folders(&app, "Choose files or folders for Copilot to read")
+  crate::services::path_picker::pick_files_and_folders(&app, &t!("commands.chat.pickPathsTitle"))
     .await
     .into_iter()
     .map(|path| path.to_string_lossy().into_owned())
@@ -1867,14 +1868,14 @@ pub fn chat_set_plugin(project_id: String, plugin: String, on: bool) -> Result<V
   let iq = iq::Iq::from_plugin(&plugin);
   let server = mcp::server_of_plugin(&plugin).map(str::to_string);
   if iq.is_none() && server.is_none() {
-    return Err(format!("Fabricator doesn't have the plugin {plugin}."));
+    return Err(t!("commands.chat.unknownPlugin", plugin = plugin));
   }
   if store::find_project(&project_id).is_none() {
-    return Err("Project not found.".into());
+    return Err(t!("commands.shared.projectNotFound"));
   }
   if let Some(id) = &server {
     if on && !store::mcp_servers().iter().any(|s| &s.id == id) {
-      return Err("That MCP server isn't in Fabricator anymore.".into());
+      return Err(t!("commands.chat.serverGone"));
     }
   }
   let state = store::mutate_project(&project_id, |p| {

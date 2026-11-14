@@ -1,0 +1,172 @@
+{
+  "hero": {
+    "eyebrow": "Welcome to",
+    "tagline": "Build and ship Rayfin apps by chatting with an AI agent."
+  },
+  "progress": {
+    "checking": "Checking what you already have…",
+    "ready": "Everything's ready. You can start building.",
+    "start": "Let's get Fabricator set up. This usually takes a minute.",
+    "left_one": "{{count}} thing left to set up.",
+    "left_other": "{{count}} things left to set up."
+  },
+  "problem": {
+    "askHelp": "Ask Help",
+    "showDetails": "Show details",
+    "hideDetails": "Hide details"
+  },
+  "problems": {
+    "busy": {
+      "title": "Another installation is already running on this computer.",
+      "fix": "Wait for it to finish — a Windows update often causes this — then try again."
+    },
+    "permission": {
+      "title": "Fabricator does not have permission to install this.",
+      "fix": "Close Fabricator, right-click it and choose \"Run as administrator\", then try again. If your computer is managed by your workplace, your IT team may need to install it for you."
+    },
+    "offline": {
+      "title": "Fabricator couldn't reach the internet to download this.",
+      "fix": "Check your connection and try again. If you are on a work network or a VPN, it may be blocking the download."
+    },
+    "diskFull": {
+      "title": "There is not enough free space to install this.",
+      "fix": "Free up some disk space and try again."
+    },
+    "noWinget": {
+      "title": "This computer doesn't have the Windows package installer (winget).",
+      "fix": "Install it from the Microsoft Store by searching for \"App Installer\", or use the download link to install the tool yourself."
+    },
+    "noHomebrew": {
+      "title": "This Mac doesn't have Homebrew, which Fabricator uses to install tools.",
+      "fix": "Install Homebrew from brew.sh, or use the download link to install the tool yourself."
+    },
+    "cancelled": {
+      "title": "The install was cancelled.",
+      "fix": "Try again when you are ready."
+    },
+    "sso": {
+      "title": "Your organization needs you to sign in through it first.",
+      "fix": "Finish the sign-in your browser opened, including any extra organization step, then try again."
+    },
+    "noCopilot": {
+      "title": "This account doesn't have GitHub Copilot available.",
+      "fix": "Sign in with an account that has Copilot, or set it up at github.com/features/copilot."
+    },
+    "notOnPath": {
+      "title": "The tool installed, but this computer cannot see it yet.",
+      "fix": "Restart Fabricator so it picks up the new tool."
+    },
+    "unknownFix": "If this keeps happening, ask Help — it can read what went wrong and explain it."
+  },
+  "relaunch": {
+    "message": "<strong>Almost there.</strong> Restart to finish setting up the tools that were just installed.",
+    "restartNow": "Restart now"
+  },
+  "copilot": {
+    "title": "Connect GitHub Copilot",
+    "note": "The AI that builds your app — and that answers your questions while you set the rest up",
+    "subtitle": "Sign in to start building, and to unlock Help",
+    "helpReady": "Help is available now. If anything below goes wrong, select <strong>Help</strong> and it will read what happened."
+  },
+  "tools": {
+    "title": "Install the tools",
+    "note": "Free tools Fabricator uses behind the scenes. It can install them for you.",
+    "allInstalled_one": "All {{count}} installed",
+    "allInstalled_other": "All {{count}} installed",
+    "requiredInstalled_one": "All {{count}} required tools installed",
+    "requiredInstalled_other": "All {{count}} required tools installed",
+    "installAll": "Install all",
+    "installing": "Installing…",
+    "updating": "Updating…",
+    "getIt": "Get it",
+    "needsInternet": "Installing needs an internet connection",
+    "resolveChecks": "Resolve the CLI check errors first",
+    "offline": "You're offline, so Fabricator can't download these yet. Reconnect and select <strong>Re-check</strong>.",
+    "purpose": {
+      "node": "Runs your app on this computer while you build it",
+      "npm": "Fetches the building blocks your app is made from",
+      "git": "Keeps a history of your app so you can always go back",
+      "az": "Lets Fabricator sign you in to Azure",
+      "gh": "Lets Fabricator work with your code on GitHub",
+      "fallback": "Used by Fabricator behind the scenes"
+    },
+    "versionNeedsMin": "Version {{version}} — Fabricator needs {{min}} or newer",
+    "versionNeedsNewer": "Version {{version}} — Fabricator needs a newer version",
+    "unknownVersionNeedsMin": "Version unknown — Fabricator needs {{min}} or newer",
+    "unknownVersionNeedsNewer": "Version unknown — Fabricator needs a newer version",
+    "state": {
+      "ready": "Ready",
+      "needsUpdating": "Needs updating",
+      "optional": "Optional",
+      "missing": "Missing"
+    }
+  },
+  "azure": {
+    "title": "Sign in to Azure",
+    "note": "Optional. Lets you share apps, add Fabric data and migrate Power BI reports. You can also sign in later.",
+    "optional": "Optional",
+    "subtitle": "Access your Azure resources",
+    "installCliFirst": "Install the Azure CLI first"
+  },
+  "account": {
+    "signedIn": "Signed in",
+    "checking": "Checking",
+    "connected": "Connected",
+    "signOutOf": "Sign out of {{name}}",
+    "signingOut": "Signing out…",
+    "waiting": "Waiting…"
+  },
+  "finish": {
+    "allSet": "You're all set",
+    "almostThere": "Almost there",
+    "restart": "Restart Fabricator to finish setting up the tools that were just installed.",
+    "ready": "Your tools are installed and your accounts are connected.",
+    "readyWithoutAzure": "Your tools are installed and GitHub Copilot is connected. Sign in to Azure whenever you need it.",
+    "stepsLeft_one": "Finish the step above to continue.",
+    "stepsLeft_other": "Finish the {{count}} steps above to continue.",
+    "enter": "Enter Fabricator"
+  },
+  "log": {
+    "empty": "Process output will appear here.",
+    "manualInstall": "Finish the install in the page that opened, then click “Restart”."
+  },
+  "section": {
+    "hide": "Hide"
+  },
+  "actionBar": {
+    "help": "Help",
+    "helpTitle": "Ask Help about anything that is not working",
+    "helpOfflineTitle": "Get help with setup — including the documentation",
+    "showLog": "Show log",
+    "hideLog": "Hide log",
+    "checking": "Checking...",
+    "signingOut": "Signing out...",
+    "recheckRequired": "Re-check required",
+    "stepsLeft_one": "{{count}} step left",
+    "stepsLeft_other": "{{count}} steps left",
+    "back": "Back to Fabricator"
+  },
+  "recheck": {
+    "button": "Re-check",
+    "tool": "Re-check {{name}}"
+  },
+  "signingIn": {
+    "label": "Signing in",
+    "title": "Signing you in…",
+    "finalizing": "Getting things ready…",
+    "browser": "Finish signing in to {{provider}} in your browser, or follow the device-code instructions below."
+  },
+  "run": {
+    "copilotSignIn": "Sign in to GitHub Copilot",
+    "copilotSignOut": "Sign out of GitHub Copilot",
+    "azureSignIn": "Sign in to Azure",
+    "azureSignOut": "Sign out of Azure",
+    "installAll": "Install everything",
+    "install": "Install {{name}}",
+    "update": "Update {{name}}",
+    "failed": "{{action}} did not complete. Please try again.",
+    "installFailed": "{{action}} did not complete. Check the process output.",
+    "verifyFailed": "Could not verify account status: {{error}}",
+    "recheckFailed": "Could not re-check the environment: {{error}}"
+  }
+}

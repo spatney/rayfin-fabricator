@@ -1,0 +1,636 @@
+{
+  "rules": {
+    "access/entity-missing-permission": {
+      "title": "Entität hat keinen Berechtigungs-Decorator",
+      "summary": "Jede Entität deklariert explizit `@authenticated`, `@anonymous` oder `@role`",
+      "why": "Eine Entität ohne Berechtigungs-Decorator ist nicht abgesichert – sie erhält stillschweigend `authenticated: *`, sodass jeder angemeldete Benutzer alle Zeilen erstellen, lesen, aktualisieren und löschen kann.",
+      "fix": "Füge einen expliziten Decorator hinzu: `@authenticated('*', { policy: (claims, item) => claims.sub.eq(item.user_id) })` für benutzerbezogene Daten oder `@authenticated('read')` für gemeinsam genutzte Referenzdaten."
+    },
+    "access/route-without-auth-guard": {
+      "title": "Geschützte Seite ist ohne Anmeldung erreichbar",
+      "summary": "Seiten, die App-Daten verwenden, warten auf die Sitzung und erfordern eine Anmeldung",
+      "why": "Ohne Guard können nicht angemeldete Besucher Seiten öffnen, die die Daten-API aufrufen – die Aufrufe schlagen fehl, oder es erscheint eine Oberfläche für angemeldete Benutzer –, und Apps, die die Anmeldung nie einbinden, können gar keine authentifizierten Daten laden.",
+      "fix": "Umschließe geschützte Routen mit einem Guard, der auf den `loading`-Status des Auth-Kontexts wartet und bei `!isAuthenticated` zur Anmeldeseite weiterleitet, und stelle sicher, dass der Auth-Provider vor jedem Datenaufruf eingerichtet ist."
+    },
+    "access/on-auth-state-change": {
+      "title": "`onAuthStateChange` gibt es in Rayfin nicht",
+      "summary": "Sitzungsänderungen werden mit `onSessionChange` beobachtet",
+      "why": "Der Rayfin-Auth-Client hat kein `onAuthStateChange` (ein Name aus anderen Auth-SDKs), daher löst Code, der es aufruft, zur Laufzeit einen Fehler aus.",
+      "fix": "Abonniere Änderungen mit `client.auth.onSessionChange(callback)`; es gibt eine Funktion zurück, die das Abonnement wieder beendet."
+    },
+    "access/fabric-provider-missing": {
+      "title": "Fabric-SSO ist aktiviert, aber das Provider-Paket ist nicht installiert",
+      "summary": "Apps mit Fabric-SSO hängen von `@microsoft/rayfin-auth-provider-fabric` ab",
+      "why": "`services.auth.fabric.enabled` schaltet den Ablauf im Back-End ein, aber das Front-End braucht `@microsoft/rayfin-auth-provider-fabric`, um Benutzer tatsächlich anzumelden.",
+      "fix": "Installiere `@microsoft/rayfin-auth-provider-fabric` in derselben Version wie das restliche Rayfin SDK und melde Benutzer mit `ensureSignedInWithFabric` an."
+    },
+    "access/fabric-provider-dynamic-import": {
+      "title": "Fabric-Auth-Provider wird nur verzögert importiert",
+      "summary": "Der Fabric-Auth-Provider wird beim Start statisch importiert",
+      "why": "Der Provider liest das Flag `?fabricEmbedded=true` aus, wenn sein Modul zum ersten Mal geladen wird. Wird er nur über `import()` geladen, kann ihm das Flag entgehen, sodass die Anmeldung in Fabric auf ein Pop-up ausweicht.",
+      "fix": "Importiere `@microsoft/rayfin-auth-provider-fabric` statisch im Einstiegsmodul der App (oder in einem Modul, das dieses beim Start importiert)."
+    },
+    "access/sign-in-outside-gesture": {
+      "title": "Pop-up-Anmeldung startet ohne Klick des Benutzers",
+      "summary": "Die Pop-up-Anmeldung wird direkt durch eine Benutzeraktion gestartet",
+      "why": "`ensureSignedInWithFabric` ruft zum Schluss `window.open()` auf, und Browser blockieren das, wenn es nicht direkt innerhalb eines Klicks läuft – so schlägt die Anmeldung unbemerkt fehl.",
+      "fix": "Rufe es im `onClick` einer Schaltfläche vor dem ersten `await` auf. Für die automatische Anmeldung beim Laden der Seite in Fabric verwende stattdessen `initEmbeddedAuth()`, das nie ein Pop-up öffnet."
+    },
+    "access/mock-auth-credentials": {
+      "title": "Mock-Anmeldung mit hartcodierten Anmeldeinformationen wird mit der App ausgeliefert",
+      "summary": "Die App enthält keine Mock-Anmeldung mit hartcodierten Anmeldeinformationen",
+      "why": "Ein übrig gebliebener `MockAuthService` meldet sich mit fester E-Mail-Adresse und festem Kennwort über einen Ablauf für das lokale Back-End an, den Fabric-Apps nicht unterstützen, und kann einspringen, wenn Konfiguration fehlt.",
+      "fix": "Lösche `MockAuthService` und den Codezweig für die lokale Entwicklung, der ihn auswählt, oder ersetze ihn durch ein In-Memory-Testdouble, das nur von Tests importiert wird."
+    },
+    "access/entra-exchange-not-enabled": {
+      "title": "Anmeldung mit Entra-Token ist in rayfin.yml nicht aktiviert",
+      "summary": "Apps, die sich mit einem Entra-Token anmelden, auch über die lokale automatische Anmeldung, aktivieren `externalEntraExchange`",
+      "why": "`signInWithEntraToken()` und die lokale automatische Anmeldung (`fetchRayfinLocalSessionToken()`) tauschen ein delegiertes Entra-Token gegen eine Rayfin-Sitzung ein. Das lokale Back-End von Fabricator akzeptiert den Austausch mit einer Warnung, aber solange `services.auth.fabric.externalEntraExchange` nicht `true` ist, lehnt das Back-End einer veröffentlichten App ihn mit „External Entra exchange is not enabled.“ ab.",
+      "fix": "Setze `externalEntraExchange: true` unter `services.auth.fabric` in rayfin.yml."
+    },
+    "access/session-introspection": {
+      "title": "Code hängt von nicht dokumentierten Sitzungsfeldern ab",
+      "summary": "Nur dokumentierte Sitzungsfelder werden gelesen",
+      "why": "Rayfin-Sitzungen sind bewusst undurchsichtig. Code, der mehr als `user`, `isAuthenticated`, `isAnonymous`, `role` und `expiresAt` liest oder decodiert, funktioniert nicht mehr, sobald das SDK den Aufbau der Sitzung ändert.",
+      "fix": "Mach die Oberfläche von `session.isAuthenticated` oder `session.user` abhängig und verwende nur die dokumentierten Felder."
+    },
+    "access/embedded-auth-not-awaited": {
+      "title": "Oberfläche für angemeldete Benutzer erscheint vor Abschluss der eingebetteten Anmeldung",
+      "summary": "Der Start wartet auf `initEmbeddedAuth()`, bevor die Oberfläche für angemeldete Benutzer erscheint oder Daten geladen werden",
+      "why": "In Fabric meldet `initEmbeddedAuth()` den Benutzer an und prüft seit Rayfin 1.36 zuerst, ob ein externer Einbettungshost vorhanden ist. Wird die Oberfläche für angemeldete Benutzer gerendert oder die Daten-API aufgerufen, bevor der Aufruf abgeschlossen ist, kann dabei die veraltete Sitzung eines anderen Benutzers oder gar keine Sitzung verwendet werden.",
+      "fix": "Warte im Auth-Provider auf `initEmbeddedAuth()`, bevor du `loading` auf false setzt, und mach Datenaufrufe und geschützte Routen von diesem Status abhängig."
+    },
+    "policy/owner-field-without-policy": {
+      "title": "Benutzerbezogene Daten sind nicht auf ihren Besitzer beschränkt",
+      "summary": "Bei Entitäten mit Besitzerfeld können nur die Besitzer ihre Zeilen ändern",
+      "why": "Die Entität speichert einen Besitzer (`user_id`, `owner_id`, `created_by`, …), aber eine Freigabe für angemeldete Benutzer, die Erstellen, Aktualisieren oder Löschen erlaubt, hat keine `policy` auf Zeilenebene – so kann jeder angemeldete Benutzer die Zeilen aller Benutzer ändern.",
+      "fix": "Füge `policy: (claims, item) => claims.sub.eq(item.user_id)` zu jeder Freigabe hinzu, die auf den Besitzer beschränkt sein soll. Verwende getrennte Decorators pro Aktion, wenn Lesezugriffe geteilt werden, Schreibzugriffe aber nicht."
+    },
+    "policy/anonymous-write": {
+      "title": "Jeder kann diese Daten ohne Anmeldung ändern",
+      "summary": "Anonyme (öffentliche) Freigaben erlauben nur Lesen",
+      "why": "Eine `@anonymous`-Freigabe, die Erstellen, Aktualisieren oder Löschen umfasst, lässt nicht authentifizierte Aufrufer Zeilen ändern: in der veröffentlichten App überall dort, wo ein Mandantenadministrator anonymen Datenzugriff erlaubt (die meisten Mandanten lehnen die Rolle `anonymous` beim Veröffentlichen ab), und in der lokalen Vorschau von Fabricator.",
+      "fix": "Beschränke `@anonymous` für wirklich öffentliche Daten auf `'read'` und verlagere Schreibzugriffe auf `@authenticated` mit einer Besitzerrichtlinie."
+    },
+    "policy/anonymous-grant": {
+      "title": "Anonymer Datenzugriff kann die Veröffentlichung blockieren",
+      "summary": "Öffentlicher (anonymer) Datenzugriff wird nur genutzt, wo der Mandant ihn erlaubt",
+      "why": "Die meisten Fabric-Mandanten lehnen die Rolle `anonymous` ab: Die Veröffentlichung (`rayfin up`) schlägt mit `ANONYMOUS_DATA_ACCESS_BLOCKED_BY_TENANT_ADMIN` fehl, sofern ein Mandantenadministrator nicht „Enable anonymous data access for Fabric Apps (Preview)“ eingeschaltet hat. Das lokale Back-End von Fabricator lässt die Rolle zu, daher funktionieren öffentliche Daten in der lokalen Vorschau, und das Problem zeigt sich erst beim Veröffentlichen.",
+      "fix": "Gib Daten, die nur angemeldete Benutzer brauchen, stattdessen für die Rolle `authenticated` frei: Ersetze `@anonymous('read')` (oder `@role('anonymous', …)`) durch `@authenticated('read')`. Behalte `@anonymous('read')` nur für wirklich öffentliche Daten bei – und nur, wenn dein Mandantenadministrator anonymen Datenzugriff für Fabric-Apps eingeschaltet hat."
+    },
+    "policy/unsupported-claim": {
+      "title": "Richtlinie verwendet einen nicht unterstützten Claim",
+      "summary": "Richtlinien vergleichen nur `claims.sub`, `claims.email` oder `claims.role`",
+      "why": "Die Richtlinien-DSL unterstützt nur `sub`, `email` und `role`. Andere Claims (Mandant, Organisation, benutzerdefinierte) lassen sich nicht kompilieren oder treffen nie zu.",
+      "fix": "Speichere den Wert in der Zeile (zum Beispiel `organization_id`) und schränke den Zugriff mit `claims.sub` plus einer Mitgliedschaftsprüfung im Anwendungscode ein."
+    },
+    "policy/blob-without-permission": {
+      "title": "Speicherordner hat keinen Berechtigungs-Decorator",
+      "summary": "Jede `@blob()`-Speicherklasse deklariert explizite Berechtigungen",
+      "why": "Speicherordner werden mit denselben Decorators `@authenticated` / `@anonymous` / `@role` geschützt wie Entitäten; ohne einen davon ist nicht explizit festgelegt, wer Dateien lesen und schreiben darf.",
+      "fix": "Füge der `@blob()`-Klasse einen Decorator wie `@authenticated('*', { policy: (claims, item) => claims.sub.eq(item.owner_id) })` hinzu."
+    },
+    "policy/prefer-shorthand": {
+      "title": "Kurzform `@authenticated` / `@anonymous` verwenden",
+      "summary": "Integrierte Rollen verwenden die Kurzformen `@authenticated` / `@anonymous`",
+      "why": "`@role('authenticated', …)` funktioniert, aber die Kurzformen sind der dokumentierte Stil und machen die Absicht an der Aufrufstelle deutlicher.",
+      "fix": "Ersetze `@role('authenticated', …)` durch `@authenticated(…)` und `@role('anonymous', …)` durch `@anonymous(…)`."
+    },
+    "policy/sensitive-field-exposed": {
+      "title": "Vertrauliches Feld ist über die Daten-API lesbar",
+      "summary": "Vertrauliche Felder sind von Lesefreigaben ausgenommen",
+      "why": "Felder wie Geheimnisse, Token, Kennwörter oder sensible personenbezogene Daten werden an jeden Aufrufer zurückgegeben, der die Entität lesen darf, sofern sie nicht ausgeschlossen sind.",
+      "fix": "Füge der Lesefreigabe `exclude: ['field']` hinzu (verwende getrennte Decorators pro Aktion, wenn Schreibzugriffe das Feld weiterhin brauchen), oder verschiebe den Wert aus der Entität in ein serverseitiges Geheimnis."
+    },
+    "policy/overbroad-grant": {
+      "title": "Freigabe geht weiter, als die Daten es erfordern",
+      "summary": "Jede Rolle erhält nur die Aktionen, die sie braucht",
+      "why": "Wer allen angemeldeten Benutzern für gemeinsam genutzte Daten `'*'` (oder Aktualisieren und Löschen) gewährt, lässt jeden Benutzer sie bearbeiten oder löschen, und uneingeschränkte Lesezugriffe auf benutzerbezogene Daten legen die Zeilen aller Benutzer offen.",
+      "fix": "Teile Freigaben nach Aktion auf – zum Beispiel `@authenticated('read')` für alle und auf den Besitzer beschränkte Richtlinien (oder gar keine Freigabe) für Schreibzugriffe."
+    },
+    "policy/policy-not-caller-scoped": {
+      "title": "Zeilenrichtlinie prüft nie, wer der Aufrufer ist",
+      "summary": "Zeilenrichtlinien für benutzerbezogene Daten vergleichen einen Claim",
+      "why": "Eine Richtlinie, die nur die eigenen Felder der Zeile vergleicht (nie `claims`), filtert zwar Zeilen, beschränkt sie aber nicht auf den angemeldeten Benutzer.",
+      "fix": "Füge eine Bedingung für den Aufrufer hinzu, etwa `claims.sub.eq(item.user_id)`, und verknüpfe sie mit `.and()`, wenn der bestehende Filter weiterhin nötig ist."
+    },
+    "policy/org-scope-without-membership": {
+      "title": "Teamdaten werden nicht auf Mitgliedschaft geprüft",
+      "summary": "Bei teambezogenen Daten wird vor dem Lesen und Schreiben die Mitgliedschaft geprüft",
+      "why": "Richtlinien können „der Aufrufer gehört zu `item.organization_id`“ nicht ausdrücken, daher kann ein Benutzer ohne Mitgliedschaftsprüfung in der App die Zeilen eines anderen Teams lesen oder schreiben.",
+      "fix": "Ermittle zuerst die Mitgliedschaften des Aufrufers und filtere Lesezugriffe nach `organization_id`. Prüfe außerdem die Mitgliedschaft, bevor du Zeilen für eine Organisation erstellst oder aktualisierst."
+    },
+    "policy/connector-policy-app-auth": {
+      "title": "Benutzerbezogene Regeln für einen Connector, der unter der App-Identität läuft",
+      "summary": "Connectors mit benutzerbezogenen Daten verwenden delegierte Authentifizierung",
+      "why": "Mit `auth.type: application` läuft jede Connector-Abfrage unter der Identität der App, sodass die Quelle Benutzer nicht unterscheiden kann und eine Richtlinie, die `claims.sub` oder `claims.email` vergleicht, dort nicht einschränkt, was die einzelne Person sieht. Seit Rayfin 1.36 setzt `rayfin connector add` SQL-Connectors standardmäßig auf `application`.",
+      "fix": "Verwende `auth.type: delegated` für Connectors, deren Daten auf den jeweiligen Benutzer beschränkt sein müssen, oder entferne die benutzerbezogenen Regeln, wenn alle die Daten sehen dürfen."
+    },
+    "secrets/secret-in-public-env": {
+      "title": "Geheimnis wird über eine im Browser sichtbare Variable offengelegt",
+      "summary": "Im Browser sichtbare Variablen (`VITE_`, `RAYFIN_PUBLIC_`) enthalten keine Geheimnisse",
+      "why": "Werte in `VITE_*` und `RAYFIN_PUBLIC_*` werden in das Browser-Bundle kompiliert, sodass jeder, der die App verwendet, sie lesen kann.",
+      "fix": "Entferne den Wert aus den Front-End-Variablen, speichere ihn mit `rayfin secret set <NAME>` und lies ihn serverseitig in einer Rayfin-Funktion. Ist der Schlüssel dafür gedacht, öffentlich zu sein (zum Beispiel ein auf Browser beschränkter Schlüssel für einen Kartendienst), verwirf dieses Problem als akzeptiertes Risiko."
+    },
+    "secrets/env-file-not-ignored": {
+      "title": "Umgebungsdatei wird von Git nicht ignoriert",
+      "summary": "Lokale Umgebungsdateien werden von Git ignoriert",
+      "why": "`rayfin/.env` und `.env.local` enthalten die Einstellungen deiner veröffentlichten App und manchmal Geheimnisse. Werden sie nicht ignoriert, landen sie im Git-Verlauf.",
+      "fix": "Füge die Datei zu `.gitignore` hinzu, committe stattdessen eine Platzhalterdatei `.env.example` und rotiere alles, was bereits committet wurde."
+    },
+    "secrets/hardcoded-credential": {
+      "title": "Anmeldeinformationen sind im Projekt hartcodiert",
+      "summary": "Quellcode, Skripts und Workflows enthalten keine hartcodierten Anmeldeinformationen",
+      "why": "Schlüssel, Token und Verbindungszeichenfolgen in committeten Dateien sind für jeden sichtbar, der den Code hat, und bleiben im Git-Verlauf, selbst nachdem du sie gelöscht hast.",
+      "fix": "Verschiebe den Wert in ein Rayfin-Geheimnis (`rayfin secret set`) oder in den Geheimnisspeicher deiner CI, verweise über den Namen darauf und rotiere die offengelegten Anmeldeinformationen."
+    },
+    "secrets/redirect-uri-scope": {
+      "title": "Umleitungs-URIs erlauben unerwartete Ursprünge",
+      "summary": "`allowedRedirectUris` enthält nur die eigenen Ursprünge der App",
+      "why": "Jeder aufgeführte Ursprung kann die Fabric-SSO-Übergabe empfangen. Platzhalterzeichen und nicht lokale Ursprünge mit einfachem `http` vergrößern den Kreis derer, die sie empfangen können.",
+      "fix": "Behalte nur deinen lokalen Entwicklungsursprung (etwa `http://localhost:5173`) und den eigenen Ursprung der veröffentlichten App, und entferne Platzhalterzeichen und aus anderen Projekten kopierte Einträge."
+    },
+    "secrets/publishable-key-mismatch": {
+      "title": "Variable für den veröffentlichbaren Schlüssel enthält etwas anderes",
+      "summary": "Variablen für veröffentlichbare Schlüssel enthalten einen veröffentlichbaren Schlüssel (`pk-…`)",
+      "why": "Nur veröffentlichbare Schlüssel (`pk-…`) sind im Clientcode sicher. Jeder andere Wert in dieser Variable wird an den Browser ausgeliefert.",
+      "fix": "Stelle den Wert wieder her, den die Veröffentlichung (`rayfin up`) oder `rayfin env` schreibt (er beginnt mit `pk-`), und rotiere den Wert, der versehentlich eingefügt wurde."
+    },
+    "secrets/deployments-file-tracked": {
+      "title": "Liste veröffentlichter Apps wird von Git nicht ignoriert",
+      "summary": "`rayfin/.deployments.json` wird von Git ignoriert",
+      "why": "Die Datei enthält die Arbeitsbereichs-, Mandanten- und Element-IDs der Apps, die du veröffentlicht hast, und wird bei jeder Veröffentlichung (`rayfin up`) neu geschrieben; sie ist nicht zum Teilen gedacht.",
+      "fix": "Füge `rayfin/.deployments.json` zu `.gitignore` hinzu und nimm die Datei mit `git rm --cached rayfin/.deployments.json` aus der Versionsverwaltung."
+    },
+    "secrets/local-backend-not-ignored": {
+      "title": "Ordner des lokalen Back-Ends wird von Git nicht ignoriert",
+      "summary": "`.rayfin-local/`, wo das lokale Back-End seine Daten, Schlüssel und Geheimnisse ablegt, bleibt außerhalb von Git",
+      "why": "Fabricator führt die App auf diesem Computer mit einem lokalen Back-End aus, das seinen Zustand in `.rayfin-local/` speichert: die lokale Datenbank der App mit ihren Benutzern und Sitzungen (`db.sqlite`), Signaturschlüssel (`keys/`) und die lokalen Werte deiner Geheimnisse (`secrets.json`). Die eigene `.gitignore` des Ordners, eine einzige Zeile `*`, hält all das aus Git heraus. Fehlt diese Datei oder wurde sie geändert, oder verfolgt Git bereits Dateien in dem Ordner, bringen Commits – auch die von Fabricator – sie in den Git-Verlauf.",
+      "fix": "Setze `.rayfin-local/.gitignore` wieder auf eine einzige Zeile `*` zurück (fehlt die Datei, schreibt das lokale Back-End sie beim nächsten Start neu), oder füge `.rayfin-local/` zur `.gitignore` des Projekts hinzu. Verfolgt Git dort bereits Dateien, nimm sie mit `git rm -r --cached .rayfin-local` aus der Versionsverwaltung und rotiere alle echten Geheimnisse, die committet wurden."
+    },
+    "secrets/encryption-fallback-committed": {
+      "title": "Tokencache im Klartext in einer committeten Datei aktiviert",
+      "summary": "Committete Dateien aktivieren kein Zwischenspeichern von CLI-Token im Klartext",
+      "why": "`RAYFIN_ENCRYPTION_FALLBACK_ENABLED` speichert den Tokencache der CLI im Klartext und ist nur für die lokale Entwicklung gedacht.",
+      "fix": "Entferne die Variable aus committeten Skripts, Env-Dateien und der CI-Konfiguration; setze sie nur bei Bedarf in einer lokalen Shell."
+    },
+    "secrets/credential-in-browser": {
+      "title": "Browsercode ruft einen Dienst mit geheimen Anmeldeinformationen auf",
+      "summary": "Anmeldeinformationen für andere Dienste bleiben auf dem Server",
+      "why": "Alles, was der Browser sendet, ist für Benutzer sichtbar; wer kostenpflichtige oder privilegierte APIs aus Front-End-Code aufruft, legt also die Anmeldeinformationen offen.",
+      "fix": "Verlagere den Aufruf in eine Rayfin-Funktion, die den Schlüssel als `ctx.Secrets.<NAME>` liest (füge das Geheimnis in der Ansicht „Geheimnisse“ von Fabricator hinzu), und rufe diese Funktion aus der App auf. Functions sind nicht in jeder Fabric-Region verfügbar, also prüfe, ob die Veröffentlichung mit Functions in deinem Arbeitsbereich gelingt."
+    },
+    "data-model/text-without-max": {
+      "title": "Textfeld hat keine maximale Länge",
+      "summary": "Jedes `@text`- und `@email`-Feld legt `max` fest",
+      "why": "Unter MSSQL, das veröffentlichte Apps verwenden, wird ein `@text()` oder `@email()` ohne `max` zu `NVARCHAR(MAX)`, was die Generierung des GraphQL-Schemas stören kann – die Veröffentlichung meldet Erfolg, danach schlagen die Abfragen der veröffentlichten App mit einem internen Serverfehler fehl.",
+      "fix": "Lege eine explizite Länge fest, zum Beispiel `@text({ max: 200 })`. Verwende `max: 128` für Besitzer-IDs, die aus `claims.sub` stammen."
+    },
+    "data-model/fk-typed-text": {
+      "title": "Fremdschlüssel ist als Text typisiert",
+      "summary": "Fremdschlüssel auf andere Entitäten verwenden `@uuid`",
+      "why": "Eine Spalte `{property}_id`, die auf eine andere Entität verweist, muss zum UUID-Primärschlüssel dieser Entität passen; sie als `@text()` zu deklarieren, ist ein Typkonflikt.",
+      "fix": "Deklariere sie als `@uuid()`. Besitzer-IDs aus der Anmeldung (etwa `user_id` aus `claims.sub`) sind keine Fremdschlüssel und bleiben `@text({ max: 128 })`."
+    },
+    "data-model/relation-not-lazy": {
+      "title": "Beziehungsziel ist nicht von einer Pfeilfunktion umschlossen",
+      "summary": "Ziele von `@one` / `@many` verwenden eine verzögerte Pfeilfunktion",
+      "why": "`@one(Target)` wertet die Klasse sofort aus, was bei zirkulären Importen zwischen Entitätsdateien fehlschlägt.",
+      "fix": "Schreibe `@one(() => Target)` und `@many(() => Target)`."
+    },
+    "data-model/relation-import-type": {
+      "title": "Entitätsimport funktioniert zur Laufzeit nicht",
+      "summary": "Entitätsdateien importieren verwandte Klassen als Werte, mit `.js`-Pfaden",
+      "why": "Beziehungs-Decorators brauchen die Klasse zur Laufzeit, aber `import type` wird beim Kompilieren entfernt. Relative Importe zwischen Entitätsdateien brauchen außerdem die Endung `.js`, damit sie als ESM aufgelöst werden.",
+      "fix": "Verwende `import { Target } from './Target.js'`."
+    },
+    "data-model/entity-not-registered": {
+      "title": "Entität ist nicht vollständig im Schema registriert",
+      "summary": "Jede Entität steht sowohl im `schema`-Array als auch im Schematyp",
+      "why": "Eine Entität, die in der Schemadatei (`schema.ts` oder `src/index.ts` eines Datenpakets) fehlt, gehört nicht zum typisierten Client (`client.data.<Entity>` gibt es dann nicht), und eine, die nur im Array oder nur im Typ steht, ist nur halb registriert.",
+      "fix": "Importiere sie mit einem `.js`-Pfad und füge sie sowohl dem exportierten Schematyp als auch dem `schema`-Array hinzu."
+    },
+    "data-model/field-missing-decorator": {
+      "title": "Entitätseigenschaft hat keinen Feld-Decorator",
+      "summary": "Jede Entitätseigenschaft hat genau einen Feld-Decorator",
+      "why": "Eigenschaften ohne Typ-Decorator (`@text`, `@int`, `@uuid`, …) werden nicht gespeichert, und zwei Typ-Decorators an einer Eigenschaft stehen in Konflikt – Lese- und Schreibvorgänge verhalten sich dann nicht so, wie die Klasse vermuten lässt.",
+      "fix": "Gib jeder gespeicherten Eigenschaft genau einen Feld-Decorator (zum Beispiel `@int()`) und verschiebe Werte, die nicht gespeichert werden sollen, aus der Entitätsklasse heraus."
+    },
+    "data-model/decimal-precision": {
+      "title": "Angaben zu Genauigkeit und Dezimalstellen sind unvollständig",
+      "summary": "`@decimal` legt Genauigkeit und Dezimalstellen gemeinsam fest, mit einer Genauigkeit ≤ 28",
+      "why": "Data API Builder unterstützt eine Genauigkeit von höchstens 28, und wer nur eines von `precision` / `scale` festlegt, erhält einen unerwarteten Spaltentyp.",
+      "fix": "Lege beides fest, zum Beispiel `@decimal({ precision: 18, scale: 2 })`."
+    },
+    "data-model/nullable-mismatch": {
+      "title": "Optionales Feld ist nur an einer Stelle als optional markiert",
+      "summary": "Felder, die NULL zulassen, verwenden `{ optional: true }` zusammen mit `?`",
+      "why": "Felder sind standardmäßig erforderlich. `optional: true` ohne `?` (oder `?` ohne die Option) führt dazu, dass Datenbank und TypeScript-Typ nicht übereinstimmen.",
+      "fix": "Verwende beides zusammen, zum Beispiel `@text({ optional: true, max: 200 }) note?: string`."
+    },
+    "data-model/many-to-many": {
+      "title": "Viele-zu-viele-Beziehung ohne Verknüpfungsentität",
+      "summary": "Viele-zu-viele-Verknüpfungen laufen über eine explizite Verknüpfungsentität",
+      "why": "`@one` / `@many` bilden nur Eins-zu-viele-Beziehungen ab. Zwei Entitäten, die mit `@many` gegenseitig aufeinander verweisen, ergeben keine funktionierende Verknüpfung.",
+      "fix": "Füge eine Verknüpfungsentität mit zwei `@one()`-Feldern hinzu – eines für jede Seite – und führe Abfragen über sie aus."
+    },
+    "data-model/reserved-entity-name": {
+      "title": "Entitätsname ist von GraphQL reserviert",
+      "summary": "Keine Entität ist nach einem integrierten GraphQL-Typ benannt",
+      "why": "Entitätsnamen werden zu GraphQL-Typnamen. Seit Rayfin 1.36 lehnt die CLI Namen wie `Date`, `String`, `Query` oder `UUID` sowie alles ab, was mit `__` beginnt, sodass die Veröffentlichung fehlschlägt.",
+      "fix": "Benenne die Klasse um (zum Beispiel `EventDate` statt `Date`), oder behalte sie bei und gib mit `@entity('EventDate')` einen sicheren Namen an."
+    },
+    "data-model/relation-options": {
+      "title": "Beziehungs-Decorator hat eine nicht unterstützte Option",
+      "summary": "`@one()` und `@many()` verwenden nur `optional` und `unique`",
+      "why": "Beziehungs-Decorators akzeptieren nur `{ optional, unique }`. Optionen wie `default`, `max`, `foreignKey` oder `targetKey` werden nicht unterstützt; der Fremdschlüssel ist immer die Spalte `<property>_id`.",
+      "fix": "Entferne die anderen Optionen und verwende den Fremdschlüssel `<property>_id`, den die Beziehung erzeugt."
+    },
+    "data-model/weak-constraints": {
+      "title": "Feld akzeptiert Werte, die die App nie verwendet",
+      "summary": "Felder verwenden den engsten dokumentierten Typ und die engsten Grenzen",
+      "why": "Freitext für eine feste Auswahl, Text für E-Mail-Adressen oder unbegrenzte Zahlen lassen ungültige Daten an der Oberfläche vorbei und verfälschen Filter, Diagramme und Summen.",
+      "fix": "Verwende dokumentierte Optionen: `@set([...])` für feste Auswahlmöglichkeiten, `@email()` für E-Mail-Adressen und `min` / `max` für Zahlen und Text."
+    },
+    "data-model/seed-authenticated-entity": {
+      "title": "Seed-Skript schreibt in eine Entität, die eine Anmeldung erfordert",
+      "summary": "Seed-Skripts schreiben nur in Entitäten, die Schreibzugriffe per Skript erlauben",
+      "why": "Es gibt keinen unterstützten Weg, Daten per Skript in Entitäten zu schreiben, die eine Anmeldung erfordern, daher schlagen diese Seed-Skripts fehl.",
+      "fix": "Lege Daten, die du beim Entwickeln brauchst, stattdessen als Zeilen in `rayfin/seed` ab: Fabricator lädt sie in die lokalen Daten der App, wobei `$developer` oder `$user:<email>` für den Besitzer der jeweiligen Zeile steht. Auf Fabric erstellst du Daten, die eine Anmeldung erfordern, über die laufende App: Skripts können nur `@anonymous()`-Entitäten befüllen, und die lehnen die meisten Fabric-Mandanten beim Veröffentlichen ab."
+    },
+    "queries/unpaginated-list": {
+      "title": "Listenabfrage bricht stillschweigend nach 100 Zeilen ab",
+      "summary": "Listen, die wachsen können, rufen ihre Ergebnisse seitenweise ab",
+      "why": "`.execute()` gibt nur eine einzige Seite zurück (standardmäßig 100 Zeilen), ohne anzuzeigen, dass es weitere gibt. Wachsen die Tabellen, zeigt die App deshalb stillschweigend unvollständige Listen und Summen an.",
+      "fix": "Verwende `.first(n).executePaginated()` und folge `.after(endCursor)`, solange `hasNextPage` den Wert true hat, oder lade weitere Seiten bei Bedarf nach."
+    },
+    "queries/count-method": {
+      "title": "`.count()` gibt es bei Rayfin-Abfragen nicht",
+      "summary": "Zeilenzahlen ergeben sich aus der Ergebnislänge oder einer numerischen Aggregation",
+      "why": "Der Fluent-Client hat keine Methode `count()`. `count` ist eine Aggregation über ein numerisches Feld, die Werte ungleich NULL zählt, nicht Zeilen.",
+      "fix": "Um Zeilen zu zählen, wähle möglichst wenige Felder aus und verwende `results.length` (bei großen Tabellen über alle Seiten summiert), oder aggregiere `count` über ein numerisches Feld, das kein NULL zulässt."
+    },
+    "queries/find-by-pk": {
+      "title": "`findByPk` gibt es nicht – verwende `findById`",
+      "summary": "Einzelne Datensätze werden mit `findById` gelesen",
+      "why": "Rayfin hat kein `findByPk` (ein Name aus anderen ORMs), daher schlagen diese Aufrufe fehl.",
+      "fix": "Verwende `client.data.<Entity>.findById(id)`."
+    },
+    "queries/total-count": {
+      "title": "Code verlässt sich auf `totalCount`, das nie gesetzt wird",
+      "summary": "Kein Code verlässt sich auf `totalCount`",
+      "why": "Data API Builder kann keine Gesamtzahlen zurückgeben, daher gibt es `totalCount` zwar im Ergebnistyp, es wird aber nie befüllt.",
+      "fix": "Zähle stattdessen die geladenen Elemente, oder blättere mit `.executePaginated()` durch die Seiten und summiere `items.length`."
+    },
+    "queries/where-dot-path": {
+      "title": "Filter verwendet einen Punktpfad über eine Beziehung",
+      "summary": "Filter verwenden Fremdschlüsselspalten, keine Punktpfade",
+      "why": "Punktpfade wie `'notebook.id'` funktionieren nur in `.select()`. In `.where()` schlagen sie fehl oder filtern nichts.",
+      "fix": "Filtere nach der Fremdschlüsselspalte: `.where({ notebook_id: { eq: notebookId } })`."
+    },
+    "queries/select-nested-path": {
+      "title": "Auswahl reicht mehr als eine Beziehungsebene tief",
+      "summary": "Felder werden über höchstens eine Beziehungsebene ausgewählt",
+      "why": "`.select()` unterstützt Punktpfade über eine Beziehungsebene (`'notebook.name'`), nicht über zwei (`'notebook.owner.email'`).",
+      "fix": "Führe für die tiefer liegenden Daten eine zweite Abfrage aus, oder füge der Entität, die sie braucht, eine direkte Beziehung hinzu."
+    },
+    "queries/aggregate-with-row-methods": {
+      "title": "Aggregation wird mit Zeilenauswahl kombiniert",
+      "summary": "Aggregationen werden nicht mit `select` / `orderBy` / `first` / `after` kombiniert",
+      "why": "Data API Builder lehnt gruppierte Aggregationen in Kombination mit Zeilenabfragen ab, daher schlagen diese Ketten fehl.",
+      "fix": "Führe die Aggregation separat aus und sortiere oder begrenze die zurückgegebenen Gruppen anschließend in TypeScript."
+    },
+    "queries/sort-direction-case": {
+      "title": "Sortierrichtung ist nicht kleingeschrieben",
+      "summary": "`orderBy` verwendet `'asc'` / `'desc'`",
+      "why": "Sortierrichtungen sind die kleingeschriebenen Zeichenfolgen `'asc'` und `'desc'`, keine großgeschriebenen Konstanten.",
+      "fix": "Schreibe `.orderBy({ createdAt: 'desc' })`."
+    },
+    "queries/raw-data-fetch": {
+      "title": "Daten werden mit handgeschriebenem GraphQL abgerufen",
+      "summary": "App-Daten laufen über den typisierten Client (`client.data`)",
+      "why": "Handgeschriebene `fetch()`- oder GraphQL-Aufrufe an die Rayfin-API umgehen die Sitzungsverwaltung und Typsicherheit des typisierten Clients.",
+      "fix": "Verwende stattdessen Abfragen und Mutationen über `client.data.<Entity>`."
+    },
+    "queries/n-plus-one": {
+      "title": "Eine Abfrage pro Element in einer Schleife",
+      "summary": "Verwandte Daten werden gesammelt geladen, nicht mit einer Abfrage pro Zeile",
+      "why": "Für jedes Listenelement eine Abfrage abzuwarten, vervielfacht mit wachsenden Daten die Roundtrips – und den Kapazitätsverbrauch.",
+      "fix": "Lade alles in einer Abfrage – mit `.where({ id: { in: ids } })`, einem einstufigen Punktpfad in `.select()` oder einer Aggregation."
+    },
+    "queries/mutation-shape": {
+      "title": "Mutation entspricht nicht der dokumentierten Form",
+      "summary": "Mutationen setzen Beziehungen auf die dokumentierte Weise",
+      "why": "Beziehungen werden nicht geschrieben, indem man eine Fremdschlüsselspalte (`notebook_id`) in `create` / `update` direkt setzt, und Arrays, die `@many`-Feldern zugewiesen werden, bewirken nichts.",
+      "fix": "Übergib stattdessen das verwandte Objekt – `notebook: { id: notebookId }` – und ändere eine `@many`-Seite, indem du das `@one` jedes untergeordneten Elements aktualisierst."
+    },
+    "config/missing-service-blocks": {
+      "title": "rayfin.yml deklariert Authentifizierung und Daten nicht",
+      "summary": "rayfin.yml deklariert `services.auth` und `services.data`, auch wenn sie deaktiviert sind",
+      "why": "Die CLI liest diese Schlüssel, ohne Standardwerte anzuwenden; fehlt einer, schlägt die Veröffentlichung fehl.",
+      "fix": "Füge beide Blöcke hinzu – zum Beispiel `data: { enabled: false }`, wenn die App keine Daten speichert."
+    },
+    "config/data-dialect": {
+      "title": "Datendienst braucht `dialect: mssql`",
+      "summary": "Der Datendienst deklariert `dialect: mssql`",
+      "why": "Mit `services.data.enabled: true` ist `dialect` erforderlich, und Fabric-Apps unterstützen nur `mssql` – sonst schlägt die Veröffentlichung mit „Dialect is required when Data module is enabled“ fehl.",
+      "fix": "Setze `dialect: mssql` unter `services.data`."
+    },
+    "config/experimental-decorators": {
+      "title": "Legacy-Decorators sind in der tsconfig aktiviert",
+      "summary": "tsconfig aktiviert weder `experimentalDecorators` noch `emitDecoratorMetadata`",
+      "why": "Rayfin verwendet Standard-Decorators nach TC39. Der Legacy-Modus `experimentalDecorators` (und `emitDecoratorMetadata`, das ihn voraussetzt) bricht die Kompilierung der Entitäten.",
+      "fix": "Entferne `experimentalDecorators` und `emitDecoratorMetadata` aus jeder tsconfig."
+    },
+    "config/decorators-lib": {
+      "title": "In der tsconfig fehlt `ESNext.Decorators`",
+      "summary": "Die tsconfig für die Entitäten enthält `ESNext.Decorators`",
+      "why": "Erst die Bibliothek `ESNext.Decorators` ermöglicht die Typprüfung der Standard-Decorators von Rayfin.",
+      "fix": "Füge `\"ESNext.Decorators\"` zu `compilerOptions.lib` in der tsconfig.json im Stammverzeichnis hinzu."
+    },
+    "config/swc-with-runtime-entities": {
+      "title": "Build-Plug-In kann die Entitätsklassen, die die App importiert, nicht kompilieren",
+      "summary": "Front-End-Code, der Entitätsklassen importiert, wird mit einem Plug-In gebaut, das Decorators unterstützt",
+      "why": "`@vitejs/plugin-react-swc` kann Standard-Decorators nicht parsen. Werden Entitätsklassen als Werte importiert (nicht mit `import type`), landen sie im Browser-Build, der dann mit „Expression expected“ fehlschlägt.",
+      "fix": "Importiere Entitäten mit `import type`, oder wechsle zu `@vitejs/plugin-react`."
+    },
+    "config/vite-target": {
+      "title": "Vite-Ziel ist zu alt für die gebündelten Entitätsklassen",
+      "summary": "Vite zielt auf ES2022 oder neuer, wenn das Bundle Entitätsklassen enthält",
+      "why": "Enthält der Browser-Build Entitätsklassen mit Decorators, muss esbuild auf ES2022 oder neuer zielen, sonst kann die Decorator-Syntax nicht geparst werden.",
+      "fix": "Setze `target: 'es2022'` unter `build`, `esbuild` und `optimizeDeps.esbuildOptions` in vite.config.ts."
+    },
+    "config/static-hosting-folder": {
+      "title": "Ordner für statisches Hosting passt nicht zur Build-Ausgabe",
+      "summary": "`staticHosting.folder` entspricht dem Build-Ausgabeverzeichnis des Front-Ends",
+      "why": "Die Veröffentlichung (`rayfin up`) lädt `staticHosting.folder` hoch. Weicht der Ordner davon ab, wohin der Bundler den Build schreibt, schlägt die Veröffentlichung fehl oder lädt veraltete Dateien hoch.",
+      "fix": "Gleiche `services.staticHosting.folder` an `build.outDir` von Vite an (Standard: `dist`)."
+    },
+    "config/deprecated-yml-keys": {
+      "title": "rayfin.yml enthält veraltete Schlüssel",
+      "summary": "rayfin.yml verwendet keine veralteten Schlüssel",
+      "why": "Diese Schlüssel sind veraltet oder werden ignoriert: `frontend:` auf oberster Ebene (das Framework wird automatisch erkannt) und `publishable_key:` (wird in `rayfin/.env` verwaltet), `services.connectors.enabled` (Connectors sind seit Rayfin 1.36 immer aktiv) und `services.staticHosting.anonymousAccess` (in 1.35.1 durch `assetAccess` ersetzt).",
+      "fix": "Entferne sie aus rayfin.yml. Wenn du `anonymousAccess` entfernst, setze stattdessen `assetAccess` auf `protected` oder `public`."
+    },
+    "config/connectors-list-shape": {
+      "title": "Connectors haben in rayfin.yml noch die alte Map-Struktur",
+      "summary": "`connectors:` in rayfin.yml ist eine Liste von Einträgen",
+      "why": "Aktuelle Versionen der Rayfin CLI lesen `connectors:` als Liste von `- name:`-Einträgen mit einem `type`; die ältere Map mit dem Connector-Namen als Schlüssel ist nicht die dokumentierte Struktur.",
+      "fix": "Schreibe jeden Connector als Listeneintrag mit `name` und `type` um (zum Beispiel, indem du `rayfin connector add` erneut ausführst), und behalte dabei `config`, `auth` und `operations` bei."
+    },
+    "config/functions-auth": {
+      "title": "Functions sind ohne Anwendungsauthentifizierung aktiviert",
+      "summary": "Aktivierte Functions deklarieren `auth.type: application`",
+      "why": "Seit Rayfin 1.36 lehnt die Veröffentlichung (`rayfin up`) aktivierte Functions ab, wenn `services.functions.auth.type` nicht `application` ist: „authentication is required when Functions are enabled.“",
+      "fix": "Füge `auth: { type: application }` unter `services.functions` in rayfin.yml hinzu. Functions rufen andere Dienste dann mit der Identität der App auf."
+    },
+    "config/static-hosting-posture": {
+      "title": "Statisches Hosting legt nicht fest, wer die App laden kann",
+      "summary": "`services.staticHosting.assetAccess` ist explizit festgelegt",
+      "why": "Seit Rayfin 1.35.1 muss eine gehostete App `protected` (Fabric-Anmeldung erforderlich) oder `public` wählen. Fehlt die Angabe, schreibt die erste nicht interaktive Veröffentlichung (`rayfin up`) für dich `protected` in rayfin.yml – der Zugriff ist dann keine bewusste Entscheidung.",
+      "fix": "Füge `assetAccess: protected` unter `services.staticHosting` hinzu (oder `public`, wenn jeder mit dem Link die Dateien der App laden können soll; Datenberechtigungen gelten weiterhin)."
+    },
+    "config/embedded-public-conflict": {
+      "title": "Ausschließlich eingebettete App ist als öffentlich eingestellt",
+      "summary": "`assetAccess: public` wird nicht mit `embedded.only: true` kombiniert",
+      "why": "Eine App, die nur im Fabric-Portal lädt, hat keine eigenständige Seite, die öffentlich sein könnte, daher schlägt die Veröffentlichung fehl: `rayfin up` lehnt die Kombination mit „Invalid static hosting posture“ ab.",
+      "fix": "Verwende `assetAccess: protected` für eine ausschließlich eingebettete App, oder setze `embedded.only: false`, wenn sie auch eigenständig laden soll."
+    },
+    "config/stale-feature-flags": {
+      "title": "Feature-Flag schaltet eine Funktionalität frei, die kein Flag mehr braucht",
+      "summary": "`RAYFIN_FEATURE_FLAGS` führt nur Funktionalitäten auf, die noch ein Flag brauchen",
+      "why": "Functions und Connectors sind seit Rayfin 1.36 allgemein verfügbar, daher bewirken `functions` und `connectors` in `RAYFIN_FEATURE_FLAGS` nichts. Nur `storage` nutzt das Flag noch.",
+      "fix": "Entferne `functions` und `connectors` aus `RAYFIN_FEATURE_FLAGS` – und die Variable selbst, wenn nichts übrig bleibt."
+    },
+    "platform/cli-outdated": {
+      "title": "Rayfin CLI ist veraltet",
+      "summary": "Die Rayfin CLI nutzt das neueste Release",
+      "why": "Neuere Versionen der CLI bringen Fehlerbehebungen mit und entsprechen der aktuellen Dokumentation; das auf rayfin.ai beschriebene Verhalten gilt für ältere Versionen womöglich nicht. Bei Apps, die Fabricator auf diesem Computer ausführt, zählen nur Releases, die das lokale Back-End von Fabricator ausführen kann.",
+      "fix": "Aktualisiere `@microsoft/rayfin-cli` auf das neueste Release – Fabricator kann das Upgrade an Copilot übergeben."
+    },
+    "platform/sdk-outdated": {
+      "title": "Rayfin SDK ist veraltet",
+      "summary": "Die Pakete des Rayfin SDK nutzen das neueste Release",
+      "why": "SDK und CLI werden unabhängig voneinander versioniert, und neuere SDK-Releases enthalten Fehlerbehebungen und die APIs, die die aktuelle Dokumentation beschreibt. Rayfin 1.36 hat außerdem mehrere Importe und Functions-APIs geändert. Bei Apps, die Fabricator auf diesem Computer ausführt, zählen nur Releases, die das lokale Back-End von Fabricator ausführen kann.",
+      "fix": "Aktualisiere alle Pakete des Rayfin SDK gemeinsam auf dieselbe neueste Version – Fabricator kann das Upgrade an Copilot übergeben."
+    },
+    "platform/sdk-lockstep": {
+      "title": "Pakete des Rayfin SDK haben unterschiedliche Versionen",
+      "summary": "Alle Pakete des Rayfin SDK sind in derselben Version installiert",
+      "why": "`rayfin-core`, `-client`, `-data`, `-auth`, `-auth-provider-fabric`, `-lib`, `-functions`, `-storage`, `-embed-host` und `-local-dev` erscheinen immer gemeinsam in derselben Version; gemischte Versionen sind ungetestet und können zur Laufzeit Fehler verursachen.",
+      "fix": "Lege jedes Paket des Rayfin SDK auf dasselbe Release fest und installiere die Pakete neu. In Apps, die Fabricator auf diesem Computer ausführt, ist das der `~`-Bereich des Projekts, etwa `~1.36.0`."
+    },
+    "platform/sdk-local-range": {
+      "title": "Rayfin-Pakete sind nicht auf ein Release festgelegt, das Fabricator lokal ausführt",
+      "summary": "Rayfin-Pakete bleiben auf einer Release-Linie, die Fabricator auf diesem Computer ausführt",
+      "why": "Das lokale Back-End von Fabricator führt bestimmte Release-Linien von Rayfin aus, etwa 1.36.x und 2.0.x, und neue Projekte legen jedes `@microsoft/rayfin-*`-Paket mit einem `~`-Bereich (`~1.36.0`) auf eine davon fest. Mit einem älteren Release können sich Teile der App auf diesem Computer fehlerhaft verhalten, und eine veröffentlichte App wird in der Vorschau stattdessen mit ihrem veröffentlichten Back-End ausgeführt. Mit einem `^`-Bereich oder einem Tag wie `latest` kann die nächste Installation die App auf ein anderes Release bringen, das niemand ausgewählt hat. Ein neueres Release, das du selbst wählst, läuft trotzdem auf diesem Computer, und die Vorschau weist darauf hin, dass manches möglicherweise nicht wie erwartet funktioniert.",
+      "fix": "Setze jedes `@microsoft/rayfin-*`-Paket in package.json auf den `~`-Bereich einer Release-Linie, die Fabricator ausführt, etwa `~1.36.0` oder `~2.0.0`, und führe `npm install` aus, damit alle Pakete in diesen Bereich aufgelöst werden."
+    },
+    "platform/connector-version": {
+      "title": "Connector-Paket ist nicht auf die Version der CLI festgelegt",
+      "summary": "Connector-Pakete sind auf die Version der CLI oder den `~`-Bereich des Projekts festgelegt",
+      "why": "Connector-Pakete erscheinen immer zusammen mit der CLI in derselben Version, ihre npm-Tags können aber hinterherhinken. Eine Installation ohne feste Version kann einen älteren Connector holen, der sein eigenes `rayfin-data` mitbringt – dann stecken zwei Rayfin-Versionen in einer App.",
+      "fix": "Installiere genau die Version, die `rayfin connector add` ausgibt (normalerweise die Version der CLI), oder den `~`-Bereich, den die anderen Rayfin-Pakete des Projekts verwenden, etwa `~1.36.0` – niemals einen `^`-Bereich."
+    },
+    "platform/connector-schema-value-import": {
+      "title": "Connector-Schema bündelt Entitätsklassen mit Decorators",
+      "summary": "`schema.ts`-Dateien von Connectors führen Entitätsfelder mit Namen auf, außer wenn Beziehungspfade die Klassen brauchen",
+      "why": "Werden Entitätsklassen als Werte importiert, landen ihre Decorators im Browser-Bundle. Build und Veröffentlichung gelingen, aber die veröffentlichte Seite kann leer bleiben.",
+      "fix": "Führe in `rayfin/connectors/<name>/schema.ts` die skalaren Felder jeder Entität als Array von Zeichenfolgen in `connectorConfig.entities` auf und verwende `import type` / `export type` für die Klassen. Behalte die Klassenform nur bei, wenn die App Beziehungspfade wie `orderItems.quantity` auswählt, und prüfe, ob die veröffentlichte Seite lädt."
+    },
+    "platform/connector-app-auth": {
+      "title": "Connector für semantisches Modell oder KQL verwendet Anwendungsauthentifizierung",
+      "summary": "Connectors für semantische Modelle und KQL verwenden delegierte Authentifizierung",
+      "why": "`auth.type: application` ist für `fabric-semanticmodel`- und `kusto`-Connectors nicht zulässig, daher schlägt die Veröffentlichung fehl: `rayfin up` lehnt die Konfiguration ab.",
+      "fix": "Setze `auth.type: delegated` für diese Connectors."
+    },
+    "platform/connector-fabric-only": {
+      "title": "Connector läuft nur auf Fabric",
+      "summary": "Jeder Connector läuft in der lokalen Vorschau",
+      "why": "Fabricator führt die App auf diesem Computer aus, wo Connectors für semantische Modelle und SQL (`fabric-semanticmodel`, `fabric-sqldatabase`, `fabric-warehouse`, `fabric-sqlanalytics`) mit deiner Identität laufen. Andere Typen, etwa `kusto`, laufen nur auf Fabric. Solange die App nicht veröffentlicht ist, schlagen ihre Aufrufe an diese Connectors in der Vorschau fehl. Ist sie veröffentlicht, verwendet die Vorschau das Back-End der veröffentlichten App statt des Back-Ends dieses Computers, sodass Änderungen an Datenmodell, Funktionen und Connectors dort erst nach dem Veröffentlichen sichtbar werden.",
+      "fix": "Behalte den Connector, wenn die App diese Daten braucht, und veröffentliche die App, um Änderungen auszuprobieren, die ihn verwenden. Liegen dieselben Daten auch in einem semantischen Modell, einem Warehouse oder einer SQL-Datenbank, läuft ein Connector dieses Typs in der lokalen Vorschau."
+    },
+    "platform/connector-orphaned-dir": {
+      "title": "Connector-Ordner hat keinen Eintrag in rayfin.yml",
+      "summary": "Jeder Ordner in `rayfin/connectors` gehört zu einem Connector in rayfin.yml",
+      "why": "Ein übrig gebliebener Connector-Ordner wird nicht mehr veröffentlicht oder aktualisiert, App-Code importiert aber womöglich noch daraus.",
+      "fix": "Lösche den Ordner und seine Importe, oder füge den Connector mit `rayfin connector add` erneut hinzu."
+    },
+    "platform/connector-wiring": {
+      "title": "Connector ist nicht einheitlich eingebunden",
+      "summary": "Connector-Namen und Laufzeiten stimmen in rayfin.yml, Schema und Client überein",
+      "why": "Der Connector-Schlüssel muss in rayfin.yml, im Schematyp des Connectors, in der Option `connectors` des Clients und – bei Connectors für semantische Modelle und KQL – in der Laufzeitzuordnung identisch sein, sonst schlagen Aufrufe fehl oder liefern nicht decodierte Daten.",
+      "fix": "Verwende überall denselben Schlüssel, und übergib die Laufzeitzuordnung (`fabricSemanticModel()`, `kusto()`) als zweites Konstruktorargument des Clients."
+    },
+    "platform/functions-context-import": {
+      "title": "`RayfinContext` wird aus dem falschen Paket importiert",
+      "summary": "Funktionen importieren `RayfinContext` und `AudienceType` aus `@microsoft/fabric-user-data-functions`",
+      "why": "`RayfinContext` und `AudienceType` stammen aus `@microsoft/fabric-user-data-functions`; ein Import aus `@microsoft/rayfin-functions` (dem Front-End-Client) schlägt fehl.",
+      "fix": "Importiere sie aus `@microsoft/fabric-user-data-functions`."
+    },
+    "platform/functions-mssql": {
+      "title": "SQL-Client der Funktion hat einen bekannten Verbindungsfehler mit Fabric",
+      "summary": "Funktionen verwenden `mssql@^12.6.0` mit `encrypt: true`",
+      "why": "Ältere `mssql`-Versionen ziehen ein `tedious`-Release mit einem Fehler beim Login nach sich, der an Fabric-SQL-Endpunkten zu „socket hang up“-Fehlern führt, und `encrypt: 'strict'` entspricht nicht dem, was Fabric erwartet.",
+      "fix": "Verwende `mssql@^12.6.0` und `encrypt: true`."
+    },
+    "platform/functions-unregistered": {
+      "title": "Funktionshandler ist nicht registriert",
+      "summary": "Jeder Funktionshandler ist mit `udf.func` registriert",
+      "why": "Nur Handler, die mit `udf.func(...)` registriert sind, lassen sich aufrufen – lokal wie nach der Veröffentlichung – und sind für den Client typisiert. `types.ts` wird generiert, daher werden Änderungen von Hand überschrieben.",
+      "fix": "Registriere jeden Handler mit `udf.func(name, handler, …)`, und generiere die Typen neu, statt `types.ts` zu bearbeiten."
+    },
+    "platform/experimental-services": {
+      "title": "App verwendet das experimentelle Rayfin Storage",
+      "summary": "Bei experimentellem Storage wird auf die Verfügbarkeit hingewiesen",
+      "why": "Storage ist experimentell: Es ist nicht in jeder Fabric-Region und jedem Mandanten verfügbar, und `@microsoft/rayfin-storage` kann sich zwischen Releases erheblich ändern.",
+      "fix": "Bevor du dich auf Storage verlässt, prüfe, ob die Veröffentlichung mit Storage in deinem Zielarbeitsbereich gelingt (es läuft auch in der lokalen Vorschau), und halte alle Rayfin-Pakete auf demselben Release."
+    },
+    "platform/deprecated-fabric-callback": {
+      "title": "Veraltete Fabric-Callback-Bridge wird verwendet",
+      "summary": "Es werden keine veralteten Anmelde-APIs von Fabric verwendet",
+      "why": "`bridgeFabricCallback()` und die Option `callbackUrl` gibt es nur für ältere Fabric-Portale, und sie werden entfernt.",
+      "fix": "Entferne sie und verlass dich auf den Standardablauf mit `ensureSignedInWithFabric` / `initEmbeddedAuth`."
+    },
+    "platform/ai-files-missing": {
+      "title": "Agent-Dateien für Rayfin fehlen",
+      "summary": "Der von der CLI verwaltete Rayfin-Skill ist für Coding-Agents installiert",
+      "why": "`.agents/skills/rayfin/SKILL.md` gibt Copilot zur Version passende Anleitungen für Rayfin; ohne die Datei verlässt sich der Agent auf älteres Allgemeinwissen.",
+      "fix": "Führe `npx rayfin init ai-files install` aus."
+    },
+    "platform/removed-experimental-import": {
+      "title": "Import aus einem entfernten experimentellen Pfad",
+      "summary": "Decorators stammen aus `@microsoft/rayfin-core` und Connector-Hilfsfunktionen aus `@microsoft/rayfin-connectors`",
+      "why": "Seit Rayfin 1.36 enthält `@microsoft/rayfin-core/experimental` nur noch die `blob`-Hilfsfunktionen für Storage. Entitäts- und Feld-Decorators, `RayfinPrimaryKey`, `Source` und `AutoGenerated` wurden daraus entfernt, daher brechen diese Importe den Build.",
+      "fix": "Importiere Decorators und `RayfinPrimaryKey` aus `@microsoft/rayfin-core` sowie `Source` und `AutoGenerated` aus `@microsoft/rayfin-connectors`."
+    },
+    "platform/connector-client-experimental-import": {
+      "title": "Connectors-Client stammt aus dem alten experimentellen Einstiegspunkt",
+      "summary": "`ConnectorsRayfinClient` wird aus `@microsoft/rayfin-client` importiert",
+      "why": "Seit Rayfin 1.36 wird der Connectors-Client vom stabilen Einstiegspunkt `@microsoft/rayfin-client` exportiert. Der Pfad `/experimental` funktioniert aus Kompatibilitätsgründen weiterhin, ist aber veraltet.",
+      "fix": "Schreibe `import { ConnectorsRayfinClient } from '@microsoft/rayfin-client'`."
+    },
+    "platform/functions-removed-audience": {
+      "title": "Funktion verwendet eine entfernte Token-Zielgruppe",
+      "summary": "Funktionen verwenden nur die Zielgruppen `Sql`, `Storage`, `Fabric`, `AzureAI` und `ADO`",
+      "why": "Rayfin 1.36 hat die Zielgruppen `CosmosDB`, `KeyVault`, `EventGrid`, `Kusto` und `WorkIQ` entfernt, daher lässt sich Code, der darauf verweist, nicht mehr kompilieren.",
+      "fix": "Verwende eine der fünf verbleibenden Zielgruppen, oder speichere einen Schlüssel mit `rayfin secret set` und lies ihn als `ctx.Secrets.<NAME>`."
+    },
+    "platform/functions-legacy-context-api": {
+      "title": "Funktion verwendet das veraltete `ctx.getToken()` oder `ctx.getSecret()`",
+      "summary": "Funktionen lesen Token als `ctx.Tokens.<Audience>` und Geheimnisse als `ctx.Secrets.<NAME>`",
+      "why": "Rayfin 1.36 hat `ctx.getToken()` und `ctx.getSecret()` durch die typisierten `ctx.Tokens` und `ctx.Secrets` ersetzt. Die alten Aufrufe sind veraltet und umgehen die Prüfung von Zielgruppen und Geheimnisnamen.",
+      "fix": "Deklariere die Zielgruppe in `RayfinContext<Schema, AudienceType.Sql>` und lies `ctx.Tokens.Sql`; lies Geheimnisse als `ctx.Secrets.API_KEY`."
+    },
+    "platform/functions-availability": {
+      "title": "App verwendet Rayfin Functions",
+      "summary": "Auf die Verfügbarkeit von Functions im Zielarbeitsbereich wird hingewiesen",
+      "why": "Functions sind seit Rayfin 1.36 allgemein verfügbar, aber nicht in jeder Fabric-Region und jedem Mandanten.",
+      "fix": "Bevor du dich auf Funktionen verlässt, prüfe, ob die Veröffentlichung mit Functions in deinem Zielarbeitsbereich gelingt (sie laufen auch in der lokalen Vorschau), und belasse den Datenzugriff in `client.data`, wo keine Funktion nötig ist."
+    },
+    "platform/latest-guidance": {
+      "title": "Widerspricht aktuellen Rayfin-Empfehlungen",
+      "summary": "Die App folgt den neuesten veröffentlichten Rayfin-Regeln und berücksichtigt bekannte Einschränkungen",
+      "why": "Die Regeln von Rayfin für Coding-Agents, bekannte Einschränkungen und Abkündigungen ändern sich zwischen Releases, und die App verlässt sich womöglich auf Verhalten, das nicht mehr empfohlen wird.",
+      "fix": "Folge den verlinkten Empfehlungen für deine installierte Rayfin-Version."
+    },
+    "performance/client-side-aggregation": {
+      "title": "Summen werden berechnet, indem jede Zeile geladen wird",
+      "summary": "Summen und Zusammenfassungen verwenden serverseitige Aggregation",
+      "why": "Zeilen abzurufen, um sie im Browser zu summieren, zu mitteln oder zu zählen, ist langsam, verbraucht Kapazität und wird durch die Paginierung begrenzt.",
+      "fix": "Verwende `.groupBy()` / `.aggregate()` und zeige die zurückgegebenen Gruppen an."
+    },
+    "performance/client-per-render": {
+      "title": "Rayfin-Client wird wiederholt erstellt",
+      "summary": "Ein einziger `RayfinClient` wird erstellt und wiederverwendet",
+      "why": "Wird ein Client in Komponenten oder bei jedem Aufruf erstellt, wiederholt sich die Einrichtung, und der gemeinsame Sitzungszustand kann verloren gehen.",
+      "fix": "Erstelle den Client einmal in einem Modul (etwa `src/services/rayfinClient.ts`) und importiere ihn überall."
+    },
+    "performance/oversized-page": {
+      "title": "Seitengröße ist weit größer, als die Ansicht braucht",
+      "summary": "Seitengrößen passen zu dem, was die Oberfläche anzeigt",
+      "why": "Tausende Zeilen pro Seite anzufordern (`.first(10000)`), hebelt die Paginierung aus und verlangsamt jeden Ladevorgang.",
+      "fix": "Passe `.first(n)` an das an, was die Ansicht zeigt, und lade weitere Seiten bei Bedarf nach."
+    },
+    "performance/unvirtualized-list": {
+      "title": "Sehr lange Liste rendert jede Zeile",
+      "summary": "Sehr lange Listen werden schrittweise gerendert",
+      "why": "Hunderte oder Tausende Zeilen auf einmal zu rendern, macht das Laden und Scrollen der Seite langsam.",
+      "fix": "Zeige mit „Mehr laden“ jeweils eine Seite an, oder virtualisiere die Liste."
+    },
+    "performance/expensive-render": {
+      "title": "Aufwendige Arbeit läuft bei jedem Rendern",
+      "summary": "Aufwendige Berechnungen werden memoisiert oder aus dem Renderpfad verlagert",
+      "why": "Große Arrays direkt im Komponentenrumpf zu sortieren, zu filtern oder umzuformen, läuft bei jedem Rendern erneut und macht die Oberfläche träge.",
+      "fix": "Umschließe die Berechnung mit `useMemo`, oder verlagere sie dorthin, wo die Daten geladen werden."
+    },
+    "accessibility/img-alt": {
+      "title": "Bild hat keinen Alternativtext",
+      "summary": "Bilder haben einen Alternativtext (oder `alt=\"\"`, wenn sie nur dekorativ sind)",
+      "why": "Screenreader können ein Bild ohne `alt` nicht beschreiben – sie lesen den Dateinamen vor oder übergehen seine Bedeutung ganz.",
+      "fix": "Füge eine kurze Beschreibung hinzu – oder bei rein dekorativen Bildern `alt=\"\"`."
+    },
+    "accessibility/control-label": {
+      "title": "Formularsteuerelement hat keine Beschriftung",
+      "summary": "Eingabefelder, Auswahllisten und Textbereiche haben eine zugängliche Beschriftung",
+      "why": "Ohne Beschriftung hören Screenreader-Nutzer ein unbenanntes Steuerelement und wissen nicht, was sie eingeben sollen. Platzhalter zählen nicht als Beschriftung.",
+      "fix": "Verknüpfe ein sichtbares `<label htmlFor>` mit dem Steuerelement, oder füge `aria-label` / `aria-labelledby` hinzu."
+    },
+    "accessibility/non-semantic-interactive": {
+      "title": "Klickbares Element lässt sich nicht mit der Tastatur bedienen",
+      "summary": "Klickbare Elemente sind Schaltflächen oder Links (oder vollständig per Tastatur bedienbar)",
+      "why": "Ein `div` oder `span` mit `onClick` lässt sich per Tastatur weder fokussieren noch aktivieren und wird nicht als Schaltfläche angesagt.",
+      "fix": "Verwende ein `<button>`-Element (oder einen Link), oder füge `role=\"button\"`, `tabIndex={0}` und einen Handler für die Eingabe- und Leertaste hinzu."
+    },
+    "accessibility/icon-button-name": {
+      "title": "Schaltfläche mit nur einem Symbol hat keinen zugänglichen Namen",
+      "summary": "Schaltflächen, die nur ein Symbol zeigen, haben einen zugänglichen Namen",
+      "why": "Eine Schaltfläche, deren einziger Inhalt ein Symbol ist, wird nur als „Schaltfläche“ angesagt, sodass Screenreader-Nutzer nicht erkennen, was sie bewirkt.",
+      "fix": "Füge `aria-label` (zum Beispiel `aria-label=\"Delete task\"`) oder visuell ausgeblendeten Text hinzu."
+    },
+    "accessibility/color-only-state": {
+      "title": "Status wird nur durch Farbe angezeigt",
+      "summary": "Status und Fehler werden nicht allein durch Farbe vermittelt",
+      "why": "Wer die Farben nicht unterscheiden kann, bekommt den Status gar nicht mit.",
+      "fix": "Ergänze die Farbe um Text, ein Symbol oder eine zugängliche Statusmeldung."
+    }
+  },
+  "categories": {
+    "access": {
+      "title": "Zugriff und Anmeldung",
+      "description": "Wer auf die Daten und Seiten der App zugreifen kann und ob die Anmeldung richtig eingebunden ist."
+    },
+    "policy": {
+      "title": "Datenrichtlinien",
+      "description": "Richtlinien auf Zeilenebene, Sichtbarkeit von Feldern und wie weit die Freigaben jeder Rolle reichen."
+    },
+    "secrets": {
+      "title": "Geheimnisse und Offenlegung",
+      "description": "Anmeldeinformationen, Umgebungsdateien und Ursprünge, die nach außen gelangen oder den Zugriff ausweiten könnten."
+    },
+    "data-model": {
+      "title": "Datenmodell",
+      "description": "Definitionen von Entitäten, Feldern und Beziehungen, einschließlich der Grenzen von MSSQL."
+    },
+    "queries": {
+      "title": "Abfragen",
+      "description": "Wie die App Daten über den typisierten Client liest und schreibt."
+    },
+    "config": {
+      "title": "Konfiguration",
+      "description": "rayfin.yml, TypeScript- und Vite-Einstellungen sowie statisches Hosting."
+    },
+    "platform": {
+      "title": "Rayfin-Versionen und Plattform",
+      "description": "CLI- und SDK-Versionen, veraltete APIs, Connectors, Functions, Storage und Agent-Dateien."
+    },
+    "performance": {
+      "title": "Leistung",
+      "description": "Vorgänge, die mit wachsenden Daten und steigender Nutzung langsamer oder teurer werden."
+    },
+    "accessibility": {
+      "title": "Barrierefreiheit",
+      "description": "Ob Menschen, die Tastatur und Hilfstechnologien verwenden, die App nutzen können."
+    }
+  }
+}

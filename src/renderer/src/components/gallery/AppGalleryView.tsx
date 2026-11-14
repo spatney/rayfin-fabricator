@@ -11,6 +11,7 @@ import { topLayerOpen, useSuppressPreview } from '../../overlay'
 import { useAzureSignIn, type AzureSignIn } from '../../azureAuth'
 import { authErrorMessage } from '../../authErrors'
 import type { WorkspaceUse } from '../../fabric'
+import { formatLocale, Trans, translator, useTranslation } from '../../i18n'
 import { useProjectFacts } from '../../projectFacts'
 import { useThumbnails } from '../../thumbnails'
 import { FabricatorMark } from '../FabricatorMark'
@@ -35,7 +36,6 @@ import {
   appAddress,
   appHealth,
   applyQuery,
-  count,
   groupByWorkspace,
   pinKey,
   publishedThumbnail,
@@ -75,7 +75,6 @@ const STATUS_CHUNK = 12
 /** Most apps whose statuses are read to put the most recently published first. */
 const RECENT_LIMIT = 500
 const PREFS_KEY = 'rayfin.gallery'
-const LIST_FAILED = 'Couldn’t list your Fabric apps. Try again.'
 
 /** Test seam: forget the last apps read. */
 export function resetGallerySnapshotForTests(): void {
@@ -90,12 +89,13 @@ type Prefs = Pick<GalleryQuery, 'where' | 'sort' | 'pinned'> & {
 const WHERE: readonly GalleryWhere[] = ['all', 'local', 'remote']
 const SORTS: readonly GallerySort[] = ['name', 'recent', 'opened', 'workspace']
 const VIEWS: readonly GalleryView[] = ['grid', 'table']
-const SORT_NAMES: Record<GallerySort, { label: string; desc: string }> = {
-  name: { label: 'Name', desc: 'A to Z' },
-  recent: { label: 'Recently published', desc: 'Newest publish first' },
-  opened: { label: 'Recently opened', desc: 'The apps you opened last first' },
-  workspace: { label: 'Workspace', desc: 'Grouped, your recent workspaces first' }
-}
+/** Each order's name and description in the Sort menu (their keys in `gallery`). */
+const SORT_NAMES = {
+  name: { label: 'sort.name.label', desc: 'sort.name.desc' },
+  recent: { label: 'sort.recent.label', desc: 'sort.recent.desc' },
+  opened: { label: 'sort.opened.label', desc: 'sort.opened.desc' },
+  workspace: { label: 'sort.workspace.label', desc: 'sort.workspace.desc' }
+} as const satisfies Record<GallerySort, { label: string; desc: string }>
 
 /** The saved pins: each key once, leaving out anything that isn't one. */
 function savedPins(value: unknown): string[] {
@@ -148,6 +148,7 @@ export default function AppGalleryView({
   onUseExample
 }: Props): JSX.Element {
   useSuppressPreview()
+  const { t } = useTranslation('gallery')
   const [result, setResult] = useState<GalleryResult | null>(
     () => gallerySnapshot()?.result ?? null
   )
@@ -240,16 +241,17 @@ export default function AppGalleryView({
     async (refresh: boolean): Promise<void> => {
       const seq = ++readSeq.current
       setChecking(true)
+      const listFailed = (): string => translator('gallery')('view.listFailed')
       let next: GalleryResult
       try {
         next = await window.api.gallery.list(refresh)
       } catch (reason) {
-        next = { ok: false, apps: [], error: authErrorMessage(reason, LIST_FAILED) }
+        next = { ok: false, apps: [], error: authErrorMessage(reason, listFailed()) }
       }
       if (seq !== readSeq.current || !mounted.current) return
       setChecking(false)
       if (!next.ok) {
-        setFailure({ error: next.error || LIST_FAILED, needsAz: next.needsAz })
+        setFailure({ error: next.error || listFailed(), needsAz: next.needsAz })
         return
       }
       setFailure(null)
@@ -469,7 +471,7 @@ export default function AppGalleryView({
 
   /** Have Copilot write an app's description, and show it once it's saved. */
   const describe = useCallback(async (app: GalleryApp): Promise<GalleryDescribeResult> => {
-    if (!app.local) return { ok: false, error: 'This app isn’t on this computer.' }
+    if (!app.local) return { ok: false, error: translator('gallery')('view.notLocal') }
     const answer = await window.api.gallery.describe(app.local.projectId)
     const description = answer.ok ? answer.description : undefined
     if (description && mounted.current) {
@@ -539,15 +541,18 @@ export default function AppGalleryView({
   const user = result?.account?.user
   const summary = result
     ? filteredBy
-      ? `Showing ${filtered.length.toLocaleString('en')} of ${count(apps.length, 'app')}`
-      : `${count(apps.length, 'app')} · ${count(workspaces.length, 'workspace')}`
+      ? t('summary.filtered', { shown: filtered.length, count: apps.length })
+      : t('summary.total', {
+          apps: t('count.apps', { count: apps.length }),
+          workspaces: t('count.workspaces', { count: workspaces.length })
+        })
     : ''
   const announced = result
     ? filteredBy
-      ? `${filtered.length.toLocaleString('en')} of ${count(apps.length, 'app')} shown`
-      : `${count(apps.length, 'app')} shown`
+      ? t('announce.filtered', { shown: filtered.length, count: apps.length })
+      : t('announce.all', { count: apps.length })
     : checking
-      ? 'Loading your Fabric apps'
+      ? t('announce.loading')
       : ''
 
   return (
@@ -557,29 +562,32 @@ export default function AppGalleryView({
           <div className="gallery-wrap gallery-head-inner">
             <div className="gallery-title-row">
               <div className="gallery-titles">
-                <p className="gallery-eyebrow">Microsoft Fabric</p>
-                <h1 className="gallery-title">App gallery</h1>
+                <p className="gallery-eyebrow">{t('head.eyebrow')}</p>
+                <h1 className="gallery-title">{t('head.title')}</h1>
                 <p className="gallery-sub">
-                  Every Rayfin app you can open in Fabric
                   {user ? (
-                    <>
-                      , as <strong>{user}</strong>
-                    </>
+                    <Trans
+                      t={t}
+                      i18nKey="head.subAs"
+                      values={{ user }}
+                      components={{ b: <strong /> }}
+                    />
                   ) : (
-                    ''
+                    t('head.sub')
                   )}
-                  .
                 </p>
               </div>
               <div className="gallery-head-tools">
-                {checking && result && <span className="gallery-checking">Checking Fabric…</span>}
+                {checking && result && (
+                  <span className="gallery-checking">{t('head.checking')}</span>
+                )}
                 {summary && <span className="gallery-count">{summary}</span>}
                 {tab === 'apps' && (
-                  <div className="seg gallery-view" role="group" aria-label="Layout">
+                  <div className="seg gallery-view" role="group" aria-label={t('layout.label')}>
                     {(
                       [
-                        ['grid', 'Cards'],
-                        ['table', 'Table']
+                        ['grid', 'layout.grid'],
+                        ['table', 'layout.table']
                       ] as const
                     ).map(([value, label]) => (
                       <button
@@ -589,7 +597,7 @@ export default function AppGalleryView({
                         aria-pressed={prefs.view === value}
                         onClick={() => setPrefs((p) => ({ ...p, view: value }))}
                       >
-                        {label}
+                        {t(label)}
                       </button>
                     ))}
                   </div>
@@ -597,8 +605,8 @@ export default function AppGalleryView({
                 <button
                   type="button"
                   className="btn btn--sm btn--icon"
-                  aria-label="Refresh"
-                  title="Refresh"
+                  aria-label={t('actions.refresh')}
+                  title={t('actions.refresh')}
                   disabled={checking}
                   onClick={() => void read(true)}
                 >
@@ -608,11 +616,11 @@ export default function AppGalleryView({
             </div>
 
             {onUseExample && (
-              <div className="gallery-tabs" role="tablist" aria-label="Show">
+              <div className="gallery-tabs" role="tablist" aria-label={t('tabs.label')}>
                 {(
                   [
-                    ['apps', 'Apps'],
-                    ['examples', 'Examples']
+                    ['apps', 'tabs.apps'],
+                    ['examples', 'tabs.examples']
                   ] as const
                 ).map(([value, label]) => (
                   <button
@@ -623,7 +631,7 @@ export default function AppGalleryView({
                     className={`gallery-tab${tab === value ? ' is-on' : ''}`}
                     onClick={() => setTab(value)}
                   >
-                    {label}
+                    {t(label)}
                   </button>
                 ))}
               </div>
@@ -640,8 +648,8 @@ export default function AppGalleryView({
                     value={text}
                     autoFocus
                     spellCheck={false}
-                    placeholder="Search apps, workspaces and descriptions"
-                    aria-label="Search apps"
+                    placeholder={t('search.placeholder')}
+                    aria-label={t('search.label')}
                     onChange={(e) => setText(e.target.value)}
                   />
                   {!text && (
@@ -650,12 +658,12 @@ export default function AppGalleryView({
                     </kbd>
                   )}
                 </label>
-                <div className="seg gallery-where" role="group" aria-label="Where the apps are">
+                <div className="seg gallery-where" role="group" aria-label={t('where.label')}>
                   {(
                     [
-                      ['all', 'All', apps.length],
-                      ['local', 'On this computer', localCount],
-                      ['remote', 'In Fabric only', apps.length - localCount]
+                      ['all', 'where.all', apps.length],
+                      ['local', 'where.local', localCount],
+                      ['remote', 'where.remote', apps.length - localCount]
                     ] as const
                   ).map(([value, label, n]) => (
                     <button
@@ -665,9 +673,11 @@ export default function AppGalleryView({
                       aria-pressed={prefs.where === value}
                       onClick={() => setPrefs((p) => ({ ...p, where: value }))}
                     >
-                      {label}
+                      {t(label)}
                       {result && (
-                        <span className="gallery-seg-count">{n.toLocaleString('en')}</span>
+                        <span className="gallery-seg-count">
+                          {n.toLocaleString(formatLocale())}
+                        </span>
                       )}
                     </button>
                   ))}
@@ -676,13 +686,15 @@ export default function AppGalleryView({
                   type="button"
                   className={`gallery-chip${prefs.attention ? ' is-on' : ''}`}
                   aria-pressed={prefs.attention}
-                  title="Apps whose last publish failed, that changed since they were published, that can update Rayfin, or that never published"
+                  title={t('filters.attentionTitle')}
                   onClick={() => setPrefs((p) => ({ ...p, attention: !p.attention }))}
                 >
                   <span className="gdot gdot--pending" aria-hidden="true" />
-                  Needs attention
+                  {t('filters.attention')}
                   {result && (
-                    <span className="gallery-seg-count">{attentionCount.toLocaleString('en')}</span>
+                    <span className="gallery-seg-count">
+                      {attentionCount.toLocaleString(formatLocale())}
+                    </span>
                   )}
                 </button>
                 {rolesKnown && (
@@ -690,12 +702,14 @@ export default function AppGalleryView({
                     type="button"
                     className={`gallery-chip${prefs.editable ? ' is-on' : ''}`}
                     aria-pressed={prefs.editable}
-                    title="Apps in workspaces where you're an Admin, Member or Contributor"
+                    title={t('filters.editableTitle')}
                     onClick={() => setPrefs((p) => ({ ...p, editable: !p.editable }))}
                   >
                     <Codicon name="edit" />
-                    Apps I can edit
-                    <span className="gallery-seg-count">{editableCount.toLocaleString('en')}</span>
+                    {t('filters.editable')}
+                    <span className="gallery-seg-count">
+                      {editableCount.toLocaleString(formatLocale())}
+                    </span>
                   </button>
                 )}
                 <WorkspacePicker
@@ -707,9 +721,9 @@ export default function AppGalleryView({
                 />
                 <GalleryMenu
                   icon="list-ordered"
-                  label={SORT_NAMES[prefs.sort].label}
-                  value={SORT_NAMES[prefs.sort].label}
-                  name="Sort"
+                  label={t(SORT_NAMES[prefs.sort].label)}
+                  value={t(SORT_NAMES[prefs.sort].label)}
+                  name={t('sort.menu')}
                   width={260}
                 >
                   {(close) =>
@@ -728,8 +742,8 @@ export default function AppGalleryView({
                           }}
                         >
                           <span className="mp-item-text">
-                            <span className="mp-item-label">{SORT_NAMES[sort].label}</span>
-                            <span className="mp-item-desc">{SORT_NAMES[sort].desc}</span>
+                            <span className="mp-item-label">{t(SORT_NAMES[sort].label)}</span>
+                            <span className="mp-item-desc">{t(SORT_NAMES[sort].desc)}</span>
                           </span>
                           <Codicon
                             name="check"
@@ -760,15 +774,14 @@ export default function AppGalleryView({
                 {result?.truncated && (
                   <p className="gallery-note">
                     <Codicon name="info" />
-                    Fabric has more apps than Fabricator reads at once, so some apps you can open
-                    aren’t shown.
+                    {t('notes.truncated')}
                   </p>
                 )}
                 {!result ? (
                   failure ? (
                     <ErrorState failure={failure} azure={azure} onRetry={() => void read(true)} />
                   ) : (
-                    <ul className="gallery-grid" aria-busy="true" aria-label="Loading apps">
+                    <ul className="gallery-grid" aria-busy="true" aria-label={t('loadingLabel')}>
                       {Array.from({ length: 8 }, (_, i) => (
                         <SkeletonCard key={i} index={i} />
                       ))}
@@ -777,13 +790,11 @@ export default function AppGalleryView({
                 ) : apps.length === 0 ? (
                   <div className="gallery-state">
                     <FabricatorMark className="gallery-state-mark" />
-                    <p className="gallery-state-title">No Rayfin apps yet</p>
-                    <p className="gallery-state-sub">
-                      Apps you publish to Fabric, and apps others share with you, show up here.
-                    </p>
+                    <p className="gallery-state-title">{t('empty.title')}</p>
+                    <p className="gallery-state-sub">{t('empty.desc')}</p>
                     <div className="gallery-state-actions">
                       <button type="button" className="btn btn--primary" onClick={onNewProject}>
-                        New project
+                        {t('empty.newProject')}
                       </button>
                     </div>
                   </div>
@@ -792,39 +803,42 @@ export default function AppGalleryView({
                     <Codicon name="search" className="gallery-state-glyph" />
                     <p className="gallery-state-title">
                       {text.trim()
-                        ? `No apps match “${text.trim()}”`
-                        : 'No apps match these filters'}
+                        ? t('noMatch.text', { text: text.trim() })
+                        : t('noMatch.filters')}
                     </p>
-                    <p className="gallery-state-sub">
-                      Try other words, or look in every workspace.
-                    </p>
+                    <p className="gallery-state-sub">{t('noMatch.desc')}</p>
                     <div className="gallery-state-actions">
                       <button type="button" className="btn" onClick={showAll}>
-                        Show all apps
+                        {t('noMatch.showAll')}
                       </button>
                     </div>
                   </div>
                 ) : prefs.sort === 'workspace' ? (
                   groupByWorkspace(shown).map((group) => {
                     const usedAt = group.pinned ? undefined : usedAtOf.get(group.id)
+                    const name = group.pinned ? t('groups.pinned') : group.name
                     return (
-                      <section key={group.id} className="gallery-group" aria-label={group.name}>
+                      <section key={group.id} className="gallery-group" aria-label={name}>
                         <h2 className="gallery-group-head">
                           <Codicon name={groupIcon(group)} />
                           <span className="gallery-group-name">
-                            {group.pinned ? group.name : <WorkspaceName name={group.name} />}
+                            {group.pinned ? name : <WorkspaceName name={group.name} />}
                           </span>
                           <span className="gallery-group-count">{group.entries.length}</span>
                           {usedAt ? (
                             <span className="gallery-group-used">
-                              Used {ago(new Date(usedAt).toISOString())}
+                              {t('groups.used', { when: ago(new Date(usedAt).toISOString()) })}
                             </span>
                           ) : null}
                         </h2>
                         <Results
                           {...results}
                           entries={group.entries}
-                          label={group.pinned ? 'Pinned apps' : `Apps in ${group.name}`}
+                          label={
+                            group.pinned
+                              ? t('groups.pinnedApps')
+                              : t('groups.appsIn', { name: group.name })
+                          }
                           grouped={!group.pinned}
                         />
                       </section>
@@ -840,7 +854,7 @@ export default function AppGalleryView({
                       className="btn btn--sm"
                       onClick={() => setLimit((n) => n + PAGE)}
                     >
-                      Show more ({(filtered.length - shown.length).toLocaleString('en')} left)
+                      {t('more', { count: filtered.length - shown.length })}
                     </button>
                   </div>
                 )}
@@ -915,7 +929,7 @@ interface ResultsProps {
 function Results({
   entries,
   selectedId,
-  label = 'Apps',
+  label,
   grouped = false,
   view,
   picture,
@@ -925,12 +939,14 @@ function Results({
   onPin,
   onQuickLook
 }: ResultsProps): JSX.Element {
+  const { t } = useTranslation('gallery')
+  const name = label ?? t('list.label')
   if (view === 'table') {
     return (
       <AppTable
         entries={entries}
         selectedId={selectedId}
-        label={label}
+        label={name}
         showWorkspace={!grouped}
         picture={picture}
         updateOf={updateOf}
@@ -942,7 +958,7 @@ function Results({
     )
   }
   return (
-    <ul className="gallery-grid" aria-label={label}>
+    <ul className="gallery-grid" aria-label={name}>
       {entries.map((entry) => (
         <AppCard
           key={entry.app.id}
@@ -971,6 +987,7 @@ function SignInButton({
   azure: AzureSignIn
   small?: boolean
 }): JSX.Element {
+  const { t } = useTranslation('gallery')
   return (
     <button
       type="button"
@@ -978,7 +995,7 @@ function SignInButton({
       disabled={azure.signingIn}
       onClick={() => void azure.signIn()}
     >
-      {azure.signingIn ? 'Signing in…' : 'Sign in to Azure'}
+      {azure.signingIn ? t('azure.signingIn') : t('azure.signIn')}
     </button>
   )
 }
@@ -993,21 +1010,20 @@ function ErrorState({
   azure: AzureSignIn
   onRetry: () => void
 }): JSX.Element {
+  const { t } = useTranslation('gallery')
   return (
     <div className="gallery-state" role="alert">
       <Codicon name={failure.needsAz ? 'account' : 'warning'} className="gallery-state-glyph" />
       <p className="gallery-state-title">
-        {failure.needsAz ? 'Sign in to Azure' : 'Couldn’t list your apps'}
+        {failure.needsAz ? t('azure.signIn') : t('error.title')}
       </p>
       <p className="gallery-state-sub">
-        {azure.signingIn
-          ? 'Finish signing in to Azure in your browser.'
-          : (azure.error ?? failure.error)}
+        {azure.signingIn ? t('azure.finish') : (azure.error ?? failure.error)}
       </p>
       <div className="gallery-state-actions">
         {failure.needsAz && <SignInButton azure={azure} />}
         <button type="button" className="btn" disabled={azure.signingIn} onClick={onRetry}>
-          Try again
+          {t('actions.tryAgain')}
         </button>
       </div>
     </div>
@@ -1024,19 +1040,18 @@ function Banner({
   azure: AzureSignIn
   onRetry: () => void
 }): JSX.Element {
+  const { t } = useTranslation('gallery')
   return (
     <div className="gallery-note gallery-note--warn" role="alert">
       <span className="gdot gdot--warn" aria-hidden="true" />
       <span className="gallery-note-text">
-        {failure.needsAz
-          ? 'Sign in to Azure to see your latest apps. These are from earlier.'
-          : `Couldn’t check Fabric for changes: ${failure.error}`}
+        {failure.needsAz ? t('banner.signIn') : t('banner.failed', { error: failure.error })}
       </span>
       {failure.needsAz ? (
         <SignInButton azure={azure} small />
       ) : (
         <button type="button" className="btn btn--sm" onClick={onRetry}>
-          Try again
+          {t('actions.tryAgain')}
         </button>
       )}
     </div>

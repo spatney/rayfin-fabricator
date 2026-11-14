@@ -1,18 +1,19 @@
 import { useEffect, useId, useMemo, useState, type JSX } from 'react'
 import type { TeamAbandonItem, TeamAbandonPlan, TeamActionResult, TeamProblem, TeamWorkspace } from '@shared/ipc'
+import { translator, useTranslation } from '../../i18n'
 import { useSuppressPreview } from '../../overlay'
 import { useModalFocus } from '../../modalFocus'
 import { ProblemView, StepList, teamError, useStepProgress, type StepRow } from './common'
 import './team.css'
 
-const KIND_LABEL: Record<TeamAbandonItem['kind'], string> = {
-  identity: 'Deploy identity',
-  trust: 'Its federated credentials for this workspace',
-  fabric: 'Fabric workspace',
-  pipeline: 'Fabricator’s files and settings in it',
-  github: 'GitHub repository',
-  local: 'Folder on this computer'
-}
+const KIND_LABEL = {
+  identity: 'abandon.kind.identity',
+  trust: 'abandon.kind.trust',
+  fabric: 'abandon.kind.fabric',
+  pipeline: 'abandon.kind.pipeline',
+  github: 'abandon.kind.github',
+  local: 'abandon.kind.local'
+} as const satisfies Record<TeamAbandonItem['kind'], string>
 
 const KIND_ICON: Record<TeamAbandonItem['kind'], string> = {
   identity: 'key',
@@ -23,23 +24,20 @@ const KIND_ICON: Record<TeamAbandonItem['kind'], string> = {
   local: 'folder'
 }
 
-const LOOKUP_FAILED = 'Could not look up what setup created.'
-
 /** The cleanup checklist for these items. Mirrors ABANDON_STEPS in src-tauri/src/commands/team/abandon.rs. */
 export function abandonSteps(items: TeamAbandonItem[]): Array<{ id: string; label: string }> {
+  const t = translator('team')
   const count = (kind: TeamAbandonItem['kind']): number => items.filter((i) => i.kind === kind).length
   const identities = count('identity')
   const fabric = count('fabric')
   return [
-    { id: 'check', label: 'Look up what setup created' },
-    ...(identities
-      ? [{ id: 'identity', label: identities === 1 ? 'Delete the deploy identity' : 'Delete the deploy identities' }]
-      : []),
-    ...(count('trust') ? [{ id: 'trust', label: 'Remove the federated credentials from your app registration' }] : []),
-    ...(fabric ? [{ id: 'fabric', label: fabric === 1 ? 'Delete the Fabric workspace' : 'Delete the Fabric workspaces' }] : []),
-    ...(count('pipeline') ? [{ id: 'cleanup', label: 'Remove Fabricator’s files and settings from the repository' }] : []),
-    ...(count('github') ? [{ id: 'github', label: 'Delete the GitHub repository' }] : []),
-    { id: 'local', label: 'Remove the workspace from this computer' }
+    { id: 'check', label: t('abandon.step.check') },
+    ...(identities ? [{ id: 'identity', label: t('abandon.step.identity', { count: identities }) }] : []),
+    ...(count('trust') ? [{ id: 'trust', label: t('abandon.step.trust') }] : []),
+    ...(fabric ? [{ id: 'fabric', label: t('abandon.step.fabric', { count: fabric }) }] : []),
+    ...(count('pipeline') ? [{ id: 'cleanup', label: t('abandon.step.cleanup') }] : []),
+    ...(count('github') ? [{ id: 'github', label: t('abandon.step.github') }] : []),
+    { id: 'local', label: t('abandon.step.local') }
   ]
 }
 
@@ -67,6 +65,7 @@ export function stillThere(item: TeamAbandonItem, workspace: TeamWorkspace): boo
 }
 
 function ItemList({ items }: { items: TeamAbandonItem[] }): JSX.Element {
+  const { t } = useTranslation('team')
   return (
     <ul className="team-abandon-items">
       {items.map((item) => (
@@ -81,7 +80,7 @@ function ItemList({ items }: { items: TeamAbandonItem[] }): JSX.Element {
               item.name
             )}
           </span>
-          <span className="team-abandon-kind">{KIND_LABEL[item.kind]}</span>
+          <span className="team-abandon-kind">{t(KIND_LABEL[item.kind])}</span>
         </li>
       ))}
     </ul>
@@ -105,6 +104,7 @@ interface Props {
  */
 export default function AbandonSetupModal({ workspace, onClose, onGone, onChanged }: Props): JSX.Element {
   useSuppressPreview()
+  const { t } = useTranslation('team')
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
   const scope = useMemo(() => `team-abandon-${crypto.randomUUID()}`, [])
@@ -140,7 +140,13 @@ export default function AbandonSetupModal({ workspace, onClose, onGone, onChange
     try {
       next = await window.api.team.abandonPlan(workspace.id)
     } catch (reason) {
-      next = { ok: false, error: teamError(reason, LOOKUP_FAILED), items: [], kept: [], needsDeletePermission: false }
+      next = {
+        ok: false,
+        error: teamError(reason, t('abandon.lookupFailed')),
+        items: [],
+        kept: [],
+        needsDeletePermission: false
+      }
     }
     setPlan(next)
     setNeedsPermission(next.needsDeletePermission)
@@ -148,7 +154,7 @@ export default function AbandonSetupModal({ workspace, onClose, onGone, onChange
       setPhase('confirm')
       return
     }
-    setProblem(next.problem ?? { step: 'check', message: next.error ?? LOOKUP_FAILED })
+    setProblem(next.problem ?? { step: 'check', message: next.error ?? t('abandon.lookupFailed') })
     setPhase('failed')
   }
 
@@ -186,12 +192,12 @@ export default function AbandonSetupModal({ workspace, onClose, onGone, onChange
     try {
       const result = await window.api.team.githubSignIn(true, true, workspace.account)
       if (!result.ok) {
-        setGrantError(result.error ?? 'Could not start GitHub sign-in.')
+        setGrantError(result.error ?? t('shared.signInFailed'))
         return
       }
       setWaiting(true)
     } catch (reason) {
-      setGrantError(teamError(reason, 'Could not start GitHub sign-in.'))
+      setGrantError(teamError(reason, t('shared.signInFailed')))
     }
   }
 
@@ -204,7 +210,7 @@ export default function AbandonSetupModal({ workspace, onClose, onGone, onChange
     try {
       result = await window.api.team.abandonSetup(workspace.id, scope)
     } catch (reason) {
-      result = { ok: false, error: teamError(reason, 'Abandoning the setup stopped unexpectedly.') }
+      result = { ok: false, error: teamError(reason, t('abandon.stoppedUnexpectedly')) }
     }
     if (result.ok) {
       onGone()
@@ -212,7 +218,7 @@ export default function AbandonSetupModal({ workspace, onClose, onGone, onChange
     }
     if (result.workspace) setLatest(result.workspace)
     onChanged()
-    const next = result.problem ?? { step: 'check', message: result.error ?? 'Abandoning the setup stopped.' }
+    const next = result.problem ?? { step: 'check', message: result.error ?? t('abandon.stopped') }
     setProblem(next)
     setPhase('failed')
     if (next.step === 'github') void checkPermission()
@@ -224,7 +230,7 @@ export default function AbandonSetupModal({ workspace, onClose, onGone, onChange
       await window.api.team.leave(workspace.id)
       onGone()
     } catch (reason) {
-      setProblem({ step: 'local', message: teamError(reason, 'Could not remove the workspace from this computer.') })
+      setProblem({ step: 'local', message: teamError(reason, t('abandon.removeFailed')) })
       setPhase('failed')
     } finally {
       setRemoving(false)
@@ -247,12 +253,12 @@ export default function AbandonSetupModal({ workspace, onClose, onGone, onChange
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>Abandon setting up {workspace.name}?</h2>
+          <h2 id={titleId}>{t('abandon.title', { name: workspace.name })}</h2>
         </div>
         <div className="modal-body team-form">
           {phase === 'checking' && (
             <div className="team-muted" role="status">
-              <span className="ws-spinner" /> Looking up what setup created…
+              <span className="ws-spinner" /> {t('abandon.checking')}
             </div>
           )}
 
@@ -262,15 +268,13 @@ export default function AbandonSetupModal({ workspace, onClose, onGone, onChange
                 <>
                   <p className="team-muted">
                     {items.some((i) => i.kind === 'trust' || i.kind === 'pipeline')
-                      ? 'Fabricator permanently deletes what setup created so far and removes what it added to what you provided, then removes the workspace from this computer:'
-                      : 'Fabricator permanently deletes what setup created so far, then removes the workspace from this computer:'}
+                      ? t('abandon.confirmProvided')
+                      : t('abandon.confirm')}
                   </p>
                   <ItemList items={items} />
                 </>
               ) : (
-                <p className="team-muted">
-                  Nothing that setup created is left. Fabricator removes the workspace from this computer.
-                </p>
+                <p className="team-muted">{t('abandon.nothingLeft')}</p>
               )}
               {plan.kept.map((note) => (
                 <p key={note} className="team-muted">
@@ -288,30 +292,23 @@ export default function AbandonSetupModal({ workspace, onClose, onGone, onChange
               <span className="team-check-dot team-check-dot--warn" />
               <span className="team-check-text">
                 <strong>GitHub</strong>
-                <div className="team-muted">
-                  Deleting the repository needs one more GitHub permission (delete_repo). GitHub asks you to
-                  approve it.
-                </div>
+                <div className="team-muted">{t('abandon.deletePermission')}</div>
               </span>
               <button type="button" className="btn btn--sm btn--primary" onClick={() => void grant()}>
-                {waiting ? 'Waiting…' : 'Grant GitHub access'}
+                {waiting ? t('shared.waiting') : t('shared.grantGithubAccess')}
               </button>
             </div>
           )}
-          {waiting && (
-            <p className="team-muted">
-              Finish signing in in the terminal window, then come back. This updates automatically.
-            </p>
-          )}
+          {waiting && <p className="team-muted">{t('shared.finishSignIn')}</p>}
           {grantError && <div className="alert alert--error">{grantError}</div>}
 
           {phase === 'failed' && (
             <p className="team-muted">
               {plan?.ok && left.length > 0
-                ? `Remove from this computer keeps what's left: ${left.map((i) => i.name).join(', ')}.`
+                ? t('abandon.keepsLeft', { items: left.map((i) => i.name).join(', ') })
                 : plan?.ok
-                  ? 'Remove from this computer forgets the workspace here.'
-                  : 'Remove from this computer keeps everything setup created.'}
+                  ? t('abandon.forgets')
+                  : t('abandon.keepsAll')}
             </p>
           )}
         </div>
@@ -323,11 +320,11 @@ export default function AbandonSetupModal({ workspace, onClose, onGone, onChange
               disabled={busy}
               onClick={() => void removeHere()}
             >
-              {removing ? 'Removing…' : 'Remove from this computer'}
+              {removing ? t('abandon.removing') : t('abandon.removeHere')}
             </button>
           )}
           <button type="button" className="btn btn--ghost" disabled={busy} onClick={onClose}>
-            Cancel
+            {t('actions.cancel')}
           </button>
           {phase === 'failed' ? (
             <button
@@ -337,7 +334,7 @@ export default function AbandonSetupModal({ workspace, onClose, onGone, onChange
               disabled={busy || (ran && needsPermission && hasRepo)}
               onClick={() => void (ran ? run() : check())}
             >
-              Try again
+              {t('actions.tryAgain')}
             </button>
           ) : (
             <button
@@ -350,12 +347,12 @@ export default function AbandonSetupModal({ workspace, onClose, onGone, onChange
               {phase === 'running' ? (
                 <span className="btn-busy">
                   <span className="btn-spin" aria-hidden="true" />
-                  Deleting…
+                  {t('status.deleting')}
                 </span>
               ) : deletes || phase === 'checking' ? (
-                'Delete and abandon'
+                t('abandon.deleteAndAbandon')
               ) : (
-                'Abandon setup'
+                t('abandon.abandon')
               )}
             </button>
           )}

@@ -1,6 +1,7 @@
 import type { ChatPluginId, ExperimentFlags } from '@shared/ipc'
 import fabricSvg from '../../assets/brands/fabric.svg'
 import microsoftSvg from '../../assets/brands/microsoft.svg'
+import { translator } from '../../i18n'
 
 /** A plugin chat can look things up with, as the composer's Plugins menu shows it. */
 export interface ChatPlugin {
@@ -17,13 +18,17 @@ export const CHAT_PLUGINS: readonly ChatPlugin[] = [
   {
     id: 'fabric-iq',
     name: 'Fabric IQ',
-    description: 'Explore the Power BI reports and semantic models you can open.',
+    get description() {
+      return translator('chat')('plugins.fabricIq')
+    },
     logo: fabricSvg
   },
   {
     id: 'work-iq',
     name: 'Work IQ',
-    description: 'Find your Microsoft 365 email, meetings, files, Teams messages and people.',
+    get description() {
+      return translator('chat')('plugins.workIq')
+    },
     logo: microsoftSvg,
     experiment: 'workIq'
   }

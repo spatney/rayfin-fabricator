@@ -2,6 +2,7 @@ import { useEffect, useState, type JSX } from 'react'
 import type { RayfinNewerRelease, RayfinVersionInfo } from '@shared/ipc'
 import { newerRayfinWarnings } from '../localDevelopment'
 import { useSuppressPreview } from '../overlay'
+import { useTranslation } from '../i18n'
 
 interface Props {
   /**
@@ -65,6 +66,7 @@ export default function RayfinVersionControl({
   onUpdate,
   publishes = false
 }: Props): JSX.Element | null {
+  const { t } = useTranslation('publish')
   const [open, setOpen] = useState(false)
 
   // The popover is plain HTML, but the live preview is a native webview that paints
@@ -90,8 +92,8 @@ export default function RayfinVersionControl({
         className="ver-btn"
         title={
           update
-            ? `Rayfin ${version} — update to ${info.latest} available`
-            : `Rayfin ${version} — Rayfin ${newer?.version} is available`
+            ? t('rayfinVersion.updateTitle', { version, latest: info.latest })
+            : t('rayfinVersion.newerTitle', { version, newer: newer?.version })
         }
         onClick={() => setOpen((o) => !o)}
       >
@@ -104,8 +106,8 @@ export default function RayfinVersionControl({
           {update && (
             <>
               <div className="ver-pop-head">
-                <span className="ver-pop-title">Update available</span>
-                <span className="ver-pop-sub">A newer version of Rayfin is ready.</span>
+                <span className="ver-pop-title">{t('rayfinVersion.updateAvailable')}</span>
+                <span className="ver-pop-sub">{t('rayfinVersion.newerReady')}</span>
               </div>
               <ul className="ver-rows">
                 {rows.map((r) => (
@@ -128,7 +130,7 @@ export default function RayfinVersionControl({
                   setOpen(false)
                 }}
               >
-                Update with Copilot
+                {t('rayfinVersion.updateWithCopilot')}
               </button>
             </>
           )}
@@ -136,9 +138,13 @@ export default function RayfinVersionControl({
             <div className={`ver-newer${update ? ' ver-newer--below' : ''}`}>
               <div className="ver-pop-head">
                 <span className="ver-pop-title">
-                  Rayfin {newer.version} is available{update ? ' too' : ''}
+                  {update
+                    ? t('rayfinVersion.newerAvailableToo', { version: newer.version })
+                    : t('rayfinVersion.newerAvailable', { version: newer.version })}
                 </span>
-                {!update && <span className="ver-pop-sub">This app is on Rayfin {version}.</span>}
+                {!update && (
+                  <span className="ver-pop-sub">{t('rayfinVersion.current', { version })}</span>
+                )}
               </div>
               <ul className="ver-warnings">
                 {newerRayfinWarnings(newer).map((warning) => (
@@ -154,14 +160,12 @@ export default function RayfinVersionControl({
                   setOpen(false)
                 }}
               >
-                Update to {newer.version} with Copilot
+                {t('rayfinVersion.updateToNewer', { version: newer.version })}
               </button>
             </div>
           )}
           <p className="ver-note">
-            {publishes
-              ? 'Copilot updates the packages and fixes any changes. They reach Fabric when Fabricator publishes the app after the turn.'
-              : 'Copilot updates the packages and fixes any changes. They reach Fabric the next time you publish.'}
+            {publishes ? t('rayfinVersion.notePublishes') : t('rayfinVersion.note')}
           </p>
         </div>
       )}

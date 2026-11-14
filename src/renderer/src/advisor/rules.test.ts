@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { AI_RULES, CATEGORIES, QUICK_RULES, RULES } from '@shared/advisor/catalog'
+import { setLanguage } from '../i18n'
 import { localSdkOf, matchesWorkspace } from './context'
 import { QUICK_IMPLS } from './rules'
 import { npmRangeSpan } from './source'
@@ -964,5 +965,51 @@ describe('accessibility rules', () => {
     const f = out.finding('accessibility/img-alt')!
     expect(f.line).toBe(3)
     expect(f.locations).toHaveLength(0)
+  })
+})
+
+describe('quick checks in another language', () => {
+  afterEach(async () => {
+    await setLanguage('en')
+  })
+
+  const anonymousRead = {
+    'rayfin/data/Todo.ts': TODO.replace('@entity()', "@entity()\n@anonymous('read')")
+  }
+
+  it('keep the English detail for Copilot and add one in the interface’s language', async () => {
+    await setLanguage('de')
+    const f = (await check(anonymousRead)).finding('policy/anonymous-grant')!
+    expect(f.detail).toBe(
+      '`Todo` allows anonymous reads. They work in the local preview, but publishing fails unless your tenant admin has turned on anonymous data access for Fabric apps.'
+    )
+    expect(f.detailText).toBe(
+      '`Todo` erlaubt anonyme Lesezugriffe. Sie funktionieren in der lokalen Vorschau, aber die Veröffentlichung schlägt fehl, sofern dein Mandantenadministrator den anonymen Datenzugriff für Fabric-Apps nicht eingeschaltet hat.'
+    )
+  })
+
+  it('sum up several places in the interface’s language', async () => {
+    await setLanguage('de')
+    const todo = TODO.replace(/@text\(\{ max: \d+ \}\)/g, '@text()')
+    const out = await check({ 'rayfin/data/Todo.ts': todo })
+    const noMax = out.finding('data-model/text-without-max')!
+    expect(noMax.detail).toBe('2 text fields have no maximum length: Todo.title, Todo.user_id.')
+    expect(noMax.detailText).toBe(
+      '2 Textfelder haben keine maximale Länge: Todo.title, Todo.user_id.'
+    )
+    const connectors = YML.replace('services:\n', 'services:\n  connectors:\n    enabled: true\n')
+    const yml = connectors.replace('folder: dist', 'anonymousAccess: true\n    folder: dist')
+    const old = (await check({ 'rayfin/rayfin.yml': yml })).finding('config/deprecated-yml-keys')!
+    expect(old.detail).toBe(
+      'Found in 2 places: services.connectors.enabled, services.staticHosting.anonymousAccess.'
+    )
+    expect(old.detailText).toBe(
+      'An 2 Stellen gefunden: services.connectors.enabled, services.staticHosting.anonymousAccess.'
+    )
+  })
+
+  it('add nothing in English', async () => {
+    const f = (await check(anonymousRead)).finding('policy/anonymous-grant')!
+    expect(f).not.toHaveProperty('detailText')
   })
 })

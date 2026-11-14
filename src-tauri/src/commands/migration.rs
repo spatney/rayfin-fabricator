@@ -15,14 +15,14 @@ use crate::state::AppState;
 fn project_dir(project_id: &str) -> Result<PathBuf, String> {
   store::find_project(project_id)
     .map(|p| PathBuf::from(p.path))
-    .ok_or_else(|| "That project isn't in Fabricator anymore.".to_string())
+    .ok_or_else(|| t!("commands.shared.projectGone"))
 }
 
 fn ensure_enabled() -> Result<(), String> {
   if store::report_migration_enabled() {
     Ok(())
   } else {
-    Err("Turn on Migrate Power BI reports in Settings → Experiments first.".into())
+    Err(t!("commands.migration.turnOnFirst"))
   }
 }
 

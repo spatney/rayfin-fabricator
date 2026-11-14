@@ -204,20 +204,20 @@ pub async fn git_status(id: String) -> GitStatus {
 
 pub async fn git_commit(id: String, message: String) -> GitCommitResult {
   let Some(project) = find_project(&id) else {
-    return GitCommitResult { ok: false, error: Some("Project folder not found.".into()), status: GitStatus::default() };
+    return GitCommitResult { ok: false, error: Some(t!("commands.shared.projectFolderNotFound")), status: GitStatus::default() };
   };
   if !Path::new(&project.path).exists() {
-    return GitCommitResult { ok: false, error: Some("Project folder not found.".into()), status: GitStatus::default() };
+    return GitCommitResult { ok: false, error: Some(t!("commands.shared.projectFolderNotFound")), status: GitStatus::default() };
   }
   let msg = message.trim().to_string();
   if msg.is_empty() {
-    return GitCommitResult { ok: false, error: Some("Enter a commit message.".into()), status: git_status(id).await };
+    return GitCommitResult { ok: false, error: Some(t!("commands.git.enterMessage")), status: git_status(id).await };
   }
   let dir = project.path.clone();
   // Adding everything would count a file's conflict markers as its resolution.
   let current = status_in(&dir).await;
   if current.merging && !current.conflicts.is_empty() {
-    return GitCommitResult { ok: false, error: Some(STILL_CONFLICTED.into()), status: current };
+    return GitCommitResult { ok: false, error: Some(t!("commands.git.stillConflicted")), status: current };
   }
 
   let email = git(&dir, &["config", "user.email"]).await;
@@ -233,7 +233,7 @@ pub async fn git_commit(id: String, message: String) -> GitCommitResult {
     let e = add.stderr.trim().to_string();
     return GitCommitResult {
       ok: false,
-      error: Some(if e.is_empty() { "git add failed.".into() } else { e }),
+      error: Some(if e.is_empty() { t!("commands.git.addFailed") } else { e }),
       status: git_status(id).await,
     };
   }
@@ -246,9 +246,9 @@ pub async fn git_commit(id: String, message: String) -> GitCommitResult {
     return GitCommitResult {
       ok: false,
       error: Some(if nothing {
-        "Nothing to commit.".into()
+        t!("commands.git.nothingToCommit")
       } else if err.is_empty() {
-        "git commit failed.".into()
+        t!("commands.git.commitFailed")
       } else {
         err
       }),
@@ -265,7 +265,7 @@ pub async fn git_commit(id: String, message: String) -> GitCommitResult {
 /// instead.
 pub async fn git_save_turn(id: String, request: String) -> SavedTurn {
   let Some(project) = find_project(&id) else {
-    return SavedTurn { commit: None, error: Some("Project not found.".into()) };
+    return SavedTurn { commit: None, error: Some(t!("commands.shared.projectNotFound")) };
   };
   if project.team.is_some() {
     return SavedTurn::default();
@@ -346,7 +346,7 @@ fn parse_log(stdout: &str) -> Vec<GitCommitSummary> {
       author: head.get(2).copied().unwrap_or("").to_string(),
       relative_date: head.get(3).copied().unwrap_or("").to_string(),
       iso_date: head.get(4).copied().unwrap_or("").to_string(),
-      subject: if subject.is_empty() { "(no message)".to_string() } else { subject.to_string() },
+      subject: if subject.is_empty() { t!("commands.git.noSubject") } else { subject.to_string() },
       files_changed: stat.files_changed,
       insertions: stat.insertions,
       deletions: stat.deletions,
@@ -625,11 +625,11 @@ async fn show_at(cwd: &str, rev: &str, path: &str) -> String {
 }
 
 fn read_working(root: &str, rel_path: &str) -> Result<String, String> {
-  let target = safe_resolve(root, rel_path).ok_or_else(|| "Path is outside the project.".to_string())?;
+  let target = safe_resolve(root, rel_path).ok_or_else(|| t!("commands.shared.pathOutside"))?;
   match std::fs::read(&target) {
     Ok(bytes) => Ok(String::from_utf8_lossy(&bytes).into_owned()),
     Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-    Err(e) => Err(format!("Could not read {rel_path}: {e}")),
+    Err(e) => Err(t!("commands.git.cantReadPath", path = rel_path, error = e)),
   }
 }
 
@@ -643,7 +643,7 @@ pub async fn git_file_diff(id: String, reference: String, path: String, old_path
       after: String::new(),
       binary: None,
       too_large: None,
-      error: Some("Project not found.".into()),
+      error: Some(t!("commands.shared.projectNotFound")),
     };
   };
   file_diff_at(&project.path, &reference, path, old_path).await
@@ -731,7 +731,7 @@ pub async fn git_compare_file_diff(
       after: String::new(),
       binary: None,
       too_large: None,
-      error: Some("Project not found.".into()),
+      error: Some(t!("commands.shared.projectNotFound")),
     };
   };
   let cwd = project.path;
@@ -1294,8 +1294,8 @@ mod tests {
   }
 }
 
-fn revert_err(message: &str) -> RevertResult {
-  RevertResult { ok: false, head: None, no_changes: None, error: Some(message.to_string()) }
+fn revert_err(message: impl Into<String>) -> RevertResult {
+  RevertResult { ok: false, head: None, no_changes: None, error: Some(message.into()) }
 }
 
 /// Restore a team app: only its folder (`cwd`) goes back to `target_sha`, so the
@@ -1306,20 +1306,20 @@ async fn revert_folder(cwd: &str, target_sha: &str, subject: &str) -> RevertResu
   if dirty.ok && !dirty.stdout.trim().is_empty() {
     git(cwd, &["add", "-A", "--", "."]).await;
     if !git(cwd, &["commit", "-m", "Save before restoring an earlier version"]).await.ok {
-      return revert_err("Could not save your current changes before restoring.");
+      return revert_err(t!("commands.git.cantSaveBeforeRestore"));
     }
   }
   let orig_res = git(cwd, &["rev-parse", "HEAD"]).await;
   let orig = orig_res.stdout.trim().to_string();
   if !orig_res.ok || orig.is_empty() {
-    return revert_err("Could not read the current version.");
+    return revert_err(t!("commands.git.cantReadCurrent"));
   }
   let source = format!("--source={target_sha}");
   let restored = git(cwd, &["restore", &source, "--staged", "--worktree", "--", "."]).await;
   if !restored.ok {
     let back = format!("--source={orig}");
     git(cwd, &["restore", &back, "--staged", "--worktree", "--", "."]).await;
-    return revert_err("That version doesn’t include this app, so it can’t be restored.");
+    return revert_err(t!("commands.git.versionWithoutApp"));
   }
   if git(cwd, &["diff", "--cached", "--quiet"]).await.ok {
     return RevertResult { ok: true, head: Some(orig), no_changes: Some(true), error: None };
@@ -1330,7 +1330,7 @@ async fn revert_folder(cwd: &str, target_sha: &str, subject: &str) -> RevertResu
     let back = format!("--source={orig}");
     git(cwd, &["restore", &back, "--staged", "--worktree", "--", "."]).await;
     let e = commit.stderr.trim();
-    return revert_err(if e.is_empty() { "Could not save the restored version." } else { e });
+    return revert_err(if e.is_empty() { t!("commands.git.cantSaveRestored") } else { e.to_string() });
   }
   let head = git(cwd, &["rev-parse", "HEAD"]).await;
   RevertResult {
@@ -1343,22 +1343,22 @@ async fn revert_folder(cwd: &str, target_sha: &str, subject: &str) -> RevertResu
 
 pub async fn git_revert(id: String, reference: String) -> RevertResult {
   let Some(project) = find_project(&id) else {
-    return revert_err("Project not found.");
+    return revert_err(t!("commands.shared.projectNotFound"));
   };
   let cwd = project.path;
 
   if reference.is_empty() || reference == GIT_WORKING_REF {
-    return revert_err("Pick a saved version to restore.");
+    return revert_err(t!("commands.git.pickVersion"));
   }
 
   let inside = git(&cwd, &["rev-parse", "--is-inside-work-tree"]).await;
   if !inside.ok || inside.stdout.trim() != "true" {
-    return revert_err("This project isn’t tracked by git, so there’s nothing to restore.");
+    return revert_err(t!("commands.git.notTrackedRestore"));
   }
 
   let target = git(&cwd, &["rev-parse", "--verify", &format!("{reference}^{{commit}}")]).await;
   if !target.ok || target.stdout.trim().is_empty() {
-    return revert_err("That version no longer exists.");
+    return revert_err(t!("commands.git.versionGone"));
   }
   let target_sha = target.stdout.trim().to_string();
   let subject_res = git(&cwd, &["log", "-1", "--pretty=%s", &target_sha]).await;
@@ -1380,13 +1380,13 @@ pub async fn git_revert(id: String, reference: String) -> RevertResult {
     args.extend_from_slice(&["commit", "-m", "Save before restoring an earlier version"]);
     let saved = git(&cwd, &args).await;
     if !saved.ok {
-      return revert_err("Could not save your current changes before restoring.");
+      return revert_err(t!("commands.git.cantSaveBeforeRestore"));
     }
   }
 
   let orig_res = git(&cwd, &["rev-parse", "HEAD"]).await;
   if !orig_res.ok || orig_res.stdout.trim().is_empty() {
-    return revert_err("Could not read the current version.");
+    return revert_err(t!("commands.git.cantReadCurrent"));
   }
   let orig = orig_res.stdout.trim().to_string();
   if orig == target_sha {
@@ -1397,14 +1397,14 @@ pub async fn git_revert(id: String, reference: String) -> RevertResult {
   let hard = git(&cwd, &["reset", "--hard", &target_sha]).await;
   if !hard.ok {
     let e = hard.stderr.trim();
-    return revert_err(if e.is_empty() { "Could not restore that version." } else { e });
+    return revert_err(if e.is_empty() { t!("commands.git.cantRestore") } else { e.to_string() });
   }
   // 3) …then move the branch pointer back so the change becomes a new commit.
   let soft = git(&cwd, &["reset", "--soft", &orig]).await;
   if !soft.ok {
     git(&cwd, &["reset", "--hard", &orig]).await;
     let e = soft.stderr.trim();
-    return revert_err(if e.is_empty() { "Could not restore that version." } else { e });
+    return revert_err(if e.is_empty() { t!("commands.git.cantRestore") } else { e.to_string() });
   }
 
   let staged = git(&cwd, &["diff", "--cached", "--quiet"]).await;
@@ -1419,7 +1419,7 @@ pub async fn git_revert(id: String, reference: String) -> RevertResult {
   if !commit.ok {
     git(&cwd, &["reset", "--hard", &orig]).await;
     let e = commit.stderr.trim();
-    return revert_err(if e.is_empty() { "Could not save the restored version." } else { e });
+    return revert_err(if e.is_empty() { t!("commands.git.cantSaveRestored") } else { e.to_string() });
   }
   let new_head = git(&cwd, &["rev-parse", "HEAD"]).await;
   RevertResult {
@@ -1524,7 +1524,7 @@ async fn compute_remote_status(cwd: &str, do_fetch: bool) -> GitRemoteStatus {
     if !fetched.ok {
       let e = fetched.stderr.trim();
       out.fetch_error =
-        Some(if e.is_empty() { "Could not reach the remote.".to_string() } else { e.to_string() });
+        Some(if e.is_empty() { t!("commands.git.cantReachRemote") } else { e.to_string() });
     }
   }
 
@@ -1567,13 +1567,12 @@ fn no_repo_status() -> GitStatus {
 }
 
 /// Team projects sync through their working branch (see `commands::team`).
-const TEAM_SYNC: &str = "Fabricator saves this team app to GitHub for you after each change. Use Update and Publish instead.";
-const MERGING: &str = "A merge is waiting to be finished. Finish it or cancel it first.";
-const STILL_CONFLICTED: &str = "Some files still have conflicts. Resolve them, or cancel the merge, first.";
-const OVERLAP: &str = "Your changes and the latest changes overlap and couldn’t be combined automatically.";
+fn team_sync() -> String {
+  t!("commands.git.teamSync")
+}
 
-fn sync_err(message: &str, status: GitStatus, remote: GitRemoteStatus) -> GitSyncResult {
-  GitSyncResult { ok: false, error: Some(message.to_string()), conflict: None, packages_changed: false, status, remote }
+fn sync_err(message: impl Into<String>, status: GitStatus, remote: GitRemoteStatus) -> GitSyncResult {
+  GitSyncResult { ok: false, error: Some(message.into()), conflict: None, packages_changed: false, status, remote }
 }
 
 /// What git said went wrong, in a line.
@@ -1583,9 +1582,11 @@ fn reason(res: &Git) -> String {
     .flat_map(str::lines)
     .map(str::trim)
     .find(|line| !line.is_empty())
-    .unwrap_or("git gave no reason.");
-  let said = said.strip_prefix("error: ").or_else(|| said.strip_prefix("fatal: ")).unwrap_or(said);
-  said.chars().take(300).collect()
+    .map(|said| said.strip_prefix("error: ").or_else(|| said.strip_prefix("fatal: ")).unwrap_or(said));
+  match said {
+    Some(said) => said.chars().take(300).collect(),
+    None => t!("commands.git.noReason"),
+  }
 }
 
 /// The commit `HEAD` names, or "" when there's none yet.
@@ -1643,12 +1644,10 @@ async fn synced(cwd: &str, before: &str) -> GitSyncResult {
 /// A merge that stopped at conflicts, for Copilot or you to resolve.
 async fn conflicted(cwd: &str, status: GitStatus) -> GitSyncResult {
   let count = status.conflicts.len();
+  let error = t!("commands.git.overlapIn", count = count);
   GitSyncResult {
     ok: false,
-    error: Some(format!(
-      "Your changes and the latest changes overlap in {count} file{}.",
-      if count == 1 { "" } else { "s" }
-    )),
+    error: Some(error),
     conflict: Some(true),
     packages_changed: false,
     status,
@@ -1660,18 +1659,18 @@ async fn conflicted(cwd: &str, status: GitStatus) -> GitSyncResult {
 /// can't sync. Team apps sync through their working branch instead.
 async fn sync_folder(id: &str) -> Result<String, Box<GitSyncResult>> {
   let Some(project) = find_project(id) else {
-    return Err(Box::new(sync_err("Project folder not found.", no_repo_status(), GitRemoteStatus::default())));
+    return Err(Box::new(sync_err(t!("commands.shared.projectFolderNotFound"), no_repo_status(), GitRemoteStatus::default())));
   };
   if project.team.is_some() {
-    return Err(Box::new(sync_err(TEAM_SYNC, status_in(&project.path).await, GitRemoteStatus::default())));
+    return Err(Box::new(sync_err(team_sync(), status_in(&project.path).await, GitRemoteStatus::default())));
   }
   if !Path::new(&project.path).exists() {
-    return Err(Box::new(sync_err("Project folder not found.", no_repo_status(), GitRemoteStatus::default())));
+    return Err(Box::new(sync_err(t!("commands.shared.projectFolderNotFound"), no_repo_status(), GitRemoteStatus::default())));
   }
   let inside = git(&project.path, &["rev-parse", "--is-inside-work-tree"]).await;
   if !inside.ok || inside.stdout.trim() != "true" {
     return Err(Box::new(sync_err(
-      "This project isn’t tracked by git.",
+      t!("commands.git.notTracked"),
       status_in(&project.path).await,
       GitRemoteStatus::default(),
     )));
@@ -1691,18 +1690,18 @@ pub async fn git_pull(id: String) -> GitSyncResult {
 /// the result says so; [`merge_latest_in`] then merges them for Copilot.
 async fn pull_in(cwd: &str) -> GitSyncResult {
   if merging(cwd).await {
-    return sync_err(MERGING, status_in(cwd).await, compute_remote_status(cwd, false).await);
+    return sync_err(t!("commands.git.merging"), status_in(cwd).await, compute_remote_status(cwd, false).await);
   }
   if !has_upstream(cwd).await {
     return sync_err(
-      "This branch isn’t linked to a remote branch yet.",
+      t!("commands.git.noUpstream"),
       status_in(cwd).await,
       compute_remote_status(cwd, false).await,
     );
   }
   if !save_first(cwd, "Save before getting the latest changes").await {
     return sync_err(
-      "Could not save your current changes before updating.",
+      t!("commands.git.cantSaveBeforeUpdate"),
       status_in(cwd).await,
       compute_remote_status(cwd, false).await,
     );
@@ -1713,7 +1712,7 @@ async fn pull_in(cwd: &str) -> GitSyncResult {
   if !fetched.ok {
     let e = fetched.stderr.trim();
     return sync_err(
-      if e.is_empty() { "Could not reach the remote." } else { e },
+      if e.is_empty() { t!("commands.git.cantReachRemote") } else { e.to_string() },
       status_in(cwd).await,
       compute_remote_status(cwd, false).await,
     );
@@ -1732,7 +1731,7 @@ async fn pull_in(cwd: &str) -> GitSyncResult {
       }
       return GitSyncResult {
         ok: false,
-        error: Some(OVERLAP.to_string()),
+        error: Some(t!("commands.git.overlap")),
         conflict: Some(true),
         packages_changed: false,
         status: status_in(cwd).await,
@@ -1757,21 +1756,21 @@ async fn merge_latest_in(cwd: &str) -> GitSyncResult {
   let status = status_in(cwd).await;
   if status.merging {
     return if status.conflicts.is_empty() {
-      sync_err(MERGING, status, compute_remote_status(cwd, false).await)
+      sync_err(t!("commands.git.merging"), status, compute_remote_status(cwd, false).await)
     } else {
       conflicted(cwd, status).await
     };
   }
   if !has_upstream(cwd).await {
     return sync_err(
-      "This branch isn’t linked to a remote branch yet.",
+      t!("commands.git.noUpstream"),
       status,
       compute_remote_status(cwd, false).await,
     );
   }
   if !save_first(cwd, "Save before getting the latest changes").await {
     return sync_err(
-      "Could not save your current changes before updating.",
+      t!("commands.git.cantSaveBeforeUpdate"),
       status_in(cwd).await,
       compute_remote_status(cwd, false).await,
     );
@@ -1791,8 +1790,9 @@ async fn merge_latest_in(cwd: &str) -> GitSyncResult {
   if status.merging {
     git(cwd, &["merge", "--abort"]).await;
   }
+  let message = t!("commands.git.cantCombine", reason = reason(&merged));
   sync_err(
-    &format!("Couldn’t combine the latest changes: {}", reason(&merged)),
+    message,
     status_in(cwd).await,
     compute_remote_status(cwd, false).await,
   )
@@ -1813,7 +1813,7 @@ async fn finish_merge_in(cwd: &str) -> GitSyncResult {
   }
   if !status.conflicts.is_empty() {
     let mut result = conflicted(cwd, status).await;
-    result.error = Some(STILL_CONFLICTED.to_string());
+    result.error = Some(t!("commands.git.stillConflicted"));
     return result;
   }
   version_history::ensure_identity(Path::new(cwd)).await;
@@ -1821,8 +1821,9 @@ async fn finish_merge_in(cwd: &str) -> GitSyncResult {
   let added = git(cwd, &["add", "-A"]).await;
   let committed = if added.ok { git(cwd, &["commit", "--no-edit"]).await } else { added };
   if !committed.ok {
+    let message = t!("commands.git.cantFinish", reason = reason(&committed));
     return sync_err(
-      &format!("Couldn’t finish the merge: {}", reason(&committed)),
+      message,
       status_in(cwd).await,
       compute_remote_status(cwd, false).await,
     );
@@ -1847,8 +1848,9 @@ async fn abort_merge_in(cwd: &str) -> GitSyncResult {
   let packages = touched.ok && touched.stdout.lines().any(is_package_manifest);
   let aborted = git(cwd, &["merge", "--abort"]).await;
   if !aborted.ok {
+    let message = t!("commands.git.cantCancel", reason = reason(&aborted));
     return sync_err(
-      &format!("Couldn’t cancel the merge: {}", reason(&aborted)),
+      message,
       status_in(cwd).await,
       compute_remote_status(cwd, false).await,
     );
@@ -1915,12 +1917,13 @@ pub async fn git_switch(id: String, branch: String) -> GitSyncResult {
 
 async fn switch_in(cwd: &str, branch: &str) -> GitSyncResult {
   if merging(cwd).await {
-    return sync_err(MERGING, status_in(cwd).await, compute_remote_status(cwd, false).await);
+    return sync_err(t!("commands.git.merging"), status_in(cwd).await, compute_remote_status(cwd, false).await);
   }
   let known = branches_in(cwd).await;
   let Some(target) = known.branches.into_iter().find(|b| b.name == branch) else {
+    let message = t!("commands.git.noBranch", branch = branch);
     return sync_err(
-      &format!("There’s no branch named {branch}."),
+      message,
       status_in(cwd).await,
       compute_remote_status(cwd, false).await,
     );
@@ -1936,7 +1939,7 @@ async fn switch_in(cwd: &str, branch: &str) -> GitSyncResult {
   }
   if !save_first(cwd, &format!("Save before switching to {name}")).await {
     return sync_err(
-      "Could not save your current changes before switching.",
+      t!("commands.git.cantSaveBeforeSwitch"),
       status_in(cwd).await,
       compute_remote_status(cwd, false).await,
     );
@@ -1948,8 +1951,9 @@ async fn switch_in(cwd: &str, branch: &str) -> GitSyncResult {
     git(cwd, &["switch", &target.name]).await
   };
   if !switched.ok {
+    let message = t!("commands.git.cantSwitch", name = name, reason = reason(&switched));
     return sync_err(
-      &format!("Couldn’t switch to {name}: {}", reason(&switched)),
+      message,
       status_in(cwd).await,
       compute_remote_status(cwd, false).await,
     );
@@ -1959,24 +1963,24 @@ async fn switch_in(cwd: &str, branch: &str) -> GitSyncResult {
 
 pub async fn git_push(id: String) -> GitSyncResult {
   let Some(project) = find_project(&id) else {
-    return sync_err("Project folder not found.", no_repo_status(), GitRemoteStatus::default());
+    return sync_err(t!("commands.shared.projectFolderNotFound"), no_repo_status(), GitRemoteStatus::default());
   };
   if project.team.is_some() {
-    return sync_err(TEAM_SYNC, git_status(id.clone()).await, GitRemoteStatus::default());
+    return sync_err(team_sync(), git_status(id.clone()).await, GitRemoteStatus::default());
   }
   if !Path::new(&project.path).exists() {
-    return sync_err("Project folder not found.", no_repo_status(), GitRemoteStatus::default());
+    return sync_err(t!("commands.shared.projectFolderNotFound"), no_repo_status(), GitRemoteStatus::default());
   }
   let cwd = project.path.clone();
 
   let inside = git(&cwd, &["rev-parse", "--is-inside-work-tree"]).await;
   if !inside.ok || inside.stdout.trim() != "true" {
-    return sync_err("This project isn’t tracked by git.", git_status(id.clone()).await, GitRemoteStatus::default());
+    return sync_err(t!("commands.git.notTracked"), git_status(id.clone()).await, GitRemoteStatus::default());
   }
   // Per product decision: only push when an upstream already exists.
   if !has_upstream(&cwd).await {
     return sync_err(
-      "This branch isn’t linked to a remote branch yet.",
+      t!("commands.git.noUpstream"),
       git_status(id.clone()).await,
       compute_remote_status(&cwd, false).await,
     );
@@ -1990,9 +1994,9 @@ pub async fn git_push(id: String) -> GitSyncResult {
     return GitSyncResult {
       ok: false,
       error: Some(if rejected {
-        "The remote has changes you don’t have yet. Get the latest changes first, then push again.".to_string()
+        t!("commands.git.rejected")
       } else if e.is_empty() {
-        "Could not push your changes.".to_string()
+        t!("commands.git.cantPush")
       } else {
         e
       }),

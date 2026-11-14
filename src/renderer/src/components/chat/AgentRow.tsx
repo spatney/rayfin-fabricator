@@ -1,5 +1,6 @@
 import { memo, useState, type JSX } from 'react'
 import type { ChatToolCall } from '@shared/ipc'
+import { useTranslation } from '../../i18n'
 import { ChevronRightIcon } from '../icons'
 import { CodePreview } from './CodePreview'
 import { ToolKindIcon } from './icons'
@@ -26,6 +27,7 @@ export const AgentRow = memo(function AgentRow({
   projectPath: string
   onOpenFile?: (path: string) => void
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   const state = tool.agent?.state ?? tool.state
   const working = state === 'running'
   const [choice, setChoice] = useState<boolean | null>(null)
@@ -33,9 +35,9 @@ export const AgentRow = memo(function AgentRow({
   const open = choice ?? working
   const hidden = working && !showAll ? Math.max(0, steps.length - LIVE_WINDOW) : 0
   const shown = hidden ? steps.slice(hidden) : steps
-  const name = tool.agent?.name ?? 'Agent'
+  const name = tool.agent?.name ?? t('agentRow.agent')
   const task = tool.title?.trim() && tool.title !== tool.name ? tool.title.trim() : ''
-  const count = `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`
+  const count = t('steps.count', { count: steps.length })
   // A background agent's step only says that it started; its result went to Copilot.
   const output = !working && !tool.agent?.background && tool.output ? tool.output : ''
 
@@ -46,7 +48,7 @@ export const AgentRow = memo(function AgentRow({
         className="step-line"
         aria-expanded={open}
         aria-label={[name, task, count].filter(Boolean).join(', ')}
-        title={open ? 'Hide its steps' : 'Show its steps'}
+        title={open ? t('agentRow.hideSteps') : t('agentRow.showSteps')}
         onClick={() => setChoice(!open)}
       >
         <span className="step-icon">
@@ -60,7 +62,7 @@ export const AgentRow = memo(function AgentRow({
         {task && <span className="step-target">{task}</span>}
         <span className="step-meta">
           <span>{count}</span>
-          {state === 'error' && <span className="step-failed">failed</span>}
+          {state === 'error' && <span className="step-failed">{t('steps.failed')}</span>}
         </span>
         <ChevronRightIcon className="step-caret" />
       </button>
@@ -68,7 +70,7 @@ export const AgentRow = memo(function AgentRow({
         <div className="step-agent-body">
           {hidden > 0 && (
             <button type="button" className="worklog-earlier" onClick={() => setShowAll(true)}>
-              Show {hidden} earlier {hidden === 1 ? 'step' : 'steps'}
+              {t('steps.showEarlier', { count: hidden })}
             </button>
           )}
           {shown.map((step) => (

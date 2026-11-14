@@ -7,6 +7,8 @@
 // plain language and says what to do next; the raw text is kept so it can be
 // shown on request and so nothing is lost from a bug report.
 
+import { translator } from '../i18n'
+
 export interface SetupProblem {
   /** What went wrong, in one plain sentence. */
   title: string
@@ -16,88 +18,122 @@ export interface SetupProblem {
   retryable: boolean
 }
 
-/** Ordered: the first pattern that matches wins, so put specific ones first. */
+/**
+ * Ordered: the first pattern that matches wins, so put specific ones first.
+ * The patterns match English output from the package managers and CLIs, so
+ * they stay English; only what is shown to the user is translated.
+ */
 const PATTERNS: Array<{ test: RegExp; problem: (raw: string) => SetupProblem }> = [
   {
     // Windows package manager, one install at a time.
     test: /another installation|already in progress|0x8a150044|being used by another/i,
-    problem: () => ({
-      title: 'Another installation is already running on this computer.',
-      fix: 'Wait for it to finish — a Windows update often causes this — then try again.',
-      retryable: true
-    })
+    problem: () => {
+      const t = translator('setup')
+      return {
+        title: t('problems.busy.title'),
+        fix: t('problems.busy.fix'),
+        retryable: true
+      }
+    }
   },
   {
     test: /elevat|administrator|run as admin|requires admin|0x80070005|access is denied|EPERM|EACCES/i,
-    problem: () => ({
-      title: 'Fabricator does not have permission to install this.',
-      fix: 'Close Fabricator, right-click it and choose "Run as administrator", then try again. If your computer is managed by your workplace, your IT team may need to install it for you.',
-      retryable: true
-    })
+    problem: () => {
+      const t = translator('setup')
+      return {
+        title: t('problems.permission.title'),
+        fix: t('problems.permission.fix'),
+        retryable: true
+      }
+    }
   },
   {
     test: /ENOTFOUND|ETIMEDOUT|ECONNREFUSED|ECONNRESET|getaddrinfo|network|offline|could not resolve|temporary failure in name resolution|unable to connect/i,
-    problem: () => ({
-      title: "Fabricator couldn't reach the internet to download this.",
-      fix: 'Check your connection and try again. If you are on a work network or a VPN, it may be blocking the download.',
-      retryable: true
-    })
+    problem: () => {
+      const t = translator('setup')
+      return {
+        title: t('problems.offline.title'),
+        fix: t('problems.offline.fix'),
+        retryable: true
+      }
+    }
   },
   {
     test: /no space|ENOSPC|disk full|not enough space/i,
-    problem: () => ({
-      title: 'There is not enough free space to install this.',
-      fix: 'Free up some disk space and try again.',
-      retryable: true
-    })
+    problem: () => {
+      const t = translator('setup')
+      return {
+        title: t('problems.diskFull.title'),
+        fix: t('problems.diskFull.fix'),
+        retryable: true
+      }
+    }
   },
   {
     test: /winget.*(not recognized|not found|cannot find)|'winget'/i,
-    problem: () => ({
-      title: "This computer doesn't have the Windows package installer (winget).",
-      fix: 'Install it from the Microsoft Store by searching for "App Installer", or use the download link to install the tool yourself.',
-      retryable: false
-    })
+    problem: () => {
+      const t = translator('setup')
+      return {
+        title: t('problems.noWinget.title'),
+        fix: t('problems.noWinget.fix'),
+        retryable: false
+      }
+    }
   },
   {
     test: /brew.*(not found|command not found)|'brew'/i,
-    problem: () => ({
-      title: "This Mac doesn't have Homebrew, which Fabricator uses to install tools.",
-      fix: 'Install Homebrew from brew.sh, or use the download link to install the tool yourself.',
-      retryable: false
-    })
+    problem: () => {
+      const t = translator('setup')
+      return {
+        title: t('problems.noHomebrew.title'),
+        fix: t('problems.noHomebrew.fix'),
+        retryable: false
+      }
+    }
   },
   {
     test: /cancel|abort|user declined|operation was canceled/i,
-    problem: () => ({
-      title: 'The install was cancelled.',
-      fix: 'Try again when you are ready.',
-      retryable: true
-    })
+    problem: () => {
+      const t = translator('setup')
+      return {
+        title: t('problems.cancelled.title'),
+        fix: t('problems.cancelled.fix'),
+        retryable: true
+      }
+    }
   },
   {
     test: /saml|single sign-?on|sso|organization has enabled/i,
-    problem: () => ({
-      title: 'Your organization needs you to sign in through it first.',
-      fix: 'Finish the sign-in your browser opened, including any extra organization step, then try again.',
-      retryable: true
-    })
+    problem: () => {
+      const t = translator('setup')
+      return {
+        title: t('problems.sso.title'),
+        fix: t('problems.sso.fix'),
+        retryable: true
+      }
+    }
   },
   {
     test: /no (active )?copilot|not entitled|subscription|quota|free tier/i,
-    problem: () => ({
-      title: "This account doesn't have GitHub Copilot available.",
-      fix: 'Sign in with an account that has Copilot, or set it up at github.com/features/copilot.',
-      retryable: true
-    })
+    problem: () => {
+      const t = translator('setup')
+      return {
+        title: t('problems.noCopilot.title'),
+        fix: t('problems.noCopilot.fix'),
+        retryable: true
+      }
+    }
   },
   {
     test: /not recognized|command not found|is not a recognized/i,
-    problem: () => ({
-      title: 'The tool installed, but this computer cannot see it yet.',
-      fix: 'Restart Fabricator so it picks up the new tool.',
-      retryable: true
-    })
+    problem: () => {
+      const t = translator('setup')
+      return {
+        title: t('problems.notOnPath.title'),
+        fix: t('problems.notOnPath.fix'),
+        retryable: true
+      }
+    }
   }
 ]
 
@@ -126,7 +162,7 @@ export function setupProblem(raw: string | undefined | null): SetupProblem | nul
   if (!text) return null
   return {
     title: text,
-    fix: "If this keeps happening, ask Help — it can read what went wrong and explain it.",
+    fix: translator('setup')('problems.unknownFix'),
     retryable: true
   }
 }

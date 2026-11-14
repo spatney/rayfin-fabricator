@@ -1,0 +1,104 @@
+{
+  "startup": {
+    "verifySignIn": "No se pudo comprobar el inicio de sesión. Vuelve a intentarlo.",
+    "checkTools": "No se pudieron comprobar las herramientas instaladas. Vuelve a intentarlo.",
+    "loadSettings": "No se pudo cargar la configuración de la aplicación. Vuelve a intentarlo.",
+    "settingsUnavailable": "Configuración no disponible"
+  },
+  "appBar": {
+    "tabs": {
+      "build": "Crear",
+      "code": "Código",
+      "blueprint": "Blueprint",
+      "advisor": "Asesor"
+    },
+    "views": "Vistas del proyecto",
+    "advisorIssues_one": "Asesor — {{count}} problema abierto de gravedad alta o media",
+    "advisorIssues_other": "Asesor — {{count}} problemas abiertos de gravedad alta o media",
+    "openIssues_one": "{{count}} problema abierto",
+    "openIssues_other": "{{count}} problemas abiertos",
+    "allProjects": "Todos los proyectos",
+    "allProjectsLabel": "{{name}} — Todos los proyectos",
+    "allProjectsTitle": "{{path}}\nTodos los proyectos",
+    "switchProjects": "Cambiar de proyecto",
+    "switchProjectsLabel": "{{name}} — Cambiar de proyecto",
+    "recentProjects": "Proyectos recientes",
+    "noRecentProjects": "No hay otros proyectos recientes",
+    "team": "Equipo",
+    "back": "Volver a {{name}}",
+    "backToProjects": "Volver a los proyectos",
+    "backTitle": "Volver a {{name}}: siguió en ejecución mientras explorabas los proyectos"
+  },
+  "splash": {
+    "stages": {
+      "tools": "Comprobando tus herramientas",
+      "accounts": "Comprobando tus inicios de sesión",
+      "ready": "Todo listo",
+      "setup": "Antes hay que configurar algunas cosas",
+      "error": "Hay algo que revisar"
+    },
+    "opening": "Abriendo <b>{{name}}</b>",
+    "openingProjects": "Abriendo tus proyectos",
+    "firstLaunch": "¡Hola, soy Ray! Qué bien que hayas vuelto."
+  },
+  "crash": {
+    "title": "Algo salió mal",
+    "body": "Fabricator encontró un error inesperado. Normalmente se soluciona al recargar; tus proyectos y el historial del chat están guardados.",
+    "details": "Detalles técnicos",
+    "reload": "Recargar",
+    "openLogs": "Abrir registros"
+  },
+  "update": {
+    "title": "Actualización disponible",
+    "lead": "Hay una nueva actualización lista para instalarse.",
+    "leadVersion": "Fabricator {{version}} está listo para instalarse.",
+    "hint": "Puedes instalarla ahora o elegir Más tarde para seguir usando esta versión y actualizar cuando quieras.",
+    "updateNow": "Actualizar ahora",
+    "later": "Más tarde",
+    "installingShort": "Instalando…",
+    "downloading": "Descargando la actualización…",
+    "downloadingVersion": "Descargando la actualización {{version}}…",
+    "ready": "La actualización está lista para instalarse",
+    "readyVersion": "La actualización {{version}} está lista para instalarse",
+    "installing": "Instalando la actualización…",
+    "installingVersion": "Instalando la actualización {{version}}…",
+    "starting": "Iniciando…",
+    "restartToApply": "Fabricator se reiniciará para aplicarla.",
+    "restartsAutomatically": "Fabricator se reiniciará automáticamente.",
+    "restartAndUpdate": "Reiniciar y actualizar",
+    "required": "Hay que instalar una actualización obligatoria para continuar."
+  },
+  "attention": {
+    "notSignedIn": "No has iniciado sesión en {{names}}.",
+    "toolsMissing_one": "Falta {{tools}} o su versión está desactualizada.",
+    "toolsMissing_other": "Faltan {{tools}} o sus versiones están desactualizadas.",
+    "manageAccounts": "Administrar cuentas",
+    "reviewSetup": "Revisar la configuración inicial"
+  },
+  "toast": {
+    "region": "Notificaciones",
+    "dismiss": "Descartar notificación"
+  },
+  "touchUp": {
+    "label": "Señalar y editar",
+    "labelPicked_one": "{{label}}, {{count}} elemento seleccionado",
+    "labelPicked_other": "{{label}}, {{count}} elementos seleccionados",
+    "turnOff": "Desactivar",
+    "turnOn": "Activar",
+    "clip": "Recortar una captura de pantalla",
+    "shiftKey": "Mayús",
+    "drag": "arrastrar"
+  },
+  "pick": {
+    "display_one": "Retoca esto",
+    "display_other": "Retoca estos {{count}} elementos",
+    "toSend": "Elementos seleccionados para enviar",
+    "sent": "Elementos seleccionados",
+    "number": "Selección {{n}}",
+    "draw": "Dibujar sobre la imagen de {{label}}",
+    "drawTitle": "Ampliar y dibujar encima",
+    "remove": "Quitar {{label}}",
+    "show": "Mostrar la imagen de {{label}}",
+    "showTitle": "Ampliar"
+  }
+}

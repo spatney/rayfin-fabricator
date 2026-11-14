@@ -86,7 +86,9 @@ pub(crate) fn failure(message: impl Into<String>) -> ToolResult {
 pub(crate) const CONNECT_FABRIC_IQ_TOOL: &str = "fabricator_connect_fabric_iq";
 
 /// The choice on the card that leaves Fabric IQ as it is.
-const NOT_NOW: &str = "Not now";
+fn not_now() -> String {
+  t!("services.agentTools.notNow")
+}
 
 /// What the agent hears once Fabric IQ is connected.
 const FABRIC_IQ_CONNECTED: &str = "Fabric IQ is connected in this chat. Use its tools: \
@@ -189,17 +191,18 @@ impl FabricIqAsk {
 
   /// The question on the card, and the choice that does it. `signs_in`: the
   /// Azure CLI needs a sign-in too.
-  fn question(self, reason: &str, signs_in: bool) -> (String, &'static str) {
+  fn question(self, reason: &str, signs_in: bool) -> (String, String) {
     match self {
       FabricIqAsk::TurnOn => (
-        format!(
-          "Copilot wants to look up {reason} with Fabric IQ, which is off in this chat.{}",
-          if signs_in { " Turning it on also asks you to sign in to Azure in your browser." } else { "" }
-        ),
-        "Turn on Fabric IQ",
+        if signs_in {
+          t!("services.agentTools.turnOnQuestionSignIn", reason = reason)
+        } else {
+          t!("services.agentTools.turnOnQuestion", reason = reason)
+        },
+        t!("services.agentTools.turnOn"),
       ),
       FabricIqAsk::SignIn => {
-        (format!("Fabric IQ needs you to sign in to Azure before Copilot can look up {reason}."), "Sign in to Azure")
+        (t!("services.agentTools.signInQuestion", reason = reason), t!("services.agentTools.signIn"))
       }
     }
   }
@@ -255,8 +258,9 @@ async fn connect_fabric_iq(app: &AppHandle, project_id: &str, session_id: &str, 
   let emit = |event: ChatEvent| emit_chat_event(app, &route.project_id, &route.turn_id, event);
   let notice = |text: String| emit(ChatEvent::Notice { text });
   if let Some(ask) = ask {
-    let (question, accept) = ask.question(reason.unwrap_or("this data"), signs_in);
-    let card = Card { question, choices: vec![accept.to_string(), NOT_NOW.to_string()] };
+    let this_data = t!("services.agentTools.thisData");
+    let (question, accept) = ask.question(reason.unwrap_or(&this_data), signs_in);
+    let card = Card { question, choices: vec![accept.clone(), not_now()] };
     match ask_on_card(&state.plan, session_id, route.plan_context, card, &emit, &cancel, QUESTION_POLL).await {
       Some(answer) if answer == accept => {}
       Some(_) => {
@@ -274,7 +278,7 @@ async fn connect_fabric_iq(app: &AppHandle, project_id: &str, session_id: &str, 
     emit(ChatEvent::PluginsChanged);
   }
   if signs_in {
-    notice("Sign in to Azure in your browser…".into());
+    notice(t!("services.signIn.inBrowser", name = "Azure"));
     let signed = tokio::select! {
       result = crate::commands::auth::auth_login_az(app.clone(), None) => result,
       _ = cancel.wait_cancelled() => return stopped(),
@@ -287,7 +291,7 @@ async fn connect_fabric_iq(app: &AppHandle, project_id: &str, session_id: &str, 
       ));
     }
   }
-  notice("Connecting Fabric IQ…".into());
+  notice(t!("services.agentTools.connecting"));
   let open = |url: &str| {
     app.opener().open_url(url, None::<&str>).map_err(|e| format!("Fabricator couldn't open the browser ({e})"))
   };
@@ -295,7 +299,7 @@ async fn connect_fabric_iq(app: &AppHandle, project_id: &str, session_id: &str, 
   match iq::connect_now(&session, Iq::Fabric, &ui, &cancel).await {
     Ok(()) => {
       state.copilot.plugins_started(project_id, &session, Iq::Fabric).await;
-      notice("Fabric IQ is on.".into());
+      notice(t!("services.agentTools.connected"));
       ToolResult::Text(FABRIC_IQ_CONNECTED.into())
     }
     Err(why) => failure(format!("Fabric IQ couldn't connect: {why}. Tell the user.")),
@@ -1742,7 +1746,7 @@ mod tests {
             _ => "something else".into(),
           })
         };
-        let card = Card { question: "Turn it on?".into(), choices: vec!["Turn on Fabric IQ".into(), NOT_NOW.into()] };
+        let card = Card { question: "Turn it on?".into(), choices: vec!["Turn on Fabric IQ".into(), not_now()] };
         ask_on_card(&gate, "s", false, card, &emit, &CancelToken::new(), Duration::from_millis(5)).await
       }
     });

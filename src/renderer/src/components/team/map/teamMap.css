@@ -1037,6 +1037,13 @@
   text-overflow: ellipsis;
 }
 
+/* A row's status at its end wraps before it squeezes the row's name (it's
+   longer in some languages). */
+.tmap-insp-meta {
+  max-width: 50%;
+  text-align: right;
+}
+
 .tmap-insp-actions {
   display: flex;
   flex-wrap: wrap;

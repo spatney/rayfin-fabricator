@@ -17,7 +17,8 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import type { LocalLogEvent } from '@shared/ipc'
 import { errorMessage } from '../errorReport'
-import { isMac } from '../platform'
+import { translator } from '../i18n'
+import { isMac, modKey } from '../platform'
 import { filePaths, findFileLinks, projectRelative } from './links'
 import { newOutput, OUTPUT_LINES } from './output'
 import { DEFAULT_FONT_SIZE, terminalStore, type TerminalTab } from './store'
@@ -90,7 +91,14 @@ function opensLinks(event: MouseEvent): boolean {
   return isMac() ? event.metaKey : event.ctrlKey
 }
 
-export const LINK_HINT = isMac() ? '⌘-click to open' : 'Ctrl+click to open'
+/** How to open the link under the pointer: a web link, or a project file in the Code tab. */
+function openHint(inCode = false): string {
+  const t = translator('code')
+  if (isMac()) return inCode ? t('session.openFileMac') : t('session.openLinkMac')
+  return inCode
+    ? t('session.openFile', { ctrl: modKey() })
+    : t('session.openLink', { ctrl: modKey() })
+}
 
 /** 1-based terminal columns of each character offset in a buffer line's text. */
 function columnsOf(line: IBufferLine): number[] {
@@ -189,7 +197,7 @@ export abstract class TerminalView {
         activate: (event, uri) => {
           if (opensLinks(event)) hooks?.openUrl(uri)
         },
-        hover: (event) => hooks?.linkHint(event, LINK_HINT),
+        hover: (event) => hooks?.linkHint(event, openHint()),
         leave: () => hooks?.linkHint(null)
       },
       ...options
@@ -204,7 +212,7 @@ export abstract class TerminalView {
           if (opensLinks(event)) hooks?.openUrl(uri)
         },
         {
-          hover: (event) => hooks?.linkHint(event, LINK_HINT),
+          hover: (event) => hooks?.linkHint(event, openHint()),
           leave: () => hooks?.linkHint(null)
         }
       )
@@ -392,7 +400,7 @@ export abstract class TerminalView {
             activate: (event) => {
               if (opensLinks(event)) hooks?.openFile(link.path, link.line)
             },
-            hover: (event) => hooks?.linkHint(event, `${LINK_HINT} in Code`),
+            hover: (event) => hooks?.linkHint(event, openHint(true)),
             leave: () => hooks?.linkHint(null)
           }))
         )
@@ -562,9 +570,10 @@ export class TerminalSession extends TerminalView {
       if (this.disposed || this.latest !== id) return
       this.ptyId = null
       this.outbox = ''
-      const message = errorMessage(error, 'The terminal couldn’t start.')
+      const t = translator('code')
+      const message = errorMessage(error, t('session.cantStart'))
       this.setStatus('failed', { error: message })
-      this.term.write(`\x1b[31m${message}\x1b[0m\r\n\x1b[90mPress Enter to try again.\x1b[0m\r\n`)
+      this.term.write(`\x1b[31m${message}\x1b[0m\r\n\x1b[90m${t('session.pressEnter')}\x1b[0m\r\n`)
     }
   }
 
@@ -594,8 +603,9 @@ export class TerminalSession extends TerminalView {
     this.ptyId = null
     this.outbox = ''
     this.setStatus('exited', { exitCode: code })
-    const how = code === null ? 'The shell ended.' : `The shell exited with code ${code}.`
-    this.term.write(`\r\n\x1b[0m\x1b[90m${how} Press Enter to start a new one.\x1b[0m\r\n`)
+    const t = translator('code')
+    const how = code === null ? t('session.ended') : t('session.exited', { code })
+    this.term.write(`\r\n\x1b[0m\x1b[90m${how}\x1b[0m\r\n`)
   }
 
   private input(data: string): void {

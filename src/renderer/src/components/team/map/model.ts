@@ -7,6 +7,7 @@ import type {
   TeamMapRun,
   TeamWorkspace
 } from '@shared/ipc'
+import { translator } from '../../../i18n'
 import { dataIds, type ResourceView } from './resources'
 
 /** How a deployment target is doing. */
@@ -149,17 +150,20 @@ export function runLabel(run: TeamMapRun, apps: TeamMapApp[]): string {
   const names = folders.map((f) => apps.find((a) => same(a.folder, f))?.name ?? f)
   const what = names.length ? names.join(', ') : undefined
   const done = !isActive(run)
+  const t = translator('teamMap')
   switch (run.kind) {
     case 'preview':
-      return what ? `Preview of ${what}` : 'Preview'
+      return what ? t('runLabel.previewOf', { what }) : t('shared.preview')
     case 'production':
-      if (what) return `${done ? 'Published' : 'Publishing'} ${what}`
-      if (done && run.title) return `Published: ${run.title.replace(/\s*\(#\d+\)$/, '')}`
-      return done ? 'Published' : 'Publishing'
+      if (what)
+        return done ? t('runLabel.publishedWhat', { what }) : t('runLabel.publishingWhat', { what })
+      if (done && run.title)
+        return t('runLabel.publishedTitle', { title: run.title.replace(/\s*\(#\d+\)$/, '') })
+      return done ? t('runLabel.published') : t('runLabel.publishing')
     case 'verify':
-      return 'Checking Fabric access'
+      return t('runLabel.verify')
     default:
-      return run.title ?? 'Pipeline run'
+      return run.title ?? t('runLabel.pipelineRun')
   }
 }
 
@@ -171,11 +175,19 @@ export function changingLabel(app: TeamMapApp): string {
     if (copy.mine) you = true
     else if (copy.author && !others.some((n) => same(n, copy.author))) others.push(copy.author)
   }
-  const people = [...(you ? ['You'] : []), ...others]
-  if (!people.length) return app.copies.length ? `${app.copies.length} in progress` : 'No one is changing it'
-  if (people.length === 1) return you ? 'You’re changing it' : `${people[0]} is changing it`
-  if (people.length === 2) return `${people[0]} and ${people[1]} are changing it`
-  return `${people.length} people are changing it`
+  const t = translator('teamMap')
+  const count = (you ? 1 : 0) + others.length
+  if (!count)
+    return app.copies.length
+      ? t('changing.inProgress', { count: app.copies.length })
+      : t('changing.nobody')
+  if (count === 1) return you ? t('changing.you') : t('changing.one', { name: others[0] })
+  if (count === 2) {
+    return you
+      ? t('changing.youAndOther', { name: others[0] })
+      : t('changing.two', { first: others[0], second: others[1] })
+  }
+  return t('changing.many', { count })
 }
 
 /** How the deployments in one of the workspace's Fabric workspaces are doing. */
@@ -430,14 +442,17 @@ export function layoutMap(
     if (a && b) Object.assign(edge, wire(a, b, edge.kind === 'tree' ? 'from' : 'to'))
   }
 
+  const t = translator('teamMap')
   return {
     nodes,
     edges: edges.filter((e) => e.d),
     lanes: [
-      { label: 'Published & in progress', x: COLUMN.copy, w: NODE_WIDTH.copy },
-      { label: 'Apps', x: COLUMN.app, w: NODE_WIDTH.app },
-      { label: 'Data & connections', x: COLUMN.resource, w: NODE_WIDTH.resource },
-      ...(wanted.length ? [{ label: 'Connected to', x: COLUMN.source, w: NODE_WIDTH.source }] : [])
+      { label: t('lanes.versions'), x: COLUMN.copy, w: NODE_WIDTH.copy },
+      { label: t('shared.apps'), x: COLUMN.app, w: NODE_WIDTH.app },
+      { label: t('lanes.data'), x: COLUMN.resource, w: NODE_WIDTH.resource },
+      ...(wanted.length
+        ? [{ label: t('lanes.sources'), x: COLUMN.source, w: NODE_WIDTH.source }]
+        : [])
     ],
     width: Math.max(...nodes.map((n) => n.x + n.w)),
     height: Math.max(...nodes.map((n) => n.y + n.h))

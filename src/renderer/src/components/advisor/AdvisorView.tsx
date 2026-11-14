@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, type JSX } from '
 import type { AdvisorCategoryId, AdvisorFinding, StudioProject } from '@shared/ipc'
 import { CATALOG, categoryById } from '@shared/advisor/catalog'
 import type { FindingItem } from '../../advisor/lifecycle'
+import { categoryTitle, findingTitle } from '../../advisor/ruleText'
 import type { AdvisorController } from '../../advisor/store'
+import { useTranslation } from '../../i18n'
 import type { MarkdownLinks } from '../Markdown'
 import { ModelPicker } from '../models/ModelPicker'
 import { Codicon } from '../icons'
@@ -10,7 +12,7 @@ import { AreasPanel } from './AreasPanel'
 import { FindingDetail } from './FindingDetail'
 import { IssuesPanel, type IssueTab } from './IssuesPanel'
 import { PostureHeader } from './PostureHeader'
-import { plural, relativeTime } from './format'
+import { relativeTime } from './format'
 import '../chat/chat.css'
 import './advisor.css'
 
@@ -28,11 +30,18 @@ interface Props {
   onManageKeys?: () => void
 }
 
+/** The English to search by, plus any of `shown` (as the interface shows it) that differs from it. */
+function haystack(english: string[], shown: string[]): string {
+  return [...english, ...shown.filter((s) => s && !english.includes(s))].join(' ').toLowerCase()
+}
+
 function matchesQuery(item: FindingItem, q: string): boolean {
   if (!q) return true
   const f = item.finding
-  const hay = `${f.title} ${f.detail} ${f.file ?? ''} ${f.ruleId} ${categoryById(f.category)?.title ?? ''}`
-  return hay.toLowerCase().includes(q)
+  return haystack(
+    [f.title, f.detail, f.file ?? '', f.ruleId, categoryById(f.category)?.title ?? ''],
+    [findingTitle(f), categoryTitle(f.category, ''), f.detailText ?? '']
+  ).includes(q)
 }
 
 function isActionable(item: FindingItem): boolean {
@@ -55,6 +64,7 @@ export default function AdvisorView({
   openRequest,
   onManageKeys
 }: Props): JSX.Element {
+  const { t, i18n } = useTranslation('advisor')
   const [tab, setTab] = useState<IssueTab>('open')
   const [query, setQuery] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
@@ -74,15 +84,16 @@ export default function AdvisorView({
   const loading = !quick && !advisor.quickError
   const q = query.trim().toLowerCase()
 
+  // Searches match titles in the interface's language too, so they follow it.
   const lists = useMemo(() => {
     const open = derived.open.filter((i) => matchesQuery(i, q))
     return {
       open,
       new: open.filter((i) => i.isNew),
       dismissed: derived.hidden.filter((i) => matchesQuery(i, q)),
-      resolved: derived.resolved.filter((r) => !q || `${r.title} ${r.file ?? ''}`.toLowerCase().includes(q))
+      resolved: derived.resolved.filter((r) => !q || haystack([r.title, r.file ?? ''], [findingTitle(r)]).includes(q))
     }
-  }, [derived, q])
+  }, [derived, q, i18n.language])
   const items = tab === 'dismissed' ? lists.dismissed : tab === 'new' ? lists.new : tab === 'open' ? lists.open : []
 
   // Drop selections that are no longer open (fixed, dismissed, or gone).
@@ -158,29 +169,29 @@ export default function AdvisorView({
   if (q) {
     empty = (
       <div className="adv-empty">
-        <p>No issues match “{query.trim()}”.</p>
+        <p>{t('view.empty.noMatch', { query: query.trim() })}</p>
         <button type="button" className="adv-link" onClick={() => setQuery('')}>
-          Clear search
+          {t('view.empty.clearSearch')}
         </button>
       </div>
     )
   } else if (tab === 'new') {
-    empty = <div className="adv-empty">No new issues since the last review.</div>
+    empty = <div className="adv-empty">{t('view.empty.noNew')}</div>
   } else if (tab === 'resolved') {
-    empty = <div className="adv-empty">Nothing resolved yet. Issues you fix show up here.</div>
+    empty = <div className="adv-empty">{t('view.empty.noResolved')}</div>
   } else if (tab === 'dismissed') {
-    empty = <div className="adv-empty">Nothing dismissed. Dismissed issues and muted rules show up here.</div>
+    empty = <div className="adv-empty">{t('view.empty.noDismissed')}</div>
   } else if (loading) {
     empty = (
       <div className="adv-empty">
-        <span className="shimmer-text">Checking your app…</span>
+        <span className="shimmer-text">{t('checkingApp')}</span>
       </div>
     )
   } else if (review.running) {
     empty = (
       <div className="adv-empty">
-        <p className="adv-empty-title">No issues so far</p>
-        <p>Copilot is still reviewing. Anything it confirms shows up here right away.</p>
+        <p className="adv-empty-title">{t('view.empty.noneSoFar')}</p>
+        <p>{t('view.empty.stillReviewing')}</p>
       </div>
     )
   } else {
@@ -189,20 +200,20 @@ export default function AdvisorView({
         <span className="adv-clear-badge" aria-hidden="true">
           <Codicon name="check" />
         </span>
-        <p className="adv-clear-title">Nothing needs your attention</p>
+        <p className="adv-clear-title">{t('view.empty.allClear')}</p>
         <p className="adv-clear-text">
           {deepCurrent && deep
-            ? `${plural(derived.tally.passed, 'check')} passed, including Copilot’s deep review ${relativeTime(deep.analyzedAt)}.`
-            : `The quick checks found nothing. A deep review has Copilot check ${plural(derived.tally.waiting, 'more rule')} that need judgment.`}
+            ? t('view.empty.passedWithDeep', { count: derived.tally.passed, time: relativeTime(deep.analyzedAt) })
+            : t('view.empty.quickClean', { count: derived.tally.waiting })}
         </p>
         {!deepCurrent && (
           <button type="button" className="btn btn--sm btn--primary" onClick={() => void advisor.startReview()}>
-            <Codicon name="sparkle" /> Run deep review
+            <Codicon name="sparkle" /> {t('view.runDeep')}
           </button>
         )}
         {derived.resolved.length > 0 && (
           <button type="button" className="adv-link adv-clear-resolved" onClick={() => setTab('resolved')}>
-            <Codicon name="pass-filled" /> {plural(derived.resolved.length, 'issue')} resolved since the last review
+            <Codicon name="pass-filled" /> {t('view.empty.resolvedSince', { count: derived.resolved.length })}
           </button>
         )}
       </div>
@@ -237,10 +248,10 @@ export default function AdvisorView({
       <header className="adv-bar">
         <div className="adv-bar-title">
           <Codicon name="shield" />
-          <span>Advisor</span>
+          <span>{t('view.title')}</span>
         </div>
-        <span className="adv-bar-sub" title={`Rule catalog ${CATALOG.catalogVersion}`}>
-          Rules for Rayfin {CATALOG.rayfinBaseline}
+        <span className="adv-bar-sub" title={t('view.catalogVersion', { version: CATALOG.catalogVersion })}>
+          {t('view.rulesFor', { version: CATALOG.rayfinBaseline })}
         </span>
         <span className="adv-bar-spacer" />
         <button
@@ -248,8 +259,8 @@ export default function AdvisorView({
           className="chat-tool"
           onClick={advisor.refreshQuick}
           disabled={advisor.quickRunning}
-          title="Re-run the quick checks"
-          aria-label="Re-run the quick checks"
+          title={t('view.rerunQuick')}
+          aria-label={t('view.rerunQuick')}
         >
           <Codicon name="refresh" className={advisor.quickRunning ? 'icon-spin' : ''} />
         </button>
@@ -261,12 +272,12 @@ export default function AdvisorView({
             tiers
             placement="down"
             onManageKeys={onManageKeys}
-            label="Advisor model"
+            label={t('view.model')}
           />
         </div>
         {review.running ? (
           <button type="button" className="btn btn--sm btn--ghost" onClick={advisor.cancelReview}>
-            <Codicon name="debug-stop" /> Stop
+            <Codicon name="debug-stop" /> {t('actions.stop')}
           </button>
         ) : (
           <button
@@ -274,9 +285,9 @@ export default function AdvisorView({
             className="btn btn--sm btn--primary"
             onClick={() => void advisor.startReview()}
             disabled={advisor.loading}
-            title="Have Copilot review the app against every rule — read-only, on its own session"
+            title={t('view.reviewTitle')}
           >
-            <Codicon name="sparkle" /> {deep?.report.ok ? 'Re-run deep review' : 'Run deep review'}
+            <Codicon name="sparkle" /> {deep?.report.ok ? t('view.rerunDeep') : t('view.runDeep')}
           </button>
         )}
       </header>
@@ -304,7 +315,7 @@ export default function AdvisorView({
               <Codicon name="error" />
               <span>{review.error}</span>
               <button type="button" className="adv-link" onClick={() => void advisor.startReview()}>
-                Try again
+                {t('actions.tryAgain')}
               </button>
             </div>
           )}
@@ -317,71 +328,60 @@ export default function AdvisorView({
           {advisor.quickError && (
             <div className="adv-banner adv-banner--warn" role="alert">
               <Codicon name="warning" />
-              <span>The quick checks couldn’t read the project: {advisor.quickError}</span>
+              <span>{t('view.quickError', { error: advisor.quickError })}</span>
             </div>
           )}
           {!review.running && deep?.report.ok && deep.legacy && (
             <div className="adv-banner">
               <Codicon name="history" />
-              <span>
-                This deep review ran with an older rule set. Re-run it to check the app against the rules for
-                Rayfin {CATALOG.rayfinBaseline}.
-              </span>
+              <span>{t('view.legacy', { version: CATALOG.rayfinBaseline })}</span>
             </div>
           )}
           {!review.running && deep?.report.ok && !deep.legacy && deep.rulesChanged && (
             <div className="adv-banner">
               <Codicon name="history" />
-              <span>The Advisor’s rules were updated since this review. Re-run it to apply the new rules.</span>
+              <span>{t('view.rulesChanged')}</span>
             </div>
           )}
           {!review.running && deep?.report.ok && !deep.legacy && !deep.rulesChanged && deep.stale && (
             <div className="adv-banner">
               <Codicon name="history" />
-              <span>
-                Your code changed since the deep review ({relativeTime(deep.analyzedAt)}). The quick checks are
-                current; re-run the deep review to refresh Copilot’s findings.
-              </span>
+              <span>{t('view.stale', { time: relativeTime(deep.analyzedAt) })}</span>
             </div>
           )}
           {applied.length > 0 && !advisor.verify.running && (
             <div className="adv-banner adv-banner--applied">
               <Codicon name="check" />
-              <span>
-                Copilot applied fixes for {plural(applied.length, 'deep-review issue')}. Verify them against the
-                current code.
-              </span>
+              <span>{t('view.applied', { count: applied.length })}</span>
               <button
                 type="button"
                 className="adv-link"
                 onClick={() => void advisor.startVerify(applied.map((i) => i.finding))}
               >
-                Verify fixes
+                {t('view.verifyFixes')}
               </button>
             </div>
           )}
           {chatBusy && derived.open.length > 0 && (
             <div className="adv-banner adv-banner--busy">
               <span className="step-spin" aria-hidden="true" />
-              <span>
-                Copilot is working on a task — Fix is paused until it finishes. You can still explain and review
-                issues.
-              </span>
+              <span>{t('view.busy')}</span>
             </div>
           )}
           {quick?.truncated && (
             <div className="adv-banner">
               <Codicon name="info" />
-              <span>This project is large, so the quick checks skipped some files.</span>
+              <span>{t('view.truncated')}</span>
             </div>
           )}
 
           {!review.running && deep?.report.ok && deep.report.summary && (
-            <aside className="adv-summary" aria-label="Copilot’s summary">
+            <aside className="adv-summary" aria-label={t('view.summary')}>
               <div className="adv-summary-body">
                 <span className="adv-summary-label">
-                  Copilot’s summary · {relativeTime(deep.analyzedAt)}
-                  {deepCurrent ? '' : ' · outdated'}
+                  {t(deepCurrent ? 'view.summaryLabel' : 'view.summaryLabelOutdated', {
+                    time: relativeTime(deep.analyzedAt)
+                  })}
                 </span>
                 <p>{deep.report.summary}</p>
               </div>
@@ -391,8 +391,8 @@ export default function AdvisorView({
           <div className="adv-workspace" ref={workspaceRef}>
             <IssuesPanel
               tab={tab}
-              onTab={(t) => {
-                setTab(t)
+              onTab={(next) => {
+                setTab(next)
                 setOpenId(null)
               }}
               counts={counts}

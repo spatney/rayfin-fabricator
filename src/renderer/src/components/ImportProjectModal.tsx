@@ -3,9 +3,10 @@ import type { ImportPreview, ImportResult, StudioProject } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { errorMessage } from '../errorReport'
+import { formatLocale, Trans, translator, useTranslation } from '../i18n'
 import { formatBytes, listNames } from './blueprint/localData'
 import { displayPath } from './projectDisplay'
-import { ProjectFileProgress, ProjectFileSummary, count, fileName } from './projectFile'
+import { ProjectFileProgress, ProjectFileSummary, fileName } from './projectFile'
 import SecurityCheckPanel from './security/SecurityCheck'
 import { useSecurityCheck } from './security/useSecurityCheck'
 
@@ -48,7 +49,7 @@ function Fact({
 function exportedOn(iso: string | undefined): string | undefined {
   const at = iso ? new Date(iso) : null
   if (!at || Number.isNaN(at.getTime())) return undefined
-  return at.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  return at.toLocaleDateString(formatLocale(), { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 /**
@@ -59,6 +60,7 @@ function exportedOn(iso: string | undefined): string | undefined {
  * opened with Fabricator, and offers to check the file for security risks first.
  */
 export default function ImportProjectModal({ path, onImported, onClose }: Props): JSX.Element {
+  const { t } = useTranslation('projects')
   useSuppressPreview()
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
@@ -94,7 +96,7 @@ export default function ImportProjectModal({ path, onImported, onClose }: Props)
       },
       (reason) => {
         if (!mountedRef.current) return
-        setError(errorMessage(reason, `Fabricator couldn’t read ${file}.`))
+        setError(errorMessage(reason, translator('projects')('import.errors.cantRead', { file })))
         setPhase('review')
       }
     )
@@ -137,7 +139,10 @@ export default function ImportProjectModal({ path, onImported, onClose }: Props)
     try {
       result = await window.api.projects.importProject(path)
     } catch (reason) {
-      result = { ok: false, error: errorMessage(reason, `Fabricator couldn’t import ${file}.`) }
+      result = {
+        ok: false,
+        error: errorMessage(reason, t('import.errors.cantImport', { file }))
+      }
     }
     if (!mountedRef.current) return
     if (result.ok && result.project) {
@@ -145,14 +150,16 @@ export default function ImportProjectModal({ path, onImported, onClose }: Props)
       onClose()
       return
     }
-    setError(result.error ?? `Fabricator couldn’t import ${file}.`)
+    setError(result.error ?? t('import.errors.cantImport', { file }))
     setPhase('review')
   }
 
   const when = exportedOn(preview?.exportedAt)
   const lead = preview?.from
-    ? `Exported by ${preview.from}${when ? ` on ${when}` : ''}`
-    : `From ${file}`
+    ? when
+      ? t('import.exportedByOn', { from: preview.from, date: when })
+      : t('import.exportedBy', { from: preview.from })
+    : t('import.fromFile', { file })
 
   return (
     <div className="modal-backdrop" onClick={importing ? undefined : onClose}>
@@ -166,11 +173,11 @@ export default function ImportProjectModal({ path, onImported, onClose }: Props)
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>Import project</h2>
+          <h2 id={titleId}>{t('import.title')}</h2>
           <button
             type="button"
             className="icon-btn"
-            aria-label="Close"
+            aria-label={t('actions.close')}
             disabled={importing}
             onClick={onClose}
           >
@@ -182,7 +189,7 @@ export default function ImportProjectModal({ path, onImported, onClose }: Props)
           {phase === 'loading' && (
             <p className="project-file-status" role="status">
               <span className="ws-spinner" aria-hidden="true" />
-              Reading {file}…
+              {t('import.reading', { file })}
             </p>
           )}
 
@@ -194,14 +201,14 @@ export default function ImportProjectModal({ path, onImported, onClose }: Props)
 
           {preview && (
             <ProjectFileSummary name={preview.name}>
-              {importing ? `Importing it from ${file}.` : lead}
+              {importing ? t('import.importingFrom', { file }) : lead}
             </ProjectFileSummary>
           )}
 
           {preview && importing && progress && (
             <ProjectFileProgress
-              label={`Importing ${preview.name}…`}
-              name="Import progress"
+              label={t('import.importingName', { name: preview.name })}
+              name={t('import.progress')}
               processed={progress.processed}
               total={progress.total}
             />
@@ -209,29 +216,29 @@ export default function ImportProjectModal({ path, onImported, onClose }: Props)
 
           {preview && !(importing && progress) && (
             <>
-              <div className="project-file-parts" role="list" aria-label="What it brings in">
+              <div className="project-file-parts" role="list" aria-label={t('import.bringsIn')}>
                 <Fact
                   icon="file-code"
-                  title="App code"
-                  detail={`${count(preview.files, 'file')} · ${formatBytes(preview.bytes)}`}
+                  title={t('parts.code')}
+                  detail={`${t('file.files', { count: preview.files })} · ${formatBytes(preview.bytes)}`}
                 >
-                  Fabricator installs its packages when you open it.
+                  {t('import.code.desc')}
                 </Fact>
                 {preview.history && (
-                  <Fact icon="history" title="Version history">
-                    Every version saved before, so History and Restore work.
+                  <Fact icon="history" title={t('parts.history')}>
+                    {t('import.history.desc')}
                   </Fact>
                 )}
                 {preview.workspace && (
-                  <Fact icon="cloud" title="Published app" detail={preview.workspace}>
+                  <Fact icon="cloud" title={t('parts.published')} detail={preview.workspace}>
                     {preview.from
-                      ? `Publishing updates this same app. Ask ${preview.from} for workspace access.`
-                      : 'Publishing updates this same app, once you have access to its workspace.'}
+                      ? t('import.published.askFrom', { from: preview.from })
+                      : t('import.published.needAccess')}
                   </Fact>
                 )}
                 {preview.secrets.length > 0 && (
-                  <Fact icon="key" title="Secrets" detail={listNames(preview.secrets)}>
-                    Their values don’t come with it. Set your own in Code → Secrets.
+                  <Fact icon="key" title={t('parts.secrets')} detail={listNames(preview.secrets)}>
+                    {t('import.secrets.desc')}
                   </Fact>
                 )}
               </div>
@@ -239,18 +246,19 @@ export default function ImportProjectModal({ path, onImported, onClose }: Props)
               <p className="project-file-note">
                 <span className="codicon codicon-folder" aria-hidden="true" />
                 <span>
-                  It goes in a new folder,{' '}
-                  <code className="project-file-code" title={preview.folder}>
-                    {displayPath(preview.folder)}
-                  </code>
-                  .
+                  <Trans
+                    t={t}
+                    i18nKey="import.folder"
+                    values={{ folder: displayPath(preview.folder) }}
+                    components={{
+                      code: <code className="project-file-code" title={preview.folder} />
+                    }}
+                  />
                 </span>
               </p>
               <p className="project-file-note">
                 <span className="codicon codicon-shield" aria-hidden="true" />
-                <span>
-                  Only import projects from people you trust. Their code runs on this computer.
-                </span>
+                <span>{t('import.trust')}</span>
               </p>
 
               <SecurityCheckPanel check={check} kind="project" disabled={importing} />
@@ -272,7 +280,7 @@ export default function ImportProjectModal({ path, onImported, onClose }: Props)
             disabled={importing}
             onClick={onClose}
           >
-            {preview ? 'Cancel' : 'Close'}
+            {preview ? t('actions.cancel') : t('actions.close')}
           </button>
           {preview && (
             <button
@@ -282,7 +290,11 @@ export default function ImportProjectModal({ path, onImported, onClose }: Props)
               disabled={importing || checking}
               onClick={() => void importIt()}
             >
-              {importing ? 'Importing…' : risky ? 'Import anyway' : 'Import'}
+              {importing
+                ? t('import.importing')
+                : risky
+                  ? t('import.importAnyway')
+                  : t('import.import')}
             </button>
           )}
         </div>

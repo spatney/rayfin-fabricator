@@ -1,14 +1,8 @@
 import { useEffect, useId, useState, type JSX } from 'react'
 import { CUSTOM_INSTRUCTIONS_MAX } from '@shared/ipc'
+import { formatLocale, useTranslation } from '../i18n'
 import { useModalFocus } from '../modalFocus'
 import { useSuppressPreview } from '../overlay'
-
-/** Examples in the empty box: the kind of guidance that suits every app. */
-const PLACEHOLDER = [
-  'Use the system’s light or dark theme by default.',
-  'Use sentence case for headings, labels and buttons.',
-  'Show dates like 5 Mar 2026.'
-].join('\n')
 
 /**
  * Custom instructions: your own guidance for every app you build, such as "Use
@@ -27,6 +21,7 @@ export default function CustomInstructionsModal({
   onSave: (text: string) => void
   onClose: () => void
 }): JSX.Element {
+  const { t } = useTranslation('models')
   useSuppressPreview()
   const titleId = useId()
   const fieldId = useId()
@@ -35,6 +30,12 @@ export default function CustomInstructionsModal({
   const saved = instructions ?? ''
   const [text, setText] = useState(saved)
   const changed = text.trim() !== saved.trim()
+  /** Examples in the empty box: the kind of guidance that suits every app. */
+  const placeholder = [
+    t('instructions.examples.theme'),
+    t('instructions.examples.case'),
+    t('instructions.examples.dates')
+  ].join('\n')
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -60,26 +61,22 @@ export default function CustomInstructionsModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>Custom instructions</h2>
+          <h2 id={titleId}>{t('instructions.title')}</h2>
           <button
             type="button"
             className="btn btn--sm btn--ghost"
             onClick={onClose}
-            aria-label="Close custom instructions"
+            aria-label={t('instructions.close')}
           >
             ✕
           </button>
         </div>
 
         <div className="modal-body settings-body">
-          <p className="modal-sub">
-            Tell Copilot what you want in every app you build, such as a theme, wording or layout.
-            Each app’s chat follows these from its next message, and what you ask in the chat comes
-            first. They stay in Fabricator: they aren’t saved in your apps.
-          </p>
+          <p className="modal-sub">{t('instructions.sub')}</p>
           <div className="field">
             <label className="field-label" htmlFor={fieldId}>
-              Instructions
+              {t('instructions.label')}
             </label>
             <textarea
               id={fieldId}
@@ -88,14 +85,15 @@ export default function CustomInstructionsModal({
               maxLength={CUSTOM_INSTRUCTIONS_MAX}
               autoFocus
               value={text}
-              placeholder={PLACEHOLDER}
+              placeholder={placeholder}
               aria-describedby={hintId}
               onChange={(e) => setText(e.target.value)}
             />
             <span className="field-hint custom-instructions-hint" id={hintId}>
-              <span>Keep them short: Copilot reads them with every message.</span>
+              <span>{t('instructions.hint')}</span>
               <span className="custom-instructions-count">
-                {text.length.toLocaleString()} / {CUSTOM_INSTRUCTIONS_MAX.toLocaleString()}
+                {text.length.toLocaleString(formatLocale())} /{' '}
+                {CUSTOM_INSTRUCTIONS_MAX.toLocaleString(formatLocale())}
               </span>
             </span>
           </div>
@@ -103,10 +101,10 @@ export default function CustomInstructionsModal({
 
         <div className="modal-footer">
           <button type="button" className="btn btn--ghost" onClick={onClose}>
-            Cancel
+            {t('actions.cancel')}
           </button>
           <button type="button" className="btn btn--primary" disabled={!changed} onClick={save}>
-            Save
+            {t('actions.save')}
           </button>
         </div>
       </div>

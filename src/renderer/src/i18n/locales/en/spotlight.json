@@ -1,0 +1,320 @@
+{
+  "groups": {
+    "projects": "Projects",
+    "apps": "Fabric apps",
+    "actions": "Actions",
+    "docs": "Documentation",
+    "files": "Files"
+  },
+  "kinds": {
+    "projects": "Project",
+    "apps": "Fabric app",
+    "actions": "Action",
+    "docs": "Docs",
+    "files": "File"
+  },
+  "verbs": {
+    "projects": "Open project",
+    "apps": "Open app",
+    "actions": "Run action",
+    "files": "Open in Code",
+    "continue": "Continue conversation"
+  },
+  "views": {
+    "projects": {
+      "title": "Search projects",
+      "placeholder": "Search projects…"
+    },
+    "apps": {
+      "title": "Search Fabric apps",
+      "placeholder": "Search the apps you can open in Fabric…"
+    },
+    "actions": {
+      "title": "Search actions",
+      "placeholder": "Search actions…"
+    },
+    "docs": {
+      "title": "Search the docs",
+      "placeholder": "Search the docs…"
+    },
+    "files": {
+      "title": "Search files",
+      "placeholder": "Search files…"
+    },
+    "help": {
+      "title": "Ask Help",
+      "placeholder": "Ask Help anything…"
+    }
+  },
+  "ask": {
+    "label": "Ask Help",
+    "signedOut": "Sign in to GitHub Copilot to ask Help",
+    "quoted": "“{{text}}”",
+    "continue": "Continue your Help conversation"
+  },
+  "sections": {
+    "suggestions": "Suggestions",
+    "recent": "Recent projects",
+    "results": "Results",
+    "use": "Use “{{query}}” with…"
+  },
+  "placeholder": {
+    "all": "Search for projects, actions and docs…",
+    "followUp": "Ask a follow-up…",
+    "files": "Search files in {{name}}…",
+    "filesHere": "Search files in this project…"
+  },
+  "count": {
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results"
+  },
+  "announce": {
+    "results_one": "{{count}} result.",
+    "results_other": "{{count}} results.",
+    "answering": "Help is answering.",
+    "answered": "Help answered."
+  },
+  "notify": {
+    "failed": "{{title}} didn’t work. Try again.",
+    "copiedAnswer": "Copied the answer",
+    "copyFailed": "Couldn’t copy the answer"
+  },
+  "panel": {
+    "title": "Actions",
+    "openInHelp": "Open in Help",
+    "copyAnswer": "Copy answer",
+    "stop": "Stop answering",
+    "suggests": "Help suggests",
+    "sources": "Sources",
+    "newConversation": "New conversation",
+    "help": "Help",
+    "noMatch": "No actions match",
+    "search": "Search for actions",
+    "searchPlaceholder": "Search for actions…"
+  },
+  "empty": {
+    "listingFiles": "Listing the files…",
+    "loadingDocs": "Loading the docs…",
+    "nothing": "Nothing here yet",
+    "none": {
+      "projects": "No projects yet",
+      "apps": "No apps yet",
+      "actions": "No actions yet",
+      "docs": "No docs yet",
+      "files": "No files yet"
+    },
+    "noMatch": {
+      "projects": "No projects match “{{text}}”",
+      "apps": "No apps match “{{text}}”",
+      "actions": "No actions match “{{text}}”",
+      "docs": "No docs match “{{text}}”",
+      "files": "No files match “{{text}}”"
+    },
+    "askInstead": "Press <tab/> to ask Help instead"
+  },
+  "bar": {
+    "backTitle": "Back (Esc)"
+  },
+  "foot": {
+    "files": "Files in {{name}}",
+    "answering": "Answering…",
+    "followUp": "Ask follow-up"
+  },
+  "sources": {
+    "team": "Team",
+    "teamWorkspace": "{{team}} · team workspace",
+    "openNow": "Open now",
+    "missing": "Missing",
+    "openInVsCode": "Open in VS Code",
+    "copyPath": "Copy path",
+    "copied": "Copied {{text}}",
+    "manageProject": "Manage project",
+    "workspace": "Workspace",
+    "openOverview": "Open overview",
+    "copyRepository": "Copy repository",
+    "openInFabric": "Open in Fabric",
+    "openInFabricator": "Open in Fabricator",
+    "copyLink": "Copy link",
+    "copiedLink": "Copied the link",
+    "onThisComputer": "{{workspace}} · on this computer",
+    "projectFolder": "Project folder"
+  },
+  "suggest": {
+    "advisor_one": "Review {{count}} Advisor issue",
+    "advisor_other": "Review {{count}} Advisor issues",
+    "advisorOpen": "High and medium issues are open in {{name}}",
+    "advisorOpenHere": "High and medium issues are open in this app",
+    "deployFailed": "Find out why publishing failed",
+    "couldNotPublish": "Couldn’t publish {{name}}"
+  },
+  "act": {
+    "current": "Current",
+    "viewBuild": {
+      "title": "Build",
+      "subtitle": "Chat with Copilot and preview {{name}}"
+    },
+    "viewCode": {
+      "title": "Code",
+      "subtitle": "Browse the files of {{name}}"
+    },
+    "viewBlueprint": {
+      "title": "Blueprint",
+      "subtitle": "What {{name}} is made of, and its data model"
+    },
+    "viewAdvisor": {
+      "title": "Advisor",
+      "subtitle": "Check {{name}} for problems before you share it"
+    },
+    "history": {
+      "title": "History",
+      "subtitle": "Every version of {{name}}, and what changed"
+    },
+    "skills": {
+      "title": "Skills",
+      "subtitle": "Guidance Copilot follows while it builds this app"
+    },
+    "secrets": {
+      "title": "Secrets",
+      "subtitle": "Keys and passwords your app’s functions use"
+    },
+    "terminal": {
+      "title": "Terminal",
+      "subtitle": "Run commands in {{name}}’s folder",
+      "hide": "Hide terminal",
+      "hideSubtitle": "Put the terminal away; its shells keep running"
+    },
+    "newTerminal": {
+      "title": "New terminal",
+      "subtitle": "Start another shell in {{name}}’s folder"
+    },
+    "deploy": {
+      "title": "Publish",
+      "changes": "Publish changes",
+      "files_one": "Publish {{count}} change",
+      "files_other": "Publish {{count}} changes",
+      "subtitle": "Publish {{name}} again",
+      "changesSubtitle": "Your latest changes aren’t on {{name}} yet",
+      "filesSubtitle_one": "{{count}} file changed since {{name}} was published",
+      "filesSubtitle_other": "{{count}} files changed since {{name}} was published"
+    },
+    "share": {
+      "title": "Share",
+      "subtitle": "Give people access to {{name}}"
+    },
+    "autoDeploy": {
+      "on": "Turn on Publish after each chat turn",
+      "off": "Turn off Publish after each chat turn",
+      "onSubtitle": "Publish what each chat turn changes as it finishes",
+      "offSubtitle": "Keep chat changes on this computer until you publish them"
+    },
+    "home": {
+      "title": "All projects",
+      "subtitle": "Show every project on Home"
+    },
+    "newProject": {
+      "title": "New project",
+      "subtitle": "Describe it and Copilot builds it"
+    },
+    "openFolder": {
+      "title": "Open folder",
+      "subtitle": "Use an existing local project"
+    },
+    "clone": {
+      "title": "Clone from GitHub",
+      "subtitle": "Bring a repository into Fabricator"
+    },
+    "importProject": {
+      "title": "Import a project",
+      "subtitle": "Open a .fabricator file someone sent you"
+    },
+    "migrate": {
+      "title": "Migrate a Power BI report",
+      "subtitle": "Turn a report into an app"
+    },
+    "gallery": {
+      "title": "App gallery",
+      "subtitle": "Browse every app you can open in Fabric"
+    },
+    "manageProject": {
+      "title": "Manage {{name}}",
+      "subtitle": "Rename it, export it, or remove it from Fabricator"
+    },
+    "exportProject": {
+      "title": "Export {{name}}",
+      "subtitle": "Save it as a file someone else can import"
+    },
+    "overview": {
+      "title": "Workspace overview",
+      "subtitle": "Every app, change and deployment in {{name}}",
+      "subtitleHere": "Every app, change and deployment in this team workspace"
+    },
+    "theme": {
+      "dark": "Dark theme",
+      "light": "Light theme",
+      "system": "System theme",
+      "appearance": "Appearance",
+      "systemSubtitle": "Follow your computer’s light or dark setting"
+    },
+    "textSize": {
+      "title": "Text size {{percent}}%",
+      "subtitle": "Scale the whole interface"
+    },
+    "settings": {
+      "title": "Settings",
+      "subtitle": "Theme, text size, experiments and more"
+    },
+    "accounts": {
+      "title": "Manage accounts",
+      "subtitle": "See and change every account Fabricator uses"
+    },
+    "apiKeys": {
+      "title": "Manage API keys",
+      "subtitle": "Use models from Anthropic, OpenAI, xAI and Google with your own keys"
+    },
+    "mcpServers": {
+      "title": "Manage MCP servers",
+      "subtitle": "Add the MCP servers chat can turn on in its Plugins"
+    },
+    "chatDefaults": {
+      "title": "Manage chat defaults",
+      "subtitle": "The model and plugins a new project’s chat starts with"
+    },
+    "customInstructions": {
+      "title": "Edit custom instructions",
+      "subtitle": "What Copilot follows in every app you build"
+    },
+    "fabricRefresh": {
+      "title": "Refresh Fabric authentication",
+      "subtitle": "Clear the shared Rayfin CLI credentials and sign in again"
+    },
+    "fabricSignIn": {
+      "title": "Sign in to Fabric",
+      "subtitle": "Microsoft Fabric hosts the apps you publish"
+    },
+    "setup": {
+      "title": "Open setup",
+      "subtitle": "Check the tools Fabricator needs and install missing ones"
+    },
+    "help": {
+      "title": "Open Help",
+      "subtitle": "Debug a problem, browse the docs, or report an issue"
+    },
+    "docs": {
+      "title": "Documentation",
+      "subtitle": "Open the Fabricator docs in your browser"
+    },
+    "reportIssue": {
+      "title": "Report an issue",
+      "subtitle": "Open a bug report on GitHub with your version details"
+    },
+    "exportDiagnostics": {
+      "title": "Export diagnostics",
+      "subtitle": "Save a diagnostics file to attach to a bug report"
+    },
+    "openLogs": {
+      "title": "Open logs folder",
+      "subtitle": "Fabricator’s logs on this computer",
+      "verb": "Open folder"
+    }
+  }
+}

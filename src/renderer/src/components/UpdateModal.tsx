@@ -1,4 +1,5 @@
 import { useUpdates } from '../update'
+import { useTranslation } from '../i18n'
 import ConfirmModal from './ConfirmModal'
 import Markdown from './Markdown'
 
@@ -15,6 +16,7 @@ import type { JSX } from 'react'
  */
 export default function UpdateModal(): JSX.Element | null {
   const { modalOpen, info, status, install, later } = useUpdates()
+  const { t } = useTranslation('app')
 
   if (!modalOpen) return null
 
@@ -22,7 +24,7 @@ export default function UpdateModal(): JSX.Element | null {
   const message = (
     <div className="update-modal">
       <p className="update-modal__lead">
-        {version ? `Fabricator ${version} is ready to install.` : 'A new update is ready to install.'}
+        {version ? t('update.leadVersion', { version }) : t('update.lead')}
       </p>
       {info?.currentVersion && version && (
         <p className="update-modal__versions">
@@ -35,20 +37,18 @@ export default function UpdateModal(): JSX.Element | null {
           <Markdown>{info.notes}</Markdown>
         </div>
       )}
-      <p className="update-modal__hint">
-        You can install now, or choose Later to keep using this version and update anytime.
-      </p>
+      <p className="update-modal__hint">{t('update.hint')}</p>
     </div>
   )
 
   return (
     <ConfirmModal
-      title="Update available"
+      title={t('update.title')}
       message={message}
-      confirmLabel="Update now"
-      cancelLabel="Later"
+      confirmLabel={t('update.updateNow')}
+      cancelLabel={t('update.later')}
       busy={status === 'installing'}
-      busyLabel="Installing…"
+      busyLabel={t('update.installingShort')}
       onConfirm={() => void install()}
       onCancel={later}
     />

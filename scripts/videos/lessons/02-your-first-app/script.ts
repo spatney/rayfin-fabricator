@@ -144,7 +144,7 @@ export const SCRIPT = {
     },
     {
       id: 'stinger',
-      // From RAY_FACTS (src/renderer/src/components/mascot/lines.ts). The intro used the fever, and lesson 1 the cartilage.
+      // From RAY_FACTS (facts.ray in src/renderer/src/i18n/locales/en/mascot.json). The intro used the fever, and lesson 1 the cartilage.
       beats: [{ id: 'fact', text: '[whispers] Psst… my eyes are on top, and my mouth is underneath. [giggles] So I can watch while I eat!' }],
     },
   ],

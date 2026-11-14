@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type JSX } from 'react'
 import type { StudioProject } from '@shared/ipc'
+import { translator, useTranslation } from '../i18n'
 import { useSuppressPreview } from '../overlay'
 import { useMascotInstall } from './mascot/stage'
 
@@ -25,7 +26,7 @@ export const PREPARING_CARD_DELAY_MS = 450
 function errorMessage(error: unknown): string {
   return error instanceof Error && error.message
     ? error.message
-    : 'Could not prepare this project. Check its dependencies and try again.'
+    : translator('projects')('guard.cantPrepare')
 }
 
 /**
@@ -39,6 +40,7 @@ export default function ProjectDependencyGuard({
   hidden,
   onReadyChange
 }: Props): JSX.Element {
+  const { t } = useTranslation('projects')
   const [attempt, setAttempt] = useState(0)
   const [readiness, setReadiness] = useState<Readiness>({
     projectId: '',
@@ -93,7 +95,7 @@ export default function ProjectDependencyGuard({
             : {
                 projectId: project.id,
                 state: 'error',
-                error: result.error ?? "Could not install this project's dependencies."
+                error: result.error ?? translator('projects')('guard.cantInstall')
               }
         )
       })
@@ -115,7 +117,11 @@ export default function ProjectDependencyGuard({
       ref={sectionRef}
       className={`project-dependency-guard${hidden ? ' project-dependency-guard--hidden' : ''}`}
       role={failed ? 'alert' : 'status'}
-      aria-label={failed ? `Could not prepare ${project.name}` : `Preparing ${project.name}`}
+      aria-label={
+        failed
+          ? t('guard.failedLabel', { name: project.name })
+          : t('guard.preparing', { name: project.name })
+      }
     >
       {(failed || slow) && (
         <div
@@ -126,29 +132,27 @@ export default function ProjectDependencyGuard({
         >
           {failed ? (
             <>
-              <h2 className="project-dependency-guard-title">
-                Couldn't install project dependencies
-              </h2>
+              <h2 className="project-dependency-guard-title">{t('guard.failedTitle')}</h2>
               <p className="project-dependency-guard-error">{error}</p>
               <div className="project-dependency-guard-actions">
                 <button
                   className="btn btn--sm btn--primary"
                   onClick={() => setAttempt((value) => value + 1)}
                 >
-                  Retry installation
+                  {t('guard.retry')}
                 </button>
                 <button className="btn btn--sm btn--ghost" onClick={onSwitchProjects}>
-                  Switch projects
+                  {t('guard.switchProjects')}
                 </button>
               </div>
             </>
           ) : (
             <>
               <span className="project-dependency-guard-spinner" aria-hidden />
-              <h2 className="project-dependency-guard-title">Preparing {project.name}</h2>
-              <p className="project-dependency-guard-copy">
-                Checking the project's Rayfin CLI and installing missing dependencies...
-              </p>
+              <h2 className="project-dependency-guard-title">
+                {t('guard.preparing', { name: project.name })}
+              </h2>
+              <p className="project-dependency-guard-copy">{t('guard.checking')}</p>
             </>
           )}
         </div>

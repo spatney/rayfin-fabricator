@@ -22,7 +22,9 @@ use crate::types::{GithubRepoRequest, GithubRepoResult, ProjectNameCheck, TeamOw
 /// and periods, at most 100 of them.
 static REPO_NAME_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[A-Za-z0-9._-]{1,100}$").unwrap());
 
-const NAME_RULE: &str = "Use only letters, numbers, hyphens, underscores and periods in the repository name.";
+fn name_rule() -> String {
+  t!("commands.githubRepo.nameRule")
+}
 
 /// Whether GitHub takes `name` for a repository as it is.
 fn valid_repo_name(name: &str) -> bool {
@@ -31,13 +33,13 @@ fn valid_repo_name(name: &str) -> bool {
 
 fn check_names(account: &str, owner: &str, name: &str) -> Result<(), String> {
   if !gh::is_login(account) {
-    return Err(format!("{account} isn't a GitHub account name."));
+    return Err(t!("commands.github.notAccountName", login = account));
   }
   if !gh::is_login(owner) {
-    return Err(format!("{owner} isn't a GitHub account or organization name."));
+    return Err(t!("commands.githubRepo.notAccountOrOrg", owner = owner));
   }
   if !valid_repo_name(name) {
-    return Err(NAME_RULE.into());
+    return Err(name_rule());
   }
   Ok(())
 }
@@ -66,7 +68,7 @@ pub async fn github_owners(account: Option<String>) -> TeamOwnersResult {
       Ok(owners) => TeamOwnersResult { ok: true, error: None, owners },
       Err(e) => TeamOwnersResult {
         ok: false,
-        error: Some(e.describe("List where you can create repositories")),
+        error: Some(e.describe(&t!("commands.githubRepo.listOwners"))),
         owners: vec![],
       },
     }
@@ -102,7 +104,7 @@ async fn existing(full_name: &str) -> Result<Existing, GhError> {
 }
 
 fn taken(full_name: &str) -> String {
-  format!("github.com/{full_name} already exists. Choose another name.")
+  t!("commands.githubRepo.taken", name = full_name)
 }
 
 /// Whether `owner/name` can take a project's repository, as `account`: a free
@@ -119,7 +121,7 @@ pub async fn github_check_repo(account: String, owner: String, name: String) -> 
     Ok(Existing::Taken) => ProjectNameCheck { ok: false, message: Some(taken(&full_name)) },
     Ok(Existing::Empty(_)) => ProjectNameCheck {
       ok: true,
-      message: Some(format!("github.com/{full_name} is empty, so Fabricator puts the app in it.")),
+      message: Some(t!("commands.githubRepo.adoptEmpty", name = full_name)),
     },
     // A check that couldn't run doesn't stop creating, which then says what's wrong.
     Ok(Existing::Free) | Err(_) => ProjectNameCheck { ok: true, message: None },
@@ -153,14 +155,14 @@ async fn create_repo(id: &str, request: &GithubRepoRequest) -> GithubRepoResult 
     return failed(message);
   }
   let Some(project) = store::find_project(id) else {
-    return failed("Project not found.");
+    return failed(t!("commands.shared.projectNotFound"));
   };
   if project.team.is_some() {
-    return failed("Team apps are already on GitHub, in their team workspace's repository.");
+    return failed(t!("commands.githubRepo.teamApp"));
   }
   let dir = Path::new(&project.path);
   if !dir.is_dir() {
-    return failed("The project's folder is missing.");
+    return failed(t!("commands.githubRepo.folderMissing"));
   }
   if let Err(message) = own_history(dir).await {
     return failed(message);
@@ -171,10 +173,7 @@ async fn create_repo(id: &str, request: &GithubRepoRequest) -> GithubRepoResult 
       Err(message) => return failed(message),
     };
     if let Err(message) = push_first(dir, &repo.full_name).await {
-      return failed(format!(
-        "Fabricator created github.com/{}, but couldn't push the app to it. {message}",
-        repo.full_name
-      ));
+      return failed(t!("commands.githubRepo.pushFailed", name = repo.full_name, message = message));
     }
     store::mutate_project(id, |p| p.github_account = Some(account.to_string()));
     let url = if repo.html_url.is_empty() { format!("https://github.com/{}", repo.full_name) } else { repo.html_url };
@@ -192,22 +191,19 @@ fn local(dir: &Path) -> RunOptions {
 async fn own_history(dir: &Path) -> Result<(), String> {
   let up = git::run(&["rev-parse", "--show-cdup"], local(dir)).await;
   if !up.ok {
-    return Err("This project isn't tracked by git, so it has no versions to put on GitHub.".into());
+    return Err(t!("commands.githubRepo.notTracked"));
   }
   if !up.stdout.trim().is_empty() {
     let top = git::run(&["rev-parse", "--show-toplevel"], local(dir)).await;
-    return Err(format!(
-      "This app is part of the git repository at {}, so it can't have a GitHub repository of its own.",
-      top.stdout.trim()
-    ));
+    return Err(t!("commands.githubRepo.partOfRepo", path = top.stdout.trim()));
   }
   let remotes = git::run(&["remote"], local(dir)).await;
   if remotes.ok && !remotes.stdout.trim().is_empty() {
-    return Err("This project already has a remote repository.".into());
+    return Err(t!("commands.githubRepo.hasRemote"));
   }
   let head = git::run(&["rev-parse", "--verify", "--quiet", "HEAD"], local(dir)).await;
   if !head.ok {
-    return Err("Save a first version of the app, then try again.".into());
+    return Err(t!("commands.githubRepo.saveFirst"));
   }
   Ok(())
 }
@@ -218,15 +214,15 @@ async fn create_or_adopt(account: &str, owner: &str, name: &str, private: bool) 
   let full_name = format!("{owner}/{name}");
   let body = json!({ "name": name, "private": private, "auto_init": false });
   match gh::api("POST", &create_path(account, owner), Some(&body)).await {
-    Ok(v) => gh::repo_info(&v).ok_or_else(|| "GitHub returned an unexpected repository.".to_string()),
+    Ok(v) => gh::repo_info(&v).ok_or_else(|| t!("commands.githubRepo.unexpectedRepo")),
     Err(e) if e.status == Some(422) && e.message.to_ascii_lowercase().contains("already exists") => {
       match existing(&full_name).await {
         Ok(Existing::Empty(info)) => Ok(info),
         Ok(_) => Err(taken(&full_name)),
-        Err(e) => Err(e.describe("Use the existing GitHub repository")),
+        Err(e) => Err(e.describe(&t!("commands.githubRepo.useExisting"))),
       }
     }
-    Err(e) => Err(e.describe("Create the GitHub repository")),
+    Err(e) => Err(e.describe(&t!("commands.githubRepo.createRepo"))),
   }
 }
 
@@ -264,7 +260,7 @@ fn reason(res: &RunResult) -> String {
     .take(3)
     .collect();
   if lines.is_empty() {
-    "Git didn't say why.".into()
+    t!("commands.githubRepo.noReason")
   } else {
     lines.join(" ")
   }
@@ -315,7 +311,7 @@ impl NetAuth {
 
 /// [`NetAuth`] for the account the current task acts as.
 async fn account_auth() -> Result<NetAuth, String> {
-  gh::account_token().await.map(NetAuth::with).map_err(|e| e.describe("Connect to GitHub"))
+  gh::account_token().await.map(NetAuth::with).map_err(|e| e.describe(&t!("commands.githubRepo.connect")))
 }
 
 fn is_github_https(url: &str) -> bool {
@@ -349,7 +345,7 @@ mod tests {
     for bad in ["", ".", "..", "my app", "app/two", "app.git", "café", long.as_str()] {
       assert!(!valid_repo_name(bad), "{bad}");
     }
-    assert_eq!(check_names("octo", "contoso", "my app"), Err(NAME_RULE.to_string()));
+    assert_eq!(check_names("octo", "contoso", "my app"), Err(name_rule()));
     assert!(check_names("octo; rm", "contoso", "sales").is_err());
     assert!(check_names("octo", "-contoso", "sales").is_err());
     assert!(check_names("octo_contoso", "contoso", "sales").is_ok());

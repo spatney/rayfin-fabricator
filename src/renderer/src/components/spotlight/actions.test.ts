@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { StudioProject } from '@shared/ipc'
+import { setLanguage } from '../../i18n'
 import { buildActions, type ActionContext, type ActionHandlers } from './actions'
 import { prepare, rank } from './rank'
 
@@ -158,5 +159,24 @@ describe('Search actions', () => {
       team: { workspaceId: 'w1', folder: 'apps/contoso' }
     } as StudioProject
     expect(ids(context({ project: team }))).not.toContain('action:export-project')
+  })
+})
+
+describe('Search actions in another language', () => {
+  afterEach(async () => {
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('finds an action by its translated title, and still by its English one', async () => {
+    await setLanguage('de')
+    const actions = buildActions(context())
+    expect(actions.find((a) => a.id === 'action:settings')?.title).toBe('Einstellungen')
+    const prepared = prepare(actions)
+    const top = (query: string): string | undefined => rank(prepared, query)[0]?.item.id
+    expect(top('einstellungen')).toBe('action:settings')
+    // "Settings" isn't one of its keywords; the English title is.
+    expect(top('settings')).toBe('action:settings')
+    expect(top('deploy')).toBe('action:deploy')
   })
 })

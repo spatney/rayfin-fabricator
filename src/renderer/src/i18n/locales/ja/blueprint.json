@@ -1,0 +1,362 @@
+{
+  "tab": {
+    "views": "Blueprint のビュー",
+    "architecture": "アーキテクチャ",
+    "dataModel": "データ モデル",
+    "fabricConnections": "Fabric 接続",
+    "dataExplorer": "データ エクスプローラー",
+    "reading": "アプリを読み取っています…",
+    "cantDraw": "アプリを描画できませんでした",
+    "openYml": "rayfin.yml を開く",
+    "metadataTooLarge": "metadata.json が大きすぎるため読み取れません。",
+    "firstFiles": "{{dir}}/ にある {{total}} 個のファイルのうち、最初の {{max}} 個を読み取りました。"
+  },
+  "identity": {
+    "user": "ユーザー ID",
+    "app": "アプリ ID",
+    "key": "キー"
+  },
+  "port": {
+    "user": "ユーザー ID を使用",
+    "app": "アプリ ID を使用",
+    "key": "キーを使用"
+  },
+  "portAria": {
+    "user": "{{part}}、ユーザー ID を使用",
+    "app": "{{part}}、アプリ ID を使用",
+    "key": "{{part}}、キーを使用"
+  },
+  "appIdentity": {
+    "firstPublisher": "最初に公開したアカウント",
+    "nextPublisher": "最初に公開するユーザー"
+  },
+  "model": {
+    "cantRead": "Fabricator は rayfin/rayfin.yml を読み取れませんでした。",
+    "invalidYaml": "rayfin/rayfin.yml が有効な YAML ではないため、アプリの構成要素を表示できません。",
+    "people": {
+      "signInOff": "サインインがオフのため、アプリはユーザーを区別できません。",
+      "publicPages": "アプリのページはサインイン前に読み込まれるため、リンクを知っているユーザーはだれでも HTML、JavaScript、CSS をダウンロードできます。データには引き続きサインインが必要です。",
+      "entraThroughFabric": "Microsoft Entra ID (Fabric 経由)",
+      "entra": "Microsoft Entra ID",
+      "noSignIn": "サインインなし"
+    },
+    "website": {
+      "title": "Web サイト",
+      "summary": "Fabric でホスト",
+      "assetAccessUnset": "`assetAccess` が設定されていません。公開する前に `protected` または `public` を選択してください。",
+      "public": "サインイン前にページを読み込む",
+      "protected": "サインイン後にページを読み込む",
+      "unset": "ページのアクセスが未設定",
+      "embeddedOnly": "Fabric 内でのみ開く"
+    },
+    "signin": {
+      "title": "サインイン",
+      "externalEntra": "他のアプリからの Entra トークンも受け入れる",
+      "addresses_other": "{{count}} 個のアドレスからのサインインを許可",
+      "off": "サインインはオフです。"
+    },
+    "database": {
+      "title": "データベース",
+      "tables_other": "{{count}} 個のテーブル",
+      "relationships_other": "{{count}} 個のリレーションシップ",
+      "noTables": "テーブルはまだありません",
+      "scoped_other": "行単位 {{count}}",
+      "signedIn_other": "サインイン済みの全員 {{count}}",
+      "public_other": "公開 {{count}}",
+      "readable_other": "{{count}} 個のテーブルはサインインせずに読み取れます。"
+    },
+    "storage": {
+      "title": "ファイル ストレージ",
+      "summary": "ユーザーがアップロードしたファイル · 試験段階",
+      "needsDatabase": "ストレージはデータベースに依存していますが、データベースはオフです。"
+    },
+    "functions": {
+      "authType": "`services.functions.auth.type` が `{{authType}}` になっています。Rayfin 1.36 では `application` が必要です。",
+      "noAuthType": "関数はオンですが、Rayfin 1.36 で必要な `services.functions.auth.type: application` が設定されていません。",
+      "turnedOff": "関数は記述されていますが、rayfin.yml でオフになっています。",
+      "unsupportedAudience": "`AudienceType.{{audience}}` は Rayfin 1.36.2 の公開されたオーディエンスではありません。",
+      "title": "関数",
+      "count_other": "{{count}} 個のサーバー側関数",
+      "none": "関数はまだありません",
+      "reaches": "{{list}} にアクセス"
+    },
+    "secrets": {
+      "undeclared_other": "{{names}} は `ctx.Secrets` として読み取られていますが、rayfin.yml で宣言されていないため、TypeScript エラーになります。[コード] → [シークレット] で追加すると、rayfin.yml で宣言されます。",
+      "legacy_other": "{{names}} は `ctx.getSecret()` で読み取られていますが、これは Rayfin 1.36 で非推奨です。代わりに `ctx.Secrets.<NAME>` で読み取ってください。",
+      "functionsOff": "シークレットを読み取るのは関数だけですが、rayfin.yml で関数がオフになっています。",
+      "title": "シークレット",
+      "summary_other": "{{count}} 個のシークレット (アプリと共に保存)"
+    },
+    "connectors": {
+      "title": "コネクタ",
+      "summary_other": "Fabric データへの {{count}} 個のコネクタ",
+      "kinds_other": "{{count}} 種類のソース"
+    },
+    "kinds": {
+      "warehouse": "ウェアハウス",
+      "sqlDatabase": "SQL データベース",
+      "sqlEndpoint": "レイクハウスの SQL エンドポイント",
+      "semanticModel": "セマンティック モデル",
+      "kqlDatabase": "KQL データベース"
+    },
+    "kindsInList": {
+      "warehouse": "ウェアハウス",
+      "sqlDatabase": "SQL データベース",
+      "sqlEndpoint": "レイクハウスの SQL エンドポイント",
+      "semanticModel": "セマンティック モデル",
+      "kqlDatabase": "KQL データベース"
+    },
+    "functionConnection": "関数接続",
+    "hostTypes": {
+      "webApi": "Web API",
+      "storage": "ストレージ",
+      "sql": "SQL",
+      "aiService": "AI サービス",
+      "database": "データベース"
+    },
+    "abilities": {
+      "readsAndWrites": "読み取りと書き込み",
+      "kqlCommands": "KQL クエリとコマンドを実行",
+      "daxQueries": "DAX クエリを実行",
+      "kqlQueries": "KQL クエリを実行",
+      "queries": "クエリを実行",
+      "readOnly": "読み取り専用",
+      "connected": "接続済み"
+    },
+    "auth": {
+      "missing": "`auth.type` がありません。Rayfin 1.36 では `delegated` または `application` が必要です。",
+      "invalid": "`auth.type: {{value}}` は無効です。`delegated` または `application` を使用してください。",
+      "lowercase": "`auth.type` は小文字の `{{lower}}` にする必要があります。`rayfin up` は `{{raw}}` を拒否します。",
+      "delegatedOnly": "{{kind}} コネクタでは `delegated` しか使えません。`rayfin up` は `application` を拒否します。"
+    },
+    "audiences": {
+      "sql": {
+        "detail": "レイクハウス、ウェアハウス、SQL データベース、Azure SQL",
+        "grant": "クエリを実行する各データベースへのアクセス (ワークスペース ロールや SQL ロールなど)。"
+      },
+      "storage": {
+        "detail": "OneLake のファイルと Azure の Blob、Table、Queue ストレージ",
+        "grant": "OneLake 用のワークスペース ロール、または Storage Blob Data Reader などの Storage データ ロール。"
+      },
+      "fabric": {
+        "detail": "Microsoft Fabric REST API",
+        "grant": "呼び出すワークスペースとアイテムのロール。各 API がアプリ ID をサポートしていることを確認してください。"
+      },
+      "azureAi": {
+        "detail": "Azure AI Foundry と Azure OpenAI のエンドポイント",
+        "grant": "Azure AI リソースで必要なロール (Cognitive Services User など)。"
+      },
+      "ado": {
+        "detail": "Azure DevOps REST API",
+        "grant": "呼び出す Azure DevOps の組織とプロジェクトへのアクセス。"
+      },
+      "other": {
+        "detail": "関数からアクセス",
+        "grant": "呼び出すリソースへのアクセス。"
+      }
+    },
+    "hardcoded_other": "{{count}} 個のキーがコードに直接書かれているようです: {{where}}。コードを読めるユーザーはだれでも使用できます。[コード] → [シークレット] でシークレットとして保存し、`ctx.Secrets` から読み取ってください。",
+    "hardcodedIn": "`{{file}}` の {{names}}"
+  },
+  "view": {
+    "zone": {
+      "appWorkspace": "このアプリのワークスペース",
+      "fabricWorkspace": "Fabric ワークスペース",
+      "id": "ID {{id}}…",
+      "webApis": "Web API",
+      "calledFromFunctions": "関数から呼び出し"
+    },
+    "search": "アプリとその接続を検索",
+    "clearSearch": "検索をクリア",
+    "openApp": "アプリを開く",
+    "openInPortal": "Fabric ポータルでアプリを開く",
+    "openInFabric": "Fabric で開く",
+    "zoom": "ズーム",
+    "zoomOut": "縮小",
+    "zoomIn": "拡大",
+    "fit": "ビューに合わせる",
+    "people": {
+      "aria": "アプリを使用するユーザー",
+      "title": "ユーザー",
+      "subtitle": "アプリの利用者",
+      "signIn": "Microsoft Entra ID でサインイン",
+      "signInOff": "サインインはオフ"
+    },
+    "app": {
+      "aria": "{{name}} (Fabric アプリ)",
+      "inWorkspace": "{{workspace}} の Fabric アプリ",
+      "fabricApp": "Fabric アプリ"
+    },
+    "appIdentityAria": "アプリ ID: {{who}}",
+    "serviceAria": "{{title}}: {{summary}}",
+    "sourceAria": "{{name}}、{{type}}",
+    "ghost": {
+      "title": "外部データはまだありません",
+      "body": "Fabric のウェアハウス、SQL データベース、レイクハウス、セマンティック モデルを取り込むか、関数から Azure サービスを呼び出します。",
+      "add": "Fabric データを追加…"
+    },
+    "connections_other": "{{count}} 個の接続",
+    "calledBy": "{{functions}} から呼び出し"
+  },
+  "inspector": {
+    "panelAria": "{{title}} の詳細",
+    "close": "詳細を閉じる",
+    "closeTitle": "閉じる (Esc)",
+    "signs": {
+      "user": "委任: サインインしているユーザーとして、そのユーザー自身の Fabric アクセス権で実行されます。",
+      "app": "アプリケーション: すべてのユーザーに対して同じ {{who}} として実行されます。",
+      "key": "Fabric へのサインインではなく、関数自身が送信するキーまたはトークンです。"
+    },
+    "who": {
+      "servicePrincipal": "サービス プリンシパル {{who}}",
+      "owner": "Fabric アプリの所有者"
+    },
+    "nothingYet": "まだありません",
+    "grantFabric": "Fabric ワークスペースのロール、またはアイテムに対するアクセス許可。",
+    "secretCount_other": "{{count}} 個のシークレット",
+    "notSetYet": "未設定",
+    "notSet": "未設定",
+    "opensEverywhere": "独自のアドレスと Fabric 内",
+    "moveKeys": "キーをシークレットに移動",
+    "fixWithCopilot": "Copilot で修正",
+    "facts": {
+      "signIn": "サインイン",
+      "pages": "ページ",
+      "opens": "開く場所",
+      "address": "アドレス",
+      "workspace": "ワークスペース",
+      "lastPublished": "最終公開",
+      "project": "プロジェクト",
+      "clientId": "クライアント ID",
+      "setting": "設定",
+      "buildOutput": "ビルド出力",
+      "provider": "プロバイダー",
+      "externalTokens": "他のアプリからの Entra トークン",
+      "access": "アクセス",
+      "usedBy": "使用元",
+      "addresses_other": "アドレス",
+      "capacity": "容量",
+      "model": "モデル",
+      "modelOwner": "モデルの所有者",
+      "workspaceId": "ワークスペース ID",
+      "itemId": "アイテム ID",
+      "connector": "コネクタ",
+      "type": "種類"
+    },
+    "docs": {
+      "signInPeople": "ユーザーのサインイン方法",
+      "secrets": "関数のシークレット",
+      "identities": "委任アクセスとアプリケーション アクセス",
+      "hosting": "静的ホスティング",
+      "permissions": "アクセス許可と行レベル セキュリティ",
+      "storage": "ストレージ",
+      "connections": "関数接続",
+      "connectorAuth": "コネクタの認証"
+    },
+    "people": {
+      "kicker": "利用者",
+      "lead": "ユーザーは、アプリのアドレスまたは Fabric 内でアプリを開き、職場アカウントでサインインします。他のユーザーにアクセスを許可するには、アプリ バーの <strong>[共有]</strong> を選択します。",
+      "loadBefore": "サインイン前に読み込む",
+      "loadAfter": "サインイン後に読み込む",
+      "onlyInPortal": "Fabric ポータル内のみ"
+    },
+    "app": {
+      "lead": "Rayfin はアプリを 1 つの Fabric アプリ アイテムとして実行します。ページ、サインイン、データベース、関数は <code>rayfin/rayfin.yml</code> で設定されます。",
+      "notPublished": "未公開",
+      "parts": "構成要素"
+    },
+    "identity": {
+      "kicker": "ID",
+      "keyLead": "これらの呼び出しでは Fabric のサインインを使用しません。関数は独自のキーまたはトークンを送信する (パブリック API の場合は何も送信しない) ため、アプリをだれが使用していても、そのキーを持つユーザーはだれでも同じアクセス権を持ちます。",
+      "reachedWithKey": "キーでアクセス",
+      "secretsUsed": "関数が使用するシークレット",
+      "noSecrets": "ありません。[コード] → <strong>[シークレット]</strong> でキーを追加し、<code>ctx.Secrets</code> から読み取れば、キーがコードに書かれることはありません。",
+      "userLead": "これらの接続は<strong>委任</strong>されています。すべてのクエリは、On-Behalf-Of トークン交換によって、アプリを使用しているユーザーとして実行されます。Fabric はそのユーザー自身のアクセス許可を確認するため、各ユーザーには許可されたものだけが表示されます。",
+      "everyoneNeeds": "アプリを使用するすべてのユーザーに必要なアクセス先",
+      "userNote": "ユーザー、またはユーザーが所属するグループに、各ワークスペースのロールまたは各アイテムのアクセス許可を付与してください。付与しないと、承認エラーになります。",
+      "askGrant": "付与する内容を Copilot に確認",
+      "appLeadVia": "これらの接続は<strong>アプリケーション</strong> アクセスを使用します。これは 1 つの共有 ID で、Fabric アプリ アイテムの所有者です。そこでは全員に同じデータが表示され、ユーザーごとのルールではユーザーを区別できません。",
+      "appLead": "アプリ ID を使用する接続には<strong>アプリケーション</strong> アクセスがあります。これは 1 つの共有 ID で、Fabric アプリ アイテムの所有者です。そこでは全員に同じデータが表示され、ユーザーごとのルールではユーザーを区別できません。",
+      "whose": "使用される資格情報",
+      "whoServicePrincipal": "アプリを公開するサービス プリンシパル",
+      "whoAccount": "このアプリを公開する自分の Fabric アカウント",
+      "whoOwner": "Fabric アプリ アイテムの所有者",
+      "previews": "プレビューは、プル リクエストからプレビューをデプロイする <strong>{{who}}</strong> として実行されます。",
+      "ownerNote": "所有者は、アプリを最初に公開して作成したアカウントです。他のユーザーが最初に公開した場合、アプリはそのユーザーとして実行されます。",
+      "grantTo": "アクセスを付与する対象",
+      "localNote": "アプリがこのコンピューターで実行されるときは、代わりに自分のサインインが関数で使用されます。そのため、ローカルで動作する呼び出しでも、アプリの公開後に失敗することがあります。"
+    },
+    "website": {
+      "lead": "アプリのページです。コードからビルドされた HTML、JavaScript、CSS が Fabric アプリから提供されます。",
+      "pagesLoad": "ページの読み込み",
+      "before": "サインイン前",
+      "after": "サインイン後",
+      "onlyInFabric": "Fabric 内のみ",
+      "publicNote": "リンクを知っているユーザーはだれでもページのファイルをダウンロードできますが、アプリのデータはダウンロードできません。データには引き続きサインインが必要で、各ユーザーに表示される内容はエンティティのルールで決まります。これは Web アプリでは一般的です。Fabric へのサインイン後にのみページを読み込むには、<code>assetAccess: protected</code> を設定します。",
+      "protectedNote": "ページのファイルは、Fabric にサインインしているユーザーに対してのみ読み込まれます。",
+      "readsInBrowser": "ブラウザーでの読み取り"
+    },
+    "signin": {
+      "lead": "ユーザーは Microsoft Entra ID の職場アカウントでサインインします。アプリは、そのユーザーがだれかを示すセッションを取得します。",
+      "accepted": "受け入れる",
+      "notAccepted": "受け入れない",
+      "addresses": "サインイン アドレス",
+      "more_other": "ほか {{count}} 個"
+    },
+    "database": {
+      "lead": "Fabric SQL データベースにある、アプリ独自のテーブルです。読み取りと書き込みには<strong>ユーザー ID</strong> が使用され、各テーブルのルールによって、ユーザーが表示および変更できる行が決まります。",
+      "tables_other": "{{count}} 個のテーブル",
+      "harden": "アクセスを強化",
+      "openModel": "データ モデルを開く"
+    },
+    "storage": {
+      "lead": "ユーザーがアップロードしたファイル用の BLOB ストレージです。試験段階の機能で、一部の Fabric リージョンでは利用できません。"
+    },
+    "functions": {
+      "lead": "サーバー側のコードです。外部サービスの呼び出しには<strong>アプリ ID</strong> が使用されます。アプリ自身のデータの読み取りには、引き続き関数を呼び出したユーザーの ID が使用されます。",
+      "count_other": "{{count}} 個の関数",
+      "none": "関数はまだ見つかっていません。",
+      "reaches": "アクセス先",
+      "openCode": "コードを開く"
+    },
+    "connectors": {
+      "lead": "アプリが Rayfin コネクタを介して読み書きする既存の Fabric データです。各コネクタは、<code>rayfin/rayfin.yml</code> の <code>auth.type</code> で設定されたユーザー ID またはアプリ ID を使用します。"
+    },
+    "secrets": {
+      "manage": "シークレットを管理",
+      "readTyped": "ctx.Secrets として読み取る",
+      "lead": "関数用の API キー、パスワード、接続文字列です。値はコードに含まれません。公開されたアプリは独自の値を保持し、アプリがこのコンピューターで実行されるときは、このコンピューターも独自の値を保持します。<code>rayfin.yml</code> には名前と説明だけが保存され、関数は <code>ctx.Secrets.NAME</code> として値を読み取ります。",
+      "noValue_other": "公開されたアプリには {{names}} の値がないため、それを読み取る関数は公開先で失敗します。",
+      "readBy": "{{functions}} が読み取り",
+      "readIn": "{{files}} で読み取り",
+      "unread": "読み取る関数はありません",
+      "undeclared": "{{readBy}} · rayfin.yml にありません",
+      "publishedOnly": "公開されたアプリのみ",
+      "status": {
+        "loading": "公開されたアプリにある値を確認しています…",
+        "notDeployed": "公開されたアプリ用の値は、アプリの公開後に追加できます。",
+        "team": "公開されたアプリの値を表示しています。公開されたアプリと各ユーザーのプレビューは、それぞれ独自の値を保持します。",
+        "updateRayfin": "設定されている値を確認するには、アプリの Rayfin バージョンを更新してください。",
+        "errorSignIn": "公開されたアプリの値を確認できませんでした。Fabric のサインインの有効期限が切れている可能性があります。",
+        "error": "公開されたアプリの値を確認できませんでした。",
+        "ready": "値は書き込み専用です。Fabricator は値が設定されているかどうかだけを表示し、値そのものは表示しません。"
+      },
+      "calledFrom": "同じコードから呼び出し",
+      "localNote": "アプリがこのコンピューターで実行されるときは、関数は公開されたアプリの値ではなくローカルの値を読み取ります。"
+    },
+    "source": {
+      "useApp": "アプリ ID を使用",
+      "viewModel": "モデルを表示",
+      "viewTables": "テーブルを表示",
+      "useUser": "ユーザー ID を使用",
+      "audienceLead": "{{detail}}。関数から <code>ctx.Tokens.{{audience}}</code> でアクセスします。",
+      "apiLead": "関数が呼び出す Web API です。Rayfin はこれらの呼び出しでサインインを行いません。コード自身がキーまたはトークンを送信します。",
+      "suggested": "Rayfin は <code>AudienceType.{{audience}}</code> を介してアプリ ID で {{title}} にアクセスできるため、関数にキーは必要ありません。",
+      "alwaysUser": "{{kind}} コネクタは常にユーザー ID を使用します。",
+      "sameRows": "全員に同じ行が表示されるため、テーブルのユーザーごとのルールではユーザーを区別できません。",
+      "ownAccess": "各ユーザー自身の Fabric アクセス権が適用され、テーブルのユーザーごとのルールでユーザーを識別できます。",
+      "details": "詳細",
+      "grantApp": "アプリに付与"
+    }
+  }
+}

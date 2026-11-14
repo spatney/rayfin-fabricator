@@ -150,6 +150,34 @@ impl Check {
       Check::ProjectRayfin => "Checking the app's Rayfin version",
     }
   }
+
+  /// [`Check::label`] in the app's language, for the renderer's list of checks.
+  fn display_label(self) -> String {
+    match self {
+      Check::GithubAccount => t!("team.diagnose.check.githubAccount"),
+      Check::GithubRepo => t!("team.diagnose.check.githubRepo"),
+      Check::GithubOrg => t!("team.diagnose.check.githubOrg"),
+      Check::GithubActionsPolicy => t!("team.diagnose.check.githubActionsPolicy"),
+      Check::GithubBranchRules => t!("team.diagnose.check.githubBranchRules"),
+      Check::GithubOidcSubject => t!("team.diagnose.check.githubOidcSubject"),
+      Check::GithubVariables => t!("team.diagnose.check.githubVariables"),
+      Check::GithubWorkflow => t!("team.diagnose.check.githubWorkflow"),
+      Check::GithubRuns => t!("team.diagnose.check.githubRuns"),
+      Check::GithubRun => t!("team.diagnose.check.githubRun"),
+      Check::GithubRunLog => t!("team.diagnose.check.githubRunLog"),
+      Check::GithubInvitations => t!("team.diagnose.check.githubInvitations"),
+      Check::AzureAccount => t!("team.diagnose.check.azureAccount"),
+      Check::EntraAppPolicy => t!("team.diagnose.check.entraAppPolicy"),
+      Check::EntraMyRoles => t!("team.diagnose.check.entraMyRoles"),
+      Check::EntraApp => t!("team.diagnose.check.entraApp"),
+      Check::EntraFederatedCredentials => t!("team.diagnose.check.entraFederatedCredentials"),
+      Check::FabricCapacities => t!("team.diagnose.check.fabricCapacities"),
+      Check::FabricWorkspace => t!("team.diagnose.check.fabricWorkspace"),
+      Check::FabricTenantSettings => t!("team.diagnose.check.fabricTenantSettings"),
+      Check::LocalTools => t!("team.diagnose.check.localTools"),
+      Check::ProjectRayfin => t!("team.diagnose.check.projectRayfin"),
+    }
+  }
 }
 
 /* --------------------------------- requests -------------------------------- */
@@ -185,6 +213,7 @@ impl Request {
     }
   }
 
+  /// What the check is called in the evidence Copilot reads (always English).
   pub fn label(&self) -> String {
     match (self.check, &self.target) {
       (Check::EntraApp, Target::Identity(i)) => format!("Checking the {}", i.describe()),
@@ -193,6 +222,29 @@ impl Request {
       (Check::GithubRun, Target::Run(Some(id))) => format!("Checking pipeline run {id}"),
       (Check::GithubRunLog, Target::Run(Some(id))) => format!("Reading pipeline run {id}'s log"),
       (check, _) => check.label().to_string(),
+    }
+  }
+
+  /// [`Request::label`] in the app's language, for the renderer's list of checks.
+  pub fn display_label(&self) -> String {
+    match (self.check, &self.target) {
+      (Check::EntraApp, Target::Identity(i)) => match i.role {
+        "deploy" => t!("team.diagnose.check.identity.deploy"),
+        "preview" => t!("team.diagnose.check.identity.preview"),
+        "shared" => t!("team.diagnose.check.identity.shared"),
+        _ => t!("team.diagnose.check.identity.admin"),
+      },
+      (Check::EntraFederatedCredentials, Target::Identity(i)) => match i.role {
+        "deploy" => t!("team.diagnose.check.trusts.deploy"),
+        "preview" => t!("team.diagnose.check.trusts.preview"),
+        "shared" => t!("team.diagnose.check.trusts.shared"),
+        _ => t!("team.diagnose.check.trusts.admin"),
+      },
+      (Check::FabricWorkspace, Target::Workspace(w)) if w.label == "published apps" => t!("team.diagnose.check.workspace.published"),
+      (Check::FabricWorkspace, Target::Workspace(w)) if w.label == "previews" => t!("team.diagnose.check.workspace.previews"),
+      (Check::GithubRun, Target::Run(Some(id))) => t!("team.diagnose.check.run", id = id),
+      (Check::GithubRunLog, Target::Run(Some(id))) => t!("team.diagnose.check.runLog", id = id),
+      (check, _) => check.display_label(),
     }
   }
 }
@@ -311,6 +363,7 @@ pub fn baseline_requests(ctx: &DiagContext) -> Vec<Request> {
 /// One finished check.
 #[derive(Clone, Debug)]
 pub struct Outcome {
+  /// [`Request::label`], in English for Copilot.
   pub label: String,
   /// The read worked (its findings can still be bad news).
   pub ok: bool,
@@ -356,7 +409,7 @@ impl Runner {
     if let Some(done) = self.cache.lock().unwrap().get(&id).cloned() {
       return done;
     }
-    let label = request.label();
+    let label = request.display_label();
     self.record(TeamDiagnosisCheck { id: id.clone(), label: label.clone(), state: "running".into(), detail: None });
     // Copilot's tool calls arrive on the SDK's tasks, so the account is set here.
     let checked = gh::as_account(self.ctx.account.clone(), execute(&self.ctx, request));
@@ -370,7 +423,7 @@ impl Runner {
     };
     let max = if request.check == Check::GithubRunLog { MAX_LOG } else { MAX_DETAIL };
     let detail = clip(&mask(&detail), max);
-    let outcome = Outcome { label: label.clone(), ok, detail: detail.clone() };
+    let outcome = Outcome { label: request.label(), ok, detail: detail.clone() };
     self.cache.lock().unwrap().insert(id.clone(), outcome.clone());
     let state = if ok { "done" } else { "failed" };
     self.record(TeamDiagnosisCheck { id, label, state: state.into(), detail: Some(detail) });
@@ -1440,6 +1493,25 @@ mod tests {
     }
     assert_eq!(Check::parse("rm_rf"), None);
     assert!(Check::catalog().contains("`entra_federated_credentials`"));
+  }
+
+  #[test]
+  fn the_renderer_shows_copilots_labels_in_the_apps_language() {
+    let mut requests: Vec<Request> = CATALOG.iter().map(|(check, ..)| Request::new(*check)).collect();
+    for role in ["deploy", "preview", "shared", "admin"] {
+      for check in [Check::EntraApp, Check::EntraFederatedCredentials] {
+        requests.push(Request { check, target: Target::Identity(Identity { role, client_id: guid(1) }) });
+      }
+    }
+    for label in ["published apps", "previews"] {
+      requests.push(Request { check: Check::FabricWorkspace, target: Target::Workspace(FabricTarget { label, id: guid(3) }) });
+    }
+    for check in [Check::GithubRun, Check::GithubRunLog] {
+      requests.push(Request { check, target: Target::Run(Some(42)) });
+    }
+    for request in requests {
+      assert_eq!(request.display_label(), request.label());
+    }
   }
 
   #[test]

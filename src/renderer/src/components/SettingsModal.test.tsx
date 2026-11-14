@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import type { AppSettings, AppVersions } from '@shared/ipc'
+import type { AppSettings, AppVersions, Language } from '@shared/ipc'
+import { setLanguage } from '../i18n'
 import SettingsModal from './SettingsModal'
 
 /** Install the minimal `window.api` surface SettingsModal touches. */
-function installApi(exportImpl?: () => Promise<string>): {
+function installApi(
+  exportImpl?: () => Promise<string>,
+  systemLanguage: Language = 'en'
+): {
   export: ReturnType<typeof vi.fn>
   openLogs: ReturnType<typeof vi.fn>
   openExternal: ReturnType<typeof vi.fn>
@@ -18,6 +22,7 @@ function installApi(exportImpl?: () => Promise<string>): {
         Promise.resolve({ workspaceRoot: 'C:/ws', activeProjectId: null, projects: [] })
       )
     },
+    settings: { systemLanguage: vi.fn(() => Promise.resolve(systemLanguage)) },
     diagnostics: { export: exportFn },
     openLogs,
     openExternal
@@ -356,5 +361,37 @@ describe('SettingsModal About', () => {
     const about = screen.getByRole('region', { name: 'About' })
     expect(within(about).queryByRole('button', { name: 'Copy version info' })).toBeNull()
     expect(within(about).getByRole('button', { name: 'Documentation' })).toBeTruthy()
+  })
+})
+
+describe('SettingsModal language', () => {
+  afterEach(async () => {
+    await act(() => setLanguage('en'))
+    localStorage.clear()
+  })
+
+  it('names the computer’s language and switches to the one picked', async () => {
+    installApi(undefined, 'ja')
+    const { onChange } = await renderModal()
+    const picker = screen.getByRole('combobox', { name: 'Language' }) as HTMLSelectElement
+    expect(picker.value).toBe('system')
+    expect(within(picker).getByRole('option', { name: 'System (日本語)' })).toBeTruthy()
+    expect(within(picker).getByRole('option', { name: 'Deutsch' }).getAttribute('lang')).toBe('de')
+
+    await act(async () => {
+      fireEvent.change(picker, { target: { value: 'de' } })
+    })
+    expect(onChange).toHaveBeenCalledWith({ language: 'de' })
+    expect(await screen.findByRole('heading', { name: 'Einstellungen' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Fertig' })).toBeTruthy()
+    expect(document.documentElement.lang).toBe('de')
+  })
+
+  it('shows a chosen language as chosen', async () => {
+    installApi()
+    await renderModal({ settings: { ...settings, language: 'es' } })
+    expect((screen.getByRole('combobox', { name: 'Language' }) as HTMLSelectElement).value).toBe(
+      'es'
+    )
   })
 })

@@ -3,7 +3,8 @@ export type DeviceId = 'desktop' | 'tablet' | 'phone'
 
 export interface DevicePreset {
   id: DeviceId
-  label: string
+  /** Its name's key in the `preview` namespace. */
+  label: 'devices.desktop' | 'devices.tablet' | 'devices.phone'
   /** App viewport width in CSS px; `null` fills the pane. */
   width: number | null
   /** App viewport height in CSS px, at most (a short pane shrinks it); absent fills the pane. */
@@ -11,9 +12,9 @@ export interface DevicePreset {
 }
 
 export const DEVICES: DevicePreset[] = [
-  { id: 'desktop', label: 'Desktop', width: null },
-  { id: 'tablet', label: 'Tablet', width: 820 },
-  { id: 'phone', label: 'Phone', width: 390, height: 844 }
+  { id: 'desktop', label: 'devices.desktop', width: null },
+  { id: 'tablet', label: 'devices.tablet', width: 820 },
+  { id: 'phone', label: 'devices.phone', width: 390, height: 844 }
 ]
 
 export function devicePreset(id: DeviceId): DevicePreset {

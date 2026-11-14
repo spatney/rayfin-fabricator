@@ -1,0 +1,211 @@
+{
+  "health": {
+    "failed": "Publish failed",
+    "changes": "Changes not published",
+    "outdated": "Rayfin update available",
+    "outdatedVersion": "Rayfin {{version}} available",
+    "unpublished": "Not published yet"
+  },
+  "time": {
+    "justNow": "just now"
+  },
+  "published": {
+    "when": "Published {{when}}",
+    "never": "Not published yet",
+    "notYet": "Not yet"
+  },
+  "app": {
+    "label": "{{name}}, in {{workspace}}",
+    "onThisComputer": "On this computer",
+    "teamWorkspace": "Team workspace {{name}}",
+    "teamPreview": "Team preview",
+    "pin": "Pin {{name}}",
+    "unpin": "Unpin",
+    "pinToTop": "Pin to the top",
+    "openApp": "Open app",
+    "openInFabric": "Open in Fabric",
+    "openInFabricator": "Open in Fabricator"
+  },
+  "details": {
+    "label": "About {{name}}",
+    "close": "Close details",
+    "closeTitle": "Close (Esc)",
+    "copyLink": "Copy link",
+    "quickLook": "Quick look",
+    "quickLookTitle": "Quick look (Space)",
+    "lookingUp": "Looking up the app’s address…",
+    "noAddress": "Fabric didn’t share this app’s address. Open it in Fabric instead.",
+    "notPublished": "This app hasn’t published its pages yet.",
+    "teammatePreview": "{{name}} · a teammate’s preview",
+    "canChange": "Can change it",
+    "canOpen": "Can open it",
+    "facts": {
+      "published": "Published",
+      "address": "Address",
+      "workspace": "Workspace",
+      "access": "Your access",
+      "project": "Project",
+      "team": "Team"
+    }
+  },
+  "describe": {
+    "text": "No description yet. Copilot can write one from the app, and everyone who can open it sees it here and in Fabric.",
+    "write": "Write a description",
+    "writing": "Writing a description…",
+    "failed": "Copilot didn’t write a description."
+  },
+  "table": {
+    "name": "Name",
+    "workspace": "Workspace",
+    "published": "Published",
+    "status": "Status",
+    "where": "Where",
+    "pin": "Pin"
+  },
+  "view": {
+    "listFailed": "Couldn’t list your Fabric apps. Try again.",
+    "notLocal": "This app isn’t on this computer."
+  },
+  "sort": {
+    "menu": "Sort",
+    "name": {
+      "label": "Name",
+      "desc": "A to Z"
+    },
+    "recent": {
+      "label": "Recently published",
+      "desc": "Newest publish first"
+    },
+    "opened": {
+      "label": "Recently opened",
+      "desc": "The apps you opened last first"
+    },
+    "workspace": {
+      "label": "Workspace",
+      "desc": "Grouped, your recent workspaces first"
+    }
+  },
+  "count": {
+    "apps_one": "{{count, number}} app",
+    "apps_other": "{{count, number}} apps",
+    "workspaces_one": "{{count, number}} workspace",
+    "workspaces_other": "{{count, number}} workspaces"
+  },
+  "summary": {
+    "filtered_one": "Showing {{shown, number}} of {{count, number}} app",
+    "filtered_other": "Showing {{shown, number}} of {{count, number}} apps",
+    "total": "{{apps}} · {{workspaces}}"
+  },
+  "announce": {
+    "filtered_one": "{{shown, number}} of {{count, number}} app shown",
+    "filtered_other": "{{shown, number}} of {{count, number}} apps shown",
+    "all_one": "{{count, number}} app shown",
+    "all_other": "{{count, number}} apps shown",
+    "loading": "Loading your Fabric apps"
+  },
+  "head": {
+    "eyebrow": "Microsoft Fabric",
+    "title": "App gallery",
+    "sub": "Every Rayfin app you can open in Fabric.",
+    "subAs": "Every Rayfin app you can open in Fabric, as <b>{{user}}</b>.",
+    "checking": "Checking Fabric…"
+  },
+  "layout": {
+    "label": "Layout",
+    "grid": "Cards",
+    "table": "Table"
+  },
+  "tabs": {
+    "label": "Show",
+    "apps": "Apps",
+    "examples": "Examples"
+  },
+  "search": {
+    "placeholder": "Search apps, workspaces and descriptions",
+    "label": "Search apps"
+  },
+  "where": {
+    "label": "Where the apps are",
+    "all": "All",
+    "local": "On this computer",
+    "remote": "In Fabric only"
+  },
+  "filters": {
+    "attention": "Needs attention",
+    "attentionTitle": "Apps whose last publish failed, that changed since they were published, that can update Rayfin, or that never published",
+    "editable": "Apps I can edit",
+    "editableTitle": "Apps in workspaces where you're an Admin, Member or Contributor"
+  },
+  "notes": {
+    "truncated": "Fabric has more apps than Fabricator reads at once, so some apps you can open aren’t shown."
+  },
+  "loadingLabel": "Loading apps",
+  "empty": {
+    "title": "No Rayfin apps yet",
+    "desc": "Apps you publish to Fabric, and apps others share with you, show up here.",
+    "newProject": "New project"
+  },
+  "noMatch": {
+    "text": "No apps match “{{text}}”",
+    "filters": "No apps match these filters",
+    "desc": "Try other words, or look in every workspace.",
+    "showAll": "Show all apps"
+  },
+  "groups": {
+    "pinned": "Pinned",
+    "pinnedApps": "Pinned apps",
+    "appsIn": "Apps in {{name}}",
+    "used": "Used {{when}}"
+  },
+  "list": {
+    "label": "Apps"
+  },
+  "more_one": "Show more ({{count, number}} left)",
+  "more_other": "Show more ({{count, number}} left)",
+  "azure": {
+    "signIn": "Sign in to Azure",
+    "signingIn": "Signing in…",
+    "finish": "Finish signing in to Azure in your browser."
+  },
+  "error": {
+    "title": "Couldn’t list your apps"
+  },
+  "banner": {
+    "signIn": "Sign in to Azure to see your latest apps. These are from earlier.",
+    "failed": "Couldn’t check Fabric for changes: {{error}}"
+  },
+  "examples": {
+    "loadFailed": "Couldn’t load the examples.",
+    "loading": "Loading the examples…",
+    "failedTitle": "Couldn’t load the examples",
+    "empty": "No examples yet",
+    "intro": "Apps to start from, from <b>{{source}}</b>. Pick one, and Copilot changes it into your app from there.",
+    "label": "Examples",
+    "useLabel": "Use {{name}}",
+    "use": "Use this example"
+  },
+  "menu": {
+    "current": "{{name}}: {{value}}"
+  },
+  "quickLook": {
+    "failed": "Couldn’t open the quick look.",
+    "label": "Quick look at {{name}}",
+    "close": "Close quick look",
+    "closeTitle": "Close (Space or Esc)",
+    "loading": "Loading {{name}}…"
+  },
+  "workspaces": {
+    "menu": "Workspace",
+    "title": "Workspaces",
+    "searchPlaceholder": "Search workspaces…",
+    "search": "Search workspaces",
+    "all": "All workspaces",
+    "recent": "Recent",
+    "others": "Other workspaces",
+    "noMatch": "No workspace matches “{{query}}”.",
+    "found_one": "{{found, number}} of {{count, number}} workspace",
+    "found_other": "{{found, number}} of {{count, number}} workspaces",
+    "navigate": "Navigate",
+    "select": "Select"
+  }
+}

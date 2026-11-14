@@ -1,0 +1,354 @@
+{
+  "format": {
+    "quoted": "„{{text}}“",
+    "more": "+{{count}} weitere",
+    "dateTime": "{{date}}, {{time}}"
+  },
+  "duration": {
+    "underSecond": "<1 s",
+    "seconds": "{{s}} s",
+    "minutes": "{{m}} min",
+    "minutesSeconds": "{{m}} min {{s}} s"
+  },
+  "steps": {
+    "count_one": "{{count}} Schritt",
+    "count_other": "{{count}} Schritte",
+    "showEarlier_one": "{{count}} früheren Schritt anzeigen",
+    "showEarlier_other": "{{count}} frühere Schritte anzeigen",
+    "failed": "fehlgeschlagen",
+    "exit": "Exitcode {{code}}",
+    "copyCommand": "Befehl kopieren",
+    "open": "{{name}} öffnen"
+  },
+  "code": {
+    "text": "Text",
+    "wrap": "Umbrechen",
+    "wrapLines": "Lange Zeilen umbrechen",
+    "noWrapLines": "Lange Zeilen nicht umbrechen",
+    "copyCode": "Code kopieren",
+    "showAll_one": "{{count}} Zeile anzeigen",
+    "showAll_other": "Alle {{count}} Zeilen anzeigen"
+  },
+  "files": {
+    "openInCode": "{{path}} im Code-Tab öffnen"
+  },
+  "agentRow": {
+    "agent": "Agent",
+    "hideSteps": "Seine Schritte ausblenden",
+    "showSteps": "Seine Schritte anzeigen"
+  },
+  "agentStatus": {
+    "waitingFor": "Wartet auf {{agent}}",
+    "agentsWorking_one": "{{agents}} arbeitet",
+    "agentsWorking_other": "{{agents}} arbeiten",
+    "thinking": "Denkt nach",
+    "writing": "Schreibt die Antwort",
+    "working": "Arbeitet",
+    "waitingDecision": "Wartet auf deine Entscheidung",
+    "waitingAnswer": "Wartet auf deine Antwort"
+  },
+  "assistant": {
+    "needsInput": "Fabricator braucht deine Eingabe",
+    "youAdded": "Von dir ergänzt"
+  },
+  "copyButton": {
+    "copyMessage": "Nachricht kopieren"
+  },
+  "tray": {
+    "removeItem": "{{name}} entfernen"
+  },
+  "dataTray": {
+    "toConnect": "Zu verbindende Fabric-Daten",
+    "data": "Daten",
+    "chipTitle": "{{kind}} in {{workspace}}. Copilot verbindet die Daten beim Senden. Klicke, um sie zu ändern.",
+    "sent": "Fabric-Daten",
+    "sentTitle": "{{kind}} in {{workspace}}",
+    "setup": "Einrichtung",
+    "wrapUp": "Abschluss",
+    "page": "Seite {{index}} von {{total}}: {{name}}",
+    "setupAndPage": "Einrichtung und Seite {{index}} von {{total}}: {{name}}",
+    "migration": "Power BI-Migration",
+    "migrating": "„{{report}}“ wird aus Power BI migriert"
+  },
+  "fileTray": {
+    "toSend": "Zu sendende Dateien und Ordner",
+    "sent": "Dateien und Ordner"
+  },
+  "diffView": {
+    "added": "Neue Datei",
+    "deleted": "Gelöscht",
+    "renamed": "Umbenannt",
+    "line": "⋯ Zeile {{line}}",
+    "shortened": "Diff gekürzt – öffne die Datei, um alles zu sehen."
+  },
+  "imageViewer": {
+    "picture": "Bild",
+    "pictureOf": "Bild {{index}} von {{total}}",
+    "closeTitle": "Schließen (Esc)",
+    "previous": "Vorheriges Bild",
+    "previousTitle": "Zurück (←)",
+    "next": "Nächstes Bild",
+    "nextTitle": "Weiter (→)",
+    "showLarger": "Größer anzeigen",
+    "attachment": "Angehängter Screenshot"
+  },
+  "messageRow": {
+    "screenshots_one": "{{count}} Screenshot",
+    "screenshots_other": "{{count}} Screenshots",
+    "resend": "Diese Nachricht erneut senden",
+    "interrupted": "Diese Antwort wurde unterbrochen, als die App geschlossen wurde.",
+    "resumeTitle": "Diesen Prompt erneut ausführen und fortfahren",
+    "resume": "Fortsetzen",
+    "resumeApprovedPlan": "Setze den genehmigten Plan fort",
+    "reviseRecoveredPlan": "Überarbeite den wiederhergestellten Plan",
+    "resumePlanning": "Setze die Planung fort"
+  },
+  "thinking": {
+    "live": "Denkt nach…",
+    "thoughtItThrough": "Gründlich nachgedacht",
+    "thoughtFor": "{{duration}} nachgedacht"
+  },
+  "workLog": {
+    "working": "Arbeitet",
+    "worked": "Gearbeitet",
+    "workedFor": "{{duration}} gearbeitet",
+    "hideSteps": "Schritte ausblenden",
+    "showSteps": "Schritte anzeigen",
+    "showEarlierNotes": "Frühere Notizen anzeigen"
+  },
+  "welcome": {
+    "title": "Lass uns {{name}} erstellen",
+    "sub": "Beschreibe in einfachen Worten, was du möchtest. Ich schreibe den Code und zeige ihn dir in der Vorschau in Aktion – ganz ohne Programmieren.",
+    "tailoring": "Ideen werden auf deine App zugeschnitten…",
+    "ideas": "Ideen für den Anfang",
+    "refreshTitle": "Neue Ideen aus dem Code deiner App generieren",
+    "tips": "Tipps",
+    "tipScreenshot": "Füge einen Screenshot ein oder ziehe ihn hierher",
+    "tipMention": "Gib <kbd>@</kbd> ein, um auf eine Datei zu verweisen",
+    "tipData": "Verbinde Daten mit <kbd>+</kbd>"
+  },
+  "paths": {
+    "projectFolder": "Projektordner"
+  },
+  "fusion": {
+    "modelDid": "{{model}} ({{did}})",
+    "did": {
+      "primary": "Antwort",
+      "draft": "Entwurf",
+      "critic": "Review",
+      "revision": "Überarbeitung",
+      "judge": "Prüfung",
+      "repair": "Reparatur",
+      "followUp": "Fortsetzung"
+    }
+  },
+  "plugins": {
+    "fabricIq": "Erkunde die Power BI-Berichte und semantischen Modelle, die du öffnen kannst.",
+    "workIq": "Finde deine E-Mails, Besprechungen, Dateien, Teams-Nachrichten und Personen in Microsoft 365."
+  },
+  "markup": {
+    "pen": "Stift",
+    "highlighter": "Textmarker",
+    "arrow": "Pfeil",
+    "box": "Rechteck",
+    "red": "Rot",
+    "yellow": "Gelb",
+    "green": "Grün",
+    "blue": "Blau",
+    "white": "Weiß"
+  },
+  "usage": {
+    "unit": {
+      "aiCredits_one": "KI-Credit",
+      "aiCredits_other": "KI-Credits",
+      "credits_one": "Credit",
+      "credits_other": "Credits",
+      "premiumRequests_one": "Premium-Anforderung",
+      "premiumRequests_other": "Premium-Anforderungen"
+    },
+    "unlimited": {
+      "aiCredits": "Unbegrenzte KI-Credits",
+      "premiumRequests": "Unbegrenzte Premium-Anforderungen"
+    },
+    "amount": "{{amount}} {{unit}}",
+    "tokens": "{{tokens}} Tokens",
+    "tokenLine": "{{input}} Eingabe · {{output}} Ausgabe",
+    "tokenDetail": "{{input}} Eingabetokens und {{output}} Ausgabetokens",
+    "tokenDetailCached": "{{input}} Eingabetokens ({{cached}} aus dem Prompt-Cache) und {{output}} Ausgabetokens",
+    "left": "{{left}} von {{total}} {{unit}} übrig",
+    "resets": "Wird am {{day}} zurückgesetzt",
+    "overage": "Zusätzliche Nutzung: {{amount}} {{unit}}"
+  },
+  "usageMeter": {
+    "providerKey": "Mit deinem {{provider}}-Schlüssel, abgerechnet vom Anbieter",
+    "ownKey": "Mit deinem eigenen Schlüssel, abgerechnet vom Anbieter",
+    "yourKey": "Dein Schlüssel",
+    "plan": "Copilot-Plan",
+    "percentLeft": "{{percent}} übrig",
+    "planFailed": "Dein Copilot-Plan konnte nicht geprüft werden.",
+    "planChecking": "Dein Plan wird geprüft…",
+    "remaining": "<strong>{{left}}</strong> von {{total}} {{unit}} verbleibend",
+    "planLeft": "Verbleibender Copilot-Plan",
+    "tokens": "Tokens",
+    "sessionCredits": "Credits der Sitzung",
+    "sessionUsage": "Nutzung der Sitzung",
+    "columnTokens": "Tokens",
+    "columnCredits": "Credits",
+    "columnRequests": "Anforderungen",
+    "chipLabel": "Chat-Nutzung: {{summary}}",
+    "chipTitle": "Verbrauch dieses Chats: {{summary}}",
+    "howCounted": "So wird die Nutzung gezählt",
+    "usedTokens": "Tokens verbraucht",
+    "usedCredits_one": "Credit verbraucht",
+    "usedCredits_other": "Credits verbraucht",
+    "usedRequests_one": "Premium-Anforderung verbraucht",
+    "usedRequests_other": "Premium-Anforderungen verbraucht",
+    "costTitle": "Bei 0,01 US$ pro KI-Credit",
+    "approx": "≈ {{cost}}",
+    "partial": "Einige Antworten haben ihre Credits nicht gemeldet, daher ist dies ein Mindestwert.",
+    "byModel": "Nutzung nach Modell",
+    "tokenDetails": "Token-Details",
+    "viewUsage": "Nutzung anzeigen",
+    "otherModels": "Andere Modelle"
+  },
+  "imageMarkup": {
+    "hint": "Zeichne darauf, um Copilot zu zeigen, was du meinst",
+    "cancelTitle": "Abbrechen (Esc)",
+    "failed": "Dieses Bild konnte nicht geöffnet werden.",
+    "area": {
+      "pen": "Zeichenfläche: mit dem Stift zeichnen",
+      "highlighter": "Zeichenfläche: mit dem Textmarker zeichnen",
+      "arrow": "Zeichenfläche: mit dem Pfeil zeichnen",
+      "box": "Zeichenfläche: mit dem Rechteck zeichnen"
+    },
+    "opening": "Bild wird geöffnet…",
+    "discard": "Drücke erneut Esc, um die Zeichnung zu verwerfen",
+    "tools": "Zeichenwerkzeuge",
+    "tool": "Werkzeug",
+    "color": "Farbe",
+    "withKey": "{{label}} ({{key}})",
+    "undoTitle": "Rückgängig ({{mod}}+Z)",
+    "redo": "Wiederholen",
+    "redoTitle": "Wiederholen ({{mod}}+Umschalt+Z)",
+    "clear": "Zeichnung löschen",
+    "keepTitle": "Zeichnung behalten (Eingabetaste)",
+    "closeTitle": "Schließen (Eingabetaste)"
+  },
+  "access": {
+    "readOnly": "Schreibgeschützt",
+    "readWrite": "Lesen und Schreiben"
+  },
+  "addMenu": {
+    "title": "Bilder, Dateien oder Daten hinzufügen",
+    "image": "Bild",
+    "orPaste": "Oder einfügen",
+    "files": "Dateien und Ordner…",
+    "fabricData": "Fabric-Daten",
+    "dax": "DAX",
+    "browseAll": "Alle Fabric-Daten durchsuchen…"
+  },
+  "pluginsMenu": {
+    "plugins": "Plug-Ins",
+    "pluginsOn": "Plug-Ins: {{names}}",
+    "disabled": "Plug-Ins können nicht geändert werden, während der Assistent arbeitet",
+    "title": "Plug-Ins und Tools",
+    "sub": "Wähle aus, was dieser Chat verwenden kann.",
+    "enabled_one": "{{count}} aktiviert",
+    "enabled_other": "{{count}} aktiviert",
+    "experiment": "Experiment",
+    "mcpServers": "MCP-Server",
+    "mcpNote": "Ein MCP-Server kann alles tun, was seine Tools tun.",
+    "manage": "MCP-Server verwalten…",
+    "addServer": "MCP-Server hinzufügen…",
+    "note": "Der Chat verwendet sie nur, wenn eine Anfrage sie braucht.",
+    "learn": "Mehr über Plug-Ins erfahren"
+  },
+  "turnFooter": {
+    "changedFiles_one": "{{count}} Datei geändert",
+    "changedFiles_other": "{{count}} Dateien geändert",
+    "changed": "Geändert",
+    "created": "{{path}} erstellt",
+    "edited": "{{path}} bearbeitet",
+    "deleted": "{{path}} gelöscht",
+    "hideChanges": "{{what}} – Änderungen ausblenden",
+    "showChanges": "{{what}} – Änderungen anzeigen",
+    "openInCode": "{{what}} – im Code-Tab öffnen",
+    "partial": "Einige Änderungen an dieser Datei wurden nicht aufgezeichnet – öffne sie, um alle zu sehen.",
+    "stepwise": "Änderung für Änderung angezeigt – diese Änderungen ließen sich nicht zu einem Diff zusammenfassen.",
+    "changesTo": "Änderungen an {{path}}",
+    "noNetChange": "Keine Nettoänderung – spätere Änderungen haben die früheren rückgängig gemacht.",
+    "followed_one": "Deine Anweisung <list/> befolgt",
+    "followed_other": "Deine Anweisungen <list/> befolgt",
+    "copyAnswer": "Antwort kopieren",
+    "tryAgainTitle": "Deine letzte Nachricht für einen neuen Versuch erneut ausführen",
+    "durationTitle": "Dauer"
+  },
+  "markdown": {
+    "note": "Hinweis",
+    "tip": "Tipp",
+    "important": "Wichtig",
+    "warning": "Warnung",
+    "caution": "Vorsicht"
+  },
+  "suggestions": {
+    "list": "Zeige alle meine {{things}} auf einer übersichtlichen Seite",
+    "create": "Füge ein Formular zum Erstellen und Bearbeiten von {{thing}}-Einträgen hinzu",
+    "search": "Füge Suche und Filter für meine {{things}} hinzu",
+    "chart": "Füge ein Dashboard mit Diagrammen zu meinen {{things}} hinzu",
+    "auth": "Verlange eine Anmeldung, damit alle ihre eigenen {{things}} bekommen",
+    "photo": "Lass mich an jeden {{thing}}-Eintrag ein Foto anhängen",
+    "design": "Gib der ganzen App einen frischen, modernen Look"
+  },
+  "panel": {
+    "exitFocusTitle": "Fokus beenden – Vorschau wieder anzeigen",
+    "focusTitle": "Chat fokussieren – Vorschau ausblenden",
+    "exitFocus": "Fokus beenden",
+    "focus": "Chat fokussieren",
+    "newChatTitle": "Diese Unterhaltung löschen und neu beginnen",
+    "newChat": "Neuer Chat",
+    "jumpTitle": "Zur neuesten Nachricht springen",
+    "newMessages": "Neue Nachrichten",
+    "jump": "Zum Neuesten springen",
+    "newChatConfirm": "Neuen Chat beginnen?",
+    "newChatMessage": "Dadurch wird die Unterhaltung gelöscht und Fabricator beginnt von vorn. Deine App und ihre Dateien bleiben genau so, wie sie sind."
+  },
+  "mention": {
+    "filesAndFolders": "Dateien und Ordner",
+    "projectFiles": "Projektdateien",
+    "referenceFileOrFolder": "Auf eine Datei oder einen Ordner verweisen",
+    "referenceFile": "Auf eine Datei verweisen",
+    "loading": "Dateien werden geladen…",
+    "nothingHere": "Hier passt nichts zu „{{query}}“",
+    "noFiles": "Keine Dateien passen zu „{{query}}“",
+    "outsideHint": "Um auf etwas außerhalb des Projekts zu verweisen, gib ../ oder einen vollständigen Pfad ein."
+  },
+  "composer": {
+    "cantReadImages": "{{model}} kann keine Bilder lesen",
+    "imagesBlocked": "{{note}}. Entferne die Bilder oder wähle ein Modell, das sie lesen kann.",
+    "screenshot": "Screenshot",
+    "chooseAnswerToPlan": "Wähle eine der verfügbaren Antworten, damit die Planung weitergehen kann.",
+    "chooseAnswer": "Wähle eine der verfügbaren Antworten, um fortzufahren.",
+    "thisFolder": "Dieser Ordner",
+    "dropToAttach": "Zum Anhängen ablegen",
+    "showLargerDraw": "Größer anzeigen und darauf zeichnen",
+    "screenshotToSend": "Zu sendender Screenshot",
+    "removeScreenshot": "Screenshot entfernen",
+    "addingImage": "Bild wird hinzugefügt",
+    "placeholderPick": "Beschreibe, wie sich {{label}} ändern soll, oder drücke die Eingabetaste zum Verfeinern",
+    "placeholderPicks": "Beschreibe, wie sich diese {{count}} Elemente ändern sollen, oder drücke die Eingabetaste zum Verfeinern",
+    "placeholderData": "Beschreibe, was mit diesen Daten entstehen soll, oder drücke einfach die Eingabetaste zum Verbinden",
+    "placeholderFiles": "Beschreibe, was damit passieren soll, oder drücke einfach die Eingabetaste zum Senden",
+    "placeholder": "Nachricht an Fabricator zu {{name}}…",
+    "enterToSend": "<kbd>Eingabe</kbd> zum Senden",
+    "interjectTitle": "Einschieben – jetzt senden, ohne zu warten",
+    "interject": "Diese Nachricht einschieben",
+    "stop": "Generierung stoppen",
+    "publishing": "Wird veröffentlicht – das Senden geht weiter, sobald die App live ist",
+    "sendPicks_one": "Mit dem ausgewählten Element senden (Eingabetaste)",
+    "sendPicks_other": "Mit den {{count}} ausgewählten Elementen senden (Eingabetaste)",
+    "sendData_one": "Senden und diese Daten verbinden (Eingabetaste)",
+    "sendData_other": "Senden und diese {{count}} Datenquellen verbinden (Eingabetaste)",
+    "sendTitle": "Senden (Eingabetaste)",
+    "send": "Senden"
+  }
+}

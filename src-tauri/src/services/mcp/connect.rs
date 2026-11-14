@@ -237,7 +237,7 @@ pub async fn prepare(
       let status = server.map_or(McpServerStatus::NotConfigured, |s| s.status.clone());
       if status == McpServerStatus::Connected {
         if attempt.opened {
-          (ui.notice)(format!("Signed in to {}.", attempt.name));
+          (ui.notice)(t!("services.signIn.signedIn", name = attempt.name));
         }
         memory.reset(&attempt.project, &attempt.id);
         prepared.ready.push(Ready { id: attempt.id, name: attempt.name, read_only: attempt.read_only });
@@ -333,7 +333,7 @@ async fn sign_in(session: &Session, attempt: &Attempt, ui: &Ui<'_>) -> Result<bo
   let request = McpOauthLoginRequest {
     server_name: attempt.id.clone(),
     client_name: Some("Fabricator".into()),
-    callback_success_message: Some(format!("You're signed in to {}. Return to Fabricator.", attempt.name)),
+    callback_success_message: Some(t!("services.mcp.callbackSignedIn", name = attempt.name)),
     ..Default::default()
   };
   let login = match tokio::time::timeout(RPC_WAIT, session.rpc().mcp().oauth().login(request)).await {
@@ -347,7 +347,7 @@ async fn sign_in(session: &Session, attempt: &Attempt, ui: &Ui<'_>) -> Result<bo
   if !openable(&url) {
     return Err("it needs the user to sign in, but its sign-in page isn't a web page Fabricator can open".into());
   }
-  (ui.notice)(format!("Sign in to {} in your browser…", attempt.name));
+  (ui.notice)(t!("services.signIn.inBrowser", name = attempt.name));
   (ui.open)(&url).map_err(|why| format!("it needs the user to sign in, but {why}"))?;
   Ok(true)
 }
@@ -382,8 +382,8 @@ pub async fn check(session: &Session, id: &str, command: bool, wait: Duration, p
   loop {
     let list = match tokio::time::timeout(RPC_WAIT, session.rpc().mcp().list()).await {
       Ok(Ok(list)) => list.servers,
-      Ok(Err(e)) => return failed(format!("Fabricator couldn't check it ({}).", clip(&e.to_string()))),
-      Err(_) => return failed("It's taking too long to answer.".into()),
+      Ok(Err(e)) => return failed(t!("services.mcp.checkFailed", error = clip(&e.to_string()))),
+      Err(_) => return failed(t!("services.mcp.slowToAnswer")),
     };
     let server = list.iter().find(|s| s.name == id);
     match server.map(|s| s.status.clone()) {
@@ -404,12 +404,12 @@ pub async fn check(session: &Session, id: &str, command: bool, wait: Duration, p
           },
           Ok(Err(e)) => McpCheckResult {
             status: "connected".into(),
-            error: Some(format!("It connected, but its tools couldn't be listed ({}).", clip(&e.to_string()))),
+            error: Some(t!("services.mcp.toolsUnlisted", error = clip(&e.to_string()))),
             tools: Vec::new(),
           },
           Err(_) => McpCheckResult {
             status: "connected".into(),
-            error: Some("It connected, but listing its tools is taking too long.".into()),
+            error: Some(t!("services.mcp.toolsSlow")),
             tools: Vec::new(),
           },
         };
@@ -419,11 +419,15 @@ pub async fn check(session: &Session, id: &str, command: bool, wait: Duration, p
       }
       Some(McpServerStatus::Failed | McpServerStatus::Stopped) => {
         let error = server.and_then(|s| s.error.as_deref()).map(str::trim).filter(|e| !e.is_empty());
-        let verb = if command { "It couldn't start" } else { "It couldn't connect" };
-        return failed(format!("{verb} ({}).", clip(error.unwrap_or("no reason given"))));
+        let error = error.map_or_else(|| t!("services.mcp.noReason"), clip);
+        return failed(if command {
+          t!("services.mcp.couldntStart", error = error)
+        } else {
+          t!("services.mcp.couldntConnect", error = error)
+        });
       }
       _ if Instant::now() >= until => {
-        return failed(if command { "It's taking too long to start." } else { "It's taking too long to connect." }.into());
+        return failed(if command { t!("services.mcp.slowToStart") } else { t!("services.mcp.slowToConnect") });
       }
       _ => {}
     }

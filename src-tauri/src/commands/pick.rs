@@ -11,9 +11,9 @@ use crate::services::store;
 /// project's Tailwind entry stylesheet.
 #[tauri::command]
 pub async fn pick_locate(project_id: String, targets: Vec<LocateTarget>) -> Result<LocateResult, String> {
-  let root = store::find_project(&project_id).map(|p| PathBuf::from(p.path)).ok_or("Project not found.")?;
+  let root = store::find_project(&project_id).map(|p| PathBuf::from(p.path)).ok_or_else(|| t!("commands.shared.projectNotFound"))?;
   let targets: Vec<LocateTarget> = targets.into_iter().take(40).collect();
   tokio::task::spawn_blocking(move || source_hints::locate(&root, &targets))
     .await
-    .map_err(|e| format!("Source lookup failed: {e}"))
+    .map_err(|e| t!("commands.pick.lookupFailed", error = e))
 }

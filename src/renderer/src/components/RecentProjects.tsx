@@ -10,6 +10,7 @@ import {
   type MouseEvent
 } from 'react'
 import type { StudioProject } from '@shared/ipc'
+import { useTranslation } from '../i18n'
 import { isMac } from '../platform'
 import { useProjectFacts } from '../projectFacts'
 import { removalStatus, type ProjectRemoval } from '../projectRemovals'
@@ -32,7 +33,9 @@ import { useNow } from './team/runProgress'
 /** Recent projects shown before "Show all", besides the pinned ones. */
 export const RECENT_LIMIT = 6
 
-const FILE_MANAGER = isMac() ? 'Finder' : 'Explorer'
+const REVEAL = isMac()
+  ? ({ title: 'recent.showInFinder', label: 'recent.showInFinderLabel' } as const)
+  : ({ title: 'recent.showInExplorer', label: 'recent.showInExplorerLabel' } as const)
 
 interface Props {
   /** All known projects, most-recently-used first. */
@@ -85,6 +88,7 @@ export default function RecentProjects({
   onUpdateRayfin,
   publishing
 }: Props): JSX.Element {
+  const { t } = useTranslation('home')
   const headingId = useId()
   const [showAll, setShowAll] = useState(false)
   const [text, setText] = useState('')
@@ -98,8 +102,8 @@ export default function RecentProjects({
   const filtering = text.trim().length > 0
   const teamName = useCallback(
     (project: StudioProject): string | undefined =>
-      project.team ? (teamNames.get(project.team.workspaceId) ?? 'Team') : undefined,
-    [teamNames]
+      project.team ? (teamNames.get(project.team.workspaceId) ?? t('recent.team')) : undefined,
+    [teamNames, t]
   )
   const matches = filtering
     ? projects.filter((p) => matchesProject(p, text, teamName(p)))
@@ -142,19 +146,19 @@ export default function RecentProjects({
     const links = projectLinks(project)
     const update = rayfinUpdate(project, facts.latest)
     const entries: ContextMenuEntry[] = [
-      { id: 'open', label: 'Open', icon: 'go-to-file', run: () => onSelect(project) }
+      { id: 'open', label: t('actions.open'), icon: 'go-to-file', run: () => onSelect(project) }
     ]
     if (links.app && onOpenUrl)
       entries.push({
         id: 'app',
-        label: 'Open app',
+        label: t('recent.openApp'),
         icon: 'link-external',
         run: () => onOpenUrl(links.app ?? '')
       })
     if (links.portal && onOpenUrl)
       entries.push({
         id: 'fabric',
-        label: 'Open in Fabric',
+        label: t('recent.openInFabric'),
         icon: 'globe',
         run: () => onOpenUrl(links.portal ?? '')
       })
@@ -162,34 +166,34 @@ export default function RecentProjects({
     if (onReveal && !project.missing)
       entries.push({
         id: 'reveal',
-        label: `Show in ${FILE_MANAGER}`,
+        label: t(REVEAL.title),
         icon: 'folder-opened',
         run: () => onReveal(project)
       })
     entries.push({
       id: 'copy',
-      label: 'Copy folder path',
+      label: t('recent.copyPath'),
       icon: 'copy',
       run: () => void navigator.clipboard?.writeText(project.path).catch(() => undefined)
     })
     if (onPin)
       entries.push({
         id: 'pin',
-        label: project.pinned ? 'Unpin' : 'Pin to the top',
+        label: project.pinned ? t('recent.unpin') : t('recent.pin'),
         icon: project.pinned ? 'pinned' : 'pin',
         run: () => onPin(project, !project.pinned)
       })
     if (update && onUpdateRayfin)
       entries.push({
         id: 'update',
-        label: 'Update Rayfin',
+        label: t('recent.updateRayfin'),
         detail: update,
         icon: 'arrow-up',
         run: () => onUpdateRayfin(project, update)
       })
     entries.push('separator', {
       id: 'manage',
-      label: 'Manage…',
+      label: t('recent.manageMenu'),
       icon: 'gear',
       run: () => onManageProject(project)
     })
@@ -298,31 +302,39 @@ export default function RecentProjects({
             <button
               type="button"
               className="home-project-open"
-              aria-label={`Open ${project.name}`}
+              aria-label={t('recent.openLabel', { name: project.name })}
               disabled={removing}
               onClick={() => onSelect(project)}
             >
               <span className="home-project-title">{project.name}</span>
             </button>
             {removing ? (
-              <span className="home-project-status home-project-status--removing">Removing</span>
+              <span className="home-project-status home-project-status--removing">
+                {t('recent.removing')}
+              </span>
             ) : stopped ? (
-              <span className="home-project-status home-project-status--stopped">Not removed</span>
+              <span className="home-project-status home-project-status--stopped">
+                {t('recent.notRemoved')}
+              </span>
             ) : (
               <>
                 {active && (
-                  <span className="home-project-status home-project-status--active">Open now</span>
+                  <span className="home-project-status home-project-status--active">
+                    {t('recent.openNow')}
+                  </span>
                 )}
                 {running && (
                   <span
                     className="home-project-status home-project-status--running"
-                    title="Its backend runs on this computer"
+                    title={t('recent.runningTitle')}
                   >
-                    Running locally
+                    {t('recent.running')}
                   </span>
                 )}
                 {project.missing && (
-                  <span className="home-project-status home-project-status--missing">Missing</span>
+                  <span className="home-project-status home-project-status--missing">
+                    {t('recent.missing')}
+                  </span>
                 )}
               </>
             )}
@@ -338,7 +350,7 @@ export default function RecentProjects({
                 {team ? (
                   <>
                     <span className="codicon codicon-organization" aria-hidden="true" />
-                    {team} · saved to GitHub as you work
+                    {t('recent.teamProject', { team })}
                   </>
                 ) : (
                   displayPath(project.path)
@@ -353,7 +365,10 @@ export default function RecentProjects({
                 </span>
               )}
               {update && (
-                <span className="home-project-version" title={`Rayfin ${update} is available`}>
+                <span
+                  className="home-project-version"
+                  title={t('recent.updateAvailable', { version: update })}
+                >
                   Rayfin {project.rayfinVersion}
                   {onUpdateRayfin && (
                     <>
@@ -361,11 +376,14 @@ export default function RecentProjects({
                       <button
                         type="button"
                         className="home-project-update home-project-control"
-                        aria-label={`Update Rayfin in ${project.name} to ${update}`}
-                        title={`Open ${project.name} and have Copilot update Rayfin to ${update}`}
+                        aria-label={t('recent.updateLabel', {
+                          name: project.name,
+                          version: update
+                        })}
+                        title={t('recent.updateTitle', { name: project.name, version: update })}
                         onClick={() => onUpdateRayfin(project, update)}
                       >
-                        Update
+                        {t('actions.update')}
                       </button>
                     </>
                   )}
@@ -379,18 +397,18 @@ export default function RecentProjects({
             <button
               type="button"
               className="btn btn--sm home-project-control"
-              aria-label={`Try again to remove ${project.name}`}
+              aria-label={t('recent.retryLabel', { name: project.name })}
               onClick={() => onRetryRemoval?.(project.id)}
             >
-              Try again
+              {t('actions.tryAgain')}
             </button>
             <button
               type="button"
               className="btn btn--sm btn--ghost home-project-control"
-              aria-label={`Keep ${project.name}`}
+              aria-label={t('recent.keepLabel', { name: project.name })}
               onClick={() => onDismissRemoval?.(project.id)}
             >
-              Keep
+              {t('recent.keep')}
             </button>
           </span>
         ) : (
@@ -403,8 +421,8 @@ export default function RecentProjects({
                     type="button"
                     className="home-project-action home-project-control"
                     tabIndex={-1}
-                    aria-label={`Open ${project.name}’s app`}
-                    title="Open app"
+                    aria-label={t('recent.openAppLabel', { name: project.name })}
+                    title={t('recent.openApp')}
                     onClick={() => onOpenUrl(links.app ?? '')}
                   >
                     <Codicon name="link-external" />
@@ -415,8 +433,8 @@ export default function RecentProjects({
                     type="button"
                     className="home-project-action home-project-control"
                     tabIndex={-1}
-                    aria-label={`Open ${project.name} in Fabric`}
-                    title="Open in Fabric"
+                    aria-label={t('recent.openInFabricLabel', { name: project.name })}
+                    title={t('recent.openInFabric')}
                     onClick={() => onOpenUrl(links.portal ?? '')}
                   >
                     <Codicon name="globe" />
@@ -427,8 +445,8 @@ export default function RecentProjects({
                     type="button"
                     className="home-project-action home-project-control"
                     tabIndex={-1}
-                    aria-label={`Show ${project.name} in ${FILE_MANAGER}`}
-                    title={`Show in ${FILE_MANAGER}`}
+                    aria-label={t(REVEAL.label, { name: project.name })}
+                    title={t(REVEAL.title)}
                     onClick={() => onReveal(project)}
                   >
                     <Codicon name="folder-opened" />
@@ -439,9 +457,11 @@ export default function RecentProjects({
                     type="button"
                     className={`home-project-action home-project-control${project.pinned ? ' is-on' : ''}`}
                     tabIndex={-1}
-                    aria-label={`${project.pinned ? 'Unpin' : 'Pin'} ${project.name}`}
+                    aria-label={t(project.pinned ? 'recent.unpinLabel' : 'recent.pinLabel', {
+                      name: project.name
+                    })}
                     aria-pressed={Boolean(project.pinned)}
-                    title={project.pinned ? 'Unpin' : 'Pin to the top'}
+                    title={project.pinned ? t('recent.unpin') : t('recent.pin')}
                     onClick={() => onPin(project, !project.pinned)}
                   >
                     <Codicon name={project.pinned ? 'pinned' : 'pin'} />
@@ -450,8 +470,8 @@ export default function RecentProjects({
                 <button
                   type="button"
                   className="home-project-manage home-project-control"
-                  aria-label={`Manage ${project.name}`}
-                  title="Manage"
+                  aria-label={t('recent.manageLabel', { name: project.name })}
+                  title={t('recent.manage')}
                   onClick={() => onManageProject(project)}
                 >
                   <GearIcon className="home-project-manage-icon" />
@@ -464,13 +484,15 @@ export default function RecentProjects({
     )
   }
 
-  const count = `${projects.length} project${projects.length === 1 ? '' : 's'}`
+  const count = filtering
+    ? t('recent.filtered', { shown: matches.length, count: projects.length })
+    : t('recent.count', { count: projects.length })
   const titled = groups.length > 1
 
   return (
     <section className="home-recents" aria-labelledby={headingId}>
       <div className="home-section-heading">
-        <h2 id={headingId}>Recent projects</h2>
+        <h2 id={headingId}>{t('recent.title')}</h2>
         <span className="home-recents-tools">
           {offerFilter && (
             <label className="home-filter">
@@ -481,8 +503,8 @@ export default function RecentProjects({
                 type="search"
                 value={text}
                 spellCheck={false}
-                placeholder="Filter projects"
-                aria-label="Filter projects"
+                placeholder={t('recent.filter')}
+                aria-label={t('recent.filter')}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape' && text) {
@@ -502,9 +524,7 @@ export default function RecentProjects({
               )}
             </label>
           )}
-          <span className="home-project-count">
-            {filtering ? `${matches.length} of ${count}` : count}
-          </span>
+          <span className="home-project-count">{count}</span>
         </span>
       </div>
 
@@ -513,16 +533,14 @@ export default function RecentProjects({
           <div className="home-empty-mark" aria-hidden="true">
             <FabricatorMark />
           </div>
-          <p className="home-empty-title">No recent projects</p>
-          <p className="home-empty-sub">
-            Start a new app, open one from disk, or clone a repository to see it here.
-          </p>
+          <p className="home-empty-title">{t('recent.empty')}</p>
+          <p className="home-empty-sub">{t('recent.emptyDesc')}</p>
         </div>
       ) : matches.length === 0 ? (
         <div className="home-empty home-empty--filter">
-          <p className="home-empty-title">No projects match “{text.trim()}”</p>
+          <p className="home-empty-title">{t('recent.noMatch', { text: text.trim() })}</p>
           <button type="button" className="btn btn--sm" onClick={() => setText('')}>
-            Clear filter
+            {t('recent.clearFilter')}
           </button>
         </div>
       ) : (
@@ -548,7 +566,7 @@ export default function RecentProjects({
       )}
       {(hidden > 0 || (showAll && !filtering && unpinned.length > RECENT_LIMIT)) && (
         <button type="button" className="home-show-all" onClick={() => setShowAll((s) => !s)}>
-          {showAll ? 'Show fewer' : `Show all ${projects.length} projects`}
+          {showAll ? t('recent.showFewer') : t('recent.showAll', { count: projects.length })}
         </button>
       )}
       {menu && (

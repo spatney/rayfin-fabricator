@@ -1,0 +1,94 @@
+{
+  "panel": {
+    "label": "セキュリティ チェック",
+    "title": "セキュリティ リスクをチェック",
+    "sub": "Copilot がコードを実行せずに読み取り、そのコードがこのコンピューターで何をする可能性があるかを伝えます。",
+    "check": "チェック",
+    "checking": "セキュリティ リスクをチェックしています…",
+    "elapsed": "経過時間",
+    "partial": "一部の領域はチェックされませんでした: {{error}}",
+    "found": "見つかったもの",
+    "steps_other": "{{count}} ステップ",
+    "checkAgain": "再チェック"
+  },
+  "meta": {
+    "running": "Copilot (Auto)",
+    "checkedBy": "Copilot (Auto) がチェック",
+    "files_other": "{{count}} 個のファイル"
+  },
+  "live": {
+    "unpacking": "何も実行せずに展開しています…",
+    "starting": "Copilot (Auto) を起動しています…",
+    "thinking": "考えています…"
+  },
+  "outcome": {
+    "stopped": "チェックを停止しました",
+    "stoppedFound_other": "停止するまでに、確認が必要な項目が {{count}} 件見つかりました。",
+    "stoppedNothing": "停止するまでに、何も見つかりませんでした。",
+    "fabricatorCouldnt": "Fabricator はチェックできませんでした",
+    "copilotCouldnt": "Copilot はチェックできませんでした",
+    "ownChecksFound_other": "Fabricator 独自のチェックで、確認が必要な項目が {{count}} 件見つかりました。",
+    "ownChecksNothing": "Fabricator 独自のチェックでは危険なものは見つかりませんでしたが、Copilot のようにコードを読むわけではありません。",
+    "serious_other": "重大なリスクが {{count}} 件見つかりました",
+    "advisesAgainst": "Copilot は推奨していません",
+    "found_other": "確認が必要な項目が {{count}} 件見つかりました",
+    "worthALook": "先に確認することをお勧めします",
+    "clear": "セキュリティ リスクは見つかりませんでした",
+    "clearToImport": "インポートして危険そうなものは含まれていません。",
+    "clearToInstall": "インストールして危険そうなものは含まれていません。"
+  },
+  "strip": {
+    "label": "チェック対象",
+    "found_other": "確認が必要な項目 {{count}} 件",
+    "clear": "危険なものなし",
+    "medium": "確認推奨",
+    "waiting": "未チェック",
+    "skipped": "チェックされませんでした",
+    "tip": "{{about}}。{{note}}"
+  },
+  "areas": {
+    "install": {
+      "label": "インストール スクリプト",
+      "about": "パッケージのインストール時に npm が実行するもの"
+    },
+    "packages": {
+      "label": "パッケージ",
+      "about": "パッケージの入手元"
+    },
+    "network": {
+      "label": "送信されるデータ",
+      "about": "何をどこに送信するか"
+    },
+    "hidden": {
+      "label": "隠されたコード",
+      "about": "動作を隠すように書かれたコード"
+    },
+    "system": {
+      "label": "システム アクセス",
+      "about": "アプリの外部に及ぶもの"
+    },
+    "agents": {
+      "label": "Copilot への指示",
+      "about": "開発中に Copilot に何をさせようとしているか"
+    }
+  },
+  "severity": {
+    "high": "高",
+    "medium": "中",
+    "low": "低",
+    "note": "情報"
+  },
+  "finding": {
+    "assessment": "Copilot の見解:",
+    "alsoIn": "ほかの場所:",
+    "advice": "対処方法:",
+    "byFabricator": "Fabricator 独自のチェックで検出",
+    "byCopilot": "Copilot が検出 (ファイルから引用)"
+  },
+  "steps": {
+    "label": "Copilot が読んだもの"
+  },
+  "errors": {
+    "cantCheck": "Fabricator でこのファイルをチェックできませんでした。"
+  }
+}

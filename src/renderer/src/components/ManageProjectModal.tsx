@@ -8,6 +8,7 @@ import {
   type JSX
 } from 'react'
 import type { StudioProject, TeamWorkspace } from '@shared/ipc'
+import { Trans, translator, useTranslation } from '../i18n'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { initials, markHue } from './gallery/model'
@@ -31,7 +32,7 @@ interface Props {
 function messageFor(error: unknown): string {
   return error instanceof Error && error.message
     ? error.message
-    : 'Could not rename the project. Please try again.'
+    : translator('projects')('manage.errors.cantRename')
 }
 
 /** One thing you can do with the project: an icon, what it does, and its control. */
@@ -73,6 +74,7 @@ export default function ManageProjectModal({
   teamWorkspaces,
   onMoveToTeam
 }: Props): JSX.Element {
+  const { t } = useTranslation('projects')
   useSuppressPreview()
   const titleId = useId()
   const nameId = useId()
@@ -104,7 +106,7 @@ export default function ManageProjectModal({
       }
       onClose()
     } catch (reason) {
-      setMoveError(reason instanceof Error ? reason.message : 'Could not move the project.')
+      setMoveError(reason instanceof Error ? reason.message : t('manage.errors.cantMove'))
     } finally {
       setSaving(false)
     }
@@ -126,7 +128,7 @@ export default function ManageProjectModal({
   async function saveName(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     if (!trimmedName) {
-      setError('Enter a project name.')
+      setError(t('manage.errors.noName'))
       return
     }
     if (trimmedName === project.name) {
@@ -166,12 +168,12 @@ export default function ManageProjectModal({
   }
 
   const recentsHint = project.team
-    ? 'Hide from your recent list. Your work on GitHub stays, and you can open it again from its team workspace.'
+    ? t('manage.recents.team')
     : project.missing
-      ? 'Fabricator can’t find this project on this computer. Remove it from your recent list.'
+      ? t('manage.recents.missing')
       : hasDeploy
-        ? 'Hide from your recent list. Files and the Fabric app stay intact.'
-        : 'Hide from your recent list. Files stay intact.'
+        ? t('manage.recents.withApp')
+        : t('manage.recents.filesOnly')
   const canMove = !project.team && onMoveToTeam && moveTargets.length > 0
   const canExport = Boolean(onExport) && !project.team && !project.missing
 
@@ -186,11 +188,11 @@ export default function ManageProjectModal({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>Manage project</h2>
+          <h2 id={titleId}>{t('manage.title')}</h2>
           <button
             type="button"
             className="icon-btn"
-            aria-label="Close project management"
+            aria-label={t('manage.close')}
             disabled={saving}
             onClick={onClose}
           >
@@ -218,7 +220,7 @@ export default function ManageProjectModal({
 
           <form className="project-manage-name" onSubmit={(event) => void saveName(event)}>
             <label className="project-manage-label" htmlFor={nameId}>
-              Project name
+              {t('manage.nameLabel')}
             </label>
             <div className="project-manage-field">
               <input
@@ -238,11 +240,11 @@ export default function ManageProjectModal({
                 className={`btn${canSave ? ' btn--primary' : ''}`}
                 disabled={!canSave}
               >
-                {saving ? 'Saving…' : 'Save'}
+                {saving ? t('status.saving') : t('actions.save')}
               </button>
             </div>
             <span className="project-manage-hint" id={nameHintId}>
-              Also renames it in <code>rayfin/rayfin.yml</code>.
+              <Trans t={t} i18nKey="manage.renameHint" components={{ code: <code /> }} />
             </span>
             {error && (
               <p className="project-manage-error" role="alert">
@@ -253,20 +255,16 @@ export default function ManageProjectModal({
 
           <section className="project-manage-actions" aria-labelledby={actionsId}>
             <h3 className="project-manage-heading" id={actionsId}>
-              Project actions
+              {t('manage.actionsHeading')}
             </h3>
 
             {canMove && (
-              <Action icon="organization" title="Move to a team workspace">
-                <span className="project-action-desc">
-                  Copies this app and its chat into the team workspace so your team can work on it.
-                  The team pipeline deploys it as a new app, without the data in this project&apos;s
-                  published app. This local project stays as it is.
-                </span>
+              <Action icon="organization" title={t('manage.move.title')}>
+                <span className="project-action-desc">{t('manage.move.desc')}</span>
                 <div className="project-manage-field">
                   <select
                     className="project-manage-input"
-                    aria-label="Team workspace"
+                    aria-label={t('manage.move.workspaceLabel')}
                     value={moveTarget}
                     disabled={saving}
                     onChange={(event) => setMoveTarget(event.target.value)}
@@ -283,7 +281,7 @@ export default function ManageProjectModal({
                     disabled={saving || !moveTarget}
                     onClick={() => void moveToTeam()}
                   >
-                    {saving ? 'Moving…' : 'Move'}
+                    {saving ? t('manage.move.moving') : t('manage.move.move')}
                   </button>
                 </div>
                 {moveError && (
@@ -297,7 +295,7 @@ export default function ManageProjectModal({
             {canExport && (
               <Action
                 icon="package"
-                title="Export project"
+                title={t('export.title')}
                 control={
                   <button
                     type="button"
@@ -305,29 +303,27 @@ export default function ManageProjectModal({
                     disabled={saving}
                     onClick={exportProject}
                   >
-                    Export
+                    {t('manage.export.button')}
                     <span className="codicon codicon-chevron-right" aria-hidden="true" />
                   </button>
                 }
               >
-                <span className="project-action-desc">
-                  Save a copy someone else can import into Fabricator.
-                </span>
+                <span className="project-action-desc">{t('export.lead.project')}</span>
               </Action>
             )}
 
             <Action
               icon="history"
-              title="Recent projects"
+              title={t('manage.recents.title')}
               control={
                 <button
                   type="button"
                   className="btn"
-                  aria-label="Remove from recent projects"
+                  aria-label={t('manage.recents.remove')}
                   disabled={saving}
                   onClick={removeFromRecents}
                 >
-                  Remove
+                  {t('actions.remove')}
                 </button>
               }
             >
@@ -335,17 +331,24 @@ export default function ManageProjectModal({
             </Action>
 
             {project.team ? (
-              <Action icon="organization" title="Team app">
+              <Action icon="organization" title={t('manage.team.title')}>
                 <span className="project-action-desc">
-                  This app belongs to the team workspace{' '}
-                  {teamName ? <strong>{teamName}</strong> : 'it was opened from'}. Its owners can
-                  remove it for everyone from the workspace&apos;s settings.
+                  {teamName ? (
+                    <Trans
+                      t={t}
+                      i18nKey="manage.team.desc"
+                      values={{ team: teamName }}
+                      components={{ strong: <strong /> }}
+                    />
+                  ) : (
+                    t('manage.team.descUnknown')
+                  )}
                 </span>
               </Action>
             ) : project.missing ? null : (
               <Action
                 icon="trash"
-                title="Remove project"
+                title={t('remove.title')}
                 danger
                 control={
                   <button
@@ -354,15 +357,13 @@ export default function ManageProjectModal({
                     disabled={saving}
                     onClick={reviewRemoval}
                   >
-                    Review options
+                    {t('manage.remove.review')}
                     <span className="codicon codicon-chevron-right" aria-hidden="true" />
                   </button>
                 }
               >
                 <span className="project-action-desc">
-                  {hasDeploy
-                    ? 'Trash the folder, and optionally its published app.'
-                    : 'Trash the folder. No Fabric app is changed.'}
+                  {hasDeploy ? t('manage.remove.withApp') : t('manage.remove.folderOnly')}
                 </span>
               </Action>
             )}
@@ -371,7 +372,7 @@ export default function ManageProjectModal({
 
         <div className="modal-footer">
           <button type="button" className="btn" disabled={saving} onClick={onClose}>
-            Done
+            {t('actions.done')}
           </button>
         </div>
       </div>

@@ -3,7 +3,7 @@ import type { ModelField } from '../../model/parseSchema'
 import { relativeTo } from '../../model/projectLayout'
 import type { QuickContext } from '../context'
 import type { QuickHit, QuickRuleImpl } from '../quick'
-import { listLabels } from '../quick'
+import { listLabels, say } from '../quick'
 import { firstLine, importsOf, lineOf, matchAll } from '../source'
 import { code } from './util'
 
@@ -78,14 +78,26 @@ export const dataModelRules: QuickRuleImpl[] = [
               file: e.file,
               line: d.line || f.line,
               label: `${e.name}.${f.name}`,
-              message: `${code(`${e.name}.${f.name}`)} is declared ${code(`@${d.name}(${d.args})`)} without ${code('max')}, so it becomes NVARCHAR(MAX) on MSSQL.`
+              ...say((w) =>
+                w.t('data-model/text-without-max.hit', {
+                  field: code(`${e.name}.${f.name}`),
+                  decorator: code(`@${d.name}(${d.args})`),
+                  max: code('max')
+                })
+              )
             })
           }
         }
       }
       return hits
     },
-    summarize: (hits) => `${hits.length} text fields have no maximum length: ${listLabels(hits)}.`
+    summarize: (hits) =>
+      say((w) =>
+        w.t('data-model/text-without-max.summary', {
+          count: hits.length,
+          fields: listLabels(hits, w)
+        })
+      )
   },
   {
     id: 'data-model/fk-typed-text',
@@ -99,7 +111,15 @@ export const dataModelRules: QuickRuleImpl[] = [
             file: e.file,
             line: fk.line,
             label: `${e.name}.${fk.name}`,
-            message: `${code(`${e.name}.${fk.name}`)} references ${code(rel.relationTo ?? rel.name)} through ${code(`@one`)} but is declared ${code('@text()')} instead of ${code('@uuid()')}.`
+            ...say((w) =>
+              w.t('data-model/fk-typed-text.hit', {
+                field: code(`${e.name}.${fk.name}`),
+                target: code(rel.relationTo ?? rel.name),
+                relation: code(`@one`),
+                declared: code('@text()'),
+                expected: code('@uuid()')
+              })
+            )
           })
         }
       }
@@ -120,7 +140,14 @@ export const dataModelRules: QuickRuleImpl[] = [
               file: e.file,
               line: d.line || f.line,
               label: `${e.name}.${f.name}`,
-              message: `${code(`${e.name}.${f.name}`)} passes ${code(target)} to ${code(`@${d.name}`)} directly instead of ${code(`() => ${target}`)}.`
+              ...say((w) =>
+                w.t('data-model/relation-not-lazy.hit', {
+                  field: code(`${e.name}.${f.name}`),
+                  target: code(target),
+                  decorator: code(`@${d.name}`),
+                  lazy: code(`() => ${target}`)
+                })
+              )
             })
           }
         }
@@ -145,7 +172,13 @@ export const dataModelRules: QuickRuleImpl[] = [
               file: src.path,
               line,
               label: `${src.path} (${names})`,
-              message: `${code(src.path)} imports ${code(names)} with ${code('import type')}, but uses it in a relationship decorator, which needs the runtime class.`
+              ...say((w) =>
+                w.t('data-model/relation-import-type.typeImport', {
+                  file: code(src.path),
+                  names: code(names),
+                  importType: code('import type')
+                })
+              )
             })
           }
           if (stmt.from.startsWith('.') && !/\.js$/.test(stmt.from)) {
@@ -154,7 +187,13 @@ export const dataModelRules: QuickRuleImpl[] = [
               line,
               label: `${src.path} (${stmt.from})`,
               severity: 'medium',
-              message: `${code(src.path)} imports ${code(stmt.from)} without the ${code('.js')} extension, which doesn't resolve as ESM.`
+              ...say((w) =>
+                w.t('data-model/relation-import-type.noExtension', {
+                  file: code(src.path),
+                  module: code(stmt.from),
+                  extension: code('.js')
+                })
+              )
             })
           }
         }
@@ -181,7 +220,14 @@ export const dataModelRules: QuickRuleImpl[] = [
             file: src.path,
             line: lineOf(src, cls.offset),
             label: cls.name,
-            message: `${code(cls.name)} (${code(src.path)}) isn't listed in the ${code('schema')} array in ${schemaName}.`
+            ...say((w) =>
+              w.t('data-model/entity-not-registered.notInSchema', {
+                entity: code(cls.name),
+                file: code(src.path),
+                schema: code('schema'),
+                schemaFile: schemaName
+              })
+            )
           })
         }
       }
@@ -193,7 +239,13 @@ export const dataModelRules: QuickRuleImpl[] = [
             file: schema.path,
             line: typeLine,
             label: n,
-            message: `${code(n)} is in the ${code('schema')} array but missing from the ${code(typeInfo.typeName)} type.`
+            ...say((w) =>
+              w.t('data-model/entity-not-registered.notInType', {
+                entity: code(n),
+                schema: code('schema'),
+                type: code(typeInfo.typeName)
+              })
+            )
           })
         }
         for (const n of typeInfo.names) {
@@ -202,7 +254,13 @@ export const dataModelRules: QuickRuleImpl[] = [
             file: schema.path,
             line: firstLine(schema.masked, /\bschema\s*(?::[^=]+)?=\s*\[/) ?? typeLine,
             label: n,
-            message: `${code(n)} is in the ${code(typeInfo.typeName)} type but missing from the ${code('schema')} array.`
+            ...say((w) =>
+              w.t('data-model/entity-not-registered.notInArray', {
+                entity: code(n),
+                type: code(typeInfo.typeName),
+                schema: code('schema')
+              })
+            )
           })
         }
       }
@@ -222,10 +280,17 @@ export const dataModelRules: QuickRuleImpl[] = [
             file: e.file,
             line: f.line,
             label: `${e.name}.${f.name}`,
-            message:
+            ...say((w) =>
               typed.length === 0
-                ? `${code(`${e.name}.${f.name}`)} has no field decorator, so it isn't stored.`
-                : `${code(`${e.name}.${f.name}`)} has ${typed.length} field decorators (${typed.map((d) => `@${d.name}`).join(', ')}).`
+                ? w.t('data-model/field-missing-decorator.none', {
+                    field: code(`${e.name}.${f.name}`)
+                  })
+                : w.t('data-model/field-missing-decorator.several', {
+                    field: code(`${e.name}.${f.name}`),
+                    count: typed.length,
+                    decorators: w.join(typed.map((d) => `@${d.name}`))
+                  })
+            )
           })
         }
       }
@@ -240,18 +305,23 @@ export const dataModelRules: QuickRuleImpl[] = [
         for (const f of e.fields) {
           for (const d of f.decorators ?? []) {
             if (d.name !== 'decimal') continue
-            const precision = /\bprecision\s*:\s*(\d+)/.exec(d.args)
+            const precision = /\bprecision\s*:\s*(\d+)/.exec(d.args)?.[1]
             const hasPrecision = /\bprecision\s*:/.test(d.args)
             const hasScale = /\bscale\s*:/.test(d.args)
-            let problem: string | undefined
-            if (hasPrecision !== hasScale) problem = `sets only ${hasPrecision ? 'precision' : 'scale'}`
-            else if (precision && Number(precision[1]) > 28) problem = `sets precision ${precision[1]}, above the maximum of 28`
+            let problem: 'onlyPrecision' | 'onlyScale' | 'tooPrecise' | undefined
+            if (hasPrecision !== hasScale) problem = hasPrecision ? 'onlyPrecision' : 'onlyScale'
+            else if (precision && Number(precision) > 28) problem = 'tooPrecise'
             if (!problem) continue
             hits.push({
               file: e.file,
               line: d.line || f.line,
               label: `${e.name}.${f.name}`,
-              message: `${code(`${e.name}.${f.name}`)} ${problem}.`
+              ...say((w) =>
+                w.t(`data-model/decimal-precision.${problem}`, {
+                  field: code(`${e.name}.${f.name}`),
+                  precision
+                })
+              )
             })
           }
         }
@@ -273,9 +343,16 @@ export const dataModelRules: QuickRuleImpl[] = [
             file: e.file,
             line: f.line,
             label: `${e.name}.${f.name}`,
-            message: option
-              ? `${code(`${e.name}.${f.name}`)} sets ${code('optional: true')} but the property has no ${code('?')}.`
-              : `${code(`${e.name}.${f.name}`)} is marked ${code('?')} but its decorator doesn't set ${code('optional: true')}, so the column is still required.`
+            ...say((w) => {
+              const values = {
+                field: code(`${e.name}.${f.name}`),
+                option: code('optional: true'),
+                question: code('?')
+              }
+              return option
+                ? w.t('data-model/nullable-mismatch.optionWithoutQuestion', values)
+                : w.t('data-model/nullable-mismatch.questionWithoutOption', values)
+            })
           })
         }
       }
@@ -301,7 +378,13 @@ export const dataModelRules: QuickRuleImpl[] = [
             file: e.file,
             line: f.line,
             label: `${e.name} ↔ ${other.name}`,
-            message: `${code(e.name)} and ${code(other.name)} each declare ${code('@many')} of the other, which Rayfin doesn't support without a join entity.`
+            ...say((w) =>
+              w.t('data-model/many-to-many.hit', {
+                entity: code(e.name),
+                other: code(other.name),
+                many: code('@many')
+              })
+            )
           })
         }
       }
@@ -319,9 +402,14 @@ export const dataModelRules: QuickRuleImpl[] = [
             file: e.file,
             line: e.line,
             label: name,
-            message: e.customName
-              ? `${code(e.name)} is registered as ${code(name)}, a name GraphQL reserves.`
-              : `The entity ${code(name)} uses a name GraphQL reserves.`
+            ...say((w) =>
+              e.customName
+                ? w.t('data-model/reserved-entity-name.registeredAs', {
+                    entity: code(e.name),
+                    name: code(name)
+                  })
+                : w.t('data-model/reserved-entity-name.named', { name: code(name) })
+            )
           }
         ]
       })
@@ -341,7 +429,15 @@ export const dataModelRules: QuickRuleImpl[] = [
               file: e.file,
               line: d.line || f.line,
               label: `${e.name}.${f.name}`,
-              message: `${code(`${e.name}.${f.name}`)} passes ${bad.map(code).join(', ')} to ${code(`@${d.name}`)}, which accepts only ${code('optional')} and ${code('unique')}.`
+              ...say((w) =>
+                w.t('data-model/relation-options.hit', {
+                  field: code(`${e.name}.${f.name}`),
+                  options: w.join(bad.map(code)),
+                  decorator: code(`@${d.name}`),
+                  optional: code('optional'),
+                  unique: code('unique')
+                })
+              )
             })
           }
         }

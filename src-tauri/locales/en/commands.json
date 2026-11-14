@@ -1,0 +1,544 @@
+{
+  "export": {
+    "importTitle": "Import a project",
+    "exportTitle": "Export project",
+    "projectFile": "Fabricator project",
+    "appFile": "Rayfin app",
+    "zipArchive": "Zip archive",
+    "cantRead": "Couldn’t read the file: {{error}}",
+    "teamApp": "A team app is shared through its team workspace. Invite people to the workspace instead.",
+    "missing": "Fabricator can’t find this project’s folder.",
+    "unreadable": "Fabricator can’t read this file. Import a .fabricator file someone exported, or a .zip of a Rayfin project.",
+    "notAnApp": "This file doesn’t hold a Rayfin project: there’s no rayfin/rayfin.yml in it.",
+    "manyApps": "This file holds more than one Rayfin project. Unzip it, then open the one you want with Open folder.",
+    "tooBig": "This file unpacks to more than 16 GB, so Fabricator didn’t import it.",
+    "tooMany": "This file holds more than 500,000 files, so Fabricator didn’t import it.",
+    "badIcon": "Fabricator couldn’t make the app’s icon. Try exporting it again.",
+    "cantSave": "Couldn’t save {{path}}: {{error}}",
+    "cantAdd": "Couldn’t add {{name}}: {{error}}",
+    "cantFinish": "Couldn’t finish the file: {{error}}",
+    "noFreeFolder": "Your projects folder already has folders named {{slug}} to {{slug}}-99.",
+    "cantOpen": "Couldn’t open {{path}}: {{error}}",
+    "cantCreateRoot": "Couldn’t create your projects folder {{path}}: {{error}}",
+    "cantCreate": "Couldn’t create {{path}}: {{error}}",
+    "cantUnpack": "Couldn’t unpack {{path}}: {{error}}",
+    "notAnAppFile": "This file isn’t an app Fabricator can install. Ask for the project to be exported again, as an app.",
+    "damagedAppFile": "This app file is damaged. Ask for it to be exported again.",
+    "cantInspect": "Couldn’t look at the project: {{error}}",
+    "cantExportApp": "Couldn’t export the app: {{error}}",
+    "cantExport": "Couldn’t export the project: {{error}}",
+    "fileGone": "That file isn’t there anymore."
+  },
+  "accounts": {
+    "fabricBusy": "A Fabric sign-in, sign-out, or account change is already in progress.",
+    "azureBusy": "An Azure sign-in, sign-out, or account change is already in progress.",
+    "azureMissing": "The Azure CLI isn't installed, so Fabricator can't sign you in to Azure. Install it from setup (open Settings and select Open setup), then try again.",
+    "badTenant": "Enter the organization as a tenant ID or a domain, such as contoso.onmicrosoft.com.",
+    "alreadySignedIn": "That account was already signed in here, so Fabricator is using it.",
+    "fabricAccountGone": "That Fabric account isn't on this computer anymore. Re-check your accounts.",
+    "signOutAgain": "Try signing out again.",
+    "recheckOrSignInAzure": "Re-check, or sign in to Azure again.",
+    "unreadableList": "The Azure CLI returned an account list Fabricator couldn't read. Re-check your accounts.",
+    "badSubscription": "That isn't an Azure subscription or tenant ID.",
+    "recheckAndRetry": "Re-check your accounts and try again.",
+    "sharedSubscription": "The Azure CLI couldn't switch to {{user}} because another account shares its subscription. Add {{user}} again to use it.",
+    "startingAzureSignIn": "Starting Azure sign-in…",
+    "finishBrowserSignIn": "Complete the browser sign-in and try again.",
+    "signingOutAzure": "Signing out of Azure...",
+    "nowUses": "The Azure CLI now uses {{user}}.",
+    "signedOutAzure": "Signed out of Azure.",
+    "recheckStatusOrSignOut": "Re-check your account status or try signing out again.",
+    "invalidListAfterSignOut": "Azure returned an invalid account list after sign-out. Re-check your account status.",
+    "stillSignedIn": "The Azure CLI still has {{user}} signed in. Try signing out again.",
+    "stillSignedInAny": "The Azure CLI still has signed-in accounts. Try signing out again.",
+    "actions": {
+      "fabricSignOut": "Fabric sign-out",
+      "listAzure": "Listing your Azure accounts",
+      "switchAzure": "Switching Azure accounts",
+      "azureSignIn": "Azure sign-in",
+      "azureSignOut": "Azure sign-out",
+      "azureSignOutCheck": "Azure sign-out verification"
+    }
+  },
+  "auth": {
+    "unconfirmed": "Couldn't confirm your Fabric sign-in just now. {{reason}}",
+    "unrecognizedStatus": "The Rayfin CLI returned an unrecognized sign-in status. {{hint}}",
+    "unknownProvider": "Unknown sign-in provider: {{provider}}.",
+    "copilotBusy": "A Copilot sign-in or sign-out is already in progress.",
+    "copilotTasksSignIn": "Wait for active Copilot tasks to finish or stop them, then sign in again.",
+    "copilotTasksSignOut": "Wait for active Copilot tasks to finish or stop them, then sign out again.",
+    "startingCopilot": "Starting GitHub Copilot sign-in at {{host}}...",
+    "bundledCliUnavailableHere": "The bundled Copilot CLI is unavailable on this platform.",
+    "bundledCliUnavailable": "The bundled Copilot CLI is unavailable. Restart or reinstall Fabricator and try again.",
+    "verifyingCopilot": "Verifying access in the Copilot chat engine...",
+    "invalidHost": "Enter github.com or a GitHub Enterprise Cloud hostname such as company.ghe.com (optionally with https://). Do not include a path, credentials, or a non-HTTPS port.",
+    "wrongHost": "Copilot sign-in completed, but the chat engine is not using {{host}}. Check for COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN overrides, remove unintended overrides, and sign in again.",
+    "signingOutCopilot": "Signing out of GitHub Copilot...",
+    "signedOutCopilot": "Signed out of GitHub Copilot.",
+    "unverified": "{{provider}} sign-in finished, but authentication could not be verified. Check your connection and try signing in again.",
+    "cliFailed": "{{action}} failed. {{reason}} {{hint}}",
+    "cliNotFound": "The required CLI could not be found.",
+    "cliExited": "The CLI exited with code {{code}}.",
+    "cliTimedOut": "The CLI timed out or could not be started.",
+    "incompleteProfile": "Azure returned an incomplete account profile. Re-check or sign in to Azure again.",
+    "rayfinNotFound": "The Rayfin CLI could not be found. Open the project so its dependencies install (or install Node.js and the Rayfin CLI), then try signing in again.",
+    "loginExited": "Sign-in exited with code {{code}} without opening a sign-in window or reporting a reason. Please try again; if it keeps happening, run `npx rayfin login` in the project folder to see the full error.",
+    "loginEnded": "Sign-in ended without opening a sign-in window or reporting a reason (it may have timed out or been blocked). Please try again; if it keeps happening, run `npx rayfin login` in the project folder to see the full error.",
+    "fabricBusy": "A Fabric sign-in, sign-out, or credential refresh is already in progress.",
+    "startingFabric": "Starting Fabric / Rayfin sign-in…",
+    "verifyingFabric": "Verifying the refreshed credential against Fabric...",
+    "signedInUnverified": "Signed in. {{reason}}",
+    "fabricVerified": "Fabric authentication verified.",
+    "waitingForOperations": "Waiting for current Fabric operations to finish before refreshing credentials...",
+    "clearingCredentials": "Clearing the shared Fabric / Rayfin credentials with rayfin logout...",
+    "actions": {
+      "fabricCheck": "Fabric authentication check",
+      "azureCheck": "Azure authentication check",
+      "copilotSignIn": "GitHub Copilot sign-in",
+      "azureAccountCheck": "Azure account check",
+      "fabricReset": "Fabric credential reset"
+    },
+    "hints": {
+      "recheckSoon": "Re-check your accounts in a moment.",
+      "recheckOrSignInFabric": "Re-check or sign in to Fabric again.",
+      "openProjectAndSignIn": "Open a Rayfin project and sign in to Fabric again.",
+      "checkConnectionAzure": "Check your connection and sign in to Azure again.",
+      "copilotSignInAgain": "Try signing in again and complete the browser or device-code instructions shown above.",
+      "signInAzureAgain": "Sign in to Azure again.",
+      "updateRayfin": "Nothing was retried. Update this project's Rayfin CLI and SDK to 1.35.1 or newer, then try refreshing again."
+    }
+  },
+  "chat": {
+    "copilotError": "Copilot reported an error.",
+    "taskFailed": "Chat task failed: {{error}}",
+    "busy": "A message is already being processed for this project.",
+    "turnRunning": "Turn already running.",
+    "sessionGone": "The saved Copilot session is no longer available. Started a new session; your Fabricator chat history is still here.",
+    "sessionUnavailable": "Copilot's saved session is unavailable. Started a new session; your Fabricator chat history is still here.",
+    "reconnecting": "Reconnecting to the Copilot session...",
+    "continuing": "The model stopped before finishing. Asking it to continue…",
+    "retrying": "Copilot hiccup — retrying ({{attempt}}/{{max}})…",
+    "timedOut": "Copilot timed out after two hours.",
+    "endedUnexpectedly": "Copilot ended unexpectedly.",
+    "turnFailed": "Turn failed.",
+    "cantInterject": "Couldn't interject: {{error}}",
+    "noPendingPlan": "No pending plan to resolve.",
+    "planNotThisProject": "That plan request doesn't belong to this project.",
+    "noSession": "No active Copilot session for this project.",
+    "cantUpdatePlan": "Failed to update the plan: {{error}}",
+    "answerRequired": "An answer is required.",
+    "noPendingQuestion": "No pending question to resolve.",
+    "noFreeform": "This question doesn't accept a free-form answer.",
+    "cantSavePlan": "Couldn't save the plan: {{error}}",
+    "pickPathsTitle": "Choose files or folders for Copilot to read",
+    "unknownPlugin": "Fabricator doesn't have the plugin {{plugin}}.",
+    "serverGone": "That MCP server isn't in Fabricator anymore."
+  },
+  "chatTools": {
+    "localCall": {
+      "function": "the {{name}} function",
+      "aFunction": "a function",
+      "connector": "the {{name}} connector",
+      "connectorApi": "the {{name}} connector's data API",
+      "aConnector": "a connector",
+      "appApi": "the app's data API",
+      "asYou": "as you",
+      "signedOut": "while signed out",
+      "asUser": "as {{user}}",
+      "title": "{{what}} {{who}}"
+    }
+  },
+  "commitMessage": {
+    "nothingToCommit": "There's nothing to commit.",
+    "noMessage": "Copilot didn't write a message. Please try again.",
+    "cantWrite": "Couldn't write a message: {{error}}"
+  },
+  "customSkills": {
+    "noFrontmatter": "A skill must start with a YAML frontmatter block (--- … ---).",
+    "badFrontmatter": "Invalid skill frontmatter: {{error}}",
+    "needsName": "The skill's frontmatter needs a non-empty `name`.",
+    "needsDescription": "The skill's frontmatter needs a non-empty `description`.",
+    "fileError": "File error: {{error}}",
+    "fallbackDescription": "A custom skill.",
+    "needsTitle": "Give the skill a title.",
+    "noIdFromTitle": "Couldn't make an id from that title — use letters or numbers.",
+    "reservedTitle": "“{{id}}” is a built-in skill id — pick a different title.",
+    "existsInApp": "A skill “{{id}}” already exists in this app.",
+    "inLibrary": "A custom skill “{{id}}” is already in your library.",
+    "gone": "That custom skill no longer exists.",
+    "noIdFromName": "Couldn't derive an id from the skill name — it needs letters or numbers.",
+    "reservedName": "“{{id}}” is a built-in skill id — rename the skill before adding it.",
+    "cantReadZip": "Couldn't read that .zip: {{error}}",
+    "zipNoSkill": "The .zip doesn't contain a SKILL.md.",
+    "folderNoSkill": "That folder has no SKILL.md at its top level.",
+    "unknown": "Unknown custom skill.",
+    "cantRemove": "Couldn't remove the skill: {{error}}",
+    "builtInId": "That is a built-in skill id.",
+    "alreadyInLibrary": "That skill is already in your library.",
+    "notInApp": "That skill isn't in this app.",
+    "filter": "Skill (SKILL.md or .zip)",
+    "noSource": "That custom skill has no SKILL.md."
+  },
+  "deploy": {
+    "unsupported": {
+      "nameRegion": "Fabric apps aren’t available in “{{name}}”, a workspace on a capacity in {{region}}.",
+      "region": "Fabric apps aren’t available in this workspace, on a capacity in {{region}}.",
+      "name": "Fabric apps aren’t available in “{{name}}”.",
+      "none": "Fabric apps aren’t available in this workspace.",
+      "message": "{{headline}} They aren’t in every region yet, so publish to a workspace on a capacity in another region. If none works, ask your Fabric admin to turn on Fabric Apps."
+    },
+    "cantCheckChanges": "Could not check for unpublished changes. {{error}}",
+    "gitStatusFailed": "git status failed.",
+    "cantCompare": "Could not compare the project with its last published version. {{error}}",
+    "gitDiffFailed": "git diff failed.",
+    "taskFailed": "The publish task failed: {{error}}",
+    "settingsPushFailed": "rayfin up couldn't push the sign-in settings. Check the log above.",
+    "cliNotStarted": "The project's Rayfin CLI could not be started.",
+    "exitedWithoutReason": "rayfin up exited with code {{code}} without a detailed failure reason. View the publish log. If Fabric sign-in looks successful but publishing keeps failing, use Refresh Fabric authentication and update the project's Rayfin CLI and SDK to 1.35.1 or newer.",
+    "unknownCode": "unknown",
+    "authCache": "{{detail}} Use Refresh Fabric authentication to clear the CLI credentials and sign in again. This project's Rayfin CLI and SDK should be 1.35.1 or newer.",
+    "cantStartHistory": "Could not start this app's version history, so Fabricator can't tell what changed. {{error}}",
+    "cantReadPublished": "Could not read this project's published apps. {{error}}",
+    "invalidListResponse": "Could not read this project's published apps: invalid CLI response. Nothing was deleted.",
+    "cliNotOnPath": "The rayfin CLI was not found on PATH.",
+    "switchFailed": "rayfin up switch failed.",
+    "cantReadFile": "Couldn't read {{path}}: {{error}}",
+    "noDeployments": "it has no deployments",
+    "cantUpdateFile": "Couldn't update {{path}}: {{error}}",
+    "deleteFailed": "Deleting the published app failed: {{error}}",
+    "notRecorded": "That published app isn't recorded in this project anymore.",
+    "fabricDidntDelete": "Fabric didn't delete the app.",
+    "stillRecorded": "Fabric deleted the app, but this project still records it. {{error}}"
+  },
+  "doctor": {
+    "hints": {
+      "node": "Install Node.js 22.12 or newer (includes npm).",
+      "npm": "npm ships with Node.js.",
+      "git": "Install Git for version control of your apps.",
+      "az": "Optional. Sign in to Azure to share published apps, add Fabric data and migrate Power BI reports, and to let your app's functions and connectors use your Azure access while you develop.",
+      "gh": "Optional repository browsing with gh — separate from the bundled GitHub Copilot engine."
+    },
+    "check": {
+      "noVersion": "{{name}} was found, but its version check returned no recognizable version.",
+      "failed": "{{name}} was found, but its version check failed: {{detail}}.",
+      "exitCode": "{{name}} was found, but its version check failed with exit code {{code}}.",
+      "unfinished": "{{name}} was found, but its version check could not finish (it may have timed out or failed to start).",
+      "fix": "{{problem}} Re-check or run {{command}} in a terminal to diagnose the existing installation."
+    },
+    "install": {
+      "viaWinget": "Installing {{name}} via winget (you may see a permission prompt)…",
+      "installed": "Installed {{name}}. Restart Fabricator to finish setup.",
+      "wingetFailed": "winget could not install {{name}} (exit {{code}}). Opening the official installer…",
+      "noWinget": "winget is unavailable. Opening the official {{name}} installer…",
+      "viaHomebrew": "Installing {{name}} via Homebrew…",
+      "brewFailed": "Homebrew could not install {{name}} (exit {{code}}). Opening the official installer…",
+      "noHomebrew": "Homebrew is unavailable. Opening the official {{name}} installer…",
+      "cantOpenInstaller": "Could not open the {{name}} installer: {{error}}",
+      "opened": "Opened {{url}}. Install {{name}}, then click “Restart”.",
+      "unknownTool": "Unknown prerequisite: {{id}}.",
+      "alreadyAvailable": "{{name}} is already available.",
+      "notAutomatic": "{{name}} cannot be installed automatically on this platform.",
+      "resolveCheckFirst": "Resolve the existing CLI check failure before installing all prerequisites. {{error}}",
+      "remainingManual": "The remaining prerequisites cannot be installed automatically. Follow their setup guidance.",
+      "installing": "Installing {{name}}",
+      "incomplete": "One or more installations did not complete. Check the process output for details."
+    }
+  },
+  "fabric": {
+    "cantPrepareAppLookup": "Could not prepare the Fabric app lookup: {{error}}",
+    "cantListApps": "Could not list the apps in that workspace.",
+    "noCliForWorkspace": "Could not locate the Rayfin CLI to look up the workspace.",
+    "cantPrepareWorkspaceLookup": "Could not prepare the workspace lookup: {{error}}",
+    "cantLookUpWorkspace": "Could not look up the workspace.",
+    "cantInstallDeps": "Could not install this project's dependencies: {{error}}",
+    "noCli": "Could not locate the Rayfin CLI. Open a Rayfin project to reach Fabric.",
+    "noAuthModule": "Could not locate the Rayfin CLI authentication module. Open a Rayfin project to reach Fabric.",
+    "cantPrepareAuthCheck": "Could not prepare the Fabric authentication check: {{error}}",
+    "cantVerifySession": "Could not verify the current Fabric session.",
+    "cantPrepareWorkspacesHelper": "Could not prepare the workspace lookup helper: {{error}}",
+    "cantPrepareCapacitiesHelper": "Could not prepare the capacities lookup helper: {{error}}",
+    "cantPrepareCreateHelper": "Could not prepare the create-workspace helper: {{error}}",
+    "unrecordedApps": "Some of this project's published apps have no Fabric workspace or item ID recorded. Nothing was deleted.",
+    "cantPrepareDeleteHelper": "Could not prepare the delete helper: {{error}}",
+    "enterEmail": "Enter at least one email to share with.",
+    "noWorkspaceId": "This published app has no Fabric workspace ID yet. Publish it before you share it.",
+    "cantPrepareShareHelper": "Could not prepare the share helper: {{error}}",
+    "cantPrepareDirectoryHelper": "Could not prepare the directory helper: {{error}}"
+  },
+  "files": {
+    "notAFile": "Not a file.",
+    "notFound": "File not found.",
+    "cantRead": "Could not read the file.",
+    "isFile": "This is a file, not a folder.",
+    "noFolder": "There's no folder here.",
+    "noAccess": "You don't have access to this folder.",
+    "cantOpenFolder": "Couldn't open this folder."
+  },
+  "gallery": {
+    "teamApp": "A team app is published by its team's pipeline.",
+    "notPublished": "This app isn't published yet.",
+    "noDescription": "Copilot didn't write a description. Try again.",
+    "cantWrite": "Couldn't write a description: {{error}}"
+  },
+  "git": {
+    "enterMessage": "Enter a commit message.",
+    "stillConflicted": "Some files still have conflicts. Resolve them, or cancel the merge, first.",
+    "addFailed": "git add failed.",
+    "nothingToCommit": "Nothing to commit.",
+    "commitFailed": "git commit failed.",
+    "noSubject": "(no message)",
+    "cantReadPath": "Could not read {{path}}: {{error}}",
+    "cantSaveBeforeRestore": "Could not save your current changes before restoring.",
+    "cantReadCurrent": "Could not read the current version.",
+    "versionWithoutApp": "That version doesn’t include this app, so it can’t be restored.",
+    "cantSaveRestored": "Could not save the restored version.",
+    "pickVersion": "Pick a saved version to restore.",
+    "notTrackedRestore": "This project isn’t tracked by git, so there’s nothing to restore.",
+    "versionGone": "That version no longer exists.",
+    "cantRestore": "Could not restore that version.",
+    "cantReachRemote": "Could not reach the remote.",
+    "teamSync": "Fabricator saves this team app to GitHub for you after each change. Use Update and Publish instead.",
+    "merging": "A merge is waiting to be finished. Finish it or cancel it first.",
+    "overlap": "Your changes and the latest changes overlap and couldn’t be combined automatically.",
+    "noReason": "git gave no reason.",
+    "overlapIn_one": "Your changes and the latest changes overlap in {{count}} file.",
+    "overlapIn_other": "Your changes and the latest changes overlap in {{count}} files.",
+    "notTracked": "This project isn’t tracked by git.",
+    "noUpstream": "This branch isn’t linked to a remote branch yet.",
+    "cantSaveBeforeUpdate": "Could not save your current changes before updating.",
+    "cantCombine": "Couldn’t combine the latest changes: {{reason}}",
+    "cantFinish": "Couldn’t finish the merge: {{reason}}",
+    "cantCancel": "Couldn’t cancel the merge: {{reason}}",
+    "noBranch": "There’s no branch named {{branch}}.",
+    "cantSaveBeforeSwitch": "Could not save your current changes before switching.",
+    "cantSwitch": "Couldn’t switch to {{name}}: {{reason}}",
+    "rejected": "The remote has changes you don’t have yet. Get the latest changes first, then push again.",
+    "cantPush": "Could not push your changes."
+  },
+  "github": {
+    "cantListAccounts": "Couldn't list your GitHub accounts",
+    "ghMissingSetup": "The GitHub CLI (gh) isn't installed. Install it from setup, then try again.",
+    "cantOpenTerminal": "Couldn't open a terminal. Run `{{command}}` yourself, then come back.",
+    "notAccountName": "{{login}} isn't a GitHub account name.",
+    "cantSwitch": "Couldn't switch to {{login}}",
+    "cantSignOut": "Couldn't sign out of {{login}}",
+    "ghMissingPath": "The GitHub CLI (gh) is not installed or not on PATH.",
+    "cantOpenLoginTerminal": "Could not open a terminal for GitHub sign-in. Run `gh auth login --hostname github.com` in your terminal.",
+    "authExpired": "{{operation}}: GitHub authentication is required or has expired. Sign in to github.com again.",
+    "exitCode": "{{operation}} (exit {{code}}).",
+    "cantReadRepoList": "Could not read the repository list: {{error}}",
+    "ghMissingBrowse": "GitHub CLI (gh) was not found. Install it to browse repositories.",
+    "cantListRepos": "Could not list your repositories",
+    "enterRepository": "Enter a repository as owner/name or a GitHub URL.",
+    "cantCreateWorkspaceFolder": "Could not create workspace folder: {{error}}",
+    "folderExists": "A folder named \"{{name}}\" already exists in your workspace.",
+    "ghMissingClone": "GitHub CLI (gh) was not found. Install it, then try cloning again.",
+    "cloneFailed": "Clone failed",
+    "notRayfin": "That repository isn't a Rayfin project (no rayfin/rayfin.yml).",
+    "npmMissing": "Cloned to {{path}}, but npm was not found on PATH. Install Node.js (which includes npm), run \"npm install\" in that folder, then use Open existing → Browse folder to open it.",
+    "installFailed": "Cloned to {{path}}, but installing dependencies failed: {{cause}}. See details below, then run \"npm install\" in that folder and use Open existing → Browse folder to open it.",
+    "installExited": "Cloned to {{path}}, but installing dependencies failed (npm install exited {{code}}). See details below, then run \"npm install\" in that folder and use Open existing → Browse folder to open it."
+  },
+  "githubRepo": {
+    "nameRule": "Use only letters, numbers, hyphens, underscores and periods in the repository name.",
+    "notAccountOrOrg": "{{owner}} isn't a GitHub account or organization name.",
+    "listOwners": "List where you can create repositories",
+    "taken": "github.com/{{name}} already exists. Choose another name.",
+    "adoptEmpty": "github.com/{{name}} is empty, so Fabricator puts the app in it.",
+    "teamApp": "Team apps are already on GitHub, in their team workspace's repository.",
+    "folderMissing": "The project's folder is missing.",
+    "pushFailed": "Fabricator created github.com/{{name}}, but couldn't push the app to it. {{message}}",
+    "notTracked": "This project isn't tracked by git, so it has no versions to put on GitHub.",
+    "partOfRepo": "This app is part of the git repository at {{path}}, so it can't have a GitHub repository of its own.",
+    "hasRemote": "This project already has a remote repository.",
+    "saveFirst": "Save a first version of the app, then try again.",
+    "unexpectedRepo": "GitHub returned an unexpected repository.",
+    "useExisting": "Use the existing GitHub repository",
+    "createRepo": "Create the GitHub repository",
+    "noReason": "Git didn't say why.",
+    "connect": "Connect to GitHub"
+  },
+  "local": {
+    "notIdentity": "{{who}} isn't a sign-in identity.",
+    "useIdentities": "Use developer, none or user:<username>.",
+    "useKinds": "Use developer, user or none.",
+    "enterUsername": "Enter a username, such as an email address.",
+    "chooseUser": "Choose the user to sign in as.",
+    "cantSave": "Couldn't save the file: {{error}}",
+    "chooseFolder": "Choose another folder.",
+    "enterValue": "Enter a value for the secret.",
+    "badReason": "{{code}} isn't a reason to use the published backend."
+  },
+  "mcp": {
+    "serverGone": "That server isn't in Fabricator anymore."
+  },
+  "migration": {
+    "turnOnFirst": "Turn on Migrate Power BI reports in Settings → Experiments first."
+  },
+  "pick": {
+    "lookupFailed": "Source lookup failed: {{error}}"
+  },
+  "projects": {
+    "enterRepoUrl": "Enter a GitHub repo URL, e.g. https://github.com/microsoft/awesome-rayfin",
+    "cantReachGallery": "Couldn't reach {{owner}}/{{repo}}. Check you're online and the repo has a rayfin-template.yml at its root.",
+    "galleryUnreadable": "This gallery’s rayfin-template.yml could not be parsed.",
+    "noTemplates": "No templates were found in this gallery.",
+    "nameCharacters": "Use only letters, numbers, spaces, hyphens and underscores.",
+    "nameLetterOrNumber": "Include at least one letter or number.",
+    "nameNeedsLetters": "Use letters or numbers in the name.",
+    "nameTaken": "A folder named “{{slug}}” is already in {{place}}. Choose another name.",
+    "folderExists": "A folder named \"{{slug}}\" already exists in {{place}}.",
+    "place": {
+      "thatFolder": "that folder",
+      "projectsFolder": "your projects folder",
+      "workspace": "your workspace"
+    },
+    "enterFullPath": "Enter the folder’s full path, or choose it with Browse.",
+    "notAFolder": "That’s a file, not a folder.",
+    "folderMissing": "This folder doesn’t exist yet.",
+    "cantCreateFolder": "Couldn’t create the folder: {{error}}",
+    "enterName": "Please enter a project name.",
+    "nameNeedsLettersOrNumbers": "Project name must contain letters or numbers.",
+    "npmMissingCreate": "npm was not found on PATH. Install Node.js (which includes npm) to create projects.",
+    "createFromUrlFailed": "Creating the project from the template URL failed (exit code {{code}}). Check the URL is a valid Rayfin template.",
+    "createFailed": "Project creation failed (exit code {{code}}).",
+    "creatingFrom": "Creating \"{{folder}}\" from the {{template}} template with Rayfin {{release}}…",
+    "creatingFromCommunity": "Creating \"{{folder}}\" from the community template with Rayfin {{release}}…",
+    "noSkipInstall": "This Rayfin release doesn't take --skip-install, so it installs the packages itself.",
+    "pinned": "Pinned the Rayfin packages to {{range}}.",
+    "keptVersions": "The template asks for {{name}} {{spec}}, not Rayfin {{major}}.{{minor}}.x, so it keeps its versions. Fabricator runs Rayfin {{supported}} on this computer: on other releases, some things might not work as expected.",
+    "npmMissingRetry": "npm was not found on PATH. Install Node.js (which includes npm), then retry.",
+    "theProject": "the project",
+    "chooseAnotherFolder": "Choose another folder for the project.",
+    "cantCreateWorkspaceFolder": "Could not create workspace folder: {{error}}",
+    "ready": "Project ready.",
+    "folderGone": "That folder no longer exists.",
+    "notRayfinProject": "That folder is not a Rayfin project (no rayfin/rayfin.yml).",
+    "noLongerRayfinProject": "That folder is no longer a Rayfin project (no rayfin/rayfin.yml).",
+    "cantTrash": "Couldn't move the folder to trash: {{error}}",
+    "trashHint": "Close any program using its files, such as an editor, a terminal or a dev server, and try again.",
+    "cantTrashHint": "Couldn't move the folder to trash. {{hint}}",
+    "cantTrashReason": "Couldn't move the folder to trash: {{reason}}. {{hint}}"
+  },
+  "screenshot": {
+    "pending": "Screenshot capture is deferred in the Tauri build.",
+    "onlyImages": "Only PNG, JPEG, GIF, WebP and BMP images can be attached.",
+    "cantRead": "Couldn't read the image: {{error}}",
+    "tooLarge": "The image is too large to attach: the limit is 20 MB."
+  },
+  "secrets": {
+    "timedOut": "The Rayfin CLI didn't finish in time. Check your connection, then try again.",
+    "notDeployed": "Publish your app first. Published values are stored with the published app.",
+    "enterName": "Enter a name for the secret.",
+    "nameTooLong": "Use a name of 128 characters or fewer.",
+    "nameRule": "Start the name with a letter, then use only letters, numbers and underscores.",
+    "teamApp": "Fabricator can’t change a team app’s published secrets yet. Change them in the Fabric portal.",
+    "needsRayfin": "Secrets need Rayfin {{version}} or newer. Select Rayfin in the status bar and choose Update with Copilot.",
+    "notConfirmed": "The Rayfin CLI didn't confirm the change.",
+    "cliFailed": "The Rayfin CLI failed (exit code {{code}}).",
+    "cantRead": "Couldn't read the secrets",
+    "notAList": "Fabricator can’t add {{name}}: the secrets: entry in rayfin/rayfin.yml isn’t a list. Fix the file, then try again.",
+    "noConfig": "Fabricator can’t find rayfin/rayfin.yml in this project.",
+    "cantAdd": "Couldn’t add {{name}} to rayfin.yml: {{detail}}",
+    "enterValue": "Enter a value for the secret."
+  },
+  "shared": {
+    "projectNotFound": "Project not found.",
+    "projectGone": "That project isn't in Fabricator anymore.",
+    "projectFolderNotFound": "Project folder not found.",
+    "pathOutside": "Path is outside the project.",
+    "unknown": "unknown",
+    "retryOnOpen": "Fabricator tries again when the app opens.",
+    "projectFolderGone": "The project's folder isn't there anymore.",
+    "teamWorkspaceGone": "That team workspace is no longer on this computer.",
+    "nodeMissing": "Node.js was not found on PATH."
+  },
+  "skills": {
+    "cards": {
+      "polishedUi": {
+        "title": "Polished, modern UI",
+        "description": "A clean, consistent look: spacing, type, color and components that match."
+      },
+      "butteryAnimations": {
+        "title": "Buttery animations",
+        "description": "Quick, purposeful motion that never gets in the way."
+      },
+      "responsiveLayout": {
+        "title": "Responsive on every screen",
+        "description": "Layouts that work on phones, tablets and wide desktops."
+      },
+      "easyNavigation": {
+        "title": "Easy navigation",
+        "description": "Clear menus and page titles, and links you can share."
+      },
+      "clearCopy": {
+        "title": "Clear, friendly wording",
+        "description": "Plain-language labels, buttons, messages and empty states."
+      },
+      "loadingEmptyStates": {
+        "title": "Loading & empty states",
+        "description": "Every screen handles loading, empty, error and success."
+      },
+      "friendlyForms": {
+        "title": "Friendly forms & validation",
+        "description": "Forms that guide people, check input early and never lose it."
+      },
+      "dataModeling": {
+        "title": "Solid data modeling",
+        "description": "Well-shaped Rayfin entities, relationships and queries."
+      },
+      "searchAndFilter": {
+        "title": "Search, sort & filter",
+        "description": "Find records fast in long lists, with filtering done in the query."
+      },
+      "dataViz": {
+        "title": "Beautiful charts & dashboards",
+        "description": "The right chart for each question, with the key numbers first."
+      },
+      "accessibility": {
+        "title": "Accessible to everyone",
+        "description": "Works with a keyboard and screen readers, with readable contrast."
+      },
+      "secureByDefault": {
+        "title": "Secure by default",
+        "description": "Per-user data rules, signed-in pages and no secrets in the browser."
+      },
+      "performance": {
+        "title": "Fast & snappy",
+        "description": "Quick to load and smooth to use as the app grows."
+      },
+      "rayfin": {
+        "title": "Rayfin essentials",
+        "description": "Core Rayfin knowledge: data models, sign-in, publishing and the CLI."
+      },
+      "rayfinFunctions": {
+        "description": "Server-side functions your app can call."
+      },
+      "rayfinConnectors": {
+        "description": "Use existing Fabric data: lakehouses, warehouses, SQL databases, semantic models and KQL."
+      },
+      "rayfinStorage": {
+        "description": "File storage for your app. Experimental."
+      }
+    },
+    "inThisApp": "A skill in this app.",
+    "noPreview": "This skill has no preview.",
+    "nameTaken": "This app already has its own skill with that name.",
+    "unknown": "Unknown skill.",
+    "managed": "That skill is managed by Rayfin.",
+    "managedCantRemove": "That skill is managed by Rayfin and can't be removed.",
+    "cantUpdate": "Could not update skills: {{error}}"
+  },
+  "suggest": {
+    "busy": "Suggestions are already being generated for this project."
+  },
+  "terminal": {
+    "notHere": "Terminals are only available in Fabricator's window.",
+    "badId": "That isn't a terminal id.",
+    "noShell": "Fabricator couldn't find a shell on this computer."
+  },
+  "transient": {
+    "cantReach": "Couldn't reach the model.",
+    "cantSend": "Couldn't send the request to the model."
+  }
+}

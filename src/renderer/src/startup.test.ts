@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AuthStatus, DoctorReport, ToolStatus } from '@shared/ipc'
+import { setLanguage } from './i18n'
 import {
   CHECKING_AUTH,
   failedAuth,
@@ -98,12 +99,22 @@ describe('auth results', () => {
 })
 
 describe('listText', () => {
+  afterEach(async () => {
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
   it.each([
     [['a'], 'a'],
     [['a', 'b'], 'a and b'],
     [['a', 'b', 'c'], 'a, b, and c']
   ])('joins %j', (items, text) => {
     expect(listText(items)).toBe(text)
+  })
+
+  it('lists them the way the language shown does', async () => {
+    await setLanguage('de')
+    expect(listText(['a', 'b', 'c'])).toBe('a, b und c')
   })
 })
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import type { GithubRepo, GithubStatus, InstallResult } from '@shared/ipc'
+import { Trans, useTranslation } from '../i18n'
 import { useSuppressPreview } from '../overlay'
 import { authErrorMessage } from '../authErrors'
 import { useMascotInstall } from './mascot/stage'
@@ -29,8 +30,13 @@ type ClonePhase = 'cloning' | 'verifying' | 'installing' | 'opening'
 
 interface ClonePhaseDef {
   id: ClonePhase
-  label: string
-  hint?: string
+  /** Keys in the `home` catalog. */
+  label:
+    | 'clone.phases.cloning'
+    | 'clone.phases.verifying'
+    | 'progress.installing'
+    | 'clone.phases.opening'
+  hint?: 'progress.firstRun'
   /** Loose, lowercase fragments that signal this stage has begun. */
   markers: string[]
 }
@@ -41,15 +47,15 @@ interface ClonePhaseDef {
  * dependencies (npm install) …", and "… Opening …".
  */
 const CLONE_PHASES: ClonePhaseDef[] = [
-  { id: 'cloning', label: 'Cloning repository', markers: ['cloning'] },
-  { id: 'verifying', label: 'Verifying project', markers: ['verifying'] },
+  { id: 'cloning', label: 'clone.phases.cloning', markers: ['cloning'] },
+  { id: 'verifying', label: 'clone.phases.verifying', markers: ['verifying'] },
   {
     id: 'installing',
-    label: 'Installing dependencies',
-    hint: 'First run can take a minute or two.',
+    label: 'progress.installing',
+    hint: 'progress.firstRun',
     markers: ['install']
   },
-  { id: 'opening', label: 'Opening project', markers: ['opening'] }
+  { id: 'opening', label: 'clone.phases.opening', markers: ['opening'] }
 ]
 
 const clonePhaseRank = (phase: ClonePhase): number => CLONE_PHASES.findIndex((p) => p.id === phase)
@@ -124,6 +130,7 @@ function RepositorySkeleton({ label }: { label: string }): JSX.Element {
 export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JSX.Element {
   // The native preview webview floats above HTML; suppress it while this covers the body.
   useSuppressPreview()
+  const { t } = useTranslation('home')
 
   const [status, setStatus] = useState<GithubStatus | null>(null)
   const [checking, setChecking] = useState(true)
@@ -201,7 +208,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
       setStatus(null)
       clearRepos()
       setWaitingLogin(false)
-      setStatusError(authErrorMessage(reason, 'Could not check the GitHub CLI. Please try again.'))
+      setStatusError(authErrorMessage(reason, t('clone.errors.check')))
       return null
     } finally {
       if (seq === statusSeqRef.current) setChecking(false)
@@ -245,7 +252,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
       if (cancelled) return
       if (Date.now() >= deadline) {
         setWaitingLogin(false)
-        setLoginError('GitHub sign-in was not detected. Try again, or finish signing in and click Re-check.')
+        setLoginError(t('clone.errors.notDetected'))
         return
       }
       await recheck()
@@ -271,14 +278,14 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
       } else {
         setRepos([])
         setSelected(null)
-        setReposError(res.error ?? 'Could not load your repositories.')
+        setReposError(res.error ?? t('clone.errors.repos'))
         await recheck()
       }
     } catch (reason) {
       if (seq !== reposSeqRef.current) return
       setRepos([])
       setSelected(null)
-      setReposError(authErrorMessage(reason, 'Could not load your repositories.'))
+      setReposError(authErrorMessage(reason, t('clone.errors.repos')))
       await recheck()
     } finally {
       if (seq === reposSeqRef.current) setLoadingRepos(false)
@@ -317,7 +324,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
       setInstallResult({
         ok: false,
         exitCode: null,
-        error: authErrorMessage(reason, 'Could not install the GitHub CLI. Please retry.')
+        error: authErrorMessage(reason, t('clone.errors.install'))
       })
     } finally {
       setInstalling(false)
@@ -334,18 +341,13 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
       const res = await window.api.github.login()
       if (seq !== loginSeqRef.current) return
       if (!res.ok) {
-        setLoginError(
-          authErrorMessage(
-            res.error,
-            'Could not open a terminal automatically. Run "gh auth login" in your terminal, then click Re-check.'
-          )
-        )
+        setLoginError(authErrorMessage(res.error, t('clone.errors.terminal')))
         return
       }
       setWaitingLogin(true)
     } catch (reason) {
       if (seq === loginSeqRef.current) {
-        setLoginError(authErrorMessage(reason, 'Could not start GitHub sign-in. Please try again.'))
+        setLoginError(authErrorMessage(reason, t('clone.errors.signIn')))
       }
     } finally {
       if (seq === loginSeqRef.current) {
@@ -370,7 +372,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
       const verified = await recheck()
       if (!verified?.signedIn) return
       if (!manual.trim() && verified.user !== user) {
-        setCloneError('Your GitHub account changed. Choose a repository again before cloning.')
+        setCloneError(t('clone.errors.accountChanged'))
         return
       }
       const res = await window.api.github.clone(cloneTarget)
@@ -379,12 +381,12 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
         mascot.succeed()
         onCloned()
       } else {
-        setCloneError(res.error ?? 'Clone failed.')
+        setCloneError(res.error ?? t('clone.errors.failed'))
         setShowCloneLog(true)
         await recheck()
       }
     } catch (reason) {
-      setCloneError(authErrorMessage(reason, 'Clone failed. Please try again.'))
+      setCloneError(authErrorMessage(reason, t('clone.errors.failedRetry')))
       setShowCloneLog(true)
       await recheck()
     } finally {
@@ -419,25 +421,26 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
   const cloneActiveIdx = cloneDone
     ? CLONE_PHASES.length
     : CLONE_PHASES.findIndex((p) => p.id === clonePhase)
-  const cloneActivePhaseLabel = cloneDone
-    ? 'Project ready'
-    : (CLONE_PHASES[cloneActiveIdx]?.label ?? 'Cloning repository')
+  const cloneActivePhaseLabel = t(
+    cloneDone ? 'progress.ready' : (CLONE_PHASES[cloneActiveIdx]?.label ?? 'clone.phases.cloning')
+  )
 
-  let sub = 'Sign in to GitHub to clone one of your repositories into your workspace.'
-  if (signedIn) sub = 'Pick a repository to clone into your workspace, or paste a URL.'
-  else if (status && !ghInstalled)
-    sub = 'The GitHub CLI (gh) is needed to sign in and clone repositories.'
-  else if (statusError) sub = 'Check your GitHub CLI connection, then try again.'
+  let sub = t('clone.sub.signIn')
+  if (signedIn) sub = t('clone.sub.pick')
+  else if (status && !ghInstalled) sub = t('clone.sub.needCli')
+  else if (statusError) sub = t('clone.sub.checkFailed')
 
   const connection = checking
-    ? 'Checking GitHub'
+    ? t('clone.connection.checking')
     : statusError
-      ? 'Connection unavailable'
+      ? t('clone.connection.unavailable')
       : signedIn
-        ? `Connected${status?.user ? ` as ${status.user}` : ''}`
+        ? status?.user
+          ? t('clone.connection.connectedAs', { user: status.user })
+          : t('clone.connection.connected')
         : ghInstalled
-          ? 'Sign in required'
-          : 'GitHub CLI needed'
+          ? t('clone.connection.signInRequired')
+          : t('clone.connection.cliNeeded')
 
   return (
     <div className="create-screen clone-screen" ref={screenRef}>
@@ -448,7 +451,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
           </span>
           <div className="create-head-text">
             <p className="clone-eyebrow">GitHub</p>
-            <h1 className="create-title">Clone from GitHub</h1>
+            <h1 className="create-title">{t('clone.title')}</h1>
             <p className="create-sub">{sub}</p>
           </div>
           <span
@@ -467,13 +470,13 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
           data-mascot-avoid=""
         >
           {initialChecking && (
-            <section className="clone-loading-card" aria-label="Checking GitHub connection">
+            <section className="clone-loading-card" aria-label={t('clone.checking.label')}>
               <div className="clone-loading-copy">
-                <strong>Preparing your GitHub repositories</strong>
-                <span>Checking the GitHub CLI and your sign-in before loading the picker.</span>
+                <strong>{t('clone.checking.title')}</strong>
+                <span>{t('clone.checking.desc')}</span>
               </div>
               <span className="clone-skeleton-input" aria-hidden="true" />
-              <RepositorySkeleton label="Loading repository picker..." />
+              <RepositorySkeleton label={t('clone.checking.loading')} />
             </section>
           )}
 
@@ -481,7 +484,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
             <section className="clone-state-card clone-state-card--error" role="alert">
               <span className="clone-state-icon codicon codicon-warning" aria-hidden="true" />
               <div className="clone-state-copy">
-                <h2>Could not check GitHub</h2>
+                <h2>{t('clone.checkFailed')}</h2>
                 <p>{statusError}</p>
               </div>
               <button
@@ -490,7 +493,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                 disabled={checking || startingLogin}
                 onClick={() => void recheck()}
               >
-                Try again
+                {t('actions.tryAgain')}
               </button>
             </section>
           )}
@@ -499,9 +502,9 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
             <section className="clone-state-card">
               <span className="clone-state-icon codicon codicon-terminal" aria-hidden="true" />
               <div className="clone-state-copy">
-                <h2>Install the GitHub CLI</h2>
+                <h2>{t('clone.install.title')}</h2>
                 <p>
-                  Fabricator uses <code>gh</code> to sign in and clone repositories from GitHub.
+                  <Trans t={t} i18nKey="clone.install.desc" components={{ code: <code /> }} />
                 </p>
                 <div className="clone-state-actions">
                   <button
@@ -510,7 +513,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                     disabled={installing || checking}
                     onClick={() => void installGh()}
                   >
-                    {installing ? 'Installing...' : 'Install GitHub CLI'}
+                    {installing ? t('clone.install.installing') : t('clone.install.install')}
                   </button>
                   {installResult?.requiresRelaunch ? (
                     <button
@@ -518,7 +521,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                       className="btn btn--sm"
                       onClick={() => void window.api.relaunch()}
                     >
-                      Restart to finish
+                      {t('clone.install.restart')}
                     </button>
                   ) : (
                     <button
@@ -527,7 +530,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                       disabled={installing || checking}
                       onClick={() => void recheck()}
                     >
-                      Re-check
+                      {t('clone.recheck')}
                     </button>
                   )}
                   <button
@@ -535,22 +538,20 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                     className="link-btn"
                     onClick={() => void window.api.openExternal('https://cli.github.com')}
                   >
-                    Install manually
+                    {t('clone.install.manually')}
                   </button>
                 </div>
                 {installResult?.manual && (
-                  <p className="field-hint">
-                    The installer was opened in your browser. After installing, click Restart.
-                  </p>
+                  <p className="field-hint">{t('clone.install.manualHint')}</p>
                 )}
                 {installResult && !installResult.ok && (
                   <div className="alert alert--error" role="alert">
-                    {installResult.error || 'Could not install the GitHub CLI. Please retry.'}
+                    {installResult.error || t('clone.errors.install')}
                   </div>
                 )}
                 {(installing || installLog) && (
                   <pre className="log-console log-console--sm clone-install-log">
-                    {installLog || 'Starting...'}
+                    {installLog || t('clone.starting')}
                   </pre>
                 )}
               </div>
@@ -563,11 +564,8 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
               <div className="clone-state-copy">
                 {waitingLogin ? (
                   <>
-                    <h2>Waiting for GitHub sign-in</h2>
-                    <p>
-                      A terminal window opened. Complete the browser prompts, then return here and
-                      Fabricator will detect your sign-in.
-                    </p>
+                    <h2>{t('clone.signIn.waiting')}</h2>
+                    <p>{t('clone.signIn.waitingDesc')}</p>
                     <div className="clone-state-actions">
                       <button
                         type="button"
@@ -575,7 +573,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                         disabled={checking}
                         onClick={() => void recheck()}
                       >
-                        Re-check now
+                        {t('clone.signIn.recheckNow')}
                       </button>
                       <button
                         type="button"
@@ -586,16 +584,15 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                           setWaitingLogin(false)
                         }}
                       >
-                        Cancel
+                        {t('actions.cancel')}
                       </button>
                     </div>
                   </>
                 ) : (
                   <>
-                    <h2>Sign in to GitHub</h2>
+                    <h2>{t('clone.signIn.title')}</h2>
                     <p>
-                      A terminal will run <code>gh auth login --web</code>. Complete the sign-in in
-                      your browser, then return here.
+                      <Trans t={t} i18nKey="clone.signIn.desc" components={{ code: <code /> }} />
                     </p>
                     <div className="clone-state-actions">
                       <button
@@ -604,7 +601,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                         disabled={startingLogin || checking}
                         onClick={() => void beginLogin()}
                       >
-                        {startingLogin ? 'Opening sign-in…' : 'Sign in with GitHub'}
+                        {startingLogin ? t('clone.signIn.opening') : t('clone.signIn.button')}
                       </button>
                       <button
                         type="button"
@@ -612,7 +609,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                         disabled={checking || startingLogin}
                         onClick={() => void recheck()}
                       >
-                        Re-check
+                        {t('clone.recheck')}
                       </button>
                     </div>
                   </>
@@ -627,10 +624,10 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
               <div className="clone-section-head">
                 <div>
                   <p className="clone-section-eyebrow">
-                    {initialChecking ? 'Direct link' : 'Another repository'}
+                    {initialChecking ? t('clone.manual.direct') : t('clone.manual.another')}
                   </p>
                   <h2 id="clone-manual-title">
-                    {initialChecking ? 'Paste a repository link' : 'Or paste a repository link'}
+                    {initialChecking ? t('clone.manual.title') : t('clone.manual.titleOr')}
                   </h2>
                 </div>
               </div>
@@ -638,7 +635,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                 className="field-input"
                 type="text"
                 value={manual}
-                placeholder="owner/name or https://github.com/owner/name"
+                placeholder={t('clone.manual.placeholder')}
                 autoCapitalize="off"
                 autoCorrect="off"
                 autoComplete="off"
@@ -651,12 +648,9 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
               />
               <span className="field-hint">
                 {initialChecking ? (
-                  'You can paste a link now. Cloning unlocks once GitHub connection checking finishes.'
+                  t('clone.manual.checkingHint')
                 ) : (
-                  <>
-                    The repository is cloned into your workspace and must contain{' '}
-                    <code>rayfin/rayfin.yml</code>.
-                  </>
+                  <Trans t={t} i18nKey="clone.manual.hint" components={{ code: <code /> }} />
                 )}
               </span>
             </section>
@@ -668,22 +662,22 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                 <section className="clone-repo-panel" aria-labelledby="clone-repositories-title">
                   <div className="clone-section-head">
                     <div>
-                      <p className="clone-section-eyebrow">Your repositories</p>
-                      <h2 id="clone-repositories-title">Choose a repository</h2>
+                      <p className="clone-section-eyebrow">{t('clone.repos.eyebrow')}</p>
+                      <h2 id="clone-repositories-title">{t('clone.repos.title')}</h2>
                     </div>
                     <span className="clone-account">
                       <span className="codicon codicon-account" aria-hidden="true" />
-                      {status?.user ?? 'GitHub account'}
+                      {status?.user ?? t('clone.repos.account')}
                     </span>
                   </div>
                   <label className="clone-search">
-                    <span className="sr-only">Filter repositories</span>
+                    <span className="sr-only">{t('clone.repos.filter')}</span>
                     <span className="clone-search-icon codicon codicon-search" aria-hidden="true" />
                     <input
                       className="field-input clone-search-input"
                       type="text"
                       value={filter}
-                      placeholder="Filter repositories"
+                      placeholder={t('clone.repos.filter')}
                       autoCapitalize="off"
                       autoCorrect="off"
                       autoComplete="off"
@@ -697,7 +691,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                   </label>
 
                   {reposPending ? (
-                    <RepositorySkeleton label="Loading your repositories..." />
+                    <RepositorySkeleton label={t('clone.repos.loading')} />
                   ) : reposError ? (
                     <div className="clone-list-state" role="alert">
                       <p>{reposError}</p>
@@ -709,15 +703,15 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                           setReposError(null)
                         }}
                       >
-                        Try again
+                        {t('actions.tryAgain')}
                       </button>
                     </div>
                   ) : filtered.length === 0 ? (
                     <div className="clone-list-state">
                       <p>
                         {repos && repos.length === 0
-                          ? 'No repositories found for this account.'
-                          : 'No repositories match your filter.'}
+                          ? t('clone.repos.none')
+                          : t('clone.repos.noMatch')}
                       </p>
                     </div>
                   ) : (
@@ -742,7 +736,9 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                             <span className="clone-repo-main">
                               <span className="clone-repo-name">
                                 {repo.nameWithOwner}
-                                {repo.isPrivate && <span className="clone-repo-tag">Private</span>}
+                                {repo.isPrivate && (
+                                  <span className="clone-repo-tag">{t('clone.repos.private')}</span>
+                                )}
                                 {repo.primaryLanguage && (
                                   <span className="clone-repo-tag clone-repo-tag--language">
                                     {repo.primaryLanguage}
@@ -750,7 +746,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                                 )}
                               </span>
                               <span className="clone-repo-path" title={repo.description ?? ''}>
-                                {repo.description || repo.url || 'No description'}
+                                {repo.description || repo.url || t('clone.repos.noDescription')}
                               </span>
                             </span>
                             {selected === repo.nameWithOwner && (
@@ -765,7 +761,10 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                       {remainingRepoCount > 0 && (
                         <div className="clone-repo-more">
                           <span>
-                            Showing {visibleRepos.length} of {filtered.length} repositories
+                            {t('clone.repos.showing', {
+                              shown: visibleRepos.length,
+                              count: filtered.length
+                            })}
                           </span>
                           <button
                             type="button"
@@ -775,7 +774,9 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                               setVisibleRepoCount((count) => count + INITIAL_REPO_RENDER_COUNT)
                             }
                           >
-                            Show {Math.min(INITIAL_REPO_RENDER_COUNT, remainingRepoCount)} more
+                            {t('clone.repos.showMore', {
+                              count: Math.min(INITIAL_REPO_RENDER_COUNT, remainingRepoCount)
+                            })}
                           </button>
                         </div>
                       )}
@@ -793,10 +794,10 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                     <span className="clone-progress-heading">
                       <span className="clone-progress-title">
                         {cloneFailed
-                          ? 'Could not clone repository'
+                          ? t('clone.progress.failed')
                           : cloneDone
-                            ? 'Repository ready'
-                            : 'Setting up your project'}
+                            ? t('clone.progress.ready')
+                            : t('clone.progress.settingUp')}
                       </span>
                       {cloneTarget && <code className="clone-progress-target">{cloneTarget}</code>}
                     </span>
@@ -805,8 +806,8 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                     {cloning
                       ? cloneActivePhaseLabel
                       : cloneFailed
-                        ? 'Clone failed'
-                        : 'Project ready'}
+                        ? t('clone.progress.cloneFailed')
+                        : t('progress.ready')}
                   </span>
                   <ol className="create-phases">
                     {CLONE_PHASES.map((phaseDef, i) => {
@@ -831,12 +832,12 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                             ) : null}
                           </span>
                           <span className="create-phase-text">
-                            <span className="create-phase-label">{phaseDef.label}</span>
+                            <span className="create-phase-label">{t(phaseDef.label)}</span>
                             {phaseDef.id === 'installing' && state === 'active' && (
                               <span className="create-phase-hint">
                                 {cloneElapsedSec > 75
-                                  ? 'Still working — large dependency trees take a little longer.'
-                                  : phaseDef.hint}
+                                  ? t('progress.stillWorking')
+                                  : phaseDef.hint && t(phaseDef.hint)}
                               </span>
                             )}
                           </span>
@@ -847,19 +848,23 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
 
                   <div className="create-progress-meta">
                     <span className="create-elapsed" aria-hidden="true">
-                      {cloning ? `${cloneElapsedLabel} elapsed` : cloneFailed ? '' : 'Done'}
+                      {cloning
+                        ? t('progress.elapsed', { time: cloneElapsedLabel })
+                        : cloneFailed
+                          ? ''
+                          : t('actions.done')}
                     </span>
                     <button
                       type="button"
                       className="link-btn create-progress-toggle"
                       onClick={() => setShowCloneLog((value) => !value)}
                     >
-                      {showCloneLog ? 'Hide details' : 'Show details'}
+                      {showCloneLog ? t('progress.hideDetails') : t('progress.showDetails')}
                     </button>
                   </div>
                   {showCloneLog && (
                     <pre className="log-console log-console--sm" ref={cloneLogRef}>
-                      {cloneLog || 'Starting...'}
+                      {cloneLog || t('clone.starting')}
                     </pre>
                   )}
                 </div>
@@ -872,7 +877,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
 
         <footer className="create-foot clone-foot" data-mascot-avoid="">
           <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
-            Cancel
+            {t('actions.cancel')}
           </button>
           {signedIn && (
             <button
@@ -880,7 +885,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
               onClick={() => void clone()}
               disabled={busy || waitingLogin || !cloneTarget}
             >
-              {cloning ? 'Cloning...' : 'Clone and open'}
+              {cloning ? t('clone.cloning') : t('clone.cloneAndOpen')}
             </button>
           )}
         </footer>

@@ -316,9 +316,9 @@ struct ExportReply {
 impl StepReply {
   /// A failed step's message, with the sign-in it needs.
   fn failure(&self) -> String {
-    let error = self.error.clone().unwrap_or_else(|| "It didn't finish.".into());
+    let error = self.error.clone().unwrap_or_else(|| t!("services.reportMigration.didntFinish"));
     if self.needs_az || self.needs_login {
-      format!("{error} Sign in to the Azure CLI again (az login), then try again.")
+      t!("services.reportMigration.signInAgain", error = error)
     } else {
       error
     }
@@ -352,7 +352,7 @@ async fn run_helper<T: DeserializeOwned>(
   on_data: Option<exec::OnData>,
   cancel: Option<CancelToken>,
 ) -> Result<T, String> {
-  let script = write_helper().map_err(|e| format!("Could not prepare the migration helper: {e}"))?;
+  let script = write_helper().map_err(|e| t!("services.reportMigration.helperFailed", error = e))?;
   let script = script.to_string_lossy().to_string();
   let request = request.to_string();
   let res = exec::run(
@@ -429,7 +429,7 @@ fn block_personal_models(inspection: &mut ReportInspection) {
   if !personal_model {
     return;
   }
-  let message = "Its semantic model is in My workspace, and Rayfin apps connect to models in shared workspaces. Publish the report to a workspace first, then migrate it from there.".to_string();
+  let message = t!("services.reportMigration.personalModel");
   if let Some(checks) = inspection.checks.as_mut() {
     checks.model = MigrationCheck { status: "error".into(), message: message.clone() };
   }
@@ -512,18 +512,18 @@ pub fn load(project_dir: &Path) -> Option<MigrationState> {
 fn save(project_dir: &Path, state: &MigrationState) -> Result<(), String> {
   let file = state_file(project_dir);
   if let Some(dir) = file.parent() {
-    std::fs::create_dir_all(dir).map_err(|e| format!("Could not save the migration: {e}"))?;
+    std::fs::create_dir_all(dir).map_err(|e| t!("services.reportMigration.saveFailed", error = e))?;
   }
   let text = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
   let tmp = file.with_extension("json.tmp");
-  std::fs::write(&tmp, text).map_err(|e| format!("Could not save the migration: {e}"))?;
-  std::fs::rename(&tmp, &file).map_err(|e| format!("Could not save the migration: {e}"))
+  std::fs::write(&tmp, text).map_err(|e| t!("services.reportMigration.saveFailed", error = e))?;
+  std::fs::rename(&tmp, &file).map_err(|e| t!("services.reportMigration.saveFailed", error = e))
 }
 
 /// Change a project's migration and save it, returning the new state.
 pub fn update(project_dir: &Path, f: impl FnOnce(&mut MigrationState)) -> Result<MigrationState, String> {
   let _guard = STATE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-  let mut state = load(project_dir).ok_or("This project has no report migration.")?;
+  let mut state = load(project_dir).ok_or_else(|| t!("services.reportMigration.noMigration"))?;
   f(&mut state);
   save(project_dir, &state)?;
   Ok(state)
@@ -537,7 +537,7 @@ pub fn emit(app: &AppHandle, project_id: &str, state: &MigrationState) {
 pub fn create(project_dir: &Path, source: MigrationSource, pages: &[InspectedPage]) -> Result<MigrationState, String> {
   let _guard = STATE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
   if load(project_dir).is_some() {
-    return Err("This project already has a report migration.".into());
+    return Err(t!("services.reportMigration.alreadyMigrating"));
   }
   let name = slug(&source.report_name, 50);
   let folder = if name.is_empty() { slug(&source.report_id, 8) } else { name };
@@ -557,6 +557,7 @@ pub fn create(project_dir: &Path, source: MigrationSource, pages: &[InspectedPag
   let model_stage = if source.model_id.is_some() {
     MigrationStage::default()
   } else {
+    // English: Copilot's migration turns quote the model stage's message.
     MigrationStage { status: "skipped".into(), message: Some("The report has no semantic model.".into()), progress: None }
   };
   let state = MigrationState {
@@ -570,7 +571,7 @@ pub fn create(project_dir: &Path, source: MigrationSource, pages: &[InspectedPag
     ..Default::default()
   };
   std::fs::create_dir_all(bundle_dir(project_dir, &state).join("pages"))
-    .map_err(|e| format!("Could not create the migration folder: {e}"))?;
+    .map_err(|e| t!("services.reportMigration.folderFailed", error = e))?;
   save(project_dir, &state)?;
   Ok(state)
 }
@@ -672,6 +673,7 @@ pub async fn gather(app: &AppHandle, project_id: &str, project_dir: &Path, cance
       let reply: Result<ModelReply, String> = run_helper(&request, READ_TIMEOUT_MS, None, Some(cancel.clone())).await;
       set(&|s| match &reply {
         Ok(r) if r.step.ok => {
+          // English: Copilot's migration turns quote the model stage's message.
           let note = (r.source.as_deref() == Some("queries"))
             .then(|| "Read with queries: measure formulas aren't included.".to_string());
           s.stages.model = done(note);
@@ -700,8 +702,8 @@ pub async fn gather(app: &AppHandle, project_id: &str, project_dir: &Path, cance
     let skipped_by_user = cancel.is_cancelled();
     set(&|s| match &reply {
       _ if skipped_by_user => {
-        s.stages.export = skipped("Skipped.");
-        s.stages.images = skipped("No pages were exported.");
+        s.stages.export = skipped(&t!("services.reportMigration.skipped"));
+        s.stages.images = skipped(&t!("services.reportMigration.noPages"));
       }
       Ok(r) if r.step.ok && !r.files.is_empty() => {
         s.stages.export = done(None);
@@ -709,11 +711,11 @@ pub async fn gather(app: &AppHandle, project_id: &str, project_dir: &Path, cance
       }
       Ok(r) => {
         s.stages.export = failed(r.step.failure());
-        s.stages.images = skipped("No pages were exported.");
+        s.stages.images = skipped(&t!("services.reportMigration.noPages"));
       }
       Err(e) => {
         s.stages.export = failed(e.clone());
-        s.stages.images = skipped("No pages were exported.");
+        s.stages.images = skipped(&t!("services.reportMigration.noPages"));
       }
     });
   }
@@ -858,17 +860,17 @@ pub async fn write_readme(state: &MigrationState, project_dir: &Path) {
 
 /// Save one rendered page: its image (a PNG data URL), its text and its preview.
 pub fn save_page(project_dir: &Path, index: usize, png: &str, text: &str, thumb: Option<String>) -> Result<MigrationState, String> {
-  let state = load(project_dir).ok_or("This project has no report migration.")?;
-  let page = state.pages.get(index).ok_or("That page isn't part of the migration.")?;
+  let state = load(project_dir).ok_or_else(|| t!("services.reportMigration.noMigration"))?;
+  let page = state.pages.get(index).ok_or_else(|| t!("services.reportMigration.notAPage"))?;
   let bytes = decode_png(png)?;
   let rel_image = format!("{}/pages/{}.png", state.dir, page.stem);
   let rel_text = format!("{}/pages/{}.txt", state.dir, page.stem);
   let image_path = project_dir.join(&rel_image);
   if let Some(dir) = image_path.parent() {
-    std::fs::create_dir_all(dir).map_err(|e| format!("Could not save the page image: {e}"))?;
+    std::fs::create_dir_all(dir).map_err(|e| t!("services.reportMigration.imageSaveFailed", error = e))?;
   }
-  std::fs::write(&image_path, bytes).map_err(|e| format!("Could not save the page image: {e}"))?;
-  std::fs::write(project_dir.join(&rel_text), text).map_err(|e| format!("Could not save the page text: {e}"))?;
+  std::fs::write(&image_path, bytes).map_err(|e| t!("services.reportMigration.imageSaveFailed", error = e))?;
+  std::fs::write(project_dir.join(&rel_text), text).map_err(|e| t!("services.reportMigration.textSaveFailed", error = e))?;
   update(project_dir, |s| {
     if let Some(p) = s.pages.get_mut(index) {
       p.image = Some(rel_image);
@@ -888,12 +890,12 @@ fn decode_png(data_url: &str) -> Result<Vec<u8>, String> {
   use base64::Engine;
   let payload = data_url
     .strip_prefix("data:image/png;base64,")
-    .ok_or("A page image must be a PNG data URL.")?;
+    .ok_or_else(|| t!("services.reportMigration.notPngDataUrl"))?;
   let bytes = base64::engine::general_purpose::STANDARD
     .decode(payload)
-    .map_err(|_| "The page image isn't valid base64.".to_string())?;
+    .map_err(|_| t!("services.reportMigration.badBase64"))?;
   if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-    return Err("The page image isn't a PNG.".into());
+    return Err(t!("services.reportMigration.notPng"));
   }
   Ok(bytes)
 }
@@ -912,18 +914,18 @@ pub async fn finish_images(project_dir: &Path, error: Option<String>) -> Result<
 
 /// The bytes of the `index`th exported PDF.
 pub fn read_pdf(project_dir: &Path, index: usize) -> Result<Vec<u8>, String> {
-  let state = load(project_dir).ok_or("This project has no report migration.")?;
-  let file = state.pdfs.get(index).ok_or("There's no such exported PDF.")?;
+  let state = load(project_dir).ok_or_else(|| t!("services.reportMigration.noMigration"))?;
+  let file = state.pdfs.get(index).ok_or_else(|| t!("services.reportMigration.noSuchPdf"))?;
   if file.contains("..") || Path::new(file).is_absolute() {
-    return Err("The exported PDF's path isn't valid.".into());
+    return Err(t!("services.reportMigration.badPdfPath"));
   }
-  std::fs::read(bundle_dir(project_dir, &state).join(file)).map_err(|e| format!("Could not read the exported pages: {e}"))
+  std::fs::read(bundle_dir(project_dir, &state).join(file)).map_err(|e| t!("services.reportMigration.pdfReadFailed", error = e))
 }
 
 /// Record a page turn starting or ending.
 pub fn set_page_status(project_dir: &Path, index: usize, status: &str) -> Result<MigrationState, String> {
   if !matches!(status, "pending" | "running" | "done" | "failed") {
-    return Err(format!("Unknown page status: {status}"));
+    return Err(t!("services.reportMigration.unknownPageStatus", status = status));
   }
   let next = update(project_dir, |s| {
     if let Some(p) = s.pages.get_mut(index) {

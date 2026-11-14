@@ -10,6 +10,7 @@ import {
 import { Codicon } from './icons'
 import type { DeployTopic } from '../deployProgress'
 import { clockLabel, forgetDeployMeter, readDeployMeter } from '../deployMeter'
+import { Trans, useTranslation } from '../i18n'
 import { isRaySentAway, useRayOnScreen } from './mascot/stage'
 import { RayPerch } from './mascot/RayPerch'
 import type { RayMood } from './mascot/Ray'
@@ -220,6 +221,7 @@ export default function DeployStage({
   /** Go back to the app while publishing carries on beside it. */
   onBack?: () => void
 }): JSX.Element {
+  const { t } = useTranslation('publish')
   const appName = name?.trim() ?? ''
   const [sentAway] = useState(isRaySentAway)
   const withRay = !sentAway
@@ -266,8 +268,8 @@ export default function DeployStage({
     // carry several lines, so the last *entry* may be a multi-line block.
     const lines = log.join('').split('\n')
     for (let i = lines.length - 1; i >= 0; i--) {
-      const t = lines[i].trim()
-      if (t) return t
+      const line = lines[i].trim()
+      if (line) return line
     }
     return ''
   }, [log])
@@ -283,7 +285,7 @@ export default function DeployStage({
           <DeployRay
             topic={progress.topic}
             hop={hop}
-            name={appName || 'Your app'}
+            name={appName || t('stage.unnamed')}
             firstDeploy={firstDeploy}
           />
         ) : (
@@ -293,29 +295,37 @@ export default function DeployStage({
         )}
 
         <div className="dstage-hud">
-          <span className="dstage-eyebrow">{progress.live ? 'Published' : 'Fabricating'}</span>
+          <span className="dstage-eyebrow">
+            {progress.live ? t('stage.published') : t('stage.fabricating')}
+          </span>
           <h3 className="dstage-title">
             {progress.live ? (
-              <>
-                <b>{appName || 'Your app'}</b> is live
-              </>
+              <Trans
+                t={t}
+                i18nKey="stage.live"
+                values={{ app: appName || t('stage.unnamed') }}
+                components={{ b: <b /> }}
+              />
             ) : (
-              <>
-                Publishing <b>{appName || 'your app'}</b>
-              </>
+              <Trans
+                t={t}
+                i18nKey="stage.publishing"
+                values={{ app: appName || t('stage.unnamedPublishing') }}
+                components={{ b: <b /> }}
+              />
             )}
           </h3>
           <div
             className="dstage-bar"
             role="progressbar"
-            aria-label="Publish progress"
+            aria-label={t('progress.label')}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(bar * 100)}
           >
             <span style={{ width: `${(bar * 100).toFixed(1)}%` }} />
           </div>
-          <ol className="dstage-steps" aria-label="Publish steps">
+          <ol className="dstage-steps" aria-label={t('stage.steps')}>
             {progress.steps.map((s) => (
               <li key={s.id} className="dstage-step" data-state={s.state}>
                 <span className="dstage-step-mark" aria-hidden="true">
@@ -339,24 +349,24 @@ export default function DeployStage({
       <div className="dstage-foot">
         <div className="dstage-ticker">
           <span className="dstage-ticker-caret">›</span>
-          <span className="dstage-ticker-text">{lastLine || 'Starting to publish…'}</span>
+          <span className="dstage-ticker-text">{lastLine || t('progress.starting')}</span>
           <span className="dstage-ticker-cursor" aria-hidden="true" />
         </div>
         <div className="dstage-foot-actions">
           {onBack && (
             <button className="dstage-logbtn" type="button" onClick={onBack}>
-              Back to your app
+              {t('stage.back')}
             </button>
           )}
           <button className="dstage-logbtn" type="button" onClick={() => setShowLog((s) => !s)}>
-            {showLog ? 'Hide logs' : 'View logs'}
+            {showLog ? t('logs.hide') : t('logs.show')}
           </button>
         </div>
       </div>
 
       {showLog && (
         <pre className="deploy-log deploy-log--static dstage-fulllog" ref={logRef}>
-          {log.join('') || 'Starting to publish…'}
+          {log.join('') || t('progress.starting')}
         </pre>
       )}
     </div>

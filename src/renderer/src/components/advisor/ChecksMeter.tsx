@@ -1,7 +1,9 @@
 import { memo, useMemo, type ReactNode, type JSX } from 'react'
 import { ruleById } from '@shared/advisor/catalog'
 import type { CheckOutcome, CheckTally, CheckView } from '../../advisor/lifecycle'
-import { plainText, plural } from './format'
+import { ruleText } from '../../advisor/ruleText'
+import { useTranslation } from '../../i18n'
+import { plainText } from './format'
 
 /** Settled results fill in from the left; checks still waiting trail on the right. */
 const STRIP_ORDER: Record<Exclude<CheckOutcome, 'na'>, number> = {
@@ -15,17 +17,17 @@ const STRIP_ORDER: Record<Exclude<CheckOutcome, 'na'>, number> = {
   waiting: 7
 }
 
-const OUTCOME_LABEL: Record<CheckOutcome, string> = {
-  high: 'High-severity issue',
-  medium: 'Medium-severity issue',
-  low: 'Low-severity issue',
-  note: 'Suggestion',
-  passed: 'Passed',
-  dismissed: 'Dismissed',
-  skipped: 'Couldn’t be checked',
-  waiting: 'Needs a deep review',
-  na: 'Doesn’t apply'
-}
+const OUTCOME_LABEL = {
+  high: 'meter.outcome.high',
+  medium: 'meter.outcome.medium',
+  low: 'meter.outcome.low',
+  note: 'meter.outcome.note',
+  passed: 'meter.outcome.passed',
+  dismissed: 'meter.outcome.dismissed',
+  skipped: 'meter.outcome.skipped',
+  waiting: 'meter.outcome.waiting',
+  na: 'meter.outcome.na'
+} as const satisfies Record<CheckOutcome, string>
 
 /**
  * One block per applicable rule, colored by outcome, with a plain-language
@@ -47,6 +49,7 @@ export const ChecksMeter = memo(function ChecksMeter({
   /** Extra controls at the end of the legend (the activity toggle). */
   aside?: ReactNode
 }): JSX.Element {
+  const { t } = useTranslation('advisor')
   const blocks = useMemo(
     () =>
       checks
@@ -64,56 +67,61 @@ export const ChecksMeter = memo(function ChecksMeter({
           ? null
           : blocks.map((c) => {
               const rule = ruleById(c.ruleId)
-              const label = c.running ? 'Copilot is checking it now' : OUTCOME_LABEL[c.outcome]
+              const label = c.running ? t('meter.checkingNow') : t(OUTCOME_LABEL[c.outcome])
               return (
                 <span
                   key={c.ruleId}
                   className={`adv-meter-block adv-meter-block--${c.outcome}`}
-                  title={`${plainText(rule?.summary ?? c.ruleId)} — ${label}`}
+                  title={t('meter.blockTitle', {
+                    rule: plainText(rule ? ruleText(rule, 'summary') : c.ruleId),
+                    outcome: label
+                  })}
                 />
               )
             })}
       </div>
       <div className="adv-meter-legend">
         {loading ? (
-          <span className="shimmer-text">Running the quick checks…</span>
+          <span className="shimmer-text">{t('meter.running')}</span>
         ) : (
           <>
             {tally.issues > 0 && (
               <span className="adv-meter-item">
                 <i className={`adv-key adv-key--${issueKey}`} aria-hidden="true" />
-                {plural(tally.issues, 'check')} with issues
+                {t('meter.issues', { count: tally.issues })}
               </span>
             )}
             {tally.notes > 0 && (
               <span className="adv-meter-item">
                 <i className="adv-key adv-key--note" aria-hidden="true" />
-                {plural(tally.notes, 'suggestion')}
+                {t('counts.suggestions', { count: tally.notes })}
               </span>
             )}
             <span className="adv-meter-item">
               <i className="adv-key adv-key--passed" aria-hidden="true" />
-              {tally.passed} passed
+              {t('counts.passed', { count: tally.passed })}
             </span>
             {tally.dismissed > 0 && (
               <span className="adv-meter-item">
                 <i className="adv-key adv-key--dismissed" aria-hidden="true" />
-                {tally.dismissed} dismissed
+                {t('counts.dismissed', { count: tally.dismissed })}
               </span>
             )}
             {tally.skipped > 0 && (
               <span className="adv-meter-item">
                 <i className="adv-key adv-key--skipped" aria-hidden="true" />
-                {tally.skipped} couldn’t be checked
+                {t('meter.skipped', { count: tally.skipped })}
               </span>
             )}
             {tally.waiting > 0 && (
               <span className="adv-meter-item">
                 <i className="adv-key adv-key--waiting" aria-hidden="true" />
-                {running ? `${tally.waiting} being checked by Copilot` : `${tally.waiting} need a deep review`}
+                {running
+                  ? t('meter.beingCheckedByCopilot', { count: tally.waiting })
+                  : t('counts.needDeep', { count: tally.waiting })}
               </span>
             )}
-            <span className="adv-meter-total">{plural(tally.applicable, 'check')} for this app</span>
+            <span className="adv-meter-total">{t('meter.total', { count: tally.applicable })}</span>
           </>
         )}
         {aside && (

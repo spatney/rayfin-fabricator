@@ -1,0 +1,287 @@
+{
+  "common": {
+    "separator": "、",
+    "andMore_other": "{{items}}、ほか {{count}} 件",
+    "places_other": "{{count}} か所で見つかりました: {{labels}}。",
+    "sentences": "{{first}}{{second}}"
+  },
+  "access/entity-missing-permission": {
+    "hit": "{{entity}} にはアクセス許可のデコレーターがないため、サインインしているユーザーなら誰でも、そのすべての行を作成、読み取り、更新、削除できます。",
+    "summary_other": "{{count}} 個のエンティティにアクセス許可のデコレーターがないため、サインインしているユーザーなら誰でもそれらの行に完全にアクセスできます: {{entities}}。"
+  },
+  "access/on-auth-state-change": {
+    "hit": "{{file}} は {{method}} を呼び出していますが、これは Rayfin の認証クライアントには存在しません。"
+  },
+  "access/fabric-provider-missing": {
+    "hit": "{{setting}} が true になっていますが、{{package}} が package.json の依存関係に含まれていません。"
+  },
+  "access/fabric-provider-dynamic-import": {
+    "hit": "{{file}} は {{dynamicImport}} で Fabric 認証プロバイダーを読み込んでおり、静的にインポートしているモジュールはありません。"
+  },
+  "access/mock-auth-credentials": {
+    "hit": "{{file}} はハードコードされたメール アドレスとパスワードでサインインします。バックエンドの URL が構成されていない場合は、今でもアプリがこれを選択します。"
+  },
+  "access/entra-exchange-not-enabled": {
+    "hit": "{{file}} は {{call}} を呼び出していますが、rayfin.yml で {{setting}} が設定されていません。"
+  },
+  "policy/owner-field-without-policy": {
+    "hit": "{{entity}} は {{owner}} を保存していますが、{{grant}} の許可に行レベルのポリシーがないため、サインインしているユーザーなら誰でもほかのユーザーの行を変更できます。",
+    "summary": "これらのエンティティは所有者を保存していますが、サインインしているユーザーなら誰でもすべての行を変更できます: {{entities}}。"
+  },
+  "policy/anonymous-write": {
+    "hit": "{{entity}} は匿名の呼び出し元に {{actions}} を許可しているため、誰でもサインインせずにその行を変更できます。"
+  },
+  "policy/anonymous-grant": {
+    "hitLocal": "{{entity}} は匿名の読み取りを許可しています。ローカル プレビューでは動作しますが、テナント管理者が Fabric アプリの匿名データ アクセスをオンにしていない限り、公開は失敗します。",
+    "hitFabric": "{{entity}} は匿名の読み取りを許可していますが、テナント管理者が Fabric アプリの匿名データ アクセスをオンにしていない限り、Fabric はこれを拒否します。",
+    "summaryLocal_other": "{{count}} 個のエンティティが匿名の読み取りを許可しています。ローカル プレビューでは動作しますが、テナント管理者が Fabric アプリの匿名データ アクセスをオンにしていない限り、公開は失敗します: {{entities}}。",
+    "summaryFabric_other": "{{count}} 個のエンティティが匿名の読み取りを許可していますが、テナント管理者が Fabric アプリの匿名データ アクセスをオンにしていない限り、Fabric はこれを拒否します: {{entities}}。"
+  },
+  "policy/unsupported-claim": {
+    "hit": "{{entity}} のポリシーは {{claim}} を比較していますが、ポリシーでサポートされているのは {{sub}}、{{email}}、{{role}} だけです。"
+  },
+  "policy/blob-without-permission": {
+    "hit": "{{blob}} のストレージ クラス {{storageClass}} にアクセス許可のデコレーターがありません。"
+  },
+  "policy/prefer-shorthand": {
+    "hit": "{{entity}} は {{longhand}} を使用しています。ドキュメントに記載されている短縮形は {{shorthand}} です。"
+  },
+  "secrets/secret-in-public-env": {
+    "inEnvFile": "{{file}} の {{key}} はシークレットのようですが、そのプレフィックスによってブラウザーに公開されます。",
+    "inCode": "{{file}} は、シークレットのように見える {{name}} を、ブラウザーから見える環境変数から読み取っています。"
+  },
+  "secrets/env-file-not-ignored": {
+    "hit": "{{file}} は git の無視対象になっていないため、その値がコミットされる可能性があります。"
+  },
+  "secrets/hardcoded-credential": {
+    "hit": "{{credential}}が {{file}} に含まれています。",
+    "credentials": {
+      "privateKey": "秘密キー",
+      "storageAccountKey": "Azure ストレージ アカウント キー",
+      "sqlPassword": "パスワードを含む SQL 接続文字列",
+      "githubToken": "GitHub トークン",
+      "apiSecretKey": "API シークレット キー",
+      "slackToken": "Slack トークン",
+      "awsAccessKey": "AWS アクセス キー",
+      "clientSecret": "サービス プリンシパルのクライアント シークレット",
+      "rayfinToken": "Rayfin CLI トークン"
+    }
+  },
+  "secrets/redirect-uri-scope": {
+    "wildcard": "許可されたリダイレクト URI {{uri}} はワイルドカードを使用しています。",
+    "plainHttp": "許可されたリダイレクト URI {{uri}} は、ローカル以外のホストで暗号化されていない http を使用しています。"
+  },
+  "secrets/publishable-key-mismatch": {
+    "hit": "{{file}} の {{key}} に公開可能キーが入っていません (公開可能キーは {{prefix}} で始まります)。"
+  },
+  "secrets/deployments-file-tracked": {
+    "hit": "{{file}} は git の無視対象になっていないため、ワークスペースとアイテムの ID がコミットされる可能性があります。"
+  },
+  "secrets/local-backend-not-ignored": {
+    "what": "{{holds}} ({{files}})",
+    "holds": {
+      "secrets": "シークレットのローカル値",
+      "keys": "ローカル バックエンドの署名キー",
+      "database": "アプリのローカル データベース",
+      "uploads": "ローカル アプリにアップロードされたファイル",
+      "ids": "ローカル アプリの ID",
+      "otherFiles": "ローカル バックエンドのその他のファイル",
+      "files": "ローカル バックエンドのファイル"
+    },
+    "missing": "{{gitignore}} がないため、{{what}} が git にコミットされる可能性があります。",
+    "changed": "{{gitignore}} でフォルダー内のすべてが無視されなくなったため、{{what}} が git にコミットされる可能性があります。",
+    "tracked": "{{gitignore}} でフォルダーが無視されているにもかかわらず、git が {{folder}} 内のファイルを追跡しているため、コミットに{{what}} が含まれます。",
+    "unknown": "{{what}} が git にコミットされる可能性があります。"
+  },
+  "secrets/encryption-fallback-committed": {
+    "hit": "{{file}} で CLI トークンの平文でのキャッシュが有効になっています。"
+  },
+  "data-model/text-without-max": {
+    "hit": "{{field}} は {{max}} なしの {{decorator}} として宣言されているため、MSSQL では NVARCHAR(MAX) になります。",
+    "summary_other": "{{count}} 個のテキスト フィールドに最大長がありません: {{fields}}。"
+  },
+  "data-model/fk-typed-text": {
+    "hit": "{{field}} は {{relation}} を通じて {{target}} を参照していますが、{{expected}} ではなく {{declared}} として宣言されています。"
+  },
+  "data-model/relation-not-lazy": {
+    "hit": "{{field}} は {{lazy}} ではなく {{target}} を直接 {{decorator}} に渡しています。"
+  },
+  "data-model/relation-import-type": {
+    "typeImport": "{{file}} は {{names}} を {{importType}} でインポートしていますが、実行時のクラスが必要なリレーションシップ デコレーターで使用しています。",
+    "noExtension": "{{file}} は {{module}} を {{extension}} 拡張子なしでインポートしているため、ESM として解決されません。"
+  },
+  "data-model/entity-not-registered": {
+    "notInSchema": "{{entity}} ({{file}}) が {{schemaFile}} の {{schema}} 配列に含まれていません。",
+    "notInType": "{{entity}} は {{schema}} 配列にありますが、{{type}} 型にはありません。",
+    "notInArray": "{{entity}} は {{type}} 型にありますが、{{schema}} 配列にはありません。"
+  },
+  "data-model/field-missing-decorator": {
+    "none": "{{field}} にはフィールド デコレーターがないため、保存されません。",
+    "several_other": "{{field}} に {{count}} 個のフィールド デコレーターがあります ({{decorators}})。"
+  },
+  "data-model/decimal-precision": {
+    "onlyPrecision": "{{field}} は有効桁数だけを設定しています。",
+    "onlyScale": "{{field}} は小数点以下桁数だけを設定しています。",
+    "tooPrecise": "{{field}} は有効桁数を {{precision}} に設定していますが、最大値の 28 を超えています。"
+  },
+  "data-model/nullable-mismatch": {
+    "optionWithoutQuestion": "{{field}} は {{option}} を設定していますが、プロパティに {{question}} がありません。",
+    "questionWithoutOption": "{{field}} には {{question}} が付いていますが、デコレーターで {{option}} が設定されていないため、列は必須のままです。"
+  },
+  "data-model/many-to-many": {
+    "hit": "{{entity}} と {{other}} が互いに {{many}} を宣言していますが、Rayfin は結合エンティティなしではこれをサポートしていません。"
+  },
+  "data-model/reserved-entity-name": {
+    "registeredAs": "{{entity}} は {{name}} として登録されていますが、これは GraphQL が予約している名前です。",
+    "named": "エンティティ {{name}} は GraphQL が予約している名前を使用しています。"
+  },
+  "data-model/relation-options": {
+    "hit": "{{field}} は {{options}} を {{decorator}} に渡していますが、受け付けられるのは {{optional}} と {{unique}} だけです。"
+  },
+  "queries/count-method": {
+    "hit": "{{file}} は Rayfin のクエリで {{method}} を呼び出していますが、クエリにそのようなメソッドはありません。"
+  },
+  "queries/find-by-pk": {
+    "hit": "{{file}} は {{method}} を呼び出していますが、これは Rayfin には存在しません。"
+  },
+  "queries/total-count": {
+    "hit": "{{file}} は {{property}} を読み取っていますが、Rayfin がこの値を設定することはありません。"
+  },
+  "queries/where-dot-path": {
+    "hit": "{{file}} は {{path}} でフィルター処理していますが、ドット パスは {{select}} でしか使えません。"
+  },
+  "queries/select-nested-path": {
+    "hit": "{{file}} は {{path}} を選択していますが、このパスはリレーションシップを 2 階層以上たどっています。"
+  },
+  "queries/aggregate-with-row-methods": {
+    "hit": "{{file}} は 1 つのクエリで {{aggregate}} と {{rowMethod}} を組み合わせています。"
+  },
+  "queries/sort-direction-case": {
+    "hit": "{{file}} は {{lowercase}} ではなく {{direction}} で並べ替えています。"
+  },
+  "queries/raw-data-fetch": {
+    "fetch": "{{file}} は {{fetch}} で手書きの GraphQL 要求を送信しています。",
+    "gql": "{{file}} は {{gql}} で生の GraphQL ドキュメントを作成しています。"
+  },
+  "config/missing-service-blocks": {
+    "hit": "rayfin.yml で {{service}} が宣言されていません。"
+  },
+  "config/data-dialect": {
+    "noDialect": "{{service}} は有効になっていますが、{{dialect}} が設定されていません。",
+    "wrongDialect": "{{setting}} が {{value}} になっています。Fabric アプリでサポートされているのは {{mssql}} だけです。"
+  },
+  "config/experimental-decorators": {
+    "hit": "{{file}} で {{option}} が設定されています。"
+  },
+  "config/decorators-lib": {
+    "libMissing": "{{file}} の {{lib}} に {{decorators}} が含まれていません。",
+    "noLib": "{{file}} で {{lib}} が設定されていないため、{{decorators}} が含まれていません。"
+  },
+  "config/swc-with-runtime-entities": {
+    "hit": "{{file}} は {{module}} を値としてインポートしているため、デコレーター付きのエンティティ クラスがブラウザー向けのビルドにバンドルされます。このプロジェクトは {{plugin}} でビルドしていますが、これらのデコレーターを解析できません。"
+  },
+  "config/vite-target": {
+    "hit": "{{file}} のターゲットが ES2022 以降になっていませんが、バンドルにはエンティティ クラスが含まれています (例: {{example}})。"
+  },
+  "config/static-hosting-folder": {
+    "hit": "{{setting}} は {{folder}} ですが、Vite はビルドを {{outDir}} に書き込みます。"
+  },
+  "config/deprecated-yml-keys": {
+    "topLevelKey": "rayfin.yml に非推奨のトップレベル キー {{key}} がまだ残っています。",
+    "connectorsEnabled": "Rayfin 1.36 以降、{{setting}} は何の効果もありません。コネクタは常にオンです。",
+    "anonymousAccess": "{{setting}} は Rayfin 1.35.1 で {{replacement}} に置き換えられました。"
+  },
+  "config/functions-auth": {
+    "noAuth": "{{service}} は有効になっていますが、{{setting}} が設定されていません。",
+    "wrongType": "{{setting}} が {{value}} になっています。有効にした Functions には {{application}} が必要です。"
+  },
+  "config/static-hosting-posture": {
+    "noAccess": "{{service}} で {{setting}} が設定されていません。",
+    "wrongAccess": "{{setting}} が {{value}} になっています。{{protected}} または {{public}} を使用してください。"
+  },
+  "config/embedded-public-conflict": {
+    "hit": "{{service}} で {{public}} と {{embedded}} が同時に設定されています。"
+  },
+  "config/stale-feature-flags": {
+    "hit_other": "{{file}} の {{variable}} に {{flags}} が含まれていますが、もうフラグは必要ありません。"
+  },
+  "config/connectors-list-shape": {
+    "hit": "rayfin.yml の {{key}} は、{{entry}} エントリのリストではなく、コネクタ名をキーとするマップ ({{names}}) になっています。"
+  },
+  "platform/cli-outdated": {
+    "hit": "Rayfin CLI は {{installed}} です。最新のリリースは {{latest}} です。"
+  },
+  "platform/sdk-outdated": {
+    "hit": "Rayfin SDK は {{installed}} ({{package}}) です。最新のリリースは {{latest}} です。"
+  },
+  "platform/sdk-lockstep": {
+    "hit": "Rayfin SDK のパッケージが異なるバージョンでインストールされています: {{packages}}。"
+  },
+  "platform/sdk-local-range": {
+    "runs": "Fabricator がこのコンピューターで実行する Rayfin のリリース ({{lines}})",
+    "older": "{{package}} は {{spec}} として宣言されているため、{{runs}} をインストールできません。",
+    "loose": "{{package}} は {{spec}} として宣言されているため、次回のインストールで Rayfin {{line}} を超えて、Fabricator がこのコンピューターで実行できない可能性のあるリリースに更新されることがあります。",
+    "installedPinned": "インストールされている {{package}} は {{version}} で、{{runs}} の範囲外です。ただし、宣言は {{spec}} です。{{command}} を実行して元に戻してください。",
+    "installedOutside": "インストールされている {{package}} は {{version}} で、{{runs}} の範囲外です。",
+    "pinIt": "{{pin}} に固定してください。",
+    "summary": "これらの Rayfin パッケージは {{runs}} に固定されていません: {{packages}}。",
+    "pinThem": "{{pin}} に固定して、再インストールしてください。"
+  },
+  "platform/connector-version": {
+    "range": "{{package}} は {{range}} として宣言されているため、CLI とは異なるリリースがインストールされる可能性があります。",
+    "installed": "{{package}} は {{installed}} がインストールされていますが、CLI は {{cli}} です。"
+  },
+  "platform/connector-schema-value-import": {
+    "imports": "{{file}} は {{names}} を {{typeOnly}} ではなく値としてインポートしています。",
+    "reexports": "{{file}} は {{names}} を {{typeOnly}} ではなく値として再エクスポートしています。"
+  },
+  "platform/connector-client-experimental-import": {
+    "hit": "{{file}} は {{name}} を {{package}} ではなく {{experimental}} からインポートしています。"
+  },
+  "platform/removed-experimental-import": {
+    "hit_other": "{{file}} は {{names}} を {{module}} からインポートしていますが、このモジュールからはもうエクスポートされていません。現在は {{homes}} にあります。"
+  },
+  "platform/connector-app-auth": {
+    "hit": "{{type}} コネクタ {{connector}} は {{setting}} を使用していますが、この種類のコネクタでは許可されていません。"
+  },
+  "platform/connector-fabric-only": {
+    "hit": "{{connector}} は Fabric でのみ動作する {{type}} コネクタのため、ローカル プレビューからは呼び出せません。{{outcome}}",
+    "summary": "これらのコネクタは Fabric でのみ動作するため、ローカル プレビューからは呼び出せません: {{connectors}}。{{outcome}}",
+    "outcome": "アプリを公開するまでは、これらの呼び出しは失敗します。公開後は、プレビューで公開したアプリのバックエンドが使われます。"
+  },
+  "platform/connector-orphaned-dir": {
+    "hit": "{{folder}} に対応するコネクタが rayfin.yml にありません。"
+  },
+  "platform/functions-context-import": {
+    "hit": "{{file}} は {{names}} を {{package}} からインポートしています。"
+  },
+  "platform/functions-mssql": {
+    "pinned": "{{file}} で {{dependency}} が固定されていますが、これは 12.6.0 より前のバージョンです。",
+    "strictEncrypt": "{{file}} は {{encrypt}} ではなく {{strict}} で接続しています。"
+  },
+  "platform/functions-removed-audience": {
+    "hit": "{{file}} は {{audience}} を使用していますが、これは Rayfin 1.36 で削除されました。"
+  },
+  "platform/functions-legacy-context-api": {
+    "hit": "{{file}} は {{replacement}} ではなく {{call}} を呼び出しています。"
+  },
+  "platform/functions-availability": {
+    "hit": "{{service}} サービスが有効になっていますが、すべての Fabric リージョンやテナントで使えるわけではありません。"
+  },
+  "platform/experimental-services": {
+    "hit": "試験段階の {{service}} サービスが有効になっています。"
+  },
+  "platform/deprecated-fabric-callback": {
+    "bridge": "{{file}} は非推奨の {{function}} を呼び出しています。",
+    "callbackUrl": "{{file}} は非推奨の {{option}} オプションを渡しています。"
+  },
+  "platform/ai-files-missing": {
+    "hit": "{{file}} がインストールされていないため、コーディング エージェントはバージョンに合った Rayfin のガイダンスを得られません。"
+  },
+  "performance/oversized-page": {
+    "hit": "{{file}} は {{rows}} 行のページを要求しています。"
+  },
+  "accessibility/img-alt": {
+    "hit": "{{file}} の {{img}} に {{alt}} 属性がありません。"
+  }
+}

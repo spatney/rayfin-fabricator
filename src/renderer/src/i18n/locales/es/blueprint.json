@@ -1,0 +1,383 @@
+{
+  "tab": {
+    "views": "Vistas de Blueprint",
+    "architecture": "Arquitectura",
+    "dataModel": "Modelo de datos",
+    "fabricConnections": "Conexiones de Fabric",
+    "dataExplorer": "Explorador de datos",
+    "reading": "Leyendo tu aplicación…",
+    "cantDraw": "No se pudo dibujar la aplicación",
+    "openYml": "Abrir rayfin.yml",
+    "metadataTooLarge": "metadata.json es demasiado grande para leerlo.",
+    "firstFiles": "Se leyeron los primeros {{max}} de {{total}} archivos de {{dir}}/."
+  },
+  "identity": {
+    "user": "Identidad del usuario",
+    "app": "Identidad de la aplicación",
+    "key": "Una clave"
+  },
+  "port": {
+    "user": "Usa la identidad del usuario",
+    "app": "Usa la identidad de la aplicación",
+    "key": "Usa una clave"
+  },
+  "portAria": {
+    "user": "{{part}}, usa la identidad del usuario",
+    "app": "{{part}}, usa la identidad de la aplicación",
+    "key": "{{part}}, usa una clave"
+  },
+  "appIdentity": {
+    "firstPublisher": "La cuenta que la publicó por primera vez",
+    "nextPublisher": "Quien la publique primero"
+  },
+  "model": {
+    "cantRead": "Fabricator no pudo leer rayfin/rayfin.yml.",
+    "invalidYaml": "rayfin/rayfin.yml no es un YAML válido, así que no se pueden mostrar las partes de la aplicación.",
+    "people": {
+      "signInOff": "El inicio de sesión está desactivado, así que la aplicación no puede distinguir a las personas.",
+      "publicPages": "Las páginas de la aplicación se cargan antes de iniciar sesión, así que cualquiera con el vínculo puede descargar su HTML, JavaScript y CSS. Sus datos siguen requiriendo iniciar sesión.",
+      "entraThroughFabric": "Microsoft Entra ID, a través de Fabric",
+      "entra": "Microsoft Entra ID",
+      "noSignIn": "Sin inicio de sesión"
+    },
+    "website": {
+      "title": "Sitio web",
+      "summary": "Hospedado en Fabric",
+      "assetAccessUnset": "`assetAccess` no está establecido. Elige `protected` o `public` antes de publicar.",
+      "public": "Las páginas se cargan antes de iniciar sesión",
+      "protected": "Las páginas se cargan tras iniciar sesión",
+      "unset": "Acceso a las páginas sin establecer",
+      "embeddedOnly": "Solo se abre dentro de Fabric"
+    },
+    "signin": {
+      "title": "Inicio de sesión",
+      "externalEntra": "También acepta tokens de Entra de otras aplicaciones",
+      "addresses_one": "Permite iniciar sesión desde {{count}} dirección",
+      "addresses_other": "Permite iniciar sesión desde {{count}} direcciones",
+      "off": "El inicio de sesión está desactivado."
+    },
+    "database": {
+      "title": "Base de datos",
+      "tables_one": "{{count}} tabla",
+      "tables_other": "{{count}} tablas",
+      "relationships_one": "{{count}} relación",
+      "relationships_other": "{{count}} relaciones",
+      "noTables": "Aún no hay tablas",
+      "scoped_one": "{{count}} filtrada por fila",
+      "scoped_other": "{{count}} filtradas por fila",
+      "signedIn_one": "{{count}} con inicio de sesión",
+      "signedIn_other": "{{count}} con inicio de sesión",
+      "public_one": "{{count}} pública",
+      "public_other": "{{count}} públicas",
+      "readable_one": "{{count}} tabla se puede leer sin iniciar sesión.",
+      "readable_other": "{{count}} tablas se pueden leer sin iniciar sesión."
+    },
+    "storage": {
+      "title": "Almacenamiento de archivos",
+      "summary": "Archivos que suben los usuarios · experimental",
+      "needsDatabase": "El almacenamiento depende de la base de datos, que está desactivada."
+    },
+    "functions": {
+      "authType": "`services.functions.auth.type` es `{{authType}}`; Rayfin 1.36 requiere `application`.",
+      "noAuthType": "Las funciones están activadas, pero no establecen `services.functions.auth.type: application`, que Rayfin 1.36 requiere.",
+      "turnedOff": "Las funciones están escritas, pero desactivadas en rayfin.yml.",
+      "unsupportedAudience": "`AudienceType.{{audience}}` no es una audiencia pública en Rayfin 1.36.2.",
+      "title": "Funciones",
+      "count_one": "{{count}} función del lado del servidor",
+      "count_other": "{{count}} funciones del lado del servidor",
+      "none": "Aún no hay funciones",
+      "reaches": "Accede a {{list}}"
+    },
+    "secrets": {
+      "undeclared_one": "{{names}} se lee como `ctx.Secrets`, pero no está declarado en rayfin.yml, lo que es un error de TypeScript. Agrégalo en Código → Secretos, que lo declara en rayfin.yml.",
+      "undeclared_other": "{{names}} se leen como `ctx.Secrets`, pero no están declarados en rayfin.yml, lo que es un error de TypeScript. Agrégalos en Código → Secretos, que los declara en rayfin.yml.",
+      "legacy_one": "{{names}} se lee con `ctx.getSecret()`, que está en desuso en Rayfin 1.36. Léelo con `ctx.Secrets.<NAME>` en su lugar.",
+      "legacy_other": "{{names}} se leen con `ctx.getSecret()`, que está en desuso en Rayfin 1.36. Léelos con `ctx.Secrets.<NAME>` en su lugar.",
+      "functionsOff": "Solo las funciones leen secretos, y las funciones están desactivadas en rayfin.yml.",
+      "title": "Secretos",
+      "summary_one": "{{count}} secreto, almacenado con la aplicación",
+      "summary_other": "{{count}} secretos, almacenados con la aplicación"
+    },
+    "connectors": {
+      "title": "Conectores",
+      "summary_one": "{{count}} conector a datos de Fabric",
+      "summary_other": "{{count}} conectores a datos de Fabric",
+      "kinds_one": "{{count}} tipo de origen",
+      "kinds_other": "{{count}} tipos de origen"
+    },
+    "kinds": {
+      "warehouse": "Almacén",
+      "sqlDatabase": "Base de datos SQL",
+      "sqlEndpoint": "Punto de conexión SQL de Lakehouse",
+      "semanticModel": "Modelo semántico",
+      "kqlDatabase": "Base de datos KQL"
+    },
+    "kindsInList": {
+      "warehouse": "almacén",
+      "sqlDatabase": "base de datos SQL",
+      "sqlEndpoint": "punto de conexión SQL de Lakehouse",
+      "semanticModel": "modelo semántico",
+      "kqlDatabase": "base de datos KQL"
+    },
+    "functionConnection": "Conexión de función",
+    "hostTypes": {
+      "webApi": "API web",
+      "storage": "Almacenamiento",
+      "sql": "SQL",
+      "aiService": "Servicio de IA",
+      "database": "Base de datos"
+    },
+    "abilities": {
+      "readsAndWrites": "Lee y escribe",
+      "kqlCommands": "Ejecuta consultas y comandos KQL",
+      "daxQueries": "Ejecuta consultas DAX",
+      "kqlQueries": "Ejecuta consultas KQL",
+      "queries": "Ejecuta consultas",
+      "readOnly": "Solo lectura",
+      "connected": "Conectado"
+    },
+    "auth": {
+      "missing": "Falta `auth.type`. Rayfin 1.36 requiere `delegated` o `application`.",
+      "invalid": "`auth.type: {{value}}` no es válido. Usa `delegated` o `application`.",
+      "lowercase": "`auth.type` debe estar en minúsculas: `{{lower}}`; `rayfin up` rechaza `{{raw}}`.",
+      "delegatedOnly": "Los conectores de tipo {{kind}} solo permiten `delegated`; `rayfin up` rechaza `application`."
+    },
+    "audiences": {
+      "sql": {
+        "detail": "Almacenes de lago, almacenes, bases de datos SQL y Azure SQL",
+        "grant": "Acceso a cada base de datos que consulta, como un rol de área de trabajo o un rol de SQL."
+      },
+      "storage": {
+        "detail": "Archivos de OneLake y almacenamiento de Azure Blob, Table o Queue",
+        "grant": "Un rol de área de trabajo para OneLake o un rol de datos de Storage, como Storage Blob Data Reader."
+      },
+      "fabric": {
+        "detail": "API REST de Microsoft Fabric",
+        "grant": "Un rol en las áreas de trabajo y los elementos a los que llama. Comprueba que cada API admita identidades de aplicación."
+      },
+      "azureAi": {
+        "detail": "Puntos de conexión de Azure AI Foundry y Azure OpenAI",
+        "grant": "El rol que requiere el recurso de Azure AI, como Cognitive Services User."
+      },
+      "ado": {
+        "detail": "API REST de Azure DevOps",
+        "grant": "Acceso a la organización y el proyecto de Azure DevOps a los que llama."
+      },
+      "other": {
+        "detail": "Accesible desde funciones",
+        "grant": "Acceso al recurso al que llama."
+      }
+    },
+    "hardcoded_one": "Parece que hay una clave escrita en el código: {{where}}. Cualquiera que pueda leer el código puede usarla. Guárdala como secreto en Código → Secretos y léela desde `ctx.Secrets`.",
+    "hardcoded_other": "Parece que hay {{count}} claves escritas en el código: {{where}}. Cualquiera que pueda leer el código puede usarlas. Guárdalas como secretos en Código → Secretos y léelas desde `ctx.Secrets`.",
+    "hardcodedIn": "{{names}} en `{{file}}`"
+  },
+  "view": {
+    "zone": {
+      "appWorkspace": "Área de trabajo de esta aplicación",
+      "fabricWorkspace": "Área de trabajo de Fabric",
+      "id": "Id. {{id}}…",
+      "webApis": "API web",
+      "calledFromFunctions": "Llamadas desde funciones"
+    },
+    "search": "Buscar en la aplicación y sus conexiones",
+    "clearSearch": "Borrar búsqueda",
+    "openApp": "Abrir la aplicación",
+    "openInPortal": "Abrir la aplicación en el portal de Fabric",
+    "openInFabric": "Abrir en Fabric",
+    "zoom": "Zoom",
+    "zoomOut": "Alejar",
+    "zoomIn": "Acercar",
+    "fit": "Ajustar a la vista",
+    "people": {
+      "aria": "Personas que usan la aplicación",
+      "title": "Personas",
+      "subtitle": "que usan la aplicación",
+      "signIn": "Inicio de sesión con Microsoft Entra ID",
+      "signInOff": "Inicio de sesión desactivado"
+    },
+    "app": {
+      "aria": "{{name}}, la aplicación de Fabric",
+      "inWorkspace": "Aplicación de Fabric en {{workspace}}",
+      "fabricApp": "Aplicación de Fabric"
+    },
+    "appIdentityAria": "Identidad de la aplicación: {{who}}",
+    "serviceAria": "{{title}}: {{summary}}",
+    "sourceAria": "{{name}}, {{type}}",
+    "ghost": {
+      "title": "Aún no hay datos externos",
+      "body": "Incorpora un almacén, una base de datos SQL, un lakehouse o un modelo semántico de Fabric, o llama a servicios de Azure desde funciones.",
+      "add": "Agregar datos de Fabric…"
+    },
+    "connections_one": "{{count}} conexión",
+    "connections_other": "{{count}} conexiones",
+    "calledBy": "Se llama desde {{functions}}"
+  },
+  "inspector": {
+    "panelAria": "Detalles de {{title}}",
+    "close": "Cerrar detalles",
+    "closeTitle": "Cerrar (Esc)",
+    "signs": {
+      "user": "Delegado: se ejecuta como la persona que haya iniciado sesión, con su propio acceso a Fabric.",
+      "app": "De aplicación: se ejecuta como {{who}}, igual para todos.",
+      "key": "Una clave o un token que la propia función envía, no un inicio de sesión de Fabric."
+    },
+    "who": {
+      "servicePrincipal": "la entidad de servicio {{who}}",
+      "owner": "el propietario de la aplicación de Fabric"
+    },
+    "nothingYet": "Nada todavía",
+    "grantFabric": "Un rol en su área de trabajo de Fabric o un permiso en el elemento.",
+    "secretCount_one": "{{count}} secreto",
+    "secretCount_other": "{{count}} secretos",
+    "notSetYet": "Aún sin establecer",
+    "notSet": "sin establecer",
+    "opensEverywhere": "En su propia dirección y dentro de Fabric",
+    "moveKeys": "Mover claves a secretos",
+    "fixWithCopilot": "Corregir con Copilot",
+    "facts": {
+      "signIn": "Inicio de sesión",
+      "pages": "Páginas",
+      "opens": "Se abre",
+      "address": "Dirección",
+      "workspace": "Área de trabajo",
+      "lastPublished": "Última publicación",
+      "project": "Proyecto",
+      "clientId": "Id. de cliente",
+      "setting": "Configuración",
+      "buildOutput": "Salida de compilación",
+      "provider": "Proveedor",
+      "externalTokens": "Tokens de Entra de otras aplicaciones",
+      "access": "Acceso",
+      "usedBy": "Usado por",
+      "addresses_one": "Dirección",
+      "addresses_other": "Direcciones",
+      "capacity": "Capacidad",
+      "model": "Modelo",
+      "modelOwner": "Propietario del modelo",
+      "workspaceId": "Id. del área de trabajo",
+      "itemId": "Id. del elemento",
+      "connector": "Conector",
+      "type": "Tipo"
+    },
+    "docs": {
+      "signInPeople": "Cómo inician sesión los usuarios",
+      "secrets": "Secretos en funciones",
+      "identities": "Acceso delegado y de aplicación",
+      "hosting": "Hospedaje estático",
+      "permissions": "Permisos y seguridad de nivel de fila",
+      "storage": "Almacenamiento",
+      "connections": "Conexiones de función",
+      "connectorAuth": "Autenticación de conectores"
+    },
+    "people": {
+      "kicker": "Quién la usa",
+      "lead": "Los usuarios abren la aplicación en su dirección o dentro de Fabric e inician sesión con su cuenta profesional. Para dar acceso a alguien, selecciona <strong>Compartir</strong> en la barra de la aplicación.",
+      "loadBefore": "Se cargan antes de iniciar sesión",
+      "loadAfter": "Se cargan después de iniciar sesión",
+      "onlyInPortal": "Solo dentro del portal de Fabric"
+    },
+    "app": {
+      "lead": "Rayfin ejecuta la aplicación como un único elemento de aplicación de Fabric: sus páginas, el inicio de sesión, la base de datos y las funciones, configurados desde <code>rayfin/rayfin.yml</code>.",
+      "notPublished": "Aún sin publicar",
+      "parts": "Partes"
+    },
+    "identity": {
+      "kicker": "Identidad",
+      "keyLead": "Estas llamadas no usan un inicio de sesión de Fabric. La función envía su propia clave o token (o ninguno, si es una API pública), así que cualquiera que tenga esa clave tiene el mismo acceso, sin importar quién use la aplicación.",
+      "reachedWithKey": "Acceso con una clave",
+      "secretsUsed": "Secretos que usan las funciones",
+      "noSecrets": "Ninguno. Agrega claves en Código → <strong>Secretos</strong> y léelas desde <code>ctx.Secrets</code> para que nunca estén en el código.",
+      "userLead": "Estas conexiones son <strong>delegadas</strong>: cada consulta se ejecuta como la persona que usa la aplicación, mediante un intercambio de tokens en nombre de (on-behalf-of). Fabric comprueba sus propios permisos, así que cada persona solo ve lo que tiene permitido.",
+      "everyoneNeeds": "Todos los que usan la aplicación necesitan acceso a",
+      "userNote": "Asigna a los usuarios, o a un grupo al que pertenezcan, un rol en cada área de trabajo o un permiso en cada elemento. Sin él, reciben un error de autorización.",
+      "askGrant": "Preguntar a Copilot qué conceder",
+      "appLeadVia": "Estas conexiones usan acceso <strong>de aplicación</strong>: una sola identidad compartida, la del propietario del elemento de aplicación de Fabric. Allí todos ven los mismos datos, y las reglas por persona no pueden distinguir a los usuarios.",
+      "appLead": "Las conexiones que usan la identidad de la aplicación tienen acceso <strong>de aplicación</strong>: una sola identidad compartida, la del propietario del elemento de aplicación de Fabric. Allí todos ven los mismos datos, y las reglas por persona no pueden distinguir a los usuarios.",
+      "whose": "Credenciales que se usan",
+      "whoServicePrincipal": "Entidad de servicio que publica la aplicación",
+      "whoAccount": "Tu cuenta de Fabric, que publica esta aplicación",
+      "whoOwner": "Propietario del elemento de aplicación de Fabric",
+      "previews": "Las vistas previas se ejecutan como <strong>{{who}}</strong>, que las implementa desde las solicitudes de incorporación de cambios (pull requests).",
+      "ownerNote": "El propietario es la cuenta que creó la aplicación al publicarla por primera vez. Si otra persona la publicó primero, se ejecuta como esa persona.",
+      "grantTo": "Concédele acceso a",
+      "localNote": "Cuando la aplicación se ejecuta en tu dispositivo, las funciones usan tu propio inicio de sesión, así que una llamada que funciona ahí puede fallar una vez publicada la aplicación."
+    },
+    "website": {
+      "lead": "Las páginas de la aplicación: el HTML, JavaScript y CSS compilados a partir de su código, servidos desde la aplicación de Fabric.",
+      "pagesLoad": "Carga de páginas",
+      "before": "Antes de iniciar sesión",
+      "after": "Después de iniciar sesión",
+      "onlyInFabric": "Solo dentro de Fabric",
+      "publicNote": "Cualquiera con el vínculo puede descargar los archivos de las páginas, pero no los datos de la aplicación: estos siguen requiriendo iniciar sesión, y las reglas de las entidades deciden lo que ve cada persona. Es lo habitual en las aplicaciones web. Para cargar las páginas solo después de iniciar sesión en Fabric, establece <code>assetAccess: protected</code>.",
+      "protectedNote": "Los archivos de las páginas solo se cargan para quienes hayan iniciado sesión en Fabric.",
+      "readsInBrowser": "Lee en el explorador"
+    },
+    "signin": {
+      "lead": "Los usuarios inician sesión con su cuenta profesional de Microsoft Entra ID. La aplicación obtiene una sesión que indica quiénes son.",
+      "accepted": "Aceptados",
+      "notAccepted": "No aceptados",
+      "addresses": "Direcciones de inicio de sesión",
+      "more_one": "y {{count}} más",
+      "more_other": "y {{count}} más"
+    },
+    "database": {
+      "lead": "Las tablas propias de la aplicación, en su base de datos SQL de Fabric. Las lecturas y escrituras usan la <strong>identidad del usuario</strong>, y las reglas de cada tabla deciden qué filas puede ver y cambiar.",
+      "tables_one": "{{count}} tabla",
+      "tables_other": "{{count}} tablas",
+      "harden": "Reforzar el acceso",
+      "openModel": "Abrir el modelo de datos"
+    },
+    "storage": {
+      "lead": "Almacenamiento de blobs para los archivos que suben los usuarios. Es experimental y no está disponible en todas las regiones de Fabric."
+    },
+    "functions": {
+      "lead": "Código del lado del servidor. Las llamadas a servicios externos usan la <strong>identidad de la aplicación</strong>; la lectura de los datos propios de la aplicación sigue usando la identidad del usuario que llamó a la función.",
+      "count_one": "{{count}} función",
+      "count_other": "{{count}} funciones",
+      "none": "Aún no se encontraron funciones.",
+      "reaches": "Accede a",
+      "openCode": "Abrir el código"
+    },
+    "connectors": {
+      "lead": "Datos de Fabric existentes que la aplicación lee y escribe mediante conectores de Rayfin. Cada uno usa la identidad del usuario o la identidad de la aplicación, según <code>auth.type</code> en <code>rayfin/rayfin.yml</code>."
+    },
+    "secrets": {
+      "manage": "Administrar secretos",
+      "readTyped": "Leer como ctx.Secrets",
+      "lead": "Claves de API, contraseñas y cadenas de conexión para las funciones. Sus valores quedan fuera del código: la aplicación publicada guarda los suyos, y también tu dispositivo cuando la aplicación se ejecuta en él. <code>rayfin.yml</code> solo guarda sus nombres y descripciones, y las funciones los leen como <code>ctx.Secrets.NAME</code>.",
+      "noValue_one": "La aplicación publicada no tiene ningún valor para {{names}}, así que una función que lo lea falla allí.",
+      "noValue_other": "La aplicación publicada no tiene ningún valor para {{names}}, así que una función que los lea falla allí.",
+      "readBy": "Leído por {{functions}}",
+      "readIn": "Leído en {{files}}",
+      "unread": "Ninguna función lo lee",
+      "undeclared": "{{readBy}} · no está en rayfin.yml",
+      "publishedOnly": "Solo en la aplicación publicada",
+      "status": {
+        "loading": "Comprobando qué valores tiene la aplicación publicada…",
+        "notDeployed": "Los valores de la aplicación publicada se pueden agregar una vez que se publique.",
+        "team": "Muestra los valores de la aplicación publicada. La aplicación publicada y la vista previa de cada persona guardan los suyos.",
+        "updateRayfin": "Actualiza la versión de Rayfin de la aplicación para ver qué valores están establecidos.",
+        "errorSignIn": "No se pudieron comprobar los valores de la aplicación publicada. Es posible que tu inicio de sesión de Fabric haya expirado.",
+        "error": "No se pudieron comprobar los valores de la aplicación publicada.",
+        "ready": "Los valores son de solo escritura: Fabricator muestra si hay uno establecido, nunca cuál es."
+      },
+      "calledFrom": "Se llama desde el mismo código",
+      "localNote": "Cuando la aplicación se ejecuta en tu dispositivo, sus funciones leen valores locales en lugar de los de la aplicación publicada."
+    },
+    "source": {
+      "useApp": "Usar la identidad de la aplicación",
+      "viewModel": "Ver el modelo",
+      "viewTables": "Ver las tablas",
+      "useUser": "Usar la identidad del usuario",
+      "audienceLead": "{{detail}}. Las funciones acceden mediante <code>ctx.Tokens.{{audience}}</code>.",
+      "apiLead": "Una API web a la que llaman las funciones. Rayfin no autentica estas llamadas: el código envía su propia clave o token.",
+      "suggested": "Rayfin puede acceder a {{title}} con la identidad de la aplicación mediante <code>AudienceType.{{audience}}</code>, así que las funciones no necesitan una clave para ello.",
+      "alwaysUser": "Los conectores de tipo {{kind}} siempre usan la identidad del usuario.",
+      "sameRows": "Todos ven las mismas filas, así que las reglas por persona de sus tablas no pueden distinguir a los usuarios.",
+      "ownAccess": "Se aplica el propio acceso a Fabric de cada persona, y las reglas por persona de sus tablas pueden usar quién es.",
+      "details": "Detalles",
+      "grantApp": "Conceder a la aplicación"
+    }
+  }
+}

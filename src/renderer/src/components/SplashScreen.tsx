@@ -19,6 +19,7 @@ import {
   type JSX
 } from 'react'
 import type { StartupStage } from '../startup'
+import { Trans, useTranslation } from '../i18n'
 import { MARK_TILE_RX, MARK_TILES, MarkGradient } from './FabricatorMark'
 import { ProjectMark } from './AppBar'
 import { type RayMood } from './mascot/Ray'
@@ -233,9 +234,11 @@ interface Swim {
  * at a time so his wake can follow him; with reduced motion he's simply there.
  */
 function LaunchRay({ leaving }: { leaving: boolean }): JSX.Element {
+  const { t } = useTranslation('app')
   const reduced = useReducedMotion()
   const [firstTime] = useState(firstMeeting)
-  const [text] = useState(() => (firstTime ? 'Hi, I’m Ray! Welcome back.' : launchGreeting()))
+  const [greeting] = useState(() => (firstTime ? null : launchGreeting()))
+  const text = greeting ?? t('splash.firstLaunch')
   const [speaking, setSpeaking] = useState(reduced)
   const hostRef = useRef<HTMLDivElement>(null)
   const waterRef = useRef<HTMLCanvasElement>(null)
@@ -356,13 +359,13 @@ function LaunchRay({ leaving }: { leaving: boolean }): JSX.Element {
 }
 
 /** The line under the wordmark at a first launch, by how far the checks have got. */
-const STAGE_STATUS: Record<StartupStage, { text: string; ongoing: boolean }> = {
-  tools: { text: 'Checking your tools', ongoing: true },
-  accounts: { text: 'Checking your sign-ins', ongoing: true },
-  ready: { text: 'All set', ongoing: false },
-  setup: { text: 'A few things to set up first', ongoing: false },
-  error: { text: 'Something needs a look', ongoing: false }
-}
+const STAGE_STATUS = {
+  tools: { key: 'splash.stages.tools', ongoing: true },
+  accounts: { key: 'splash.stages.accounts', ongoing: true },
+  ready: { key: 'splash.stages.ready', ongoing: false },
+  setup: { key: 'splash.stages.setup', ongoing: false },
+  error: { key: 'splash.stages.error', ongoing: false }
+} as const satisfies Record<StartupStage, { key: string; ongoing: boolean }>
 
 /**
  * The plain line under the wordmark: where the app is headed once that's known
@@ -379,6 +382,7 @@ function SplashStatus({
   stage: StartupStage
   opening?: string | null
 }): JSX.Element {
+  const { t } = useTranslation('app')
   const heading = opening !== undefined && (launch || stage === 'ready')
   const plain = heading || launch ? null : STAGE_STATUS[stage]
   const key = heading ? `open:${opening ?? ''}` : plain ? stage : ''
@@ -390,11 +394,16 @@ function SplashStatus({
             <>
               <ProjectMark name={opening} className="project-switcher-mark splash-status-mark" />
               <span>
-                Opening <b>{opening}</b>
+                <Trans
+                  t={t}
+                  i18nKey="splash.opening"
+                  values={{ name: opening }}
+                  components={{ b: <b /> }}
+                />
               </span>
             </>
           ) : (
-            <span>{heading ? 'Opening your projects' : plain?.text}</span>
+            <span>{heading ? t('splash.openingProjects') : plain && t(plain.key)}</span>
           )}
           {(heading || plain?.ongoing) && (
             <span className="splash-dots" aria-hidden="true">

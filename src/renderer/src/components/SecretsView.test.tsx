@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { LocalSecret, SecretInfo, SecretsState, StudioProject } from '@shared/ipc'
+import { setLanguage } from '../i18n'
 import { OverlayProvider } from '../overlay'
 import SecretsView from './SecretsView'
 import { nameProblem, toSecretName } from './secrets/SecretDialog'
@@ -444,5 +445,27 @@ describe('SecretsView', () => {
     )
     fireEvent.click(within(details).getByRole('button', { name: /Ask Copilot to use it/ }))
     expect(onSendToChat.mock.calls[0][1]).toContain("rayfin/rayfin.yml doesn't list it yet")
+  })
+})
+
+describe('SecretsView in German', () => {
+  afterEach(async () => {
+    cleanup()
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('names each value’s state in the interface’s language', async () => {
+    installApi(ready([OPENAI, MISSING]), [
+      value('OPENAI_KEY', 'local'),
+      value('STRIPE_KEY', 'none')
+    ])
+    await act(() => setLanguage('de'))
+    await renderView()
+
+    await screen.findByRole('region', { name: 'Geheimnisse' })
+    expect(row('OPENAI_KEY').textContent).toContain('Lokaler Wert: Hier festgelegt')
+    expect(row('STRIPE_KEY').textContent).toContain('Veröffentlichter Wert: Nicht festgelegt')
+    expect(nameProblem('2FA_CODE')).toBe('Der Name muss mit einem Buchstaben beginnen.')
   })
 })

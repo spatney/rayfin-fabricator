@@ -1,0 +1,108 @@
+{
+  "title": "設定",
+  "close": "設定を閉じる",
+  "general": {
+    "title": "全般",
+    "accounts": {
+      "title": "アカウント",
+      "desc": "GitHub Copilot、Microsoft Fabric、Azure CLI、GitHub にどのアカウントでサインインしているかを確認し、サインインまたはサインアウトします。",
+      "action": "アカウントの管理"
+    },
+    "apiKeys": {
+      "title": "API キー",
+      "desc": "Copilot のモデルに加えて、自分の API キーで Anthropic、OpenAI、xAI、Google のモデルを使えます。料金はプロバイダーから請求されます。",
+      "action": "API キーの管理"
+    },
+    "mcpServers": {
+      "title": "MCP サーバー",
+      "desc": "チャットの [プラグイン] でオンにできる MCP サーバー (このコンピューターで実行するコマンドや、サーバーの URL など) を追加します。",
+      "action": "MCP サーバーの管理"
+    },
+    "chatDefaults": {
+      "title": "チャットの既定値",
+      "desc": "新しいプロジェクトのチャットで最初に使うモデルとプラグインです。",
+      "action": "チャットの既定値の管理"
+    },
+    "customInstructions": {
+      "title": "カスタム指示",
+      "desc": "作成するすべてのアプリで Copilot が従う指示です (例:「既定ではシステムのテーマを使う」)。",
+      "action": "指示を編集"
+    },
+    "setup": {
+      "title": "セットアップ",
+      "desc": "Fabricator に必要なツールを確認し、足りないもの (GitHub CLI など) をインストールします。",
+      "action": "セットアップを開く"
+    },
+    "workspaceFolder": {
+      "title": "プロジェクト フォルダー",
+      "desc": "新しいプロジェクトはここに作成されます。"
+    }
+  },
+  "appearance": {
+    "title": "外観",
+    "theme": {
+      "title": "テーマ",
+      "desc": "[システム] では、コンピューターのライト/ダークの設定に従います。",
+      "system": "システム",
+      "dark": "ダーク",
+      "light": "ライト"
+    },
+    "language": {
+      "title": "言語",
+      "desc": "[システム] では、Fabricator が対応していればコンピューターの言語を使い、対応していなければ英語を使います。",
+      "system": "システム",
+      "systemNamed": "システム ({{language}})"
+    },
+    "textSize": {
+      "title": "文字サイズ",
+      "desc": "インターフェイス全体を拡大縮小します。大きなモニターで便利です。"
+    }
+  },
+  "diagnostics": {
+    "title": "診断",
+    "usage": {
+      "title": "使用状況の統計",
+      "desc": "製品の使われ方を把握するため、サインインのドメインとメール アドレスのハッシュを送信します。メール アドレス、コード、アプリはこのデバイスから出ません。"
+    },
+    "full": {
+      "title": "詳細な診断",
+      "desc": "チャットの各ターンのプロンプト、応答、ツールの出力も記録します。既定ではオフで、軽量なメタデータ (所要時間、使用したツール、エラー) だけを記録します。バグ報告に詳細を含めるにはオンにしてください。"
+    },
+    "logs": {
+      "title": "ログ",
+      "desc": "チャット セッションの診断情報はこのデバイスに保存されます。エクスポートしてバグ報告に添付できます。",
+      "export": "診断情報をエクスポート",
+      "exporting": "エクスポートしています…",
+      "openFolder": "ログ フォルダーを開く"
+    }
+  },
+  "experiments": {
+    "title": "試験的機能",
+    "desc": "これらの機能は試験段階で、既定ではオフです。動作が不安定な場合や、今後の更新で変更または削除される場合があります。",
+    "teamWorkspaces": {
+      "title": "チーム ワークスペース",
+      "desc": "プライベートな GitHub リポジトリで、チームと一緒にアプリを作成します。各メンバーは自分のコピーで作業し、Fabricator が設定するデプロイ ID を使ってパイプラインが Fabric に公開します。チームのアプリがこのコンピューターからデプロイされることはありません。GitHub CLI が必要です。"
+    },
+    "reportMigration": {
+      "title": "Power BI レポートの移行",
+      "desc": "ホームから Power BI レポートを新しいアプリに変換します。アプリはレポートのセマンティック モデルをライブで読み取り、Copilot がレポートのページ、ビジュアル、フィルターを 1 ページずつ作り直します。Azure CLI が必要です。"
+    },
+    "workIq": {
+      "title": "Work IQ",
+      "desc": "チャットのプラグインに Work IQ を追加します。チャットでオンにすると、Microsoft の Work IQ で Microsoft 365 のメール、会議、ファイル、Teams のメッセージ、ユーザーを調べ、見つけた情報を作成に活用できます。読み取り専用です。ブラウザーで職場のアカウントを使ってサインインします。Microsoft 365 Copilot ライセンスと組織の承認が必要です。"
+    }
+  },
+  "about": {
+    "title": "バージョン情報",
+    "version": "バージョン {{version}}",
+    "copyVersion": "バージョン情報をコピー",
+    "copilotBundled": "{{version}} (同梱版 {{bundled}})",
+    "unknownVersion": "不明",
+    "help": {
+      "title": "ヘルプ",
+      "desc": "Fabricator の各機能のガイドと、よくある問題の解決方法です。",
+      "docs": "ドキュメント",
+      "troubleshooting": "トラブルシューティング"
+    }
+  }
+}

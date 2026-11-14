@@ -1,0 +1,71 @@
+{
+  "actionLabels": {
+    "interactive": "Build plan",
+    "autopilot": "Run in Autopilot",
+    "autopilotFleet": "Run with fleet",
+    "exitOnly": "Approve plan"
+  },
+  "errors": {
+    "planningIncomplete": "Planning did not complete.",
+    "executionIncomplete": "Plan execution did not complete."
+  },
+  "phases": {
+    "researching": "Researching the codebase…",
+    "clarifying": "A few questions before drafting",
+    "drafting": "Drafting the plan…",
+    "review": "Plan ready for review",
+    "revising": "Revising the plan…",
+    "executing": "Executing the plan",
+    "completed": "Plan completed",
+    "failed": "Plan failed",
+    "interruptedReview": "Review was interrupted",
+    "interruptedExecution": "Execution was interrupted"
+  },
+  "card": {
+    "expandProgress": "Expand plan progress",
+    "executing": "Executing plan",
+    "workingThrough": "Working through the approved plan",
+    "revision": "Revision {{number}}",
+    "collapseProgress": "Collapse plan progress",
+    "collapse": "Collapse",
+    "progress": "Plan progress",
+    "stepsDone_one": "{{done}} of {{count}} steps done",
+    "stepsDone_other": "{{done}} of {{count}} steps done",
+    "now": "Now:",
+    "showFewer": "Show fewer",
+    "showAll_one": "Show all {{count}} steps",
+    "showAll_other": "Show all {{count}} steps",
+    "reviewFull": "Review full plan",
+    "continuePlanning": "Continue planning",
+    "resumeRemaining": "Resume remaining work",
+    "retryPlanning": "Retry planning"
+  },
+  "review": {
+    "copyFailed": "Could not copy the plan to the clipboard.",
+    "export": "Export",
+    "otherActions": "Other plan actions",
+    "moreOptions": "More options…",
+    "chooseAction": "Choose an action…",
+    "requestChanges": "Request changes",
+    "feedbackPlaceholder": "Optional — what should change about the plan?",
+    "sendFeedback": "Send feedback"
+  },
+  "dialog": {
+    "title": "Plan for {{projectName}}",
+    "doneEditing": "Done editing",
+    "loadingEditor": "Loading editor…",
+    "nothingWritten": "_Nothing written yet._",
+    "noContent": "_No plan content yet._",
+    "todos": "Todos",
+    "dependencies": "Dependencies",
+    "dependency": "{{prereq}} must finish before {{dependent}}"
+  },
+  "question": {
+    "interrupted": "Not answered before the turn was interrupted.",
+    "recommended": "Recommended",
+    "orOwnWords": "Or answer in your own words",
+    "yourAnswer": "Your answer",
+    "placeholder": "Type an answer…",
+    "send": "Send answer"
+  }
+}

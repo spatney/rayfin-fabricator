@@ -1,0 +1,164 @@
+{
+  "tenantShort": "Mandant {{id}}…",
+  "fabricNeedsProject": "Die Fabric-Anmeldung verwendet die Rayfin CLI eines Projekts. Erstelle oder öffne also zuerst ein Projekt.",
+  "azureSignInFailed": "Die Anmeldung bei Azure wurde nicht abgeschlossen. Versuche es erneut.",
+  "copilotSignInFailed": "Die Anmeldung bei Copilot wurde nicht abgeschlossen. Versuche es erneut.",
+  "signingIn": "Anmeldung läuft…",
+  "signingOut": "Abmeldung läuft…",
+  "switching": "Wird gewechselt…",
+  "addAccount": "Konto hinzufügen",
+  "installFromSetup": "Über die Einrichtung installieren",
+  "stopWaiting": "Nicht mehr warten",
+  "githubSignIn": "Bei GitHub anmelden",
+  "state": {
+    "ok": "Angemeldet",
+    "off": "Nicht angemeldet",
+    "error": "Aktion erforderlich"
+  },
+  "host": {
+    "label": "GitHub-Host",
+    "placeholder": "github.com oder firma.ghe.com",
+    "hint": "Verwende github.com oder deinen Enterprise Cloud-Host (firma.ghe.com). Eine https://-URL wird ebenfalls akzeptiert."
+  },
+  "copilotNotice": {
+    "title": "Copilot benötigt deine Aufmerksamkeit",
+    "signInHere": "Melde dich hier bei GitHub Copilot an, und sende deine Nachricht dann erneut.",
+    "signingIn": "Anmeldung bei Copilot läuft…",
+    "signIn": "Bei Copilot anmelden",
+    "help": "Hilfe zur Anmeldung",
+    "inBrowser": "Schließe die Anmeldung in deinem Browser ab, oder folge unten den Anweisungen für den Gerätecode."
+  },
+  "menu": {
+    "refreshTitle": "Die gemeinsam genutzten Anmeldeinformationen der Rayfin CLI löschen und erneut anmelden",
+    "refreshing": "Authentifizierung wird aktualisiert…",
+    "refresh": "Fabric-Authentifizierung aktualisieren",
+    "accountChecking": "Konto: Anmeldung wird geprüft",
+    "accountUser": "Konto: {{user}}",
+    "account": "Konto",
+    "checkingTitle": "Deine Microsoft Fabric-Anmeldung wird geprüft…",
+    "signedInAs": "Bei Fabric angemeldet als {{user}}",
+    "signedIn": "Bei Fabric angemeldet",
+    "unconfirmed": "Konnte gerade nicht bestätigt werden",
+    "signIn": "Bei Fabric anmelden",
+    "settingsAndAccounts": "Einstellungen und Konten",
+    "checkingFabric": "Deine Fabric-Anmeldung wird geprüft…",
+    "notSignedIn": "Nicht bei Fabric angemeldet",
+    "refreshHint": "Beim Aktualisieren werden veraltete Anmeldeinformationen gelöscht, und du wirst erneut angemeldet.",
+    "fabricAccount": "Fabric-Konto",
+    "manageTitle": "Alle Konten anzeigen und ändern, die Fabricator verwendet",
+    "manage": "Konten verwalten…",
+    "settingsTitle": "Design, Textgröße, Experimente und mehr",
+    "settings": "Einstellungen"
+  },
+  "modal": {
+    "title": "Konten",
+    "close": "Konten schließen",
+    "lead": "Die Konten, die Fabricator auf diesem Computer verwendet. Änderungen gelten für alle deine Projekte.",
+    "errors": {
+      "listFabric": "Deine Fabric-Konten konnten nicht aufgelistet werden.",
+      "listAzure": "Deine Azure-Konten konnten nicht aufgelistet werden. Versuche es erneut.",
+      "listGithub": "Deine GitHub-Konten konnten nicht aufgelistet werden. Versuche es erneut.",
+      "generic": "Das hat nicht funktioniert. Versuche es erneut.",
+      "copilotSignOut": "Die Abmeldung von Copilot wurde nicht abgeschlossen. Versuche es erneut.",
+      "fabricSignIn": "Die Anmeldung bei Fabric wurde nicht abgeschlossen. Versuche es erneut.",
+      "fabricSwitch": "Das Fabric-Konto konnte nicht gewechselt werden.",
+      "fabricSignOut": "Die Abmeldung von Fabric wurde nicht abgeschlossen. Versuche es erneut.",
+      "azureSwitch": "Das Azure-Konto konnte nicht gewechselt werden.",
+      "azureSignOut": "Die Abmeldung von Azure wurde nicht abgeschlossen. Versuche es erneut.",
+      "githubSwitch": "Der Wechsel zu {{login}} ist fehlgeschlagen.",
+      "githubSignOut": "{{login}} konnte nicht abgemeldet werden.",
+      "githubSignIn": "Die GitHub-Anmeldung konnte nicht gestartet werden."
+    },
+    "fabricNote": {
+      "browser": "Schließe die Anmeldung im geöffneten Browserfenster ab.",
+      "shared": "Auf diesem Mac werden beim Abmelden von einem Fabric-Konto alle abgemeldet, bis du dich erneut anmeldest."
+    },
+    "mismatch": {
+      "title": "Fabric und die Azure CLI befinden sich in verschiedenen Organisationen",
+      "text": "Fabric verwendet <b>{{fabricTenant}}</b> und die Azure CLI <b>{{azureTenant}}</b>. Beim Freigeben einer App und beim Verbinden von Daten werden Personen über die Azure CLI gesucht. Verwende daher für beide dieselbe Organisation.",
+      "useAzure": "{{user}} in der Azure CLI verwenden",
+      "signInOrg": "In der Azure CLI bei {{org}} anmelden",
+      "signInFabricOrg": "In der Azure CLI bei der Organisation von Fabric anmelden"
+    },
+    "inUse": "In Verwendung",
+    "copilot": {
+      "purpose": "Schreibt und bearbeitet den Code deiner App.",
+      "signIn": "Bei GitHub Copilot anmelden",
+      "waiting": "Warten auf GitHub…",
+      "signOut": "Von GitHub Copilot abmelden",
+      "signOutTitle": "Um ein anderes GitHub-Konto zu verwenden, melde dich ab und dann mit diesem Konto wieder an."
+    },
+    "fabric": {
+      "purpose": "Veröffentlicht, hostet und teilt deine Apps.",
+      "unconfirmed": "Nicht bestätigt",
+      "signIn": "Bei Microsoft Fabric anmelden",
+      "inUseTitle": "Veröffentlichung, Arbeitsbereichslisten, Freigabe und Geheimnisse verwenden dieses Konto.",
+      "refresh": "Anmeldung aktualisieren",
+      "signOut": "Von Microsoft Fabric abmelden",
+      "others": "Weitere Fabric-Konten",
+      "add": "Fabric-Konto hinzufügen"
+    },
+    "azure": {
+      "purpose": "Optional. Findet Personen, wenn du eine App freigibst, liest die Power BI-Berichte, die du migrierst, richtet Team-Arbeitsbereiche ein und lässt deine App Fabric-Daten lesen, während du sie erstellst. Wird mit deinem Terminal geteilt.",
+      "signIn": "Bei der Azure CLI anmelden",
+      "inUseTitle": "Die Azure CLI verwendet jetzt dieses Konto.",
+      "signOut": "Von der Azure CLI abmelden",
+      "others": "Weitere Azure-Konten",
+      "add": "Azure CLI-Konto hinzufügen"
+    },
+    "github": {
+      "purpose": "Klont Repositorys und führt Team-Arbeitsbereiche aus. Optional und mit deinem Terminal geteilt.",
+      "list": "GitHub-Konten",
+      "default": "Standard",
+      "defaultTitle": "Das Klonen von GitHub und dein Terminal verwenden dieses Konto. Team-Arbeitsbereiche merken sich ihr eigenes.",
+      "expired": "Anmeldung abgelaufen",
+      "makeDefault": "Als Standard festlegen",
+      "signOutTitle": "Meldet auch die GitHub CLI in deinem Terminal ab.",
+      "missing": "Die GitHub CLI ist nicht installiert. Du brauchst sie nur, um Repositorys zu klonen oder Team-Arbeitsbereiche zu verwenden.",
+      "waiting": "Schließe die Anmeldung im geöffneten Terminalfenster ab. Dein Standardkonto bleibt gleich."
+    },
+    "help": "Hilfe zu Konten",
+    "recheck": "Erneut prüfen"
+  },
+  "row": {
+    "use": "Verwenden",
+    "confirmSignOut": "{{name}} abmelden?",
+    "useAccount": "{{action}}: {{name}}",
+    "signOut": "{{name}} abmelden"
+  },
+  "addForm": {
+    "organization": "Organisation (optional)",
+    "placeholder": "contoso.onmicrosoft.com oder eine Mandanten-ID",
+    "hint": "Lass das Feld leer, um die eigene Organisation deines Kontos zu verwenden, oder gib eine ein, in der du Gast bist.",
+    "waiting": "Warten auf Microsoft…"
+  },
+  "progress": {
+    "enterCode": "Gib diesen Code bei {{service}} ein:",
+    "copyCode": "Code kopieren",
+    "open": "{{service}} öffnen",
+    "inBrowser": "Schließe die Anmeldung bei {{service}} in deinem Browser ab."
+  },
+  "githubRepo": {
+    "errors": {
+      "listAccounts": "Deine GitHub-Konten konnten nicht aufgelistet werden.",
+      "listOwners": "Es konnte nicht ermittelt werden, wo du Repositorys erstellen kannst.",
+      "signIn": "Die GitHub-Anmeldung konnte nicht gestartet werden."
+    },
+    "finishInTerminal": "Schließe die Anmeldung im geöffneten Terminalfenster ab. Diese Anzeige wird automatisch aktualisiert.",
+    "checking": "Deine GitHub-Konten werden geprüft…",
+    "noCli": "Fabricator erstellt das Repository mit der GitHub CLI, die nicht installiert ist.",
+    "signInFirst": "Melde dich bei GitHub an, um das Repository zu erstellen.",
+    "waiting": "Warten…",
+    "account": "GitHub-Konto",
+    "owner": "Besitzer",
+    "you": "{{login}} (du)",
+    "visibility": "Sichtbarkeit",
+    "private": "Privat",
+    "public": "Öffentlich",
+    "privateBlocked": "{{owner}} lässt dich keine privaten Repositorys erstellen. Wähle „Öffentlich“ oder einen anderen Besitzer.",
+    "name": "Repositoryname",
+    "invalidName": "Verwende im Repositorynamen nur Buchstaben, Ziffern, Bindestriche, Unterstriche und Punkte.",
+    "noName": "Gib einen Namen für das Repository ein.",
+    "taken": "Dieser Name ist bereits vergeben."
+  }
+}

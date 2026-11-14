@@ -1,0 +1,101 @@
+{
+  "panel": {
+    "label": "Security check",
+    "title": "Check for security risks",
+    "sub": "Copilot reads its code, without running any of it, and tells you what it could do on this computer.",
+    "check": "Check",
+    "checking": "Checking for security risks…",
+    "elapsed": "Elapsed time",
+    "partial": "Some areas weren’t checked: {{error}}",
+    "found": "What it found",
+    "steps_one": "{{count}} step",
+    "steps_other": "{{count}} steps",
+    "checkAgain": "Check again"
+  },
+  "meta": {
+    "running": "Copilot (Auto)",
+    "checkedBy": "Checked by Copilot (Auto)",
+    "files_one": "{{count}} file",
+    "files_other": "{{count}} files"
+  },
+  "live": {
+    "unpacking": "Unpacking it, without running anything…",
+    "starting": "Starting Copilot (Auto)…",
+    "thinking": "Thinking…"
+  },
+  "outcome": {
+    "stopped": "Check stopped",
+    "stoppedFound_one": "It had found {{count}} thing to look at when you stopped it.",
+    "stoppedFound_other": "It had found {{count}} things to look at when you stopped it.",
+    "stoppedNothing": "It hadn’t found anything when you stopped it.",
+    "fabricatorCouldnt": "Fabricator couldn’t check it",
+    "copilotCouldnt": "Copilot couldn’t check it",
+    "ownChecksFound_one": "Fabricator’s own checks found {{count}} thing to look at.",
+    "ownChecksFound_other": "Fabricator’s own checks found {{count}} things to look at.",
+    "ownChecksNothing": "Fabricator’s own checks found nothing risky, but they don’t read the code the way Copilot does.",
+    "serious_one": "Found {{count}} serious risk",
+    "serious_other": "Found {{count}} serious risks",
+    "advisesAgainst": "Copilot advises against it",
+    "found_one": "Found {{count}} thing to look at",
+    "found_other": "Found {{count}} things to look at",
+    "worthALook": "Worth a look first",
+    "clear": "No security risks found",
+    "clearToImport": "Nothing in it looks risky to import it.",
+    "clearToInstall": "Nothing in it looks risky to install it."
+  },
+  "strip": {
+    "label": "What it checks",
+    "found_one": "{{count}} thing to look at",
+    "found_other": "{{count}} things to look at",
+    "clear": "nothing risky",
+    "medium": "worth a look",
+    "waiting": "not checked yet",
+    "skipped": "not checked",
+    "tip": "{{about}}. {{note}}"
+  },
+  "areas": {
+    "install": {
+      "label": "Install scripts",
+      "about": "What npm runs when its packages install"
+    },
+    "packages": {
+      "label": "Packages",
+      "about": "Where its packages come from"
+    },
+    "network": {
+      "label": "Data sent out",
+      "about": "What it sends, and where"
+    },
+    "hidden": {
+      "label": "Hidden code",
+      "about": "Code written to hide what it does"
+    },
+    "system": {
+      "label": "System access",
+      "about": "What reaches outside the app"
+    },
+    "agents": {
+      "label": "Copilot instructions",
+      "about": "What it tells Copilot to do while you build"
+    }
+  },
+  "severity": {
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low",
+    "note": "Note"
+  },
+  "finding": {
+    "assessment": "Copilot read it:",
+    "alsoIn": "Also in",
+    "advice": "What to do:",
+    "byFabricator": "Found by Fabricator’s own checks",
+    "byCopilot": "Found by Copilot, quoted from the file"
+  },
+  "steps": {
+    "label": "What Copilot read"
+  },
+  "errors": {
+    "cantCheck": "Fabricator couldn’t check this file."
+  }
+}

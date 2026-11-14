@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react'
+import { useTranslation } from '../../i18n'
 import type { TerminalView } from '../../terminal/session'
 import { Codicon } from '../icons'
 
@@ -8,11 +9,11 @@ interface Options {
   regex: boolean
 }
 
-const TOGGLES: { option: keyof Options; icon: string; label: string }[] = [
-  { option: 'caseSensitive', icon: 'case-sensitive', label: 'Match case' },
-  { option: 'wholeWord', icon: 'whole-word', label: 'Match whole word' },
-  { option: 'regex', icon: 'regex', label: 'Use regular expression' }
-]
+const TOGGLES = [
+  { option: 'caseSensitive', icon: 'case-sensitive', label: 'find.matchCase' },
+  { option: 'wholeWord', icon: 'whole-word', label: 'find.wholeWord' },
+  { option: 'regex', icon: 'regex', label: 'find.regex' }
+] as const satisfies ReadonlyArray<{ option: keyof Options; icon: string; label: string }>
 
 /** Find in a terminal's output, scrollback included. Escape gives the keyboard back to the terminal. */
 export default function TerminalFind({
@@ -22,6 +23,7 @@ export default function TerminalFind({
   session: TerminalView
   onClose: () => void
 }): JSX.Element {
+  const { t } = useTranslation('code')
   const inputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const [options, setOptions] = useState<Options>({
@@ -85,23 +87,23 @@ export default function TerminalFind({
   }
 
   const count = invalid
-    ? 'Invalid pattern'
+    ? t('find.invalid')
     : !query || !results
       ? ''
       : results.count === 0
-        ? 'No results'
+        ? t('find.noResults')
         : results.index >= 0
-          ? `${results.index + 1} of ${results.count}`
-          : `${results.count} found`
+          ? t('find.position', { index: results.index + 1, total: results.count })
+          : t('find.found', { count: results.count })
 
   return (
-    <div className="terminal-find" role="search" aria-label="Find in terminal">
+    <div className="terminal-find" role="search" aria-label={t('find.label')}>
       <input
         ref={inputRef}
         className="terminal-find-input"
         value={query}
-        placeholder="Find"
-        aria-label="Find in terminal"
+        placeholder={t('find.placeholder')}
+        aria-label={t('find.label')}
         spellCheck={false}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={onKeyDown}
@@ -115,8 +117,8 @@ export default function TerminalFind({
           type="button"
           className={`terminal-btn${options[option] ? ' terminal-btn--on' : ''}`}
           aria-pressed={options[option]}
-          aria-label={label}
-          title={label}
+          aria-label={t(label)}
+          title={t(label)}
           onClick={() => setOptions((current) => ({ ...current, [option]: !current[option] }))}
         >
           <Codicon name={icon} />
@@ -126,8 +128,8 @@ export default function TerminalFind({
       <button
         type="button"
         className="terminal-btn"
-        aria-label="Previous match"
-        title="Previous match (Shift+Enter)"
+        aria-label={t('find.previous')}
+        title={t('find.previousTitle')}
         disabled={!query}
         onClick={() => step(true)}
       >
@@ -136,8 +138,8 @@ export default function TerminalFind({
       <button
         type="button"
         className="terminal-btn"
-        aria-label="Next match"
-        title="Next match (Enter)"
+        aria-label={t('find.next')}
+        title={t('find.nextTitle')}
         disabled={!query}
         onClick={() => step(false)}
       >
@@ -146,8 +148,8 @@ export default function TerminalFind({
       <button
         type="button"
         className="terminal-btn"
-        aria-label="Close find"
-        title="Close (Escape)"
+        aria-label={t('find.close')}
+        title={t('find.closeTitle')}
         onClick={onClose}
       >
         <Codicon name="close" />

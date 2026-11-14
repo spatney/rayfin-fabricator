@@ -1,4 +1,5 @@
 import type { TeamMapRun } from '@shared/ipc'
+import { useTranslation } from '../../i18n'
 import { activeDeploys } from './useTeamActivity'
 import './team.css'
 
@@ -15,10 +16,9 @@ interface Props {
  * app bar (as Share ends the deploy control), with a dot while anything deploys.
  */
 export default function TeamMapButton({ runs, onClick }: Props): JSX.Element {
+  const { t } = useTranslation('team')
   const active = activeDeploys(runs).length
-  const label = active
-    ? `Workspace overview: ${active} deployment${active === 1 ? '' : 's'} in progress`
-    : 'Workspace overview: every app, change and deployment in this team workspace'
+  const label = active ? t('mapButton.active', { count: active }) : t('mapButton.idle')
   return (
     <button
       type="button"
@@ -32,7 +32,7 @@ export default function TeamMapButton({ runs, onClick }: Props): JSX.Element {
         {active > 0 && <span className="team-map-btn-dot" />}
       </span>
       <span className="team-map-btn-label" aria-hidden="true">
-        Overview
+        {t('shared.overview')}
       </span>
     </button>
   )

@@ -506,7 +506,7 @@ pub fn clean_runner(runner: TeamRunner) -> Result<TeamRunner, String> {
     }
   }
   if group.iter().chain(&labels).any(|n| n.chars().count() > 256 || n.chars().any(char::is_control)) {
-    return Err("Enter runner group names and labels as your organization's runner settings show them.".into());
+    return Err(t!("team.templates.invalidRunner"));
   }
   Ok(TeamRunner { group, labels })
 }

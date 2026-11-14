@@ -3,11 +3,12 @@ import type { ExportOptions, ExportPreview, ExportResult, StudioProject } from '
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { errorMessage } from '../errorReport'
+import { Trans, useTranslation } from '../i18n'
 import { fabricWorkspaceUrl } from '../fabric'
 import { docsUrl } from '../docsLinks'
 import { drawAppIcon } from '../appIcon'
 import { formatBytes, listNames } from './blueprint/localData'
-import { ProjectFileProgress, ProjectFileSummary, count, fileName } from './projectFile'
+import { ProjectFileProgress, ProjectFileSummary, fileName } from './projectFile'
 import AppIcon from './AppIcon'
 
 interface Props {
@@ -22,15 +23,15 @@ type Phase = 'loading' | 'choose' | 'saving' | 'done'
 /** What the export is: a project to keep building (`.fabricator`), or an app to use (`.rayfin`). */
 type Format = 'project' | 'app'
 
-const FORMATS: { id: Format; title: string; desc: string; icon: string }[] = [
+const FORMATS = [
   {
     id: 'project',
-    title: 'Project',
-    desc: 'To keep building it in Fabricator · .fabricator',
+    title: 'export.format.project',
+    desc: 'export.format.projectDesc',
     icon: 'tools'
   },
-  { id: 'app', title: 'App', desc: 'To use it, in a window of its own · .rayfin', icon: 'window' }
-]
+  { id: 'app', title: 'export.format.app', desc: 'export.format.appDesc', icon: 'window' }
+] as const satisfies ReadonlyArray<{ id: Format; title: string; desc: string; icon: string }>
 
 /** Files that may hold secrets named before "and N more". */
 const KEPT_OUT_SHOWN = 3
@@ -45,9 +46,10 @@ function FormatChoice({
   disabled: boolean
   onChange: (format: Format) => void
 }): JSX.Element {
+  const { t } = useTranslation('projects')
   const id = useId()
   return (
-    <div className="project-file-formats" role="radiogroup" aria-label="Export it as">
+    <div className="project-file-formats" role="radiogroup" aria-label={t('export.format.label')}>
       {FORMATS.map((option) => (
         <label
           key={option.id}
@@ -70,10 +72,10 @@ function FormatChoice({
           />
           <span className="project-file-format-text">
             <span className="project-file-format-title" id={`${id}-${option.id}`}>
-              {option.title}
+              {t(option.title)}
             </span>
             <span className="project-file-format-desc" id={`${id}-${option.id}-desc`}>
-              {option.desc}
+              {t(option.desc)}
             </span>
           </span>
         </label>
@@ -155,6 +157,7 @@ function Part({
  * Secret values, the app's local data and sign-ins never go in.
  */
 export default function ExportProjectModal({ project, busy, onClose }: Props): JSX.Element {
+  const { t } = useTranslation('projects')
   useSuppressPreview()
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
@@ -191,7 +194,7 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
       },
       (reason) => {
         if (!mountedRef.current) return
-        setPreviewError(errorMessage(reason, 'Fabricator couldn’t look at this project.'))
+        setPreviewError(errorMessage(reason, t('export.errors.cantLook')))
         setPhase('choose')
       }
     )
@@ -227,9 +230,7 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
     setPhase('saving')
     setProgress(null)
     setError(null)
-    const failure = asApp
-      ? 'Fabricator couldn’t export the app.'
-      : 'Fabricator couldn’t export the project.'
+    const failure = asApp ? t('export.errors.cantExportApp') : t('export.errors.cantExportProject')
     let result: ExportResult
     try {
       if (asApp && preview) {
@@ -261,7 +262,7 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
           if (mountedRef.current) setLinkCopied(false)
         }, 2500)
       },
-      () => setError('Fabricator couldn’t copy the link.')
+      () => setError(t('export.errors.cantCopy'))
     )
   }
 
@@ -270,10 +271,20 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
   const keptOut = preview?.keptOut ?? []
   const keptOutShown =
     keptOut.length > KEPT_OUT_SHOWN
-      ? [...keptOut.slice(0, KEPT_OUT_SHOWN), `${keptOut.length - KEPT_OUT_SHOWN} more`]
+      ? [
+          ...keptOut.slice(0, KEPT_OUT_SHOWN),
+          t('export.keptOutMore', { count: keptOut.length - KEPT_OUT_SHOWN })
+        ]
       : keptOut
   const secrets = preview?.secrets ?? []
   const canSave = phase === 'choose' && Boolean(preview) && !busy
+  const neverIncluded = asApp
+    ? secrets.length > 0
+      ? t('export.never.appSecrets', { secrets: listNames(secrets) })
+      : t('export.never.app')
+    : secrets.length > 0
+      ? t('export.never.projectSecrets', { secrets: listNames(secrets) })
+      : t('export.never.project')
 
   return (
     <div className="modal-backdrop" onClick={saving ? undefined : onClose}>
@@ -287,11 +298,11 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>Export project</h2>
+          <h2 id={titleId}>{t('export.title')}</h2>
           <button
             type="button"
             className="icon-btn"
-            aria-label="Close"
+            aria-label={t('actions.close')}
             disabled={saving}
             onClick={onClose}
           >
@@ -302,16 +313,16 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
         <div className="modal-body project-file-body">
           <ProjectFileSummary name={project.name}>
             {phase === 'done'
-              ? 'It’s exported and ready to send.'
+              ? t('export.lead.done')
               : asApp
-                ? 'Save it as an app someone else can install and use.'
-                : 'Save a copy someone else can import into Fabricator.'}
+                ? t('export.lead.app')
+                : t('export.lead.project')}
           </ProjectFileSummary>
 
           {phase === 'loading' && (
             <p className="project-file-status" role="status">
               <span className="ws-spinner" aria-hidden="true" />
-              Checking what to include…
+              {t('export.checking')}
             </p>
           )}
 
@@ -319,7 +330,7 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
             <div className="project-manage-error project-file-error" role="alert">
               <span>{previewError}</span>
               <button type="button" className="btn btn--sm" onClick={loadPreview}>
-                Try again
+                {t('actions.tryAgain')}
               </button>
             </div>
           )}
@@ -327,18 +338,14 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
           {preview && (phase === 'choose' || (saving && !progress)) && (
             <>
               <FormatChoice format={format} disabled={saving} onChange={setFormat} />
-              <div
-                className="project-file-parts"
-                role="group"
-                aria-label="What the export includes"
-              >
+              <div className="project-file-parts" role="group" aria-label={t('export.includes')}>
                 <Part
-                  title="App code"
-                  detail={`${count(preview.files, 'file')} · ${formatBytes(preview.bytes)}`}
+                  title={t('parts.code')}
+                  detail={`${t('file.files', { count: preview.files })} · ${formatBytes(preview.bytes)}`}
                   checked
                   locked
                 >
-                  Source and settings. Installed packages and build output stay out.
+                  {t('export.code.desc')}
                 </Part>
                 {asApp && (
                   <div className="project-file-part project-file-part--fact">
@@ -348,39 +355,36 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
                         <span className="project-file-part-title">{preview.app.name}</span>
                         {preview.app.version && (
                           <span className="project-file-part-detail">
-                            Version {preview.app.version}
+                            {t('parts.version', { version: preview.app.version })}
                           </span>
                         )}
                       </span>
-                      <span className="project-file-part-desc">
-                        It opens in a window of its own, with this name and icon. Its data stays on
-                        the computer it’s installed on.
-                      </span>
+                      <span className="project-file-part-desc">{t('export.app.desc')}</span>
                     </span>
                   </div>
                 )}
                 {!asApp && preview.history && (
                   <Part
-                    title="Version history"
-                    detail={`${count(preview.history.versions, 'version')} · ${formatBytes(preview.history.bytes)}`}
+                    title={t('parts.history')}
+                    detail={`${t('file.versions', { count: preview.history.versions })} · ${formatBytes(preview.history.bytes)}`}
                     checked={options.history}
                     disabled={saving}
                     onChange={(history) => setOptions((o) => ({ ...o, history }))}
                   >
-                    Every saved version, so History and Restore work for them too.
+                    {t('export.history.desc')}
                   </Part>
                 )}
                 {!asApp && deployment && (
                   <Part
-                    title="Published app"
+                    title={t('parts.published')}
                     detail={deployment.workspace}
                     checked={options.deployment}
                     disabled={saving}
                     onChange={(on) => setOptions((o) => ({ ...o, deployment: on }))}
                   >
                     {options.deployment
-                      ? 'Their publishes update this same app. They’ll need access to its workspace.'
-                      : 'They’ll publish it as a new app, in a workspace they choose.'}
+                      ? t('export.published.include')
+                      : t('export.published.exclude')}
                   </Part>
                 )}
               </div>
@@ -388,12 +392,10 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
               <div className="project-file-note">
                 <span className="codicon codicon-lock" aria-hidden="true" />
                 <span>
-                  Never included: your chat, {asApp && 'version history, where it’s published, '}
-                  secret values
-                  {secrets.length > 0 && ` (${listNames(secrets)})`}, local app data or sign-ins.
+                  {neverIncluded}
                   {keptOut.length > 0 && (
                     <span className="project-file-note-extra">
-                      Also left out in case they hold secrets: {listNames(keptOutShown)}.
+                      {t('export.keptOut', { files: listNames(keptOutShown) })}
                     </span>
                   )}
                 </span>
@@ -401,10 +403,7 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
               {asApp && secrets.length > 0 && (
                 <p className="project-file-note">
                   <span className="codicon codicon-warning" aria-hidden="true" />
-                  <span>
-                    It uses secrets that don’t come with it, so what needs them won’t work where
-                    it’s installed.
-                  </span>
+                  <span>{t('export.secretsWarning')}</span>
                 </p>
               )}
 
@@ -425,8 +424,8 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
 
           {saving && progress && (
             <ProjectFileProgress
-              label={`Exporting ${project.name}…`}
-              name="Export progress"
+              label={t('export.exportingName', { name: project.name })}
+              name={t('export.progress')}
               processed={progress.processed}
               total={progress.total}
             />
@@ -440,9 +439,9 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
                   aria-hidden="true"
                 />
                 <span className="project-file-saved-text">
-                  <strong>Saved {fileName(saved.path)}</strong>
+                  <strong>{t('export.saved', { file: fileName(saved.path) })}</strong>
                   <span>
-                    {formatBytes(saved.bytes ?? 0)} · {count(saved.files ?? 0, 'file')}
+                    {formatBytes(saved.bytes ?? 0)} · {t('file.files', { count: saved.files ?? 0 })}
                   </span>
                 </span>
               </div>
@@ -457,26 +456,21 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
 
               <section className="project-file-next" aria-labelledby={`${titleId}-next`}>
                 <h3 className="project-manage-heading" id={`${titleId}-next`}>
-                  What happens next
+                  {t('export.next.title')}
                 </h3>
                 <ol className="project-file-steps">
-                  <li>Send them the file, by email, chat or a shared folder.</li>
+                  <li>{t('export.next.send')}</li>
                   <li>
-                    They double-click it. Fabricator asks before it installs the app, then opens it
-                    in a window of its own. The first time takes a minute or two. Don’t have
-                    Fabricator?{' '}
+                    {t('export.next.openApp')}{' '}
                     <button type="button" className="project-file-link" onClick={copyInstallLink}>
-                      {linkCopied ? 'Install link copied' : 'Copy the install link'}
+                      {linkCopied ? t('export.next.linkCopied') : t('export.next.copyLink')}
                       <span
                         className={`codicon codicon-${linkCopied ? 'check' : 'copy'}`}
                         aria-hidden="true"
                       />
                     </button>
                   </li>
-                  <li>
-                    After that it opens like any app. On Windows it’s in the Start menu, under
-                    Rayfin apps.
-                  </li>
+                  <li>{t('export.next.afterApp')}</li>
                 </ol>
               </section>
             </>
@@ -490,9 +484,9 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
                   aria-hidden="true"
                 />
                 <span className="project-file-saved-text">
-                  <strong>Saved {fileName(saved.path)}</strong>
+                  <strong>{t('export.saved', { file: fileName(saved.path) })}</strong>
                   <span>
-                    {formatBytes(saved.bytes ?? 0)} · {count(saved.files ?? 0, 'file')}
+                    {formatBytes(saved.bytes ?? 0)} · {t('file.files', { count: saved.files ?? 0 })}
                   </span>
                 </span>
               </div>
@@ -507,16 +501,18 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
 
               <section className="project-file-next" aria-labelledby={`${titleId}-next`}>
                 <h3 className="project-manage-heading" id={`${titleId}-next`}>
-                  What happens next
+                  {t('export.next.title')}
                 </h3>
                 <ol className="project-file-steps">
-                  <li>Send them the file, by email, chat or a shared folder.</li>
+                  <li>{t('export.next.send')}</li>
                   <li>
-                    They double-click it to import it into Fabricator, or select{' '}
-                    <strong>Open existing</strong>, then <strong>Import a project</strong>. New to
-                    Fabricator?{' '}
+                    <Trans
+                      t={t}
+                      i18nKey="export.next.openProject"
+                      components={{ strong: <strong /> }}
+                    />{' '}
                     <button type="button" className="project-file-link" onClick={copyInstallLink}>
-                      {linkCopied ? 'Install link copied' : 'Copy the install link'}
+                      {linkCopied ? t('export.next.linkCopied') : t('export.next.copyLink')}
                       <span
                         className={`codicon codicon-${linkCopied ? 'check' : 'copy'}`}
                         aria-hidden="true"
@@ -525,8 +521,12 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
                   </li>
                   {options.deployment && deployment && (
                     <li>
-                      So they can publish, give them Contributor access to{' '}
-                      <strong>{deployment.workspace}</strong> in Fabric.
+                      <Trans
+                        t={t}
+                        i18nKey="export.next.access"
+                        values={{ workspace: deployment.workspace }}
+                        components={{ strong: <strong /> }}
+                      />
                       {workspaceUrl && (
                         <>
                           {' '}
@@ -535,7 +535,7 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
                             className="project-file-link"
                             onClick={() => void window.api.openExternal(workspaceUrl)}
                           >
-                            Open the workspace
+                            {t('export.next.openWorkspace')}
                             <span className="codicon codicon-link-external" aria-hidden="true" />
                           </button>
                         </>
@@ -557,16 +557,16 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
                 onClick={() => {
                   if (saved.path) {
                     window.api.projects.revealExport(saved.path).catch((reason) => {
-                      setError(errorMessage(reason, 'Fabricator couldn’t show the file.'))
+                      setError(errorMessage(reason, t('export.errors.cantShow')))
                     })
                   }
                 }}
               >
                 <span className="codicon codicon-folder-opened" aria-hidden="true" />
-                Show in folder
+                {t('export.showInFolder')}
               </button>
               <button type="button" className="btn btn--primary" autoFocus onClick={onClose}>
-                Done
+                {t('actions.done')}
               </button>
             </>
           ) : saving && progress ? (
@@ -575,12 +575,12 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
               className="btn"
               onClick={() => void window.api.projects.stopExport(project.id)}
             >
-              Stop
+              {t('actions.stop')}
             </button>
           ) : (
             <>
               <button type="button" className="btn" disabled={saving} onClick={onClose}>
-                Cancel
+                {t('actions.cancel')}
               </button>
               <button
                 ref={exportRef}
@@ -589,7 +589,7 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
                 disabled={!canSave}
                 onClick={() => void save()}
               >
-                {saving ? 'Exporting…' : 'Export…'}
+                {saving ? t('export.exporting') : t('export.export')}
               </button>
             </>
           )}

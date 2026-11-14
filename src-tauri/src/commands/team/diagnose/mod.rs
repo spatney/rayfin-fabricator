@@ -50,8 +50,6 @@ const DOC_HOSTS: &[&str] = &["learn.microsoft.com", "docs.github.com", "rayfin.a
 /// the tenant details this session holds.
 const SANDBOX: Sandbox = Sandbox { url_hosts: DOC_HOSTS, read_only_mcp: false };
 
-const STOPPED: &str = "Diagnosis stopped.";
-
 /* --------------------------------- context -------------------------------- */
 
 /// Which team operation failed.
@@ -182,7 +180,7 @@ fn request_account(req: &TeamDiagnoseRequest) -> Option<String> {
 }
 
 async fn resolve(req: &TeamDiagnoseRequest) -> Result<DiagContext, String> {
-  let kind = Kind::parse(&req.kind).ok_or("Fabricator doesn't know how to diagnose that.")?;
+  let kind = Kind::parse(&req.kind).ok_or_else(|| t!("team.diagnose.unknownKind"))?;
   let mut ctx = DiagContext {
     kind,
     account: request_account(req),
@@ -334,7 +332,7 @@ pub async fn team_diagnose(
   team::require_enabled()?;
   let id = request.diagnosis_id.trim().to_string();
   if id.is_empty() {
-    return Err("Missing diagnosis id.".into());
+    return Err(t!("team.diagnose.missingId"));
   }
   let token = state.begin_team_op(&id);
   let emit: Emit = {
@@ -362,7 +360,7 @@ async fn diagnose(copilot: &CopilotManager, request: &TeamDiagnoseRequest, emit:
   let mut result = TeamDiagnosisResult { context: context.clone(), ..Default::default() };
   if token.is_cancelled() {
     result.checks = runner.checks();
-    result.error = Some(STOPPED.into());
+    result.error = Some(t!("team.diagnose.stopped"));
     return result;
   }
 
@@ -378,15 +376,15 @@ async fn diagnose(copilot: &CopilotManager, request: &TeamDiagnoseRequest, emit:
   result.checks = runner.checks();
   result.conclusion = conclusion.lock().unwrap().clone();
   match outcome {
-    Err(e) => result.error = Some(format!("Couldn't start the diagnosis. {e}")),
-    Ok((_, DrainEnd::Cancelled)) => result.error = Some(STOPPED.into()),
+    Err(e) => result.error = Some(t!("team.diagnose.cantStart", error = e)),
+    Ok((_, DrainEnd::Cancelled)) => result.error = Some(t!("team.diagnose.stopped")),
     Ok((answer, end)) => {
       result.text = answer.text();
       if result.text.is_empty() {
         let why = answer.errored.clone().unwrap_or_else(|| {
-          if matches!(end, DrainEnd::TimedOut) { "It timed out.".to_string() } else { "Copilot ended without an answer.".to_string() }
+          if matches!(end, DrainEnd::TimedOut) { t!("team.diagnose.timedOut") } else { t!("team.diagnose.noAnswer") }
         });
-        result.error = Some(format!("Couldn't finish the diagnosis. {why}"));
+        result.error = Some(t!("team.diagnose.cantFinish", reason = why));
       } else {
         result.ok = true;
       }
@@ -404,7 +402,7 @@ fn analysis_root(ctx: &DiagContext) -> Result<String, String> {
     }
   }
   let dir = paths::temp_dir().join("fabricator-team-diagnosis");
-  std::fs::create_dir_all(&dir).map_err(|e| format!("Couldn't prepare a folder for it: {e}"))?;
+  std::fs::create_dir_all(&dir).map_err(|e| t!("team.diagnose.cantPrepareFolder", error = e))?;
   Ok(dir.to_string_lossy().to_string())
 }
 
@@ -498,7 +496,7 @@ impl Answer {
       }
       "session.error" => {
         let message = data.get("message").and_then(Value::as_str).map(str::trim).filter(|m| !m.is_empty());
-        self.errored = Some(message.unwrap_or("Copilot reported an error.").to_string());
+        self.errored = Some(message.map(String::from).unwrap_or_else(|| t!("team.diagnose.copilotError")));
         None
       }
       _ => None,

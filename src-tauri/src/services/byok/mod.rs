@@ -37,8 +37,6 @@ use crate::types::{ByokModelInfo, ByokModelMeta, ByokProviderSettings, ByokProvi
 pub const CONTINUE_PROMPT: &str = "[Fabricator: your last response was empty, with no reply and no tool call, so nothing happened. Continue from where you stopped. If you meant to call a tool, call it again. If you're finished, give your final answer.]";
 /// How many times one turn asks a model to continue before giving up.
 pub const MAX_CONTINUES: u32 = 2;
-/// Shown when a model keeps stopping without finishing.
-pub const STOPPED_EARLY: &str = "The model stopped before finishing. Select Retry, or choose another model.";
 
 /// A finished `assistant.message` with no text and no tool call (see [`CONTINUE_PROMPT`]).
 pub fn is_empty_response(data: &Value) -> bool {
@@ -74,8 +72,8 @@ fn error_detail(body: &Value) -> String {
     .to_string()
 }
 
-/// GET one of a provider's model lists with `key`.
-async fn get_list(spec: &ProviderSpec, url: &str, key: &str) -> Result<Value, String> {
+/// GET one of a provider's model lists with `key`, the user's saved key when `saved`.
+async fn get_list(spec: &ProviderSpec, url: &str, key: &str, saved: bool) -> Result<Value, String> {
   let request = HTTP.get(url);
   let request = match spec.auth {
     Auth::Anthropic => request.header("x-api-key", key).header("anthropic-version", "2023-06-01"),
@@ -85,9 +83,9 @@ async fn get_list(spec: &ProviderSpec, url: &str, key: &str) -> Result<Value, St
   let response = request.send().await.map_err(|e| {
     log::warn!("listing {} models failed: {e}", spec.name);
     if e.is_timeout() {
-      format!("{} didn't answer in time. Check your connection and try again.", spec.name)
+      t!("services.byok.noAnswer", name = spec.name)
     } else {
-      format!("Couldn't reach {}. Check your connection and try again.", spec.name)
+      t!("services.byok.unreachable", name = spec.name)
     }
   })?;
   let status = response.status();
@@ -95,19 +93,23 @@ async fn get_list(spec: &ProviderSpec, url: &str, key: &str) -> Result<Value, St
   let detail = error_detail(&body);
   // xAI and Google turn a bad key down with a 400, not a 401.
   if status.as_u16() == 401 || (!status.is_success() && classify(&detail) == Some(Failure::KeyRejected)) {
-    return Err(format!("{} didn't accept this key. Check that you copied all of it.", spec.name));
+    return Err(if saved {
+      t!("services.byok.savedKeyRefused", name = spec.name)
+    } else {
+      t!("services.byok.keyRefused", name = spec.name)
+    });
   }
   if !status.is_success() {
-    return Err(format!("{} couldn't list its models ({}). {detail}", spec.name, status.as_u16()).trim().to_string());
+    return Err(t!("services.byok.listFailed", name = spec.name, status = status.as_u16(), detail = detail).trim().to_string());
   }
   Ok(body)
 }
 
-/// List the models `key` can use, which also checks the key.
-async fn list_models(spec: &ProviderSpec, key: &str) -> Result<Vec<Listed>, String> {
-  let mut listed = catalog::parse_models(spec.id, &get_list(spec, spec.models_url, key).await?);
+/// List the models `key` can use, which also checks the key (the saved one when `saved`).
+async fn list_models(spec: &ProviderSpec, key: &str, saved: bool) -> Result<Vec<Listed>, String> {
+  let mut listed = catalog::parse_models(spec.id, &get_list(spec, spec.models_url, key, saved).await?);
   if let Some(url) = spec.details_url {
-    match get_list(spec, url, key).await {
+    match get_list(spec, url, key, saved).await {
       Ok(details) => catalog::fill_in(&mut listed, catalog::parse_models(spec.id, &details)),
       Err(e) => log::warn!("listing {} model details failed: {e}", spec.name),
     }
@@ -190,7 +192,7 @@ impl ByokManager {
     ByokProviderStatus {
       id: spec.id.into(),
       name: spec.name.into(),
-      description: spec.description.into(),
+      description: (spec.description)(),
       key_url: spec.key_url.into(),
       key_prefix: spec.key_prefix.into(),
       has_key: self.key(spec.id).is_some(),
@@ -211,7 +213,7 @@ impl ByokManager {
   }
 
   fn spec(provider: &str) -> Result<&'static ProviderSpec, String> {
-    catalog::find(provider).ok_or_else(|| format!("Fabricator doesn't support {provider} keys."))
+    catalog::find(provider).ok_or_else(|| t!("services.byok.unsupportedProvider", provider = provider))
   }
 
   /// Check `key` against the provider, then save it and the models it can use.
@@ -219,14 +221,14 @@ impl ByokManager {
     let spec = Self::spec(provider)?;
     let key = key.trim();
     if key.is_empty() {
-      return Err("Paste your API key.".into());
+      return Err(t!("services.byok.pasteKey"));
     }
     if key.chars().any(char::is_whitespace) {
-      return Err("That doesn't look like an API key: it has spaces in it.".into());
+      return Err(t!("services.byok.keyHasSpaces"));
     }
-    let models = catalog::resolve(spec.id, list_models(spec, key).await?, twins);
+    let models = catalog::resolve(spec.id, list_models(spec, key, false).await?, twins);
     if models.is_empty() {
-      return Err(format!("{} didn't list any models Fabricator can use with this key.", spec.name));
+      return Err(t!("services.byok.noModels", name = spec.name));
     }
     keychain::set(spec.id, key)?;
     self.keys.lock().unwrap().insert(spec.id.into(), Some(key.to_string()));
@@ -240,11 +242,10 @@ impl ByokManager {
   /// Check the saved key again and update the models it can use.
   pub async fn refresh(&self, provider: &str, twins: &[CopilotTwin]) -> Result<ByokProviderStatus, String> {
     let spec = Self::spec(provider)?;
-    let key = self.key(spec.id).ok_or_else(|| format!("Add your {} key first.", spec.name))?;
-    let listed = match list_models(spec, &key).await {
+    let key = self.key(spec.id).ok_or_else(|| t!("services.byok.addKeyFirst", name = spec.name))?;
+    let listed = match list_models(spec, &key, true).await {
       Ok(listed) => listed,
       Err(e) => {
-        let e = e.replace("this key", "your saved key");
         self.errors.lock().unwrap().insert(spec.id.into(), e.clone());
         return Err(e);
       }
@@ -273,7 +274,7 @@ impl ByokManager {
     let mut saved = store::byok_settings()
       .providers
       .remove(spec.id)
-      .ok_or_else(|| format!("Add your {} key first.", spec.name))?;
+      .ok_or_else(|| t!("services.byok.addKeyFirst", name = spec.name))?;
     saved.enabled = saved.models.iter().filter(|m| ids.contains(&m.id)).map(|m| m.id.clone()).collect();
     store::set_byok_provider(spec.id, Some(saved));
     Ok(self.provider_status(spec))
@@ -302,28 +303,20 @@ impl ByokManager {
   /// never quietly run on another model.
   pub fn ensure_ready(&self, selection: &str) -> Result<(), String> {
     let Some((spec, _)) = registry::parse_selection(selection) else {
-      return Err(format!("{selection} isn't available anymore. Choose another model."));
+      return Err(t!("services.byok.selectionGone", selection = selection));
     };
     let settings = store::byok_settings();
     let Some((_, info)) = registry::find_model(&settings, selection) else {
-      return Err(format!(
-        "That {} model isn't one of your models anymore. Turn it on in Accounts, or choose another model.",
-        spec.name
-      ));
+      return Err(t!("services.byok.modelGone", name = spec.name));
     };
     if self.key(spec.id).is_none() {
-      return Err(format!("Your {} API key isn't set up. Add it in Accounts, or choose another model.", spec.name));
+      return Err(t!("services.byok.keyMissing", name = spec.name));
     }
     if !settings.providers.get(spec.id).is_some_and(|p| p.enabled.contains(&info.id)) {
-      return Err(format!(
-        "{} isn't one of your {} models anymore. Turn it on in Accounts, or choose another model.",
-        info.name, spec.name
-      ));
+      return Err(t!("services.byok.modelOff", model = info.name, name = spec.name));
     }
     if spec.relay {
-      relay::base_url(spec).map_err(|e| {
-        format!("Fabricator couldn't connect to {} on this computer: {e}. Restart Fabricator, or choose another model.", spec.name)
-      })?;
+      relay::base_url(spec).map_err(|e| t!("services.byok.relayFailed", name = spec.name, error = e))?;
     }
     Ok(())
   }
@@ -352,7 +345,7 @@ impl ByokManager {
             provider: spec.id.into(),
             provider_name: spec.name.into(),
             ready,
-            note: (!ready).then(|| format!("Add your {} key in Accounts", spec.name)),
+            note: (!ready).then(|| t!("services.byok.addKeyInAccounts", name = spec.name)),
           }),
         });
       }
@@ -367,7 +360,7 @@ pub fn describe(selection: &str) -> Option<(String, String)> {
   let settings = store::byok_settings();
   let model = registry::find_model(&settings, selection)
     .map(|(_, m)| m.name.clone())
-    .unwrap_or_else(|| "this model".into());
+    .unwrap_or_else(|| t!("services.byok.thisModel"));
   Some((spec.name.to_string(), model))
 }
 
@@ -453,20 +446,12 @@ pub fn is_permanent(raw: &str) -> bool {
 /// A provider's error, in plain language.
 pub fn explain(provider: &str, model: &str, raw: &str) -> Option<String> {
   Some(match classify(raw)? {
-    Failure::KeyRejected => format!("{provider} didn't accept your API key. Replace it in Accounts, or choose another model."),
-    Failure::OutOfCredit => format!(
-      "Your {provider} account is out of credit or over its spending limit. Check your billing with {provider}, or choose another model."
-    ),
-    Failure::TooLarge => format!(
-      "This request is bigger than your {provider} plan allows per minute. Fabricator's requests are large, so upgrade your {provider} plan, or choose another model."
-    ),
-    Failure::RateLimited => format!(
-      "{provider} is limiting how often your key can be used. Wait a minute and try again, or choose another model."
-    ),
-    Failure::Overloaded => format!("{provider} is overloaded right now. Try again in a minute, or choose another model."),
-    Failure::ModelGone => format!(
-      "{provider} doesn't offer {model} to your key anymore. Check your models in Accounts, or choose another model."
-    ),
+    Failure::KeyRejected => t!("services.byok.failure.keyRejected", provider = provider),
+    Failure::OutOfCredit => t!("services.byok.failure.outOfCredit", provider = provider),
+    Failure::TooLarge => t!("services.byok.failure.tooLarge", provider = provider),
+    Failure::RateLimited => t!("services.byok.failure.rateLimited", provider = provider),
+    Failure::Overloaded => t!("services.byok.failure.overloaded", provider = provider),
+    Failure::ModelGone => t!("services.byok.failure.modelGone", provider = provider, model = model),
   })
 }
 

@@ -12,6 +12,7 @@ import {
 } from 'react'
 import type { FileNode, HelpAction, HelpIssueDraft } from '@shared/ipc'
 import type { DocsIndexPage } from 'virtual:docs-index'
+import { Trans, useTranslation, type translator } from '../../i18n'
 import { Codicon } from '../icons'
 import { FabricatorMark } from '../FabricatorMark'
 import { useSuppressPreview } from '../../overlay'
@@ -28,7 +29,6 @@ import { readRecent, recencyBoost, rememberPick } from './recent'
 import { buildResults, type Entry } from './results'
 import {
   GROUP_DEFAULTS,
-  GROUP_NOUNS,
   VIEWS,
   VIEW_ORDER,
   type AskSuggestion,
@@ -39,6 +39,8 @@ import {
   type SearchScope
 } from './model'
 import './spotlight.css'
+
+type Translate = ReturnType<typeof translator<'spotlight'>>
 
 export interface SpotlightHelp {
   /** Help can answer: Copilot is signed in, or still being checked. */
@@ -122,16 +124,16 @@ export function resetSpotlightMemory(): void {
 }
 
 /** What Enter does with a result, as the action bar says it. */
-function verbOf(entry: Entry): string {
+function verbOf(entry: Entry, t: Translate): string {
   switch (entry.type) {
     case 'item':
-      return entry.item.verb ?? GROUP_DEFAULTS[entry.item.group].verb
+      return entry.item.verb ?? t(GROUP_DEFAULTS[entry.item.group].verb)
     case 'view':
-      return VIEWS[entry.view].title
+      return t(VIEWS[entry.view].title)
     case 'ask':
-      return 'Ask Help'
+      return t('ask.label')
     case 'continue':
-      return 'Continue conversation'
+      return t('verbs.continue')
   }
 }
 
@@ -146,9 +148,14 @@ function iconOf(entry: Entry): ItemIcon {
   }
 }
 
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? '' : 's'}`
-}
+/** What a search says when it has nothing yet, and when nothing matches. */
+const EMPTY = {
+  projects: { none: 'empty.none.projects', noMatch: 'empty.noMatch.projects' },
+  apps: { none: 'empty.none.apps', noMatch: 'empty.noMatch.apps' },
+  actions: { none: 'empty.none.actions', noMatch: 'empty.noMatch.actions' },
+  docs: { none: 'empty.none.docs', noMatch: 'empty.noMatch.docs' },
+  files: { none: 'empty.none.files', noMatch: 'empty.noMatch.files' }
+} as const satisfies Record<SearchGroup, { none: string; noMatch: string }>
 
 /**
  * Search: one box for finding a project, an action, a docs page or a file, and for
@@ -172,6 +179,9 @@ export default function Spotlight({
   modKey
 }: SpotlightProps): JSX.Element {
   useSuppressPreview()
+  const { t, i18n } = useTranslation('spotlight')
+  // Results hold words, so they're made again when the language changes.
+  const language = i18n.language
   const windowRef = useModalFocus<HTMLDivElement>()
   const bodyRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -268,12 +278,12 @@ export default function Spotlight({
   const base = useMemo(() => prepare(items), [items])
   const docList = useMemo(
     () => (docs ? docItems(docs, (url) => openUrlRef.current(url)) : []),
-    [docs]
+    [docs, language]
   )
   const preparedDocs = useMemo(() => prepare(docList), [docList])
   const fileList = useMemo(
     () => (tree && hasFiles ? fileItems(tree, (path) => filesRef.current?.open(path)) : []),
-    [tree, hasFiles]
+    [tree, hasFiles, language]
   )
   const preparedFiles = useMemo(() => prepare(fileList), [fileList])
   const boost = useMemo(() => {
@@ -326,7 +336,8 @@ export default function Spotlight({
       exchanges.length,
       last?.question,
       help.available,
-      answering
+      answering,
+      language
     ]
   )
 
@@ -416,7 +427,7 @@ export default function Spotlight({
       () => {
         if (action.notice) notify?.(action.notice)
       },
-      () => notify?.(`${action.title} didn’t work. Try again.`, 'error')
+      () => notify?.(t('notify.failed', { title: action.title }), 'error')
     )
   }
 
@@ -446,8 +457,8 @@ export default function Spotlight({
   const shown = waiting ? undefined : last
   const copyAnswer = (text: string): void => {
     navigator.clipboard.writeText(text).then(
-      () => setNotice('Copied the answer'),
-      () => setNotice('Couldn’t copy the answer')
+      () => setNotice(t('notify.copiedAnswer')),
+      () => setNotice(t('notify.copyFailed'))
     )
   }
 
@@ -459,7 +470,7 @@ export default function Spotlight({
           actions: [
             {
               id: 'open-help',
-              title: 'Open in Help',
+              title: t('panel.openInHelp'),
               icon: { kind: 'ray' },
               keys: [modKey, 'J'],
               run: openInHelp
@@ -468,7 +479,7 @@ export default function Spotlight({
               ? [
                   {
                     id: 'copy-answer',
-                    title: 'Copy answer',
+                    title: t('panel.copyAnswer'),
                     icon: 'copy',
                     run: () => copyAnswer(shown.answer)
                   }
@@ -478,7 +489,7 @@ export default function Spotlight({
               ? [
                   {
                     id: 'stop',
-                    title: 'Stop answering',
+                    title: t('panel.stop'),
                     icon: 'debug-stop',
                     keys: ['Esc'],
                     run: () => conversation.stop()
@@ -490,7 +501,7 @@ export default function Spotlight({
       ]
       if (shown && shown.actions.length > 0 && shown.status !== 'thinking') {
         sections.push({
-          title: 'Help suggests',
+          title: t('panel.suggests'),
           actions: shown.actions.map((action) => ({
             id: `help:${action.id}:${action.url ?? action.target ?? ''}`,
             title: action.label,
@@ -501,7 +512,7 @@ export default function Spotlight({
       }
       if (shown && shown.citations.length > 0) {
         sections.push({
-          title: 'Sources',
+          title: t('panel.sources'),
           actions: shown.citations.map((cite) => ({
             id: `cite:${cite.url}`,
             title: cite.title,
@@ -516,7 +527,7 @@ export default function Spotlight({
           actions: [
             {
               id: 'new',
-              title: 'New conversation',
+              title: t('panel.newConversation'),
               icon: 'add',
               run: () => {
                 conversation.startNew()
@@ -527,7 +538,7 @@ export default function Spotlight({
           ]
         })
       }
-      return { title: shown?.question ?? pending?.question ?? 'Help', sections }
+      return { title: shown?.question ?? pending?.question ?? t('panel.help'), sections }
     }
     if (!selected) return null
     const sections: PanelSection[] = [
@@ -535,7 +546,7 @@ export default function Spotlight({
         actions: [
           {
             id: 'primary',
-            title: verbOf(selected),
+            title: verbOf(selected, t),
             icon: iconOf(selected),
             keys: ['↵'],
             run: () => activate(selected)
@@ -544,7 +555,7 @@ export default function Spotlight({
             ? [
                 {
                   id: 'open-help',
-                  title: 'Open in Help',
+                  title: t('panel.openInHelp'),
                   icon: 'comment-discussion',
                   keys: [modKey, 'J'],
                   run: openInHelp
@@ -569,7 +580,7 @@ export default function Spotlight({
       selected.type === 'item'
         ? selected.item.title
         : selected.type === 'view'
-          ? VIEWS[selected.view].title
+          ? t(VIEWS[selected.view].title)
           : selected.title
     return { title, sections }
   })()
@@ -716,31 +727,33 @@ export default function Spotlight({
     (scope === 'files' && hasFiles && tree === null)
   const placeholder =
     scope === 'all'
-      ? 'Search for projects, actions and docs…'
+      ? t('placeholder.all')
       : scope === 'help'
         ? last
-          ? 'Ask a follow-up…'
-          : VIEWS.help.placeholder
+          ? t('placeholder.followUp')
+          : t(VIEWS.help.placeholder)
         : scope === 'files'
-          ? `Search files in ${files?.projectName ?? 'this project'}…`
-          : VIEWS[scope].placeholder
+          ? files
+            ? t('placeholder.files', { name: files.projectName })
+            : t('placeholder.filesHere')
+          : t(VIEWS[scope].placeholder)
   const status = answering
     ? busy
-      ? 'Help is answering.'
+      ? t('announce.answering')
       : last?.status === 'done'
-        ? 'Help answered.'
+        ? t('announce.answered')
         : ''
     : typed
-      ? `${plural(entries.length, 'result')}.`
+      ? t('announce.results', { count: entries.length })
       : ''
 
   // What Enter does, shown in the action bar.
   const primary: { title: string; keys: string[]; run: () => void } | null = answering
     ? typed
-      ? { title: 'Ask follow-up', keys: ['↵'], run: () => ask(query) }
-      : { title: 'Open in Help', keys: [modKey, 'J'], run: openInHelp }
+      ? { title: t('foot.followUp'), keys: ['↵'], run: () => ask(query) }
+      : { title: t('panel.openInHelp'), keys: [modKey, 'J'], run: openInHelp }
     : selected
-      ? { title: verbOf(selected), keys: ['↵'], run: () => activate(selected) }
+      ? { title: verbOf(selected, t), keys: ['↵'], run: () => activate(selected) }
       : null
 
   const renderEntry = (entry: Entry): JSX.Element => {
@@ -751,7 +764,7 @@ export default function Spotlight({
     switch (entry.type) {
       case 'item': {
         const { item } = entry
-        const live = item.hint === 'Open now'
+        const live = Boolean(item.live)
         title = <Highlight text={item.title} ranges={entry.ranges} />
         subtitle = item.subtitle
         end = (
@@ -763,17 +776,17 @@ export default function Spotlight({
               </span>
             )}
             {item.keys && <Keys keys={item.keys} />}
-            <span className="sl-kind">{item.kind ?? GROUP_DEFAULTS[item.group].kind}</span>
+            <span className="sl-kind">{item.kind ?? t(GROUP_DEFAULTS[item.group].kind)}</span>
           </>
         )
         break
       }
       case 'view': {
-        title = VIEWS[entry.view].title
+        title = t(VIEWS[entry.view].title)
         subtitle = entry.view === 'files' ? files?.projectName : undefined
         end =
           entry.count !== undefined ? (
-            <span className="sl-kind">{plural(entry.count, 'result')}</span>
+            <span className="sl-kind">{t('count.results', { count: entry.count })}</span>
           ) : (
             <Keys keys={[modKey, String(VIEW_ORDER.indexOf(entry.view) + 1)]} />
           )
@@ -814,20 +827,22 @@ export default function Spotlight({
   }
 
   const empty = (): JSX.Element => {
-    if (scope === 'files' && !tree) return <p className="sl-empty-title">Listing the files…</p>
-    if (scope === 'docs' && !docs) return <p className="sl-empty-title">Loading the docs…</p>
-    const noun = scope === 'all' || scope === 'help' ? null : GROUP_NOUNS[scope]
-    if (!typed || !noun) {
-      return <p className="sl-empty-title">{noun ? `No ${noun} yet` : 'Nothing here yet'}</p>
+    if (scope === 'files' && !tree) {
+      return <p className="sl-empty-title">{t('empty.listingFiles')}</p>
+    }
+    if (scope === 'docs' && !docs) {
+      return <p className="sl-empty-title">{t('empty.loadingDocs')}</p>
+    }
+    const words = scope === 'all' || scope === 'help' ? null : EMPTY[scope]
+    if (!typed || !words) {
+      return <p className="sl-empty-title">{words ? t(words.none) : t('empty.nothing')}</p>
     }
     return (
       <>
         <Codicon name="search" />
-        <p className="sl-empty-title">
-          No {noun} match “{typed}”
-        </p>
+        <p className="sl-empty-title">{t(words.noMatch, { text: typed })}</p>
         <p className="sl-empty-sub">
-          Press <Keys keys={['Tab']} /> to ask Help instead
+          <Trans t={t} i18nKey="empty.askInstead" components={{ tab: <Keys keys={['Tab']} /> }} />
         </p>
       </>
     )
@@ -841,7 +856,7 @@ export default function Spotlight({
         className="sl-window"
         role="dialog"
         aria-modal="true"
-        aria-label="Search"
+        aria-label={t('actions.search')}
         // A click that finds nothing to focus focuses Search, not the page, so its
         // keys keep working.
         tabIndex={-1}
@@ -870,8 +885,8 @@ export default function Spotlight({
             <button
               type="button"
               className="sl-back"
-              aria-label="Back"
-              title="Back (Esc)"
+              aria-label={t('actions.back')}
+              title={t('bar.backTitle')}
               onClick={() => changeScope('all')}
             >
               <Codicon name="arrow-left" />
@@ -882,7 +897,7 @@ export default function Spotlight({
             className="sl-input"
             type="text"
             role="combobox"
-            aria-label={scope === 'help' ? 'Ask Help' : 'Search'}
+            aria-label={scope === 'help' ? t('ask.label') : t('actions.search')}
             aria-expanded={!answering && entries.length > 0}
             aria-controls={answering ? undefined : listId}
             aria-autocomplete="list"
@@ -904,7 +919,7 @@ export default function Spotlight({
               tabIndex={-1}
               onClick={() => (typed ? ask(query) : changeScope('help'))}
             >
-              <span className="sl-askhint-label">Ask Help</span>
+              <span className="sl-askhint-label">{t('ask.label')}</span>
               <Keys keys={['Tab']} />
             </button>
           )}
@@ -920,13 +935,19 @@ export default function Spotlight({
               onReportIssue={help.onReportIssue}
             />
           ) : (
-            <div className="sl-list" ref={bodyRef} id={listId} role="listbox" aria-label="Results">
+            <div
+              className="sl-list"
+              ref={bodyRef}
+              id={listId}
+              role="listbox"
+              aria-label={t('sections.results')}
+            >
               {sections.map((section) => (
                 <div
                   key={section.key}
                   className="sl-section"
                   role="group"
-                  aria-label={section.label ?? 'Ask Help'}
+                  aria-label={section.label ?? t('ask.label')}
                 >
                   {section.label && (
                     <div className="sl-label" aria-hidden="true">
@@ -966,10 +987,12 @@ export default function Spotlight({
                 <Icon icon={VIEWS[scope].icon} small />
                 <span className="sl-nav-title">
                   {scope === 'files' && files
-                    ? `Files in ${files.projectName}`
-                    : VIEWS[scope].title}
+                    ? t('foot.files', { name: files.projectName })
+                    : t(VIEWS[scope].title)}
                 </span>
-                {scope === 'help' && busy && <span className="sl-nav-status">Answering…</span>}
+                {scope === 'help' && busy && (
+                  <span className="sl-nav-status">{t('foot.answering')}</span>
+                )}
               </>
             )}
           </div>
@@ -991,7 +1014,7 @@ export default function Spotlight({
             disabled={!panel}
             onClick={toggleActions}
           >
-            Actions
+            {t('panel.title')}
             <Keys keys={[modKey, 'K']} />
           </button>
         </footer>

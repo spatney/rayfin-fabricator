@@ -96,7 +96,7 @@ export const SCRIPT = {
     },
     {
       id: 'stinger',
-      beats: [{ id: 'fact', text: '[whispers] Psst… TODO: a true ray fact (see src/renderer/src/components/mascot/lines.ts).' }],
+      beats: [{ id: 'fact', text: '[whispers] Psst… TODO: a true ray fact (see facts.ray in src/renderer/src/i18n/locales/en/mascot.json).' }],
     },
   ],
 } satisfies LessonScript;

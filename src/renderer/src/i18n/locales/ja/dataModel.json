@@ -1,0 +1,222 @@
+{
+  "diagram": {
+    "clearSearch": "検索をクリア",
+    "clearFocus": "フォーカスを解除",
+    "focusing": "{{name}} にフォーカス中",
+    "zoom": "ズーム",
+    "zoomOut": "縮小",
+    "zoomIn": "拡大",
+    "fit": "ビューに合わせる",
+    "expand": "展開",
+    "collapse": "折りたたむ",
+    "relationships_other": "{{count}} 個のリレーションシップ",
+    "cardinality": {
+      "one": "1",
+      "many": "多"
+    }
+  },
+  "signIn": {
+    "signingIn": "サインインしています…",
+    "fabric": "Fabric にサインイン",
+    "azure": "Azure にサインイン",
+    "failed": "サインインに失敗しました",
+    "incomplete": "サインインが完了しませんでした。もう一度お試しください。"
+  },
+  "semantic": {
+    "title": "Fabric 接続",
+    "types": {
+      "semanticModel": "セマンティック モデル",
+      "warehouse": "ウェアハウス",
+      "sqlDatabase": "SQL データベース",
+      "sqlEndpoint": "レイクハウスの SQL エンドポイント"
+    },
+    "tables_other": "{{count}} 個のテーブル",
+    "discovered": "{{date}}に検出",
+    "empty": {
+      "noSources": "表示する Fabric 接続がありません。",
+      "noTablesTitle": "表示するテーブルはまだありません",
+      "noneFound": "前回の確認時、Rayfin は {{source}} にテーブルを見つけられませんでした。",
+      "noneFoundOn": "前回の確認時 ({{date}})、Rayfin は {{source}} にテーブルを見つけられませんでした。",
+      "noMetadata": "Fabricator は、Rayfin がコネクタの追加時に書き込む <code>metadata.json</code> と、アプリのエンティティ ファイルをもとに、ソースのテーブルを表示します。<code>{{dir}}/</code> にはまだどちらもありません。",
+      "noModelTitle": "このセマンティック モデルにはテーブルがありません",
+      "noModelDesc": "接続されたモデルからテーブルが返されませんでした。Fabric でデータをまだ読み込んでいる可能性があります。"
+    },
+    "discover": "Copilot でテーブルを検出",
+    "discoverChat": "{{source}} のテーブルを検出",
+    "useChat": "{{source}} のテーブルを使用",
+    "useWithCopilot": "Copilot で使用",
+    "loading": "セマンティック モデルを読み取っています…",
+    "signInFabric": {
+      "title": "サインインしてセマンティック モデルを表示",
+      "desc": "セマンティック モデルは Fabric からリアルタイムで読み取るため、有効な Fabric セッションが必要です。"
+    },
+    "signInAzure": {
+      "title": "Azure にサインインしてセマンティック モデルを表示",
+      "desc": "Fabricator は、Azure のサインインを使用して、モデルのテーブル、メジャー、リレーションシップを Fabric から読み取ります。"
+    },
+    "error": {
+      "title": "セマンティック モデルを読み取れませんでした",
+      "read": "セマンティック モデルを読み取れませんでした。"
+    },
+    "legend": {
+      "primaryKey": "主キー",
+      "foreignKey": "外部キー",
+      "inactive": "非アクティブ"
+    },
+    "notice": {
+      "unused": "アプリではまだこれらのテーブルを使用していません。",
+      "entitiesOnly": "Rayfin が検出したテーブル (metadata.json) がプロジェクトにないため、アプリのエンティティ ファイルに記述されているテーブルのみを表示しています。"
+    },
+    "search": {
+      "sqlPlaceholder": "テーブルと列を検索",
+      "sqlLabel": "テーブルと列を検索",
+      "placeholder": "テーブル、列、メジャーを検索",
+      "label": "テーブル、列、メジャーを検索"
+    },
+    "filter": {
+      "label": "テーブル",
+      "used": "アプリで使用中",
+      "all": "すべてのテーブル"
+    },
+    "expandAll": "すべてのテーブルを展開",
+    "collapseAll": "すべてのテーブルを折りたたむ",
+    "openMetadata": "metadata.json を開く",
+    "refresh": "Fabric から更新",
+    "card": {
+      "expand": "テーブルを展開",
+      "collapse": "テーブルを折りたたむ",
+      "hidden": "非表示",
+      "focus": "このテーブルにフォーカス",
+      "focusTitle": "関連テーブルにフォーカス",
+      "columns_other": "{{count}} 列",
+      "measures_other": "{{count}} 個のメジャー",
+      "noColumns": "列はありません。",
+      "measuresHead": "メジャー",
+      "showDax": "DAX を表示",
+      "showFewer": "表示を減らす",
+      "showAll": "{{total}} 個すべてを表示",
+      "storageMode": "ストレージ モード: {{mode}}",
+      "openFile": "{{file}} を開く",
+      "unused": "アプリで使用されていません"
+    },
+    "column": {
+      "typeNullable": "{{type}}、空を許可",
+      "typeRequired": "{{type}}、必須",
+      "primaryKey": "主キー",
+      "references": "{{target}} を参照",
+      "generated": "データベースが入力",
+      "generatedBy": "データベースが入力 ({{how}})",
+      "unmapped": "アプリのエンティティにはありません",
+      "calculated": "計算式: {{expression}}"
+    },
+    "measure": {
+      "label": "{{name}} の DAX",
+      "formatTitle": "書式指定文字列 — このメジャーの値の表示方法",
+      "format": "書式",
+      "folderTitle": "モデル内の表示フォルダー",
+      "folder": "フォルダー",
+      "description": "説明",
+      "copy": "DAX をコピー",
+      "noDax": "DAX 式はありません。"
+    }
+  },
+  "model": {
+    "loading": "データ モデルを読み取っています…",
+    "title": "データ モデル",
+    "empty": {
+      "title": "データ モデルはまだありません",
+      "desc": "Rayfin のエンティティは <code>{{dataDir}}/</code> にあり、<code>{{schemaFile}}</code> に一覧表示されます。エンティティを追加すると、このタブに、エンティティごとのアクセス バッジ付きの ER 図として表示されます。",
+      "add": "Copilot でデータ モデルを追加",
+      "addChat": "データ モデルを追加"
+    },
+    "noEntities": {
+      "title": "スキーマにエンティティがありません",
+      "desc": "<code>{{file}}</code> はありますが、その <code>schema</code> 配列は空です。",
+      "add": "Copilot でエンティティを追加"
+    },
+    "entities_other": "{{count}} 個のエンティティ",
+    "legend": {
+      "access": "アクセス",
+      "scoped": "行スコープ",
+      "signedIn": "サインイン済みの全員",
+      "public": "パブリック"
+    },
+    "search": {
+      "placeholder": "エンティティとフィールドを検索",
+      "label": "エンティティとフィールドを検索"
+    },
+    "expandAll": "すべてのエンティティを展開",
+    "collapseAll": "すべてのエンティティを折りたたむ",
+    "resetLayout": "レイアウトをリセット",
+    "card": {
+      "expand": "エンティティを展開",
+      "collapse": "エンティティを折りたたむ",
+      "nameTitle": "{{detail}} · {{file}} を開く",
+      "fields_other": "{{count}} 個のフィールド",
+      "linked_other": "{{count}} 個のリンク",
+      "references": "{{target}} を参照",
+      "primaryKey": "主キー",
+      "required": "必須",
+      "optional": "省略可能",
+      "unique": "一意",
+      "toOne": "↦ 1",
+      "toMany": "↦ 多",
+      "noFields": "解析されたフィールドはありません。",
+      "grants": "アクセスの付与",
+      "noRoles": "明示的なロールなし",
+      "rowPolicy": "{{grant}} (行レベルのポリシー)",
+      "policy": "ポリシー",
+      "harden": "保護を強化",
+      "focus": "フォーカス",
+      "unfocus": "フォーカスを解除"
+    },
+    "hardenChat": "{{name}} のアクセスを強化"
+  },
+  "connect": {
+    "title": "Fabric データを追加",
+    "subtitle": "開くことができる任意のワークスペースからデータを選択します。選択したデータはメッセージに追加され、送信すると Copilot がそれぞれを Rayfin コネクタとしてこのアプリに接続します。",
+    "signInBanner": "ワークスペースとそのデータを表示するには、Fabric にサインインしてください。",
+    "signInRetry": "サインインして再試行",
+    "azureFinish": "ブラウザーで Azure へのサインインを完了してください。",
+    "azureWhy": "作成中のアプリは、Azure のサインインを使用して Fabric のデータを読み取ります。",
+    "workspaces": {
+      "search": "ワークスペースを検索",
+      "loading": "ワークスペースを読み込んでいます…",
+      "none": "Fabric ワークスペースはまだありません。",
+      "label": "ワークスペース",
+      "recent": "最近使用したもの",
+      "all": "すべてのワークスペース",
+      "noMatch": "「{{query}}」に一致するワークスペースはありません。",
+      "thisApp": "このアプリ"
+    },
+    "picked_other": "{{count}} 件を選択済み",
+    "pickedAcross_other": "複数のワークスペースで {{count}} 件を選択済み",
+    "data": {
+      "choose": "データを表示するワークスペースを選択してください。",
+      "kinds": "データの種類",
+      "all": "すべて",
+      "search": "{{workspace}} を検索",
+      "loading": "{{workspace}} を読み込んでいます…",
+      "empty": "{{workspace}} には、セマンティック モデル、ウェアハウス、SQL データベース、レイクハウスがありません。",
+      "noMatch": "「{{query}}」に一致するものはありません。",
+      "none": "{{workspace}} にはデータがありません。",
+      "label": "{{workspace}} のデータ",
+      "connected": "接続済み",
+      "noneOf": {
+        "semanticmodel": "{{workspace}} にはセマンティック モデルがありません。",
+        "warehouse": "{{workspace}} にはウェアハウスがありません。",
+        "sqldatabase": "{{workspace}} には SQL データベースがありません。",
+        "lakehouse": "{{workspace}} にはレイクハウスがありません。"
+      }
+    },
+    "pickHint": "1 つ以上のワークスペースからデータを選択してください。",
+    "add": "チャットに追加",
+    "errors": {
+      "workspaces": "ワークスペースを一覧表示できませんでした。",
+      "workspacesRetry": "ワークスペースを一覧表示できませんでした。もう一度お試しください。",
+      "data": "このワークスペースのデータを一覧表示できませんでした。",
+      "dataRetry": "このワークスペースのデータを一覧表示できませんでした。もう一度お試しください。",
+      "signIn": "Fabric へのサインインが完了しませんでした。もう一度お試しください。"
+    }
+  }
+}

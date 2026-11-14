@@ -1,5 +1,6 @@
 import { useState, type JSX } from 'react'
 import type { TeamManifest, TeamMap, TeamMapRun } from '@shared/ipc'
+import { translator, useTranslation } from '../../../i18n'
 import { Codicon } from '../../icons'
 import TeamDiagnosisModal from '../diagnosis/TeamDiagnosisModal'
 import type { DiagnosisInput } from '../diagnosis/useTeamDiagnosis'
@@ -23,14 +24,16 @@ interface Props {
 }
 
 function deployed(counts: Record<Health, number>): string {
-  const parts = [`${counts.live} live`]
-  if (counts.deploying) parts.push(`${counts.deploying} deploying`)
-  if (counts.failed) parts.push(`${counts.failed} failed`)
+  const t = translator('teamMap')
+  const parts = [t('activity.live', { count: counts.live })]
+  if (counts.deploying) parts.push(t('shared.deploying', { count: counts.deploying }))
+  if (counts.failed) parts.push(t('activity.failed', { count: counts.failed }))
   return parts.join(' · ')
 }
 
 /** The sidebar while nothing is selected: what the pipeline is doing, and where it deploys. */
 export default function ActivityPanel({ map, runs, now, fabric, notice, targetOf, onReveal, onSelect }: Props): JSX.Element {
+  const { t } = useTranslation('teamMap')
   const [diagnose, setDiagnose] = useState<DiagnosisInput | null>(null)
   const shown = runs
     .filter(
@@ -43,22 +46,19 @@ export default function ActivityPanel({ map, runs, now, fabric, notice, targetOf
   const repo = map.workspace?.repo
 
   return (
-    <aside className="tmap-side" aria-label="Pipeline activity">
+    <aside className="tmap-side" aria-label={t('activity.label')}>
       <header className="tmap-side-head">
-        <h3>Deployments</h3>
+        <h3>{t('activity.title')}</h3>
         <span className={`tmap-health tmap-health--${running ? 'deploying' : 'idle'}`}>
           <span className="tmap-health-dot" aria-hidden="true" />
-          {running ? `${running} running` : 'All quiet'}
+          {running ? t('activity.running', { count: running }) : t('activity.quiet')}
         </span>
       </header>
 
       {notice && <p className="tmap-insp-warn">{notice}</p>}
 
       {shown.length === 0 ? (
-        <p className="tmap-side-empty">
-          Nothing has deployed in the last hour. Saving a change deploys its author&apos;s preview; publishing deploys
-          the app for everyone.
-        </p>
+        <p className="tmap-side-empty">{t('activity.empty')}</p>
       ) : (
         <ul className="tmap-runs">
           {shown.map((run) => {
@@ -70,14 +70,14 @@ export default function ActivityPanel({ map, runs, now, fabric, notice, targetOf
             const detail = active
               ? `${
                   run.status === 'queued' || run.status === 'waiting'
-                    ? 'Waiting to start'
+                    ? t('run.waiting')
                     : !job
-                      ? 'Planning'
+                      ? t('run.planning')
                       : progress.current
                         ? friendlyStep(progress.current.name)
-                        : 'Finishing'
+                        : t('run.finishing')
                 } · ${elapsed(run.startedAt, now)}`
-              : `${state === 'done' ? 'Deployed' : state === 'replaced' ? 'Replaced by a newer save' : 'Failed'} · ${timeAgo(
+              : `${state === 'done' ? t('run.deployed') : state === 'replaced' ? t('run.replaced') : t('health.failed')} · ${timeAgo(
                   run.updatedAt ?? run.startedAt,
                   now
                 )}`
@@ -88,7 +88,7 @@ export default function ActivityPanel({ map, runs, now, fabric, notice, targetOf
                   className="tmap-run-main"
                   onClick={() => target && onReveal(target)}
                   disabled={!target}
-                  title={target ? 'Show it in the overview' : undefined}
+                  title={target ? t('activity.reveal') : undefined}
                 >
                   <span className="tmap-run-icon" aria-hidden="true">
                     {state === 'running' ? <span className="tmap-spinner" /> : state === 'done' ? '✓' : state === 'failed' ? '✕' : '–'}
@@ -114,8 +114,8 @@ export default function ActivityPanel({ map, runs, now, fabric, notice, targetOf
                     type="button"
                     className="tmap-icon-btn"
                     onClick={() => setDiagnose({ kind: 'pipeline', workspaceId: map.workspace?.id, runId: run.id })}
-                    title="Diagnose with Copilot"
-                    aria-label="Diagnose with Copilot"
+                    title={t('shared.diagnose')}
+                    aria-label={t('shared.diagnose')}
                   >
                     <Codicon name="sparkle" />
                   </button>
@@ -124,8 +124,8 @@ export default function ActivityPanel({ map, runs, now, fabric, notice, targetOf
                   type="button"
                   className="tmap-icon-btn"
                   onClick={() => void window.api.openExternal(run.url)}
-                  title="Open the run on GitHub"
-                  aria-label="Open the run on GitHub"
+                  title={t('activity.openRun')}
+                  aria-label={t('activity.openRun')}
                 >
                   <Codicon name="link-external" />
                 </button>
@@ -137,25 +137,27 @@ export default function ActivityPanel({ map, runs, now, fabric, notice, targetOf
 
       {fabric && (
         <section className="tmap-side-section">
-          <h4>Deploys to</h4>
+          <h4>{t('activity.deploysTo')}</h4>
           <ul className="tmap-insp-list">
             {[
-              { id: nodeIds.fabricProd, label: 'Published apps', name: fabric.production.name, production: true },
-              { id: nodeIds.fabricPreview, label: 'Previews', name: fabric.previews.name, production: false }
+              { id: nodeIds.fabricProd, label: t('shared.publishedApps'), name: fabric.production.name, production: true },
+              { id: nodeIds.fabricPreview, label: t('shared.previews'), name: fabric.previews.name, production: false }
             ].map((target) => (
               <li key={target.id}>
                 <button
                   type="button"
                   className="tmap-insp-row tmap-insp-row--button"
                   onClick={() => onSelect(target.id)}
-                  title="Show what's deployed there"
+                  title={t('activity.showDeployed')}
                 >
                   <FabricGlyph />
                   <span className="tmap-insp-grow">
                     {target.label}
                     <span className="tmap-dim tmap-block tmap-ellipsis">{target.name}</span>
                   </span>
-                  <span className="tmap-dim">{deployed(fabricHealth(map, runs, target.production))}</span>
+                  <span className="tmap-dim tmap-insp-meta">
+                    {deployed(fabricHealth(map, runs, target.production))}
+                  </span>
                 </button>
               </li>
             ))}
@@ -164,14 +166,11 @@ export default function ActivityPanel({ map, runs, now, fabric, notice, targetOf
       )}
 
       <section className="tmap-side-section">
-        <h4>How it works</h4>
+        <h4>{t('activity.howItWorks')}</h4>
         <ol className="tmap-how">
-          <li>Everyone changes an app in their own working copy.</li>
-          <li>
-            Each saved change deploys that person&apos;s preview. Previews have their own data, so trying a change never
-            touches the published app&apos;s data.
-          </li>
-          <li>Publishing merges it, and the published app is deployed for everyone.</li>
+          <li>{t('activity.how1')}</li>
+          <li>{t('activity.how2')}</li>
+          <li>{t('activity.how3')}</li>
         </ol>
       </section>
 
@@ -181,10 +180,10 @@ export default function ActivityPanel({ map, runs, now, fabric, notice, targetOf
           className="tmap-link tmap-side-foot"
           onClick={() => void window.api.openExternal(`https://github.com/${repo}/actions`)}
         >
-          All pipeline runs on GitHub <Codicon name="link-external" />
+          {t('activity.allRuns')} <Codicon name="link-external" />
         </button>
       )}
-      {diagnose && <TeamDiagnosisModal input={diagnose} title="Diagnose the failed run" onClose={() => setDiagnose(null)} />}
+      {diagnose && <TeamDiagnosisModal input={diagnose} title={t('activity.diagnoseRun')} onClose={() => setDiagnose(null)} />}
     </aside>
   )
 }

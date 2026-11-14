@@ -291,13 +291,15 @@ impl Machine {
         }
         None => {
           let details = serde_json::json!({ "exitCode": exit_code, "lines": tail });
-          let code = exit_code.map(|c| format!(" (exit code {c})")).unwrap_or_default();
           match policy.next(&mut self.crashes, now) {
             Some(delay) => {
               s.state = State::Restarting;
               s.error = Some(LocalProblem {
                 code: "exited".into(),
-                message: format!("The local backend stopped unexpectedly{code}. Starting it again…"),
+                message: match exit_code {
+                  Some(code) => t!("services.localBackend.exitedCode", code = code),
+                  None => t!("services.localBackend.exited"),
+                },
                 details: Some(details),
                 time: Some(crate::commands::util::now_iso()),
                 ..Default::default()
@@ -306,14 +308,15 @@ impl Machine {
             }
             None => {
               s.state = State::Error;
+              let count = self.crashes.len();
+              let minutes = policy.window.as_secs().div_ceil(60);
               s.error = Some(LocalProblem {
                 code: "crashed".into(),
-                message: format!(
-                  "The local backend stopped unexpectedly {} times in {} minutes{code}, so Fabricator stopped restarting it.",
-                  self.crashes.len(),
-                  policy.window.as_secs().div_ceil(60),
-                ),
-                hint: Some("Check its output for the cause, then start it again.".into()),
+                message: match exit_code {
+                  Some(code) => t!("services.localBackend.crashedCode", count = count, minutes = minutes, code = code),
+                  None => t!("services.localBackend.crashed", count = count, minutes = minutes),
+                },
+                hint: Some(t!("services.localBackend.crashedHint")),
                 fatal: true,
                 details: Some(details),
                 time: Some(crate::commands::util::now_iso()),

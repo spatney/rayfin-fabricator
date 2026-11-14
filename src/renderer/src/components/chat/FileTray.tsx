@@ -1,5 +1,6 @@
 import type { JSX } from 'react'
 import type { ChatFileRef } from '@shared/ipc'
+import { useTranslation } from '../../i18n'
 import { CloseIcon, Codicon } from '../icons'
 import { fileName } from './fileRefs'
 
@@ -14,9 +15,10 @@ export function FileTray({
   files: readonly ChatFileRef[]
   onRemove: (path: string) => void
 }): JSX.Element | null {
+  const { t } = useTranslation('chat')
   if (files.length === 0) return null
   return (
-    <ul className="data-tray" aria-label="Files and folders to send">
+    <ul className="data-tray" aria-label={t('fileTray.toSend')}>
       {files.map((f) => (
         <li key={f.path} className="data-chip" title={f.path}>
           <span className="data-chip-main data-chip-main--static">
@@ -27,8 +29,8 @@ export function FileTray({
             type="button"
             className="data-chip-x"
             onClick={() => onRemove(f.path)}
-            aria-label={`Remove ${fileName(f.path)}`}
-            title="Remove"
+            aria-label={t('tray.removeItem', { name: fileName(f.path) })}
+            title={t('actions.remove')}
           >
             <CloseIcon />
           </button>
@@ -40,8 +42,9 @@ export function FileTray({
 
 /** The files and folders a sent message gave Copilot to read, as chips in the transcript. */
 export function SentFiles({ files }: { files: readonly ChatFileRef[] }): JSX.Element {
+  const { t } = useTranslation('chat')
   return (
-    <ul className="msg-data" aria-label="Files and folders">
+    <ul className="msg-data" aria-label={t('fileTray.sent')}>
       {files.map((f) => (
         <li key={f.path} className="data-chip data-chip--sent" title={f.path}>
           <Codicon name={f.dir ? 'folder' : 'file'} className="data-chip-ico" />

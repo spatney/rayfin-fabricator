@@ -67,10 +67,10 @@ impl Terminals {
   /// Start `launch.shell`, streaming what it prints, then how it ended, to `events`.
   pub fn spawn(&self, launch: Launch, events: Channel<TerminalEvent>) -> Result<TerminalInfo, String> {
     if self.sessions.lock().unwrap().contains_key(&launch.id) {
-      return Err("That terminal is already open.".into());
+      return Err(t!("services.terminal.alreadyOpen"));
     }
     let size = pty_size(launch.cols, launch.rows);
-    let pair = native_pty_system().openpty(size).map_err(|e| format!("Couldn't open a terminal: {e}"))?;
+    let pair = native_pty_system().openpty(size).map_err(|e| t!("services.terminal.openFailed", error = e))?;
 
     let mut command = CommandBuilder::new(&launch.shell.program);
     command.args(&launch.shell.args);
@@ -87,7 +87,7 @@ impl Terminals {
     let mut child = pair
       .slave
       .spawn_command(command)
-      .map_err(|e| format!("Couldn't start {}: {e}", launch.shell.name))?;
+      .map_err(|e| t!("services.terminal.startShellFailed", shell = launch.shell.name, error = e))?;
     // Our copy of the shell's end, so the PTY reports the shell closing it (Unix).
     drop(pair.slave);
 
@@ -97,7 +97,7 @@ impl Terminals {
       Ok(ends) => ends,
       Err(e) => {
         let _ = child.kill();
-        return Err(format!("Couldn't connect to {}: {e}", launch.shell.name));
+        return Err(t!("services.terminal.connectFailed", shell = launch.shell.name, error = e));
       }
     };
 
@@ -142,7 +142,7 @@ impl Terminals {
       if let Err(e) = std::thread::Builder::new().name(format!("terminal-{name}")).spawn(run) {
         session.kill();
         self.sessions.lock().unwrap().remove(&id);
-        return Err(format!("Couldn't start the terminal: {e}"));
+        return Err(t!("services.terminal.startFailed", error = e));
       }
     }
     Ok(TerminalInfo {
@@ -161,7 +161,7 @@ impl Terminals {
     let input = session.input.lock().unwrap();
     match input.as_ref() {
       Some(input) if input.send(data.as_bytes().to_vec()).is_ok() => Ok(()),
-      _ => Err(ENDED.into()),
+      _ => Err(ended()),
     }
   }
 
@@ -170,7 +170,7 @@ impl Terminals {
     let session = self.get(id)?;
     let master = session.master.lock().unwrap();
     match master.as_ref() {
-      Some(master) => master.resize(pty_size(cols, rows)).map_err(|e| format!("Couldn't resize the terminal: {e}")),
+      Some(master) => master.resize(pty_size(cols, rows)).map_err(|e| t!("services.terminal.resizeFailed", error = e)),
       None => Ok(()),
     }
   }
@@ -199,11 +199,13 @@ impl Terminals {
   }
 
   fn get(&self, id: &str) -> Result<Arc<Session>, String> {
-    self.sessions.lock().unwrap().get(id).cloned().ok_or_else(|| ENDED.into())
+    self.sessions.lock().unwrap().get(id).cloned().ok_or_else(ended)
   }
 }
 
-const ENDED: &str = "That terminal has ended.";
+fn ended() -> String {
+  t!("services.terminal.ended")
+}
 
 fn pty_size(cols: u16, rows: u16) -> PtySize {
   PtySize { rows: rows.max(1), cols: cols.max(1), pixel_width: 0, pixel_height: 0 }

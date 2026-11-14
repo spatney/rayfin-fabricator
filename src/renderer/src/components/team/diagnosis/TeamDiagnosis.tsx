@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import type { TeamDiagnosisCheck } from '@shared/ipc'
+import { translator, useTranslation } from '../../../i18n'
 import Markdown from '../../Markdown'
 import { Codicon } from '../../icons'
 import { StepList, type StepRow } from '../common'
@@ -21,13 +22,15 @@ function checkRows(checks: TeamDiagnosisCheck[]): StepRow[] {
 }
 
 function checkSummary(checks: TeamDiagnosisCheck[]): string {
+  const t = translator('team')
   const failed = checks.filter((c) => c.state === 'failed').length
-  const ran = `${checks.length} read-only ${checks.length === 1 ? 'check' : 'checks'}`
-  return failed ? `${ran} · ${failed} couldn’t complete` : ran
+  const ran = t('diagnosis.checks', { count: checks.length })
+  return failed ? `${ran} · ${t('diagnosis.incomplete', { count: failed })}` : ran
 }
 
 /** Everything that was sent to Copilot, so people can see (and copy) it. */
 function SentDetails({ state }: { state: DiagnosisState }): JSX.Element {
+  const { t } = useTranslation('team')
   const [copied, setCopied] = useState(false)
   const text = sentDetails(state)
   async function copy(): Promise<void> {
@@ -41,11 +44,11 @@ function SentDetails({ state }: { state: DiagnosisState }): JSX.Element {
   }
   return (
     <details className="team-diagnosis-sent">
-      <summary>Details sent to Copilot</summary>
+      <summary>{t('diagnosis.sent')}</summary>
       <pre className="team-diagnosis-sent-text">{text}</pre>
       <div>
         <button type="button" className="btn btn--sm" onClick={() => void copy()}>
-          {copied ? 'Copied' : 'Copy details'}
+          {copied ? t('actions.copied') : t('diagnosis.copyDetails')}
         </button>
       </div>
     </details>
@@ -58,6 +61,7 @@ function SentDetails({ state }: { state: DiagnosisState }): JSX.Element {
  * streamed explanation of the likely cause and who can fix it.
  */
 export default function TeamDiagnosis({ input, resetKey, autoStart, onFixInChat }: Props): JSX.Element {
+  const { t } = useTranslation('team')
   const { state, start, stop, reset } = useTeamDiagnosis()
   const inputRef = useRef(input)
   inputRef.current = input
@@ -74,11 +78,9 @@ export default function TeamDiagnosis({ input, resetKey, autoStart, onFixInChat 
     return (
       <div className="team-diagnosis-cta">
         <button type="button" className="btn btn--sm" onClick={() => start(inputRef.current)}>
-          <Codicon name="sparkle" /> Diagnose with Copilot
+          <Codicon name="sparkle" /> {t('shared.diagnoseWithCopilot')}
         </button>
-        <span className="team-muted">
-          Copilot runs read-only checks with your sign-ins and explains what went wrong. It changes nothing.
-        </span>
+        <span className="team-muted">{t('diagnosis.intro')}</span>
       </div>
     )
   }
@@ -87,18 +89,18 @@ export default function TeamDiagnosis({ input, resetKey, autoStart, onFixInChat 
   const checking = state.checks.some((c) => c.state === 'running')
   const rows = checkRows(state.checks)
   return (
-    <section className="team-diagnosis" aria-label="Diagnosis by Copilot" aria-busy={running}>
+    <section className="team-diagnosis" aria-label={t('diagnosis.label')} aria-busy={running}>
       <div className="team-diagnosis-head">
         <span className="team-diagnosis-title">
-          <Codicon name="sparkle" /> {running ? 'Diagnosing…' : 'Diagnosis'}
+          <Codicon name="sparkle" /> {running ? t('diagnosis.diagnosing') : t('diagnosis.title')}
         </span>
         {running ? (
           <button type="button" className="link-btn" onClick={stop}>
-            Stop
+            {t('actions.stop')}
           </button>
         ) : (
           <button type="button" className="link-btn" onClick={() => start(inputRef.current)}>
-            {state.status === 'error' ? 'Try again' : 'Diagnose again'}
+            {state.status === 'error' ? t('actions.tryAgain') : t('diagnosis.again')}
           </button>
         )}
       </div>
@@ -113,7 +115,7 @@ export default function TeamDiagnosis({ input, resetKey, autoStart, onFixInChat 
         ))}
       {running && !checking && !state.text && (
         <p className="team-diagnosis-thinking" role="status">
-          <span className="ws-spinner" aria-hidden="true" /> Copilot is looking into what the checks found…
+          <span className="ws-spinner" aria-hidden="true" /> {t('diagnosis.thinking')}
         </p>
       )}
       {state.text && (
@@ -129,13 +131,11 @@ export default function TeamDiagnosis({ input, resetKey, autoStart, onFixInChat 
       {state.status === 'done' && state.conclusion?.fixInChat && onFixInChat && (
         <div>
           <button type="button" className="btn btn--sm btn--primary" onClick={() => onFixInChat(state.text)}>
-            <Codicon name="sparkle" /> Fix with Copilot
+            <Codicon name="sparkle" /> {t('diagnosis.fix')}
           </button>
         </div>
       )}
-      {state.status === 'done' && (
-        <p className="team-diagnosis-by">Diagnosed by Copilot. It can be wrong, so check before you change settings.</p>
-      )}
+      {state.status === 'done' && <p className="team-diagnosis-by">{t('diagnosis.by')}</p>}
       {(state.context || state.checks.some((c) => c.detail)) && <SentDetails state={state} />}
     </section>
   )

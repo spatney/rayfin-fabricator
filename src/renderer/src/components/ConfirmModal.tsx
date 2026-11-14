@@ -1,6 +1,7 @@
 import { useEffect, useId, type JSX } from 'react'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
+import { useTranslation } from '../i18n'
 
 interface Props {
   title: string
@@ -31,18 +32,19 @@ interface Props {
 export default function ConfirmModal({
   title,
   message,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   danger = false,
   busy = false,
-  busyLabel = 'Working…',
+  busyLabel,
   secondaryLabel,
   onSecondary,
   secondaryBusy = false,
-  secondaryBusyLabel = 'Working…',
+  secondaryBusyLabel,
   onConfirm,
   onCancel
 }: Props): JSX.Element {
+  const { t } = useTranslation()
   useSuppressPreview()
   const working = busy || secondaryBusy
   const titleId = useId()
@@ -73,14 +75,14 @@ export default function ConfirmModal({
         </div>
         <div className="modal-footer">
           <button className="btn btn--ghost" onClick={onCancel} disabled={working}>
-            {cancelLabel}
+            {cancelLabel ?? t('actions.cancel')}
           </button>
           {secondaryLabel && onSecondary && (
             <button className="btn btn--ghost" onClick={onSecondary} disabled={working}>
               {secondaryBusy ? (
                 <span className="btn-busy">
                   <span className="btn-spin" aria-hidden="true" />
-                  {secondaryBusyLabel}
+                  {secondaryBusyLabel ?? t('status.working')}
                 </span>
               ) : (
                 secondaryLabel
@@ -96,10 +98,10 @@ export default function ConfirmModal({
             {busy ? (
               <span className="btn-busy">
                 <span className="btn-spin" aria-hidden="true" />
-                {busyLabel}
+                {busyLabel ?? t('status.working')}
               </span>
             ) : (
-              confirmLabel
+              (confirmLabel ?? t('actions.confirm'))
             )}
           </button>
         </div>

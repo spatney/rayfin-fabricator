@@ -184,19 +184,15 @@ enum Failure {
 impl From<entra::AzError> for Failure {
   fn from(e: entra::AzError) -> Self {
     match e.kind {
-      AzErrorKind::Missing => Failure::NeedsAz(
-        "Fabricator finds the apps you can open with the Azure CLI, which isn't installed. Install it from setup.".into(),
-      ),
-      AzErrorKind::NeedsLogin => {
-        Failure::NeedsAz("Fabricator finds the apps you can open with your Azure sign-in. Sign in to Azure to see them.".into())
-      }
-      _ => Failure::Failed(format!("Couldn't use your Azure sign-in: {}", e.message)),
+      AzErrorKind::Missing => Failure::NeedsAz(t!("services.gallery.azMissing")),
+      AzErrorKind::NeedsLogin => Failure::NeedsAz(t!("services.gallery.azSignIn")),
+      _ => Failure::Failed(t!("services.gallery.azFailed", error = e.message)),
     }
   }
 }
 
 fn rejected() -> Failure {
-  Failure::NeedsAz("Fabric didn't accept your Azure sign-in. Sign in to Azure again.".into())
+  Failure::NeedsAz(t!("services.gallery.rejected"))
 }
 
 /// The Azure token and account, reused for [`SESSION_TTL`] unless `fresh`.
@@ -233,7 +229,7 @@ fn client() -> Result<reqwest::Client, Failure> {
     // The token only ever goes to Fabric itself.
     .redirect(reqwest::redirect::Policy::none())
     .build()
-    .map_err(|e| Failure::Failed(format!("Couldn't reach Fabric: {e}")))
+    .map_err(|e| Failure::Failed(t!("services.gallery.unreachable", error = e)))
 }
 
 /// One Fabric call: its HTTP status and JSON body (`Null` when it isn't JSON).
@@ -254,7 +250,7 @@ async fn call(
     if let Some(m) = moniker {
       req = req.header(MONIKER_HEADER, m);
     }
-    let res = req.send().await.map_err(|e| Failure::Failed(format!("Couldn't reach Fabric: {e}")))?;
+    let res = req.send().await.map_err(|e| Failure::Failed(t!("services.gallery.unreachable", error = e)))?;
     let status = res.status().as_u16();
     if status == 429 {
       if attempt == 3 {
@@ -273,7 +269,7 @@ async fn call(
     let text = res.text().await.unwrap_or_default();
     return Ok((status, serde_json::from_str(&text).unwrap_or(Value::Null)));
   }
-  Err(Failure::Failed("Fabric is busy right now. Try again in a minute.".into()))
+  Err(Failure::Failed(t!("services.gallery.busy")))
 }
 
 /// Fabric's own words for a failed call.
@@ -284,7 +280,7 @@ fn fabric_message(status: u16, body: &Value) -> String {
     .map(str::trim)
     .filter(|m| !m.is_empty())
     .map(String::from)
-    .unwrap_or_else(|| format!("Fabric returned HTTP {status}."))
+    .unwrap_or_else(|| t!("services.gallery.httpStatus", status = status))
 }
 
 /// The next page of a Fabric list: its `continuationUri` when that stays on
@@ -328,7 +324,7 @@ fn app_from_catalog(entry: &Value) -> Option<RawApp> {
   (is_guid(&id) && is_guid(&workspace_id)).then(|| RawApp {
     name: text(entry, "displayName").unwrap_or_else(|| id.clone()),
     description: text(entry, "description"),
-    workspace_name: text(workspace, "displayName").unwrap_or_else(|| "Workspace".into()),
+    workspace_name: text(workspace, "displayName").unwrap_or_else(|| t!("services.gallery.workspace")),
     id,
     workspace_id,
   })
@@ -421,7 +417,7 @@ async fn catalog_apps(client: &reqwest::Client, token: &str) -> Result<Listing, 
       return Err(ListError::Unsupported);
     }
     if status != 200 {
-      return Err(Failure::Failed(format!("Couldn't list your Fabric apps: {}", fabric_message(status, &page))).into());
+      return Err(Failure::Failed(t!("services.gallery.listFailed", detail = fabric_message(status, &page))).into());
     }
     apps.extend(page.get("value").and_then(Value::as_array).into_iter().flatten().filter_map(app_from_catalog));
     // A continuation token carries the filter, and must be sent alone.
@@ -444,7 +440,7 @@ async fn list_all(client: &reqwest::Client, token: &str, start: &str) -> Result<
       200 => {}
       401 => return Err(rejected()),
       403 | 404 => return Ok(None),
-      _ => return Err(Failure::Failed(format!("Couldn't list your Fabric apps: {}", fabric_message(status, &page)))),
+      _ => return Err(Failure::Failed(t!("services.gallery.listFailed", detail = fabric_message(status, &page)))),
     }
     items.extend(page.get("value").and_then(Value::as_array).cloned().unwrap_or_default());
     match next_page(start, &page) {
@@ -458,13 +454,14 @@ async fn list_all(client: &reqwest::Client, token: &str, start: &str) -> Result<
 /// The apps in every workspace the account belongs to.
 async fn scanned_apps(client: &reqwest::Client, token: &str) -> Result<Listing, Failure> {
   let Some((workspaces, mut truncated)) = list_all(client, token, &format!("{API}/workspaces")).await? else {
-    return Err(Failure::Failed("Couldn't list your Fabric workspaces.".into()));
+    return Err(Failure::Failed(t!("services.gallery.workspacesFailed")));
   };
   let workspaces: Vec<(String, String)> = workspaces
     .iter()
     .filter_map(|w| {
       let id = text(w, "id").filter(|id| is_guid(id))?;
       let personal = text(w, "type").is_some_and(|t| t.eq_ignore_ascii_case("Personal"));
+      // Stays English: the gallery (AppDetails.tsx, WorkspacePicker.tsx) knows it by this name.
       let name = if personal { "My workspace".to_string() } else { text(w, "displayName").unwrap_or_else(|| id.clone()) };
       Some((id, name))
     })
@@ -748,7 +745,7 @@ pub fn published_item(project: &StudioProject) -> Option<(String, String)> {
 
 fn app_url(workspace_id: &str, item_id: &str) -> Result<String, String> {
   if !is_guid(workspace_id) || !is_guid(item_id) {
-    return Err("That isn't a Fabric app.".into());
+    return Err(t!("services.gallery.notFabricApp"));
   }
   Ok(format!("{API}/workspaces/{workspace_id}/appBackends/{item_id}"))
 }
@@ -765,7 +762,7 @@ pub async fn app_description(workspace_id: &str, item_id: &str) -> Result<String
       forget_session();
       Err(said(rejected()))
     }
-    (status, body) => Err(format!("Couldn't read the app from Fabric: {}", fabric_message(status, &body))),
+    (status, body) => Err(t!("services.gallery.readFailed", detail = fabric_message(status, &body))),
   }
 }
 
@@ -782,8 +779,8 @@ pub async fn set_description(workspace_id: &str, item_id: &str, description: &st
       forget_session();
       Err(said(rejected()))
     }
-    (403, _) => Err("Only an Admin, Member or Contributor of the app's workspace can change its description.".into()),
-    (status, body) => Err(format!("Fabric didn't save the description: {}", fabric_message(status, &body))),
+    (403, _) => Err(t!("services.gallery.notAllowed")),
+    (status, body) => Err(t!("services.gallery.saveFailed", detail = fabric_message(status, &body))),
   }
 }
 

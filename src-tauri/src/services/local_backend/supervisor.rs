@@ -340,13 +340,13 @@ impl Supervisor {
     if !self.dir.is_dir() {
       return Err(binary::problem(
         "project-not-found",
-        format!("The project's folder {} isn't there anymore.", self.dir.display()),
-        Some("Move it back, or open the project again from where it is now."),
+        t!("services.localBackend.folderGone", path = self.dir.display()),
+        Some(&t!("services.localBackend.folderGoneHint")),
       ));
     }
     let token = ControlToken::generate();
     let spec = launch_spec(&self.binary, &self.dir, &self.options, &token, &self.backends.host_env());
-    self.rt.log("fabricator", "info", &format!("Starting {}", spec.describe()), None);
+    self.rt.log("fabricator", "info", &t!("services.localBackend.startingCommand", command = spec.describe()), None);
     let mut child = spawn(&spec).map_err(|e| binary::spawn_problem(self.binary.file(), &e))?;
     let pid = child.id();
     self.rt.attach(self.generation, pid, child.stdin.take(), token.clone());
@@ -373,7 +373,7 @@ impl Supervisor {
           Some((stream, text)) => {
             let outcome = self.rt.handle_line(stream, &text, &token);
             if outcome.restart && pending.is_none() {
-              self.rt.log("fabricator", "info", "Restarting the local backend to apply the change.", None);
+              self.rt.log("fabricator", "info", &t!("services.localBackend.restartingForChange"), None);
               self.rt.update(|m| m.restarting());
               pending = Some(Pending::Config);
               self.stop_process(&mut deadline, policy.stop_grace);
@@ -404,7 +404,7 @@ impl Supervisor {
         },
         exit = child.wait() => break exit.ok(),
         _ = tokio::time::sleep_until(deadline.unwrap_or_else(far)), if deadline.is_some() && !killed => {
-          self.rt.log("fabricator", "warn", "The local backend didn't stop in time, so Fabricator ended it.", None);
+          self.rt.log("fabricator", "warn", &t!("services.localBackend.stopTimedOut"), None);
           if let Some(pid) = pid {
             process::kill_tree(pid);
           }

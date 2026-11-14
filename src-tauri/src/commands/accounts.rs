@@ -29,12 +29,19 @@ static DOMAIN_RE: Lazy<Regex> = Lazy::new(|| {
 static AZ_USER_RE: Lazy<Regex> =
   Lazy::new(|| Regex::new(r"^[A-Za-z0-9._+#'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$").unwrap());
 
-const FABRIC_BUSY: &str = "A Fabric sign-in, sign-out, or account change is already in progress.";
-const AZURE_BUSY: &str = "An Azure sign-in, sign-out, or account change is already in progress.";
+fn fabric_busy() -> String {
+  t!("commands.accounts.fabricBusy")
+}
+
+pub(crate) fn azure_busy() -> String {
+  t!("commands.accounts.azureBusy")
+}
+
 /// Signing in to Azure on demand, from a feature that needs it, before the
 /// optional Azure CLI is installed.
-const AZURE_MISSING: &str =
-  "The Azure CLI isn't installed, so Fabricator can't sign you in to Azure. Install it from setup (open Settings and select Open setup), then try again.";
+fn azure_missing() -> String {
+  t!("commands.accounts.azureMissing")
+}
 
 fn done(exit_code: Option<i32>) -> ProcResult {
   ProcResult { ok: true, exit_code, error: None }
@@ -48,7 +55,7 @@ pub(crate) fn checked_tenant(tenant: Option<String>) -> Result<Option<String>, S
   if GUID_RE.is_match(&tenant) || DOMAIN_RE.is_match(&tenant) {
     Ok(Some(tenant))
   } else {
-    Err("Enter the organization as a tenant ID or a domain, such as contoso.onmicrosoft.com.".into())
+    Err(t!("commands.accounts.badTenant"))
   }
 }
 
@@ -74,7 +81,7 @@ pub async fn fabric_add_account(app: AppHandle, tenant: Option<String>, project_
     Err(error) => return auth::auth_failure("fabric-add-account", None, error),
   };
   let Ok(_guard) = RAYFIN_AUTH_ACTION.try_lock() else {
-    return auth::auth_failure("fabric-add-account", None, FABRIC_BUSY.into());
+    return auth::auth_failure("fabric-add-account", None, fabric_busy());
   };
   let project_dir = match auth::rayfin_project_dir(project_id.as_deref()) {
     Ok(dir) => dir,
@@ -114,7 +121,7 @@ pub async fn fabric_add_account(app: AppHandle, tenant: Option<String>, project_
       let _ = fabric::activate(&existing);
       auth::forget_identity();
     }
-    on_data(Stream::System, "That account was already signed in here, so Fabricator is using it.\n");
+    on_data(Stream::System, &format!("{}\n", t!("commands.accounts.alreadySignedIn")));
   }
   result
 }
@@ -123,7 +130,7 @@ pub async fn fabric_add_account(app: AppHandle, tenant: Option<String>, project_
 #[tauri::command]
 pub async fn fabric_use_account(id: String) -> ProcResult {
   let Ok(_guard) = RAYFIN_AUTH_ACTION.try_lock() else {
-    return auth::auth_failure("fabric-use-account", None, FABRIC_BUSY.into());
+    return auth::auth_failure("fabric-use-account", None, fabric_busy());
   };
   let _access = auth::rayfin_auth_write().await;
   match fabric::activate(&id) {
@@ -139,7 +146,7 @@ pub async fn fabric_use_account(id: String) -> ProcResult {
 #[tauri::command]
 pub async fn fabric_sign_out_account(app: AppHandle, id: String, project_id: Option<String>) -> ProcResult {
   let Ok(_guard) = RAYFIN_AUTH_ACTION.try_lock() else {
-    return auth::auth_failure("fabric-logout", None, FABRIC_BUSY.into());
+    return auth::auth_failure("fabric-logout", None, fabric_busy());
   };
   let on_data = proc_streamer(&app, "logout:rayfin");
   let _access = auth::rayfin_auth_write().await;
@@ -151,11 +158,7 @@ pub async fn fabric_sign_out_account(app: AppHandle, id: String, project_id: Opt
 /// account. Callers hold the Fabric action lock and the auth write guard.
 pub(crate) async fn sign_out_fabric(id: &str, project_id: Option<&str>, on_data: OnData) -> ProcResult {
   let Some(dir) = fabric::dir_of(id) else {
-    return auth::auth_failure(
-      "fabric-logout",
-      None,
-      "That Fabric account isn't on this computer anymore. Re-check your accounts.".into(),
-    );
+    return auth::auth_failure("fabric-logout", None, t!("commands.accounts.fabricAccountGone"));
   };
   let project_dir = match auth::rayfin_project_dir(project_id) {
     Ok(dir) => dir,
@@ -179,7 +182,7 @@ pub(crate) async fn sign_out_fabric(id: &str, project_id: Option<&str>, on_data:
     return auth::auth_failure(
       "fabric-logout",
       res.exit_code,
-      auth::cli_failure_detail(&res, "Fabric sign-out", "Try signing out again."),
+      auth::cli_failure_detail(&res, &t!("commands.accounts.actions.fabricSignOut"), &t!("commands.accounts.signOutAgain")),
     );
   }
   let was_active = fabric::active_id() == id;
@@ -243,7 +246,11 @@ pub async fn azure_accounts() -> AzureAccountsResult {
     return AzureAccountsResult {
       az_installed: true,
       accounts: Vec::new(),
-      error: Some(auth::cli_failure_detail(&res, "Listing your Azure accounts", "Re-check, or sign in to Azure again.")),
+      error: Some(auth::cli_failure_detail(
+        &res,
+        &t!("commands.accounts.actions.listAzure"),
+        &t!("commands.accounts.recheckOrSignInAzure"),
+      )),
     };
   }
   match parse_azure_accounts(&res.stdout) {
@@ -251,7 +258,7 @@ pub async fn azure_accounts() -> AzureAccountsResult {
     None => AzureAccountsResult {
       az_installed: true,
       accounts: Vec::new(),
-      error: Some("The Azure CLI returned an account list Fabricator couldn't read. Re-check your accounts.".into()),
+      error: Some(t!("commands.accounts.unreadableList")),
     },
   }
 }
@@ -274,17 +281,17 @@ async fn select_azure(subscription: &str) -> exec::RunResult {
 pub async fn azure_use_account(user: String, subscription: String) -> ProcResult {
   let subscription = subscription.trim().to_string();
   if !GUID_RE.is_match(&subscription) {
-    return auth::auth_failure("azure-use-account", None, "That isn't an Azure subscription or tenant ID.".into());
+    return auth::auth_failure("azure-use-account", None, t!("commands.accounts.badSubscription"));
   }
   let Ok(_guard) = AZ_AUTH_ACTION.try_lock() else {
-    return auth::auth_failure("azure-use-account", None, AZURE_BUSY.into());
+    return auth::auth_failure("azure-use-account", None, azure_busy());
   };
   let res = select_azure(&subscription).await;
   if !res.ok {
     return auth::auth_failure(
       "azure-use-account",
       res.exit_code,
-      auth::cli_failure_detail(&res, "Switching Azure accounts", "Re-check your accounts and try again."),
+      auth::cli_failure_detail(&res, &t!("commands.accounts.actions.switchAzure"), &t!("commands.accounts.recheckAndRetry")),
     );
   }
   // Two accounts can share a subscription, and the Azure CLI then picks one of
@@ -294,7 +301,7 @@ pub async fn azure_use_account(user: String, subscription: String) -> ProcResult
     _ => auth::auth_failure(
       "azure-use-account",
       None,
-      format!("The Azure CLI couldn't switch to {} because another account shares its subscription. Add {} again to use it.", user.trim(), user.trim()),
+      t!("commands.accounts.sharedSubscription", user = user.trim()),
     ),
   }
 }
@@ -303,7 +310,7 @@ pub async fn azure_use_account(user: String, subscription: String) -> ProcResult
 #[tauri::command]
 pub async fn azure_sign_out_account(app: AppHandle, user: String) -> ProcResult {
   let Ok(_guard) = AZ_AUTH_ACTION.try_lock() else {
-    return auth::auth_failure("azure-logout", None, AZURE_BUSY.into());
+    return auth::auth_failure("azure-logout", None, azure_busy());
   };
   let on_data = proc_streamer(&app, "logout:az");
   sign_out_azure(on_data, Some(user.trim().to_string())).await
@@ -312,7 +319,7 @@ pub async fn azure_sign_out_account(app: AppHandle, user: String) -> ProcResult 
 /// Sign in with `az login`. The account just signed in becomes current; the
 /// Azure CLI keeps the others. Callers hold the Azure action lock.
 pub(crate) async fn login_az(on_data: OnData, tenant: Option<&str>) -> ProcResult {
-  on_data(Stream::Stdout, "Starting Azure sign-in…\n");
+  on_data(Stream::Stdout, &format!("{}\n", t!("commands.accounts.startingAzureSignIn")));
   // Fabric users often have no Azure subscription: sign in to the tenant anyway.
   let mut args = vec!["login", "--allow-no-subscriptions"];
   if let Some(tenant) = tenant {
@@ -325,13 +332,13 @@ pub(crate) async fn login_az(on_data: OnData, tenant: Option<&str>) -> ProcResul
   )
   .await;
   if res.not_found {
-    return auth::auth_failure("azure-login", None, AZURE_MISSING.into());
+    return auth::auth_failure("azure-login", None, azure_missing());
   }
   if !res.ok {
     return auth::auth_failure(
       "azure-login",
       res.exit_code,
-      auth::cli_failure_detail(&res, "Azure sign-in", "Complete the browser sign-in and try again."),
+      auth::cli_failure_detail(&res, &t!("commands.accounts.actions.azureSignIn"), &t!("commands.accounts.finishBrowserSignIn")),
     );
   }
   // `az login` prints the signed-in account's subscriptions: make it current.
@@ -362,7 +369,7 @@ pub(crate) async fn sign_out_azure(on_data: OnData, user: Option<String>) -> Pro
     Some(user) => Some(user),
     None => current_azure_user().await,
   };
-  on_data(Stream::Stdout, "Signing out of Azure...\n");
+  on_data(Stream::Stdout, &format!("{}\n", t!("commands.accounts.signingOutAzure")));
   let mut args = vec!["logout"];
   // An unusual name isn't passed to the CLI: plain `az logout` signs the
   // current account out, which is then confirmed gone below.
@@ -379,7 +386,7 @@ pub(crate) async fn sign_out_azure(on_data: OnData, user: Option<String>) -> Pro
     return auth::auth_failure(
       "azure-logout",
       res.exit_code,
-      auth::cli_failure_detail(&res, "Azure sign-out", "Try signing out again."),
+      auth::cli_failure_detail(&res, &t!("commands.accounts.actions.azureSignOut"), &t!("commands.accounts.signOutAgain")),
     );
   }
   let listed = exec::run("az", &["account", "list", "--all", "--output", "json"], RunOptions::timeout(30_000)).await;
@@ -389,10 +396,10 @@ pub(crate) async fn sign_out_azure(on_data: OnData, user: Option<String>) -> Pro
   };
   if let Some(next) = remaining.first().filter(|_| !remaining.iter().any(|a| a.active)) {
     if select_azure(&next.subscription).await.ok {
-      on_data(Stream::Stdout, &format!("The Azure CLI now uses {}.\n", next.user));
+      on_data(Stream::Stdout, &format!("{}\n", t!("commands.accounts.nowUses", user = next.user)));
     }
   }
-  on_data(Stream::Stdout, "Signed out of Azure.\n");
+  on_data(Stream::Stdout, &format!("{}\n", t!("commands.accounts.signedOutAzure")));
   done(res.exit_code)
 }
 
@@ -401,19 +408,19 @@ fn remaining_after_sign_out(listed: &exec::RunResult, user: Option<&str>) -> Res
   if !listed.ok {
     return Err(auth::cli_failure_detail(
       listed,
-      "Azure sign-out verification",
-      "Re-check your account status or try signing out again.",
+      &t!("commands.accounts.actions.azureSignOutCheck"),
+      &t!("commands.accounts.recheckStatusOrSignOut"),
     ));
   }
-  let accounts = parse_azure_accounts(&listed.stdout)
-    .ok_or_else(|| "Azure returned an invalid account list after sign-out. Re-check your account status.".to_string())?;
+  let accounts =
+    parse_azure_accounts(&listed.stdout).ok_or_else(|| t!("commands.accounts.invalidListAfterSignOut"))?;
   match user {
     Some(user) if accounts.iter().any(|a| a.user.eq_ignore_ascii_case(user)) => {
-      Err(format!("The Azure CLI still has {user} signed in. Try signing out again."))
+      Err(t!("commands.accounts.stillSignedIn", user = user))
     }
     Some(_) => Ok(accounts),
     None if accounts.is_empty() => Ok(accounts),
-    None => Err("The Azure CLI still has signed-in accounts. Try signing out again.".into()),
+    None => Err(t!("commands.accounts.stillSignedInAny")),
   }
 }
 

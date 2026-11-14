@@ -15,13 +15,13 @@ enum Owner {
 }
 
 impl Owner {
-  fn busy_message(self) -> &'static str {
+  fn busy_message(self) -> String {
     match self {
-      Owner::Chat => "Copilot is still working on this project. Wait for the turn to finish (or stop it), then try again.",
-      Owner::Deploy => "Fabricator is publishing this project. Wait for it to finish, then try again.",
-      Owner::Team => "Fabricator is saving or publishing this project. Wait for it to finish, then try again.",
-      Owner::Secrets => "Fabricator is updating this app's secrets. Wait for it to finish, then try again.",
-      Owner::Export => "Fabricator is exporting this project. Wait for it to finish, then try again.",
+      Owner::Chat => t!("services.projectMutation.busyChat"),
+      Owner::Deploy => t!("services.projectMutation.busyDeploy"),
+      Owner::Team => t!("services.projectMutation.busyTeam"),
+      Owner::Secrets => t!("services.projectMutation.busySecrets"),
+      Owner::Export => t!("services.projectMutation.busyExport"),
     }
   }
 }
@@ -54,9 +54,9 @@ impl Drop for MutationGuard {
 
 impl ProjectMutations {
   fn acquire(&self, project_id: &str, owner: Owner) -> Result<MutationGuard, String> {
-    let mut map = self.inner.lock().map_err(|_| "Project mutation ownership is unavailable.")?;
+    let mut map = self.inner.lock().map_err(|_| t!("services.projectMutation.unavailable"))?;
     if let Some(existing) = map.get(project_id) {
-      return Err(existing.owner.busy_message().into());
+      return Err(existing.owner.busy_message());
     }
     let generation = uuid::Uuid::new_v4().to_string();
     map.insert(project_id.to_string(), Lease { generation: generation.clone(), owner });

@@ -10,6 +10,7 @@ import {
   type JSX,
 } from 'react'
 import type { StudioProject, TeamMap, TeamMapApp, TeamMapCopy, TeamMapRun, TeamWorkspace } from '@shared/ipc'
+import { Trans, translator, useTranslation } from '../../../i18n'
 import { topLayerOpen, useSuppressPreview } from '../../../overlay'
 import { Codicon } from '../../icons'
 import { teamError } from '../common'
@@ -88,6 +89,8 @@ export default function TeamMapView({
   initialMap
 }: Props): JSX.Element {
   useSuppressPreview()
+  const { t, i18n } = useTranslation('teamMap')
+  const language = i18n.language
   const [map, setMap] = useState<TeamMap | null>(initialMap ?? null)
   const [runs, setRuns] = useState<TeamMapRun[]>(initialMap?.runs ?? [])
   const [loading, setLoading] = useState(false)
@@ -137,7 +140,7 @@ export default function TeamMapView({
       setRuns(next.runs)
       setError(next.error ?? null)
     } catch (reason) {
-      if (aliveRef.current) setError(teamError(reason, 'Could not load the workspace.'))
+      if (aliveRef.current) setError(teamError(reason, translator('teamMap')('view.loadFailed')))
     } finally {
       if (aliveRef.current) setLoading(false)
     }
@@ -208,21 +211,25 @@ export default function TeamMapView({
           : { ok: true, error: undefined, sources: [] }
         const parsed = await parseSources(result.sources)
         if (!aliveRef.current || seq !== dataSeq.current) return
-        const problem = result.ok ? null : (result.error ?? 'Could not read the apps.')
-        settle(problem && !parsed.length ? unreadable(map, problem) : buildResourceView(map, parsed))
+        const problem = result.ok
+          ? null
+          : (result.error ?? translator('teamMap')('view.readFailed'))
+        settle(
+          problem && !parsed.length ? unreadable(map, problem) : buildResourceView(map, parsed)
+        )
         setDataError(problem)
       } catch (reason) {
         if (!aliveRef.current || seq !== dataSeq.current) return
-        const problem = teamError(reason, 'Could not read the apps.')
+        const problem = teamError(reason, translator('teamMap')('view.readFailed'))
         if (!dataViewRef.current) settle(unreadable(map, problem))
         setDataError(problem)
       }
     })()
-  }, [map, workspace.id])
+  }, [map, workspace.id, language])
 
   const layout: MapLayout | null = useMemo(
     () => (map ? layoutMap(map, runs, dataView, heights) : null),
-    [map, runs, dataView, heights]
+    [map, runs, dataView, heights, language]
   )
   const stats = useMemo(() => (map ? mapStats(map, runs) : null), [map, runs])
   const itemById = useMemo(
@@ -375,9 +382,9 @@ export default function TeamMapView({
         const result = await window.api.team.openProject(workspace.id, folder)
         if (!aliveRef.current) return
         if (result.ok && result.project) onOpened(result.project)
-        else setError(result.error ?? 'Could not open the app.')
+        else setError(result.error ?? translator('teamMap')('view.openFailed'))
       } catch (reason) {
-        if (aliveRef.current) setError(teamError(reason, 'Could not open the app.'))
+        if (aliveRef.current) setError(teamError(reason, translator('teamMap')('view.openFailed')))
       } finally {
         if (aliveRef.current) setOpening(null)
       }
@@ -456,11 +463,14 @@ export default function TeamMapView({
             </div>
             <div className="tmap-node-foot">
               {app.published ? (
-                <HealthPill health={health} label={health === 'live' ? 'Published' : undefined} />
+                <HealthPill
+                  health={health}
+                  label={health === 'live' ? t('shared.published') : undefined}
+                />
               ) : (
                 <span className="tmap-health tmap-health--idle">
                   <span className="tmap-health-dot" aria-hidden="true" />
-                  Not published yet
+                  {t('shared.notPublished')}
                 </span>
               )}
               <button
@@ -469,7 +479,7 @@ export default function TeamMapView({
                 disabled={opening !== null}
                 onClick={() => void openApp(app.folder)}
               >
-                {opening === app.folder ? 'Opening…' : 'Open'}
+                {opening === app.folder ? t('shared.opening') : t('actions.open')}
               </button>
             </div>
           </>
@@ -487,9 +497,9 @@ export default function TeamMapView({
                 <Codicon name="globe" />
               </span>
               <div className="tmap-titles">
-                <strong>Published</strong>
+                <strong>{t('shared.published')}</strong>
                 <span className="tmap-dim tmap-ellipsis">
-                  {record?.url ? host(record.url) : 'Not deployed yet'}
+                  {record?.url ? host(record.url) : t('shared.notDeployed')}
                   {record?.updatedAt ? ` · ${timeAgo(record.updatedAt, now)}` : ''}
                 </span>
               </div>
@@ -507,29 +517,40 @@ export default function TeamMapView({
         const health = copyHealth(app, copy, runs)
         const title = changeTitle(copy.pr?.title, app.name)
         const notes = [
-          copy.localEdits ? 'unsaved edits' : null,
-          (copy.behind ?? 0) > 0 ? `${copy.behind} behind` : null,
-          copy.review === 'APPROVED' ? 'approved' : copy.review === 'CHANGES_REQUESTED' ? 'changes requested' : null,
-          !deploying && health !== 'failed' && previewBehind(copy) ? 'preview is older' : null
+          copy.localEdits ? t('view.notes.unsaved') : null,
+          (copy.behind ?? 0) > 0 ? t('view.notes.behind', { count: copy.behind ?? 0 }) : null,
+          copy.review === 'APPROVED'
+            ? t('view.notes.approved')
+            : copy.review === 'CHANGES_REQUESTED'
+              ? t('view.notes.changesRequested')
+              : null,
+          !deploying && health !== 'failed' && previewBehind(copy)
+            ? t('view.notes.previewOlder')
+            : null
         ].filter(Boolean)
         return (
           <>
             <div className="tmap-node-head">
               <Avatar login={copy.author || 'you'} url={copy.avatarUrl} size={28} />
               <div className="tmap-titles">
-                <strong>{copy.mine ? 'You' : copy.author}</strong>
+                <strong>{copy.mine ? t('shared.you') : copy.author}</strong>
                 <span className="tmap-dim">
-                  {copy.pr ? `#${copy.pr.number}${copy.pr.draft ? ' · draft' : ''}` : 'Not on GitHub yet'}
+                  {copy.pr
+                    ? `#${copy.pr.number}${copy.pr.draft ? ` · ${t('view.draft')}` : ''}`
+                    : t('shared.notOnGitHub')}
                   {copy.updatedAt ? ` · ${timeAgo(copy.updatedAt, now)}` : ''}
                 </span>
               </div>
-              <HealthPill health={health} label={health === 'live' ? 'Preview' : undefined} />
+              <HealthPill
+                health={health}
+                label={health === 'live' ? t('shared.preview') : undefined}
+              />
             </div>
             {title && <div className="tmap-copy-title">{title}</div>}
             <div className="tmap-node-foot">
               <DiffBar additions={copy.additions} deletions={copy.deletions} />
               <span className="tmap-dim tmap-ellipsis">
-                {copy.changedFiles} {copy.changedFiles === 1 ? 'file' : 'files'}
+                {t('shared.files', { count: copy.changedFiles })}
                 {notes.length ? ` · ${notes.join(' · ')}` : ''}
               </span>
             </div>
@@ -551,7 +572,7 @@ export default function TeamMapView({
   }
 
   return (
-    <div className="tmap" role="region" aria-label={`${ws.name} overview`}>
+    <div className="tmap" role="region" aria-label={t('view.region', { name: ws.name })}>
       <header className="tmap-head">
         <div className="tmap-head-title">
           <span className="tmap-head-glyph" aria-hidden="true">
@@ -562,20 +583,35 @@ export default function TeamMapView({
             type="button"
             className="tmap-repo"
             onClick={() => void window.api.openExternal(`https://github.com/${ws.repo}`)}
-            title="Open on GitHub"
+            title={t('view.openOnGitHub')}
           >
             <Codicon name="github" /> {ws.repo}
           </button>
           {stats && (
-            <div className="tmap-figures" aria-label="Summary">
+            <div className="tmap-figures" aria-label={t('view.summary')}>
               <span>
-                <strong>{stats.apps}</strong> {stats.apps === 1 ? 'app' : 'apps'}
+                <Trans
+                  t={t}
+                  i18nKey="view.statApps"
+                  count={stats.apps}
+                  components={{ b: <strong /> }}
+                />
               </span>
               <span>
-                <strong>{stats.copies}</strong> in progress
+                <Trans
+                  t={t}
+                  i18nKey="view.statCopies"
+                  count={stats.copies}
+                  components={{ b: <strong /> }}
+                />
               </span>
               <span>
-                <strong>{stats.live}</strong> live
+                <Trans
+                  t={t}
+                  i18nKey="view.statLive"
+                  count={stats.live}
+                  components={{ b: <strong /> }}
+                />
               </span>
             </div>
           )}
@@ -584,8 +620,8 @@ export default function TeamMapView({
               type="button"
               className={`tmap-people${selection === nodeIds.hub ? ' tmap-people--on' : ''}`}
               onClick={toggleManage}
-              title="Members, app access and settings"
-              aria-label={`${map.members.length} ${map.members.length === 1 ? 'member' : 'members'}`}
+              title={t('view.manageTitle')}
+              aria-label={t('view.members', { count: map.members.length })}
             >
               <span className="tmap-avatars">
                 {map.members.slice(0, 5).map((m) => (
@@ -600,12 +636,12 @@ export default function TeamMapView({
           {stats && stats.deploying > 0 && (
             <span className="tmap-health tmap-health--deploying tmap-head-status">
               <span className="tmap-health-dot" aria-hidden="true" />
-              {stats.deploying} deploying
+              {t('shared.deploying', { count: stats.deploying })}
             </span>
           )}
           {onNewApp && (
             <button type="button" className="model-tool-btn" onClick={() => onNewApp(workspace.id)}>
-              <Codicon name="add" /> New app
+              <Codicon name="add" /> {t('view.newApp')}
             </button>
           )}
           <button
@@ -613,28 +649,60 @@ export default function TeamMapView({
             className={`model-tool-btn${selection === nodeIds.hub ? ' tmap-tool--on' : ''}`}
             onClick={toggleManage}
             aria-pressed={selection === nodeIds.hub}
-            title="Members, app access and settings"
+            title={t('view.manageTitle')}
           >
-            <Codicon name="gear" /> Manage
+            <Codicon name="gear" /> {t('view.manage')}
           </button>
-          <button type="button" className="model-tool-btn" onClick={() => void load()} disabled={loading} title="Refresh">
+          <button
+            type="button"
+            className="model-tool-btn"
+            onClick={() => void load()}
+            disabled={loading}
+            title={t('actions.refresh')}
+          >
             <Codicon name="refresh" className={loading ? 'tmap-spin' : undefined} />
           </button>
-          <div className="model-zoom" role="group" aria-label="Zoom">
-            <button type="button" className="model-zoom-btn" onClick={() => zoomBy(0.8)} aria-label="Zoom out">
+          <div className="model-zoom" role="group" aria-label={t('view.zoom')}>
+            <button
+              type="button"
+              className="model-zoom-btn"
+              onClick={() => zoomBy(0.8)}
+              aria-label={t('view.zoomOut')}
+            >
               <Codicon name="zoom-out" />
             </button>
-            <button type="button" className="model-zoom-label" onClick={() => fitTo()} title="Fit to window">
+            <button
+              type="button"
+              className="model-zoom-label"
+              onClick={() => fitTo()}
+              title={t('view.fit')}
+            >
               {Math.round(view.scale * 100)}%
             </button>
-            <button type="button" className="model-zoom-btn" onClick={() => zoomBy(1.25)} aria-label="Zoom in">
+            <button
+              type="button"
+              className="model-zoom-btn"
+              onClick={() => zoomBy(1.25)}
+              aria-label={t('view.zoomIn')}
+            >
               <Codicon name="zoom-in" />
             </button>
           </div>
-          <button type="button" className="model-tool-btn" onClick={() => fitTo()} title="Fit to window">
+          <button
+            type="button"
+            className="model-tool-btn"
+            onClick={() => fitTo()}
+            title={t('view.fit')}
+          >
             <Codicon name="screen-full" />
           </button>
-          <button type="button" className="model-tool-btn" onClick={onClose} aria-label="Close the overview" title="Close (Esc)">
+          <button
+            type="button"
+            className="model-tool-btn"
+            onClick={onClose}
+            aria-label={t('view.close')}
+            title={t('shared.closeEsc')}
+          >
             <Codicon name="close" />
           </button>
         </div>
@@ -655,7 +723,7 @@ export default function TeamMapView({
           {!layout ? (
             <div className="tmap-loading">
               <span className="tmap-spinner tmap-spinner--lg" />
-              <span>Loading {workspace.name}…</span>
+              <span>{t('view.loading', { name: workspace.name })}</span>
             </div>
           ) : (
             <div
@@ -739,11 +807,11 @@ export default function TeamMapView({
 
           {map && map.apps.length === 0 && (
             <div className="tmap-empty">
-              <strong>No apps yet</strong>
-              <span>Create the first app in this workspace; it shows up here with everyone&apos;s work on it.</span>
+              <strong>{t('view.empty')}</strong>
+              <span>{t('view.emptyText')}</span>
               {onNewApp && (
                 <button type="button" className="btn btn--sm btn--primary" onClick={() => onNewApp(workspace.id)}>
-                  <Codicon name="add" /> New app
+                  <Codicon name="add" /> {t('view.newApp')}
                 </button>
               )}
             </div>

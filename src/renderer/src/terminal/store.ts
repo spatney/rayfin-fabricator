@@ -308,12 +308,15 @@ export function liveCount(project: ProjectTerminals): number {
 const SHORT_NAMES: Record<string, string> = { 'git-bash': 'bash' }
 
 /** Each tab's name: its shell's short name, numbered from the second of a kind. */
-export function tabLabels(tabs: readonly TerminalTab[]): Map<string, string> {
+export function tabLabels(
+  tabs: readonly TerminalTab[],
+  fallback = 'terminal'
+): Map<string, string> {
   const seen = new Map<string, number>()
   const labels = new Map<string, string>()
   for (const tab of tabs) {
     const id = tab.shellId ?? tab.requestedShell
-    const base = id ? (SHORT_NAMES[id] ?? id) : 'terminal'
+    const base = id ? (SHORT_NAMES[id] ?? id) : fallback
     const count = (seen.get(base) ?? 0) + 1
     seen.set(base, count)
     labels.set(tab.key, count === 1 ? base : `${base} ${count}`)

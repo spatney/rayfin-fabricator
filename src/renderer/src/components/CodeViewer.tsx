@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type { FileContent, FileNode, StudioProject } from '@shared/ipc'
+import { currentLanguage, formatLocale, translator, useTranslation } from '../i18n'
 import { monacoLanguage } from '../monaco'
 import { Codicon, EditorIcon } from './icons'
 import { readCodeTab, writeCodeTab, type CodeTab } from './codeTab'
@@ -26,10 +27,20 @@ interface Props {
   onSecretsChanged?: () => void
 }
 
+/** A file's size, with the decimal separator of the interface's language. */
 function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+  const t = translator('code')
+  const size = (value: number): string =>
+    currentLanguage() === 'en'
+      ? value.toFixed(1)
+      : value.toLocaleString(formatLocale(), {
+          minimumFractionDigits: 1,
+          maximumFractionDigits: 1,
+          useGrouping: false
+        })
+  if (n < 1024) return t('files.bytes', { size: n })
+  if (n < 1024 * 1024) return t('files.kilobytes', { size: size(n / 1024) })
+  return t('files.megabytes', { size: size(n / (1024 * 1024)) })
 }
 
 /** Project-relative paths (lowercased) opened by default on first entry to Files. */
@@ -90,6 +101,7 @@ interface TreeRowProps {
 }
 
 function TreeRow({ node, depth, selectedPath, onSelect }: TreeRowProps): JSX.Element {
+  const { t } = useTranslation('code')
   const isAncestor =
     node.type === 'dir' &&
     selectedPath != null &&
@@ -109,7 +121,7 @@ function TreeRow({ node, depth, selectedPath, onSelect }: TreeRowProps): JSX.Ele
           className={`tree-row tree-row--dir${node.ignored ? ' tree-row--ignored' : ''}`}
           style={{ paddingLeft: indent }}
           onClick={() => setOpen((o) => !o)}
-          title={node.ignored ? 'Ignored by Git' : undefined}
+          title={node.ignored ? t('files.ignoredByGit') : undefined}
         >
           <span className="tree-caret">
             <Codicon name={open ? 'chevron-down' : 'chevron-right'} />
@@ -137,10 +149,10 @@ function TreeRow({ node, depth, selectedPath, onSelect }: TreeRowProps): JSX.Ele
       }`}
       style={{ paddingLeft: indent + 14 }}
       onClick={() => onSelect(node)}
-      title={node.ignored ? `${node.path} — ignored by Git` : undefined}
+      title={node.ignored ? t('files.pathIgnored', { path: node.path }) : undefined}
     >
       <span className="tree-name">{node.name}</span>
-      {node.ignored && <span className="tree-ignored-tag">ignored</span>}
+      {node.ignored && <span className="tree-ignored-tag">{t('files.ignored')}</span>}
     </button>
   )
 }
@@ -152,6 +164,7 @@ function FilesView({
   theme,
   openRequest
 }: Props & { theme: string }): JSX.Element {
+  const { t } = useTranslation('code')
   const [tree, setTree] = useState<FileNode[] | null>(null)
   const [selectedState, setSelectedState] = useState(() => ({
     projectId: project.id,
@@ -286,20 +299,20 @@ function FilesView({
     <div className="code-viewer">
       <div className="code-tree">
         <div className="code-tree-head">
-          <span>Files</span>
+          <span>{t('viewer.files')}</span>
           <button
             className="btn btn--xs btn--ghost"
             onClick={() => void loadTree()}
-            title="Refresh"
+            title={t('actions.refresh')}
           >
             <Codicon name="refresh" />
           </button>
         </div>
         <div className="code-tree-body">
           {tree === null ? (
-            <div className="code-tree-empty">Loading…</div>
+            <div className="code-tree-empty">{t('status.loading')}</div>
           ) : tree.length === 0 ? (
-            <div className="code-tree-empty">No files found.</div>
+            <div className="code-tree-empty">{t('files.none')}</div>
           ) : (
             tree.map((node) => (
               <TreeRow
@@ -326,7 +339,7 @@ function FilesView({
             )}
             {file?.content != null && (
               <button className="btn btn--xs btn--ghost" onClick={copy}>
-                {copied ? 'Copied' : 'Copy'}
+                {copied ? t('actions.copied') : t('actions.copy')}
               </button>
             )}
           </div>
@@ -334,19 +347,19 @@ function FilesView({
 
         <div className="code-body">
           {!selected ? (
-            <div className="code-empty">Select a file to view its code.</div>
+            <div className="code-empty">{t('files.select')}</div>
           ) : loading || missing ? (
-            <div className="code-empty">Loading…</div>
+            <div className="code-empty">{t('status.loading')}</div>
           ) : file?.error ? (
             <div className="code-empty code-empty--err">{file.error}</div>
           ) : file?.binary ? (
-            <div className="code-empty">Binary file — not shown.</div>
+            <div className="code-empty">{t('files.binary')}</div>
           ) : file?.tooLarge ? (
             <div className="code-empty">
-              File is too large to preview ({formatBytes(file.size)}).
+              {t('files.tooLarge', { size: formatBytes(file.size) })}
             </div>
           ) : file?.content === '' ? (
-            <div className="code-empty">Empty file.</div>
+            <div className="code-empty">{t('files.empty')}</div>
           ) : file?.content != null ? (
             <div className="code-editor-host">
               <Editor
@@ -354,7 +367,7 @@ function FilesView({
                 theme={theme}
                 language={monacoLanguage(selected)}
                 value={file.content}
-                loading={<div className="code-empty">Loading editor…</div>}
+                loading={<div className="code-empty">{t('files.loadingEditor')}</div>}
                 onMount={(editor) => {
                   editorRef.current = editor
                   revealPending()
@@ -399,6 +412,7 @@ export default function CodeViewer({
   onSkillsChanged,
   onSecretsChanged
 }: Props): JSX.Element {
+  const { t } = useTranslation('code')
   const [tabState, setTabState] = useState(() => ({
     projectId: project.id,
     tab: readCodeTab(project.id)
@@ -436,14 +450,14 @@ export default function CodeViewer({
   return (
     <div className="code-shell">
       <div className="code-toolbar">
-        <div className="code-seg" role="tablist" aria-label="Code view">
+        <div className="code-seg" role="tablist" aria-label={t('viewer.views')}>
           <button
             className={`code-seg-btn${tab === 'files' ? ' code-seg-btn--on' : ''}`}
             role="tab"
             aria-selected={tab === 'files'}
             onClick={() => setTabState({ projectId: project.id, tab: 'files' })}
           >
-            Files
+            {t('viewer.files')}
           </button>
           <button
             className={`code-seg-btn${tab === 'history' ? ' code-seg-btn--on' : ''}`}
@@ -451,7 +465,7 @@ export default function CodeViewer({
             aria-selected={tab === 'history'}
             onClick={() => setTabState({ projectId: project.id, tab: 'history' })}
           >
-            History
+            {t('viewer.history')}
           </button>
           <button
             className={`code-seg-btn${tab === 'skills' ? ' code-seg-btn--on' : ''}`}
@@ -459,7 +473,7 @@ export default function CodeViewer({
             aria-selected={tab === 'skills'}
             onClick={() => setTabState({ projectId: project.id, tab: 'skills' })}
           >
-            Skills
+            {t('viewer.skills')}
           </button>
           <button
             className={`code-seg-btn${tab === 'secrets' ? ' code-seg-btn--on' : ''}`}
@@ -467,40 +481,34 @@ export default function CodeViewer({
             aria-selected={tab === 'secrets'}
             onClick={() => setTabState({ projectId: project.id, tab: 'secrets' })}
           >
-            Secrets
+            {t('viewer.secrets')}
           </button>
         </div>
-        {tab === 'history' && (
-          <span className="code-toolbar-hint">
-            A timeline of every change to your app — pick one to see what changed.
-          </span>
-        )}
+        {tab === 'history' && <span className="code-toolbar-hint">{t('viewer.historyHint')}</span>}
         <span className="code-toolbar-spacer" />
         <button
           className="btn btn--xs btn--ghost code-open-editor"
           onClick={() => void openInEditor()}
-          title="Open this project's folder in VS Code"
+          title={t('viewer.openInEditorTitle')}
         >
           <EditorIcon className="btn-ico" />
-          Open in VS Code
+          {t('viewer.openInEditor')}
         </button>
       </div>
       {editorHint && (
         <div className="code-editor-hint" role="status">
-          <span className="code-editor-hint-text">
-            VS Code isn’t installed, so we opened the project folder instead.
-          </span>
+          <span className="code-editor-hint-text">{t('viewer.noEditor')}</span>
           <button
             className="code-editor-hint-link"
             onClick={() => void window.api.openExternal('https://code.visualstudio.com/')}
           >
-            Get VS Code
+            {t('viewer.getEditor')}
           </button>
           <button
             className="code-editor-hint-x"
             onClick={() => setEditorHint(false)}
-            aria-label="Dismiss"
-            title="Dismiss"
+            aria-label={t('actions.dismiss')}
+            title={t('actions.dismiss')}
           >
             ×
           </button>

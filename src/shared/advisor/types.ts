@@ -99,6 +99,12 @@ export interface AdvisorFinding {
   title: string
   /** What's wrong here and why it matters. */
   detail: string
+  /**
+   * The detail in the interface's language, when Fabricator wrote it in
+   * another (quick checks). Shown instead of {@link detail}, which Copilot
+   * reads; never saved.
+   */
+  detailText?: string
   /** A concrete suggested fix. */
   recommendation: string
   /** Project-relative path the issue lives in, when known. */

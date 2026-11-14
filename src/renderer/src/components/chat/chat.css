@@ -2697,10 +2697,16 @@ button.thinking-head:hover {
 }
 
 /* The "+" menu: the model picker's menu (modelPicker.css), with a leading icon
-   and a faint hint at the end of each row. */
-.mp-panel.am-main,
-.mp-panel.am-fly {
+   and a faint hint at the end of each row. The data flyout grows to fit longer
+   words, as some languages have. */
+.mp-panel.am-main {
   width: 236px;
+}
+
+.mp-panel.am-fly {
+  width: auto;
+  min-width: 236px;
+  max-width: 300px;
 }
 
 .mp-item .am-icon,

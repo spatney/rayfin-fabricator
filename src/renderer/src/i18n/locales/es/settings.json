@@ -1,0 +1,108 @@
+{
+  "title": "Configuración",
+  "close": "Cerrar la configuración",
+  "general": {
+    "title": "General",
+    "accounts": {
+      "title": "Cuentas",
+      "desc": "Consulta con qué cuenta has iniciado sesión en GitHub Copilot, Microsoft Fabric, la CLI de Azure y GitHub, e inicia o cierra sesión.",
+      "action": "Administrar cuentas"
+    },
+    "apiKeys": {
+      "title": "Claves de API",
+      "desc": "Usa modelos de Anthropic, OpenAI, xAI y Google con tus propias claves de API, junto a tus modelos de Copilot. El proveedor te los factura.",
+      "action": "Administrar claves de API"
+    },
+    "mcpServers": {
+      "title": "Servidores MCP",
+      "desc": "Agrega los servidores MCP que el chat puede activar en sus Complementos, como un comando que se ejecuta en este dispositivo o la URL de un servidor.",
+      "action": "Administrar servidores MCP"
+    },
+    "chatDefaults": {
+      "title": "Valores predeterminados del chat",
+      "desc": "El modelo y los complementos con los que empieza el chat de un proyecto nuevo.",
+      "action": "Administrar valores predeterminados"
+    },
+    "customInstructions": {
+      "title": "Instrucciones personalizadas",
+      "desc": "Lo que Copilot sigue en cada aplicación que creas, como “Usa el tema del sistema de forma predeterminada”.",
+      "action": "Editar instrucciones"
+    },
+    "setup": {
+      "title": "Configuración inicial",
+      "desc": "Comprueba las herramientas que necesita Fabricator e instala las que falten, como la CLI de GitHub.",
+      "action": "Abrir la configuración inicial"
+    },
+    "workspaceFolder": {
+      "title": "Carpeta de proyectos",
+      "desc": "Los proyectos nuevos se crean aquí."
+    }
+  },
+  "appearance": {
+    "title": "Apariencia",
+    "theme": {
+      "title": "Tema",
+      "desc": "Sistema sigue la configuración de modo claro u oscuro de tu dispositivo.",
+      "system": "Sistema",
+      "dark": "Oscuro",
+      "light": "Claro"
+    },
+    "language": {
+      "title": "Idioma",
+      "desc": "Sistema usa el idioma de tu dispositivo si Fabricator está disponible en él y, si no, el inglés.",
+      "system": "Sistema",
+      "systemNamed": "Sistema ({{language}})"
+    },
+    "textSize": {
+      "title": "Tamaño del texto",
+      "desc": "Escala toda la interfaz: muy útil en monitores grandes."
+    }
+  },
+  "diagnostics": {
+    "title": "Diagnóstico",
+    "usage": {
+      "title": "Estadísticas de uso",
+      "desc": "Enviamos el dominio con el que inicias sesión y un hash de tu correo electrónico para ver cómo se usa el producto. Tu correo, tu código y tus aplicaciones se quedan en este dispositivo."
+    },
+    "full": {
+      "title": "Diagnóstico completo",
+      "desc": "Captura también las indicaciones, las respuestas y la salida de las herramientas de cada turno del chat. Desactivado de forma predeterminada: solo se registran metadatos ligeros (tiempos, herramientas usadas, errores). Actívalo para incluir más detalles en un informe de errores."
+    },
+    "logs": {
+      "title": "Registros",
+      "desc": "El diagnóstico de tus sesiones de chat se guarda en este dispositivo. Expórtalo para adjuntarlo a un informe de errores.",
+      "export": "Exportar diagnóstico",
+      "exporting": "Exportando…",
+      "openFolder": "Abrir la carpeta de registros"
+    }
+  },
+  "experiments": {
+    "title": "Experimentos",
+    "desc": "Estas funciones son experimentales y están desactivadas de forma predeterminada. Pueden ser inestables, cambiar o eliminarse en una actualización futura.",
+    "teamWorkspaces": {
+      "title": "Áreas de trabajo de equipo",
+      "desc": "Crea aplicaciones con tu equipo en un repositorio privado de GitHub. Cada persona trabaja en su propia copia, y una canalización publica en Fabric con una identidad de implementación que configura Fabricator. Las aplicaciones de equipo nunca se implementan desde este dispositivo. Requiere la CLI de GitHub."
+    },
+    "reportMigration": {
+      "title": "Migrar informes de Power BI",
+      "desc": "Convierte un informe de Power BI en una aplicación nueva desde Inicio. La aplicación lee en directo el modelo semántico del informe, y Copilot recrea las páginas, los objetos visuales y los filtros del informe, una página cada vez. Requiere la CLI de Azure."
+    },
+    "workIq": {
+      "title": "Work IQ",
+      "desc": "Agrega Work IQ a los complementos del chat. Si lo activas en un chat, el chat puede consultar tu correo, tus reuniones, tus archivos, tus mensajes de Teams y a las personas de Microsoft 365 con Work IQ de Microsoft, y usar lo que encuentre mientras crea. Solo lectura. Inicias sesión con tu cuenta profesional en el explorador. Requiere una licencia de Microsoft 365 Copilot y la aprobación de tu organización."
+    }
+  },
+  "about": {
+    "title": "Acerca de",
+    "version": "Versión {{version}}",
+    "copyVersion": "Copiar información de la versión",
+    "copilotBundled": "{{version}} (versión incluida {{bundled}})",
+    "unknownVersion": "desconocida",
+    "help": {
+      "title": "Ayuda",
+      "desc": "Guías de cada parte de Fabricator y soluciones a problemas comunes.",
+      "docs": "Documentación",
+      "troubleshooting": "Solución de problemas"
+    }
+  }
+}

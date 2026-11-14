@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type JSX } from 'react'
 import type { CommunityGallery, CommunityTemplate } from '@shared/ipc'
+import { Trans, translator, useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { AppCover } from './AppCard'
 
@@ -19,6 +20,7 @@ export default function ExamplesView({
   /** Start a new project from this example. */
   onUse: (template: CommunityTemplate) => void
 }): JSX.Element {
+  const { t } = useTranslation('gallery')
   const [gallery, setGallery] = useState<CommunityGallery | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -26,12 +28,13 @@ export default function ExamplesView({
   const load = useCallback(async (): Promise<void> => {
     setLoading(true)
     setError(null)
+    const failed = (): string => translator('gallery')('examples.loadFailed')
     try {
       const result = await window.api.projects.communityTemplates()
       if (result.ok && result.gallery) setGallery(result.gallery)
-      else setError(result.error ?? 'Couldn’t load the examples.')
+      else setError(result.error ?? failed())
     } catch {
-      setError('Couldn’t load the examples.')
+      setError(failed())
     } finally {
       setLoading(false)
     }
@@ -45,7 +48,7 @@ export default function ExamplesView({
     return (
       <p className="gallery-note" role="status">
         <Codicon name="loading" className="icon-spin" />
-        <span className="gallery-note-text">Loading the examples…</span>
+        <span className="gallery-note-text">{t('examples.loading')}</span>
       </p>
     )
   }
@@ -53,11 +56,11 @@ export default function ExamplesView({
     return (
       <div className="gallery-state" role="alert">
         <Codicon name="warning" className="gallery-state-glyph" />
-        <p className="gallery-state-title">Couldn’t load the examples</p>
+        <p className="gallery-state-title">{t('examples.failedTitle')}</p>
         <p className="gallery-state-sub">{error}</p>
         <div className="gallery-state-actions">
           <button type="button" className="btn" onClick={() => void load()}>
-            Try again
+            {t('actions.tryAgain')}
           </button>
         </div>
       </div>
@@ -67,7 +70,7 @@ export default function ExamplesView({
     return (
       <div className="gallery-state">
         <Codicon name="beaker" className="gallery-state-glyph" />
-        <p className="gallery-state-title">No examples yet</p>
+        <p className="gallery-state-title">{t('examples.empty')}</p>
       </div>
     )
   }
@@ -77,11 +80,15 @@ export default function ExamplesView({
       <p className="gallery-note">
         <Codicon name="info" />
         <span className="gallery-note-text">
-          Apps to start from, from <strong>{source}</strong>. Pick one, and Copilot changes it into
-          your app from there.
+          <Trans
+            t={t}
+            i18nKey="examples.intro"
+            values={{ source }}
+            components={{ b: <strong /> }}
+          />
         </span>
       </p>
-      <ul className="gallery-grid" aria-label="Examples">
+      <ul className="gallery-grid" aria-label={t('examples.label')}>
         {gallery.templates.map((template) => (
           <li key={exampleKey(template)} className="gcard-item">
             <div className="gcard gcard--example">
@@ -95,10 +102,10 @@ export default function ExamplesView({
                   <button
                     type="button"
                     className="btn btn--sm btn--primary"
-                    aria-label={`Use ${template.name}`}
+                    aria-label={t('examples.useLabel', { name: template.name })}
                     onClick={() => onUse(template)}
                   >
-                    Use this example
+                    {t('examples.use')}
                   </button>
                 </span>
               </span>

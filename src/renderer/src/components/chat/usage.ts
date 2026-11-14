@@ -1,35 +1,42 @@
 // Words and numbers for what a chat has used and what's left of the Copilot plan.
 import type { ChatModelUsage, ChatUsage, CopilotBilling, CopilotQuota } from '@shared/ipc'
+import { formatLocale, translator } from '../../i18n'
 import { formatTokens } from '../models/ModelPicker'
 
-const UNITS: Record<CopilotBilling, { one: string; many: string; short: [string, string] }> = {
-  ai_credits: { one: 'AI credit', many: 'AI credits', short: ['credit', 'credits'] },
+const UNITS = {
+  ai_credits: {
+    long: 'usage.unit.aiCredits',
+    short: 'usage.unit.credits',
+    unlimited: 'usage.unlimited.aiCredits'
+  },
   premium_requests: {
-    one: 'premium request',
-    many: 'premium requests',
-    short: ['premium request', 'premium requests']
+    long: 'usage.unit.premiumRequests',
+    short: 'usage.unit.premiumRequests',
+    unlimited: 'usage.unlimited.premiumRequests'
   }
-}
+} as const satisfies Record<CopilotBilling, unknown>
 
 /** The unit an amount is counted in, e.g. "AI credits" (`short`: "credits"). */
 export function unitName(unit: CopilotBilling, amount: number, short = false): string {
   const u = UNITS[unit]
-  if (short) return u.short[amount === 1 ? 0 : 1]
-  return amount === 1 ? u.one : u.many
+  return translator('chat')(short ? u.short : u.long, { count: amount })
 }
 
 /** An amount of AI credits or premium requests, as precise as its size needs. */
 export function formatAmount(n: number): string {
-  if (n > 0 && n < 0.01) return '<0.01'
+  const locale = formatLocale()
+  if (n > 0 && n < 0.01) return `<${(0.01).toLocaleString(locale)}`
   const digits = n < 10 ? 2 : n < 100 ? 1 : 0
-  return n.toLocaleString('en-US', { maximumFractionDigits: digits })
+  return n.toLocaleString(locale, { maximumFractionDigits: digits })
 }
 
 /** What AI credits cost, at US$0.01 a credit. */
 export function formatDollars(credits: number): string {
   const dollars = credits / 100
-  if (dollars > 0 && dollars < 0.01) return '<$0.01'
-  return dollars.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+  const usd = (n: number): string =>
+    n.toLocaleString(formatLocale(), { style: 'currency', currency: 'USD' })
+  if (dollars > 0 && dollars < 0.01) return `<${usd(0.01)}`
+  return usd(dollars)
 }
 
 function tokens(m: ChatModelUsage): number {
@@ -48,11 +55,16 @@ export function billedAmount(u: ChatUsage): number {
 export function usageSummary(u: ChatUsage): string | null {
   const parts: string[] = []
   const billed = billedAmount(u)
-  if (billed > 0) parts.push(`${formatAmount(billed)} ${unitName(u.billing, billed, true)}`)
+  const t = translator('chat')
+  if (billed > 0) {
+    parts.push(
+      t('usage.amount', { amount: formatAmount(billed), unit: unitName(u.billing, billed, true) })
+    )
+  }
   const own = u.models.filter((m) => m.ownKey).reduce((sum, m) => sum + tokens(m), 0)
   // Copilot's models without a reported amount still show what they read and wrote.
   const shown = own > 0 ? own : parts.length === 0 ? totalTokens(u) : 0
-  if (shown > 0) parts.push(`${formatTokens(shown)} tokens`)
+  if (shown > 0) parts.push(t('usage.tokens', { tokens: formatTokens(shown) }))
   return parts.length > 0 ? parts.join(' · ') : null
 }
 
@@ -101,7 +113,9 @@ export function modelBreakdown(u: ChatUsage): ModelShare[] {
 
 /** A share as a whole percentage: "75%", or "<1%". */
 export function formatShare(share: number): string {
-  return share > 0 && share < 1 ? '<1%' : `${Math.round(share)}%`
+  const percent = (n: number): string =>
+    (n / 100).toLocaleString(formatLocale(), { style: 'percent' })
+  return share > 0 && share < 1 ? `<${percent(1)}` : percent(Math.round(share))
 }
 
 /** Where the signed-in account's Copilot usage shows on GitHub (or GHE.com). */
@@ -122,26 +136,38 @@ export function totalTokens(u: ChatUsage): number {
 
 /** A model's tokens: "7.57M in · 47K out". */
 export function tokenLine(m: ChatModelUsage): string {
-  return `${formatTokens(m.inputTokens)} in · ${formatTokens(m.outputTokens)} out`
+  return translator('chat')('usage.tokenLine', {
+    input: formatTokens(m.inputTokens),
+    output: formatTokens(m.outputTokens)
+  })
 }
 
 /** A model's tokens in full, for its tooltip. */
 export function tokenDetail(m: ChatModelUsage): string {
-  const n = (v: number): string => v.toLocaleString('en-US')
-  const cached = m.cachedTokens > 0 ? ` (${n(m.cachedTokens)} from the prompt cache)` : ''
-  return `${n(m.inputTokens)} input tokens${cached} and ${n(m.outputTokens)} output tokens`
+  const t = translator('chat')
+  const locale = formatLocale()
+  const n = (v: number): string => v.toLocaleString(locale)
+  const counts = { input: n(m.inputTokens), output: n(m.outputTokens) }
+  return m.cachedTokens > 0
+    ? t('usage.tokenDetailCached', { ...counts, cached: n(m.cachedTokens) })
+    : t('usage.tokenDetail', counts)
 }
 
 /** What's left of the plan's allowance: "999,000 of 1,000,000 AI credits left". */
 export function quotaLeft(q: CopilotQuota): string {
-  if (q.unlimited) return `Unlimited ${unitName(q.unit, 2)}`
+  const t = translator('chat')
+  if (q.unlimited) return t(UNITS[q.unit].unlimited)
   const left = Math.max(0, q.entitlement - q.used)
-  return `${formatAmount(left)} of ${formatAmount(q.entitlement)} ${unitName(q.unit, q.entitlement)} left`
+  return t('usage.left', {
+    left: formatAmount(left),
+    total: formatAmount(q.entitlement),
+    unit: unitName(q.unit, q.entitlement)
+  })
 }
 
 /** The share of the allowance left: "99.9%". */
 export function formatPercent(p: number): string {
-  return `${p.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`
+  return (p / 100).toLocaleString(formatLocale(), { style: 'percent', maximumFractionDigits: 1 })
 }
 
 /** When the allowance resets ("Resets Dec 1"), and any usage past it. */
@@ -150,15 +176,20 @@ export function quotaNotes(q: CopilotQuota, now = Date.now()): string[] {
   const reset = q.resetDate ? Date.parse(q.resetDate) : NaN
   if (!q.unlimited && reset > now) {
     // GitHub's billing cycle turns over at midnight UTC, so name that day.
-    const day = new Date(reset).toLocaleDateString('en-US', {
+    const day = new Date(reset).toLocaleDateString(formatLocale(), {
       month: 'short',
       day: 'numeric',
       timeZone: 'UTC'
     })
-    notes.push(`Resets ${day}`)
+    notes.push(translator('chat')('usage.resets', { day }))
   }
   if (q.overage > 0) {
-    notes.push(`${formatAmount(q.overage)} ${unitName(q.unit, q.overage)} of additional usage`)
+    notes.push(
+      translator('chat')('usage.overage', {
+        amount: formatAmount(q.overage),
+        unit: unitName(q.unit, q.overage)
+      })
+    )
   }
   return notes
 }

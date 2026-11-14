@@ -101,13 +101,13 @@ fn is_id(value: &str) -> bool {
 async fn hydrate_with_cli(project_dir: &Path, workspace_id: &str, item_id: &str) -> Result<(), String> {
   const SCRIPT: &str = "const [root, workspaceId, itemId, file] = process.argv.slice(1); const { pathToFileURL } = await import('node:url'); const { hydrateDeploymentFromFabric } = await import(pathToFileURL(file).href); await hydrateDeploymentFromFabric({ projectRoot: root, workspaceId, itemId });";
   if !is_id(workspace_id) || !is_id(item_id) {
-    return Err("the deployment record isn't valid".into());
+    return Err(t!("team.localPreview.invalidRecord"));
   }
   let module = project_dir.join("node_modules/@microsoft/rayfin-cli/dist/utils/hydrate-deployment.js");
   if !module.exists() {
-    return Err("this app's Rayfin CLI can't read deployments".into());
+    return Err(t!("team.localPreview.oldCli"));
   }
-  let node = which::which("node").map_err(|_| "Node.js wasn't found".to_string())?;
+  let node = which::which("node").map_err(|_| t!("team.localPreview.noNode"))?;
   let root = project_dir.to_string_lossy().to_string();
   let file = module.to_string_lossy().to_string();
   let res = exec::run(
@@ -125,10 +125,8 @@ async fn hydrate_with_cli(project_dir: &Path, workspace_id: &str, item_id: &str)
     .map(str::trim)
     .filter(|l| !l.is_empty() && !l.starts_with("at "))
     .find(|l| l.contains("Error") || l.contains("Run `rayfin login`") || l.contains("Fabric"))
-    .unwrap_or("Fabric sign-in is needed")
-    .chars()
-    .take(240)
-    .collect::<String>();
+    .map(|l| l.chars().take(240).collect::<String>())
+    .unwrap_or_else(|| t!("team.localPreview.signInNeeded"));
   Err(detail)
 }
 
@@ -137,25 +135,23 @@ async fn hydrate_with_cli(project_dir: &Path, workspace_id: &str, item_id: &str)
 pub async fn prepare(project_dir: &Path, binding: &TeamBinding, log: impl Fn(&str)) -> Backend {
   let (backend, record) = choose(binding);
   let Some(record) = record else {
-    log("This app isn't deployed yet, so the live preview runs without data until the team pipeline deploys it.\n");
+    log(&format!("{}\n", t!("team.localPreview.notDeployed")));
     return Backend::None;
   };
   if backend == Backend::Preview {
-    log("The live preview uses your preview's data (deployed by the team pipeline when you last published).\n");
+    log(&format!("{}\n", t!("team.localPreview.usesPreview")));
   } else {
-    log("You don't have a preview, so the live preview uses the published app's data. Changes you make in it are real.\n");
+    log(&format!("{}\n", t!("team.localPreview.usesPublished")));
   }
   if !record.public_env.is_empty() {
     if let Err(e) = write_public_env(project_dir, &record.public_env) {
-      log(&format!("Couldn't update rayfin/.env: {e}\n"));
+      log(&format!("{}\n", t!("team.localPreview.cantUpdateEnv", error = e)));
     }
     return backend;
   }
   if let (Some(workspace_id), Some(item_id)) = (record.workspace_id.as_deref(), record.item_id.as_deref()) {
     if let Err(e) = hydrate_with_cli(project_dir, workspace_id, item_id).await {
-      log(&format!(
-        "Couldn't read the deployment's settings: {e}. Sign in to Fabric, or update the workspace's pipeline (Manage → Settings → Repair) and publish again.\n"
-      ));
+      log(&format!("{}\n", t!("team.localPreview.cantReadSettings", error = e)));
     }
   }
   backend

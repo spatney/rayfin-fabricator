@@ -5,6 +5,7 @@
  * app's pipeline publishes it when the user publishes.
  */
 import type { AppSettings, RayfinNewerRelease, RayfinVersionInfo } from '@shared/ipc'
+import { translator } from './i18n'
 
 /**
  * Whether chat turns publish personal apps as they finish: the published apps
@@ -81,14 +82,9 @@ export function newerRayfin(info: RayfinVersionInfo | null | undefined): RayfinN
  * this computer while the local backend doesn't run it.
  */
 export function newerRayfinWarnings(newer: RayfinNewerRelease): string[] {
+  const t = translator('preview')
   const warnings: string[] = []
-  if (!newer.isLatest) {
-    warnings.push('It isn’t Rayfin’s latest release yet, so it might be unstable.')
-  }
-  if (!newer.runsLocally) {
-    warnings.push(
-      'Fabricator doesn’t run it on this computer yet, so some things might not work as expected here.'
-    )
-  }
+  if (!newer.isLatest) warnings.push(t('rayfinWarning.prerelease'))
+  if (!newer.runsLocally) warnings.push(t('rayfinWarning.unsupported'))
   return warnings
 }

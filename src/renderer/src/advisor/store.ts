@@ -20,6 +20,7 @@ import type {
   ReasoningEffort,
   StudioProject
 } from '@shared/ipc'
+import { i18n, translator } from '../i18n'
 import { selectionArgs, selectionOf, type ModelSelection } from '../modelSelection'
 import { quickRefs, runQuickChecks, type QuickCheckResult } from './engine'
 import { isCurrent, normalizeSnapshot, type NormalizedSnapshot } from './legacy'
@@ -287,6 +288,15 @@ export function useAdvisor(
     if (loadedRef.current) refreshQuick()
   }, [opts.refreshKey, versionsKey, refreshQuick])
 
+  // Re-run them in a new interface language, so what they found reads in it.
+  useEffect(() => {
+    const onLanguageChanged = (): void => {
+      if (loadedRef.current) refreshQuick()
+    }
+    i18n.on('languageChanged', onLanguageChanged)
+    return () => i18n.off('languageChanged', onLanguageChanged)
+  }, [refreshQuick])
+
   // Persist lifecycle changes (debounced) once the saved state has loaded.
   useEffect(() => {
     if (!projectId || !loadedRef.current) return
@@ -355,7 +365,7 @@ export function useAdvisor(
     const base = quickRef.current ?? (await runQuickRef.current())
     if (projectRef.current !== id) return
     if (!base) {
-      setReview({ ...IDLE_REVIEW, error: 'Couldn’t read the project to start the review.' })
+      setReview({ ...IDLE_REVIEW, error: translator('advisor')('store.cantReadProject') })
       return
     }
     try {

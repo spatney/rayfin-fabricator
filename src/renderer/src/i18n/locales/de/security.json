@@ -1,0 +1,101 @@
+{
+  "panel": {
+    "label": "Sicherheitsprüfung",
+    "title": "Auf Sicherheitsrisiken prüfen",
+    "sub": "Copilot liest den Code, ohne etwas davon auszuführen, und sagt dir, was dieser auf diesem Computer tun könnte.",
+    "check": "Prüfen",
+    "checking": "Es wird auf Sicherheitsrisiken geprüft…",
+    "elapsed": "Verstrichene Zeit",
+    "partial": "Einige Bereiche wurden nicht geprüft: {{error}}",
+    "found": "Was gefunden wurde",
+    "steps_one": "{{count}} Schritt",
+    "steps_other": "{{count}} Schritte",
+    "checkAgain": "Erneut prüfen"
+  },
+  "meta": {
+    "running": "Copilot (Auto)",
+    "checkedBy": "Geprüft von Copilot (Auto)",
+    "files_one": "{{count}} Datei",
+    "files_other": "{{count}} Dateien"
+  },
+  "live": {
+    "unpacking": "Wird entpackt, ohne etwas auszuführen…",
+    "starting": "Copilot (Auto) wird gestartet…",
+    "thinking": "Denkt nach…"
+  },
+  "outcome": {
+    "stopped": "Prüfung gestoppt",
+    "stoppedFound_one": "Bis zum Stoppen wurde {{count}} Punkt gefunden, den du dir ansehen solltest.",
+    "stoppedFound_other": "Bis zum Stoppen wurden {{count}} Punkte gefunden, die du dir ansehen solltest.",
+    "stoppedNothing": "Bis zum Stoppen wurde nichts gefunden.",
+    "fabricatorCouldnt": "Fabricator konnte es nicht prüfen",
+    "copilotCouldnt": "Copilot konnte es nicht prüfen",
+    "ownChecksFound_one": "Die eigenen Prüfungen von Fabricator haben {{count}} Punkt gefunden, den du dir ansehen solltest.",
+    "ownChecksFound_other": "Die eigenen Prüfungen von Fabricator haben {{count}} Punkte gefunden, die du dir ansehen solltest.",
+    "ownChecksNothing": "Die eigenen Prüfungen von Fabricator haben nichts Riskantes gefunden, aber sie lesen den Code nicht so wie Copilot.",
+    "serious_one": "{{count}} ernstes Risiko gefunden",
+    "serious_other": "{{count}} ernste Risiken gefunden",
+    "advisesAgainst": "Copilot rät davon ab",
+    "found_one": "{{count}} Punkt zum Ansehen gefunden",
+    "found_other": "{{count}} Punkte zum Ansehen gefunden",
+    "worthALook": "Lieber zuerst ansehen",
+    "clear": "Keine Sicherheitsrisiken gefunden",
+    "clearToImport": "Nichts darin wirkt beim Importieren riskant.",
+    "clearToInstall": "Nichts darin wirkt beim Installieren riskant."
+  },
+  "strip": {
+    "label": "Was geprüft wird",
+    "found_one": "{{count}} Punkt zum Ansehen",
+    "found_other": "{{count}} Punkte zum Ansehen",
+    "clear": "nichts Riskantes",
+    "medium": "einen Blick wert",
+    "waiting": "noch nicht geprüft",
+    "skipped": "nicht geprüft",
+    "tip": "{{about}}. {{note}}"
+  },
+  "areas": {
+    "install": {
+      "label": "Installationsskripts",
+      "about": "Was npm ausführt, wenn die Pakete installiert werden"
+    },
+    "packages": {
+      "label": "Pakete",
+      "about": "Woher die Pakete stammen"
+    },
+    "network": {
+      "label": "Gesendete Daten",
+      "about": "Was gesendet wird und wohin"
+    },
+    "hidden": {
+      "label": "Versteckter Code",
+      "about": "Code, der verbergen soll, was er tut"
+    },
+    "system": {
+      "label": "Systemzugriff",
+      "about": "Was über die App hinausgreift"
+    },
+    "agents": {
+      "label": "Copilot-Anweisungen",
+      "about": "Welche Anweisungen es Copilot beim Entwickeln gibt"
+    }
+  },
+  "severity": {
+    "high": "Hoch",
+    "medium": "Mittel",
+    "low": "Niedrig",
+    "note": "Hinweis"
+  },
+  "finding": {
+    "assessment": "Einschätzung von Copilot:",
+    "alsoIn": "Auch in",
+    "advice": "Was zu tun ist:",
+    "byFabricator": "Von den eigenen Prüfungen von Fabricator gefunden",
+    "byCopilot": "Von Copilot gefunden, aus der Datei zitiert"
+  },
+  "steps": {
+    "label": "Was Copilot gelesen hat"
+  },
+  "errors": {
+    "cantCheck": "Fabricator konnte diese Datei nicht prüfen."
+  }
+}

@@ -1,14 +1,15 @@
 import { useState, type CSSProperties, type JSX } from 'react'
 import type { TeamRunStep } from '@shared/ipc'
+import { formatLocale, useTranslation } from '../../../i18n'
 import { elapsed, friendlyStep, runProgress } from '../runProgress'
 import type { Deploying, Health } from './model'
 
-export const HEALTH_LABEL: Record<Health, string> = {
-  live: 'Live',
-  deploying: 'Deploying',
-  failed: 'Failed',
-  idle: 'Not deployed'
-}
+export const HEALTH_LABEL = {
+  live: 'health.live',
+  deploying: 'health.deploying',
+  failed: 'health.failed',
+  idle: 'health.idle'
+} as const satisfies Record<Health, string>
 
 /** A stable hue per name, for marks and initials. */
 export function hueOf(text: string): number {
@@ -73,23 +74,25 @@ export function Avatar({ login, url, size = 26 }: { login: string; url?: string;
 }
 
 export function HealthPill({ health, label }: { health: Health; label?: string }): JSX.Element {
+  const { t } = useTranslation('teamMap')
   return (
     <span className={`tmap-health tmap-health--${health}`}>
       <span className="tmap-health-dot" aria-hidden="true" />
-      {label ?? HEALTH_LABEL[health]}
+      {label ?? t(HEALTH_LABEL[health])}
     </span>
   )
 }
 
 /** GitHub-style five-block bar of added vs removed lines. */
 export function DiffBar({ additions, deletions }: { additions: number; deletions: number }): JSX.Element {
+  const { t } = useTranslation('teamMap')
   const total = additions + deletions
   const adds = total === 0 ? 0 : Math.round((additions / total) * 5)
   const blocks = Array.from({ length: 5 }, (_, i) => (total === 0 ? 'none' : i < adds ? 'add' : 'del'))
   return (
-    <span className="tmap-diffbar" title={`${additions} lines added, ${deletions} removed`}>
-      <span className="tmap-diff-add">+{additions.toLocaleString()}</span>
-      <span className="tmap-diff-del">−{deletions.toLocaleString()}</span>
+    <span className="tmap-diffbar" title={t('diffBar.title', { additions, deletions })}>
+      <span className="tmap-diff-add">+{additions.toLocaleString(formatLocale())}</span>
+      <span className="tmap-diff-del">−{deletions.toLocaleString(formatLocale())}</span>
       <span className="tmap-diff-blocks" aria-hidden="true">
         {blocks.map((b, i) => (
           <span key={i} className={`tmap-diff-block tmap-diff-block--${b}`} />
@@ -101,16 +104,17 @@ export function DiffBar({ additions, deletions }: { additions: number; deletions
 
 /** What a deployment in progress is doing: its current step and a progress bar. */
 export function RunLine({ deploying, now }: { deploying: Deploying; now: number }): JSX.Element {
+  const { t } = useTranslation('teamMap')
   const steps = deploying.job?.steps ?? []
   const progress = runProgress(steps)
   const step =
     deploying.run.status === 'queued' || deploying.run.status === 'waiting'
-      ? 'Waiting to start'
+      ? t('run.waiting')
       : !deploying.job
-        ? 'Planning'
+        ? t('run.planning')
         : progress.current
           ? friendlyStep(progress.current.name)
-          : 'Finishing'
+          : t('run.finishing')
   return (
     <div className="tmap-runline" role="status">
       <div className="tmap-runline-text">
@@ -126,6 +130,7 @@ export function RunLine({ deploying, now }: { deploying: Deploying; now: number 
 
 /** Every step of a pipeline job, with how long each took. */
 export function StepTimeline({ steps, now }: { steps: TeamRunStep[]; now: number }): JSX.Element {
+  const { t } = useTranslation('teamMap')
   return (
     <ol className="tmap-steps">
       {steps.map((step) => {
@@ -141,7 +146,12 @@ export function StepTimeline({ steps, now }: { steps: TeamRunStep[]; now: number
                   : 'pending'
         const took =
           step.startedAt && step.completedAt
-            ? `${Math.max(0, Math.round((Date.parse(step.completedAt) - Date.parse(step.startedAt)) / 1000))}s`
+            ? t('run.seconds', {
+                seconds: Math.max(
+                  0,
+                  Math.round((Date.parse(step.completedAt) - Date.parse(step.startedAt)) / 1000)
+                )
+              })
             : state === 'running'
               ? elapsed(step.startedAt, now)
               : ''

@@ -3,6 +3,7 @@ import type { StudioProject, TeamWorkspace } from '@shared/ipc'
 import type { DerivedAdvisor } from '../advisor/lifecycle'
 import { useSuppressPreview } from '../overlay'
 import { moveMenuFocus } from '../menuFocus'
+import { useTranslation } from '../i18n'
 import { Codicon } from './icons'
 import { initials, markHue } from './gallery/model'
 import { displayPath } from './projectDisplay'
@@ -10,12 +11,12 @@ import { displayPath } from './projectDisplay'
 /** The active project's content views, switched from the app bar's tabs. */
 export type ProjectView = 'build' | 'code' | 'blueprint' | 'advisor'
 
-const TABS: { id: ProjectView; label: string }[] = [
-  { id: 'build', label: 'Build' },
-  { id: 'code', label: 'Code' },
-  { id: 'blueprint', label: 'Blueprint' },
-  { id: 'advisor', label: 'Advisor' }
-]
+const TABS = [
+  { id: 'build', label: 'appBar.tabs.build' },
+  { id: 'code', label: 'appBar.tabs.code' },
+  { id: 'blueprint', label: 'appBar.tabs.blueprint' },
+  { id: 'advisor', label: 'appBar.tabs.advisor' }
+] as const satisfies ReadonlyArray<{ id: ProjectView; label: string }>
 
 /** Other projects the switcher lists; Home lists every one. */
 const SWITCH_LIMIT = 6
@@ -59,6 +60,7 @@ export function ProjectSwitcher({
   /** Show every project on Home. */
   onShowAll: () => void
 }): JSX.Element {
+  const { t } = useTranslation('app')
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -119,8 +121,8 @@ export function ProjectSwitcher({
         <button
           type="button"
           className="project-switcher"
-          aria-label={`${project.name} — All projects`}
-          title={`${project.path}\nAll projects`}
+          aria-label={t('appBar.allProjectsLabel', { name: project.name })}
+          title={t('appBar.allProjectsTitle', { path: project.path })}
           onClick={() => {
             setOpen(false)
             onShowAll()
@@ -136,8 +138,8 @@ export function ProjectSwitcher({
           aria-haspopup="menu"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
-          aria-label={`${project.name} — Switch projects`}
-          title="Switch projects"
+          aria-label={t('appBar.switchProjectsLabel', { name: project.name })}
+          title={t('appBar.switchProjects')}
           onClick={() => setOpen((o) => !o)}
         >
           <Codicon name="chevron-down" className="project-switcher-caret" />
@@ -147,11 +149,18 @@ export function ProjectSwitcher({
       {open && (
         <div className="project-menu">
           <div className={`project-menu-label${recent.length ? '' : ' project-menu-label--empty'}`}>
-            {recent.length ? 'Recent projects' : 'No other recent projects'}
+            {recent.length ? t('appBar.recentProjects') : t('appBar.noRecentProjects')}
           </div>
-          <div className="project-menu-items" role="menu" id={menuId} aria-label="Switch projects">
+          <div
+            className="project-menu-items"
+            role="menu"
+            id={menuId}
+            aria-label={t('appBar.switchProjects')}
+          >
             {recent.map((p) => {
-              const team = p.team ? (teamNames.get(p.team.workspaceId) ?? 'Team') : undefined
+              const team = p.team
+                ? (teamNames.get(p.team.workspaceId) ?? t('appBar.team'))
+                : undefined
               return (
                 <button
                   key={p.id}
@@ -189,7 +198,7 @@ export function ProjectSwitcher({
               <span className="project-menu-icon" aria-hidden="true">
                 <Codicon name="home" />
               </span>
-              All projects
+              {t('appBar.allProjects')}
             </button>
           </div>
         </div>
@@ -204,20 +213,23 @@ export function BackToProject({
   title,
   onClick
 }: {
-  name: string
+  /** The project to go back to; without one, the button goes back to the projects. */
+  name?: string
   /** Tooltip; defaults to explaining the project kept running. */
   title?: string
   onClick: () => void
 }): JSX.Element {
+  const { t } = useTranslation('app')
+  const label = name === undefined ? t('appBar.backToProjects') : t('appBar.back', { name })
   return (
     <button
       type="button"
       className="app-bar-back"
       onClick={onClick}
-      title={title ?? `Return to ${name} — it kept running while you browsed projects`}
+      title={title ?? (name === undefined ? label : t('appBar.backTitle', { name }))}
     >
       <Codicon name="arrow-left" />
-      <span className="app-bar-back-label">Back to {name}</span>
+      <span className="app-bar-back-label">{label}</span>
     </button>
   )
 }
@@ -232,8 +244,9 @@ export function ProjectTabs({
   /** Open high/medium Advisor issues, counted on the Advisor tab. */
   advisorBadge: DerivedAdvisor['badge']
 }): JSX.Element {
+  const { t } = useTranslation('app')
   return (
-    <div className="project-tabs" role="tablist" aria-label="Project views">
+    <div className="project-tabs" role="tablist" aria-label={t('appBar.views')}>
       {TABS.map((tab) => {
         const badge = tab.id === 'advisor' ? advisorBadge : null
         return (
@@ -246,16 +259,16 @@ export function ProjectTabs({
             title={
               tab.id === 'advisor'
                 ? badge
-                  ? `Advisor — ${badge.count} open high or medium issue${badge.count === 1 ? '' : 's'}`
-                  : 'Advisor'
+                  ? t('appBar.advisorIssues', { count: badge.count })
+                  : t('appBar.tabs.advisor')
                 : undefined
             }
           >
-            {tab.label}
+            {t(tab.label)}
             {badge && (
               <span
                 className={`project-tab-badge project-tab-badge--${badge.severity}`}
-                aria-label={`${badge.count} open issue${badge.count === 1 ? '' : 's'}`}
+                aria-label={t('appBar.openIssues', { count: badge.count })}
               >
                 {badge.count}
               </span>

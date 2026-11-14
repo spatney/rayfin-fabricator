@@ -362,11 +362,12 @@ async fn quiet_incomplete_packages(project_dir: &Path, on_data: Option<&OnData>)
       return Ok(incomplete);
     }
     if started.elapsed() >= QUIET_LIMIT {
-      return Err("Another package install is still running in this project. Try again when it finishes.".to_string());
+      return Err(t!("services.exec.installRunning"));
     }
     if !announced {
       announced = true;
       if let Some(on) = on_data {
+        // Stays English: the deploy screen's progress (deployProgress.ts) reads it.
         on(Stream::System, "Waiting for changes to this project's packages to finish...\n");
       }
     }
@@ -504,20 +505,33 @@ fn is_installed_location(location: &str) -> bool {
       .all(|part| !part.is_empty() && *part != "." && *part != ".." && !part.contains(['\\', ':']))
 }
 
-/// Package locations as names for a message, like `commander, @azure/msal-node
-/// and 3 more`.
-fn package_names(locations: &[String]) -> String {
+/// The first few package locations as names, and how many more there are.
+fn first_packages(locations: &[String]) -> (String, usize) {
   const SHOWN: usize = 4;
-  let mut names = locations
+  let names = locations
     .iter()
     .take(SHOWN)
     .map(|location| location.strip_prefix("node_modules/").unwrap_or(location))
     .collect::<Vec<_>>()
     .join(", ");
-  if locations.len() > SHOWN {
-    names.push_str(&format!(" and {} more", locations.len() - SHOWN));
+  (names, locations.len().saturating_sub(SHOWN))
+}
+
+/// Package locations as names for a message, like `commander, @azure/msal-node
+/// and 3 more`. In English, for the progress line the deploy screen reads.
+fn package_names(locations: &[String]) -> String {
+  match first_packages(locations) {
+    (names, 0) => names,
+    (names, more) => format!("{names} and {more} more"),
   }
-  names
+}
+
+/// [`package_names`] for a translated message.
+fn package_list(locations: &[String]) -> String {
+  match first_packages(locations) {
+    (names, 0) => names,
+    (names, more) => t!("services.exec.andMore", names = names, count = more),
+  }
 }
 
 /// Node's report of a module it couldn't load: what it looked for, then the
@@ -711,10 +725,7 @@ where
     return first;
   }
   if let Some(on) = on_data {
-    on(
-      Stream::System,
-      "\nnpm couldn't work out the packages' peer dependencies; retrying with --legacy-peer-deps...\n",
-    );
+    on(Stream::System, &format!("\n{}\n", t!("services.exec.legacyPeers")));
   }
   args.push(LEGACY_PEER_DEPS.to_string());
   run_npm(args).await
@@ -778,14 +789,16 @@ pub fn npm_install_failure(result: &RunResult, folder: Option<&str>) -> String {
 
 /// Why `npm <command>` failed, the way [`npm_install_failure`] says it.
 pub fn npm_failure(command: &str, result: &RunResult, folder: Option<&str>) -> String {
-  let code = result.exit_code.map(|code| code.to_string()).unwrap_or_else(|| "unknown".to_string());
-  let place = folder.map(|folder| format!(" in {folder}")).unwrap_or_default();
-  let mut message = format!("npm {command} failed{place} (exit code {code})");
-  if let Some(cause) = npm_error_summary(result) {
-    message.push_str(": ");
-    message.push_str(&cause);
-  }
-  if !message.ends_with(['.', '!', '?']) {
+  let code = result.exit_code.map(|code| code.to_string()).unwrap_or_else(|| t!("services.exec.unknownExitCode"));
+  let mut message = match (folder, npm_error_summary(result)) {
+    (None, None) => t!("services.exec.npmFailed", command = command, code = code),
+    (Some(folder), None) => t!("services.exec.npmFailedIn", command = command, folder = folder, code = code),
+    (None, Some(cause)) => t!("services.exec.npmFailedWhy", command = command, code = code, cause = cause),
+    (Some(folder), Some(cause)) => {
+      t!("services.exec.npmFailedInWhy", command = command, folder = folder, code = code, cause = cause)
+    }
+  };
+  if !message.ends_with(['.', '!', '?', '。']) {
     message.push('.');
   }
   let log = npm_error_lines(result)
@@ -794,7 +807,8 @@ pub fn npm_failure(command: &str, result: &RunResult, folder: Option<&str>) -> S
     .map(str::trim)
     .filter(|path| !path.is_empty());
   if let Some(log) = log {
-    message.push_str(&format!(" npm's full log: {log}"));
+    message.push(' ');
+    message.push_str(&t!("services.exec.npmLog", log = log));
   }
   message
 }
@@ -844,9 +858,10 @@ pub async fn ensure_project_dependencies(project_dir: &Path, on_data: Option<OnD
   }
 
   if !project_dir.join("package.json").is_file() {
-    return Err("This Rayfin project has no package.json, so its dependencies cannot be installed.".to_string());
+    return Err(t!("services.exec.noPackageJson"));
   }
 
+  // Stays English: the deploy screen's progress (deployProgress.ts) reads both lines.
   if incomplete.is_empty() {
     if let Some(on) = &on_data {
       on(Stream::System, "Project dependencies are missing; installing them with npm...\n");
@@ -880,29 +895,23 @@ pub async fn ensure_project_dependencies(project_dir: &Path, on_data: Option<OnD
   // rather than failing the whole deploy.
   if use_ci && !result.ok && !result.not_found {
     if let Some(on) = &on_data {
-      on(Stream::System, "npm ci was rejected; retrying with npm install...\n");
+      on(Stream::System, &format!("{}\n", t!("services.exec.ciRejected")));
     }
     result = run_npm_install(project_dir, "install", on_data.clone()).await;
   }
 
   if result.not_found {
-    return Err("npm was not found on PATH. Install Node.js (which includes npm), then retry.".to_string());
+    return Err(t!("services.exec.npmMissing"));
   }
   if !result.ok {
     return Err(npm_install_failure(&result, None));
   }
   if !project_rayfin_cli_installed(project_dir) {
-    return Err(
-      "npm install completed, but @microsoft/rayfin-cli is still missing. Check this project's package.json."
-        .to_string(),
-    );
+    return Err(t!("services.exec.cliStillMissing"));
   }
   let still_incomplete = find_incomplete_packages(project_dir).await;
   if !still_incomplete.is_empty() {
-    return Err(format!(
-      "npm install completed, but some packages are still incomplete ({}). Close Fabricator, delete this project's node_modules folder, then open the project again.",
-      package_names(&still_incomplete)
-    ));
+    return Err(t!("services.exec.stillIncomplete", packages = package_list(&still_incomplete)));
   }
   Ok(())
 }
@@ -1006,10 +1015,7 @@ pub async fn run_project_rayfin(project_dir: &Path, args: &[&str], mut opts: Run
       if let Some(on) = on_data {
         on(
           Stream::System,
-          &format!(
-            "\nSome of this project's packages didn't install completely ({}). Fabricator reinstalls them the next time you publish, sign in to Fabric or open the project.\n",
-            package_names(&incomplete)
-          ),
+          &format!("\n{}\n", t!("services.exec.incompleteLater", packages = package_list(&incomplete))),
         );
       }
     }

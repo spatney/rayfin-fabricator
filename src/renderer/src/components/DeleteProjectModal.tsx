@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type JSX } from 'react'
 import type { StudioProject } from '@shared/ipc'
+import { Trans, useTranslation } from '../i18n'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 
@@ -30,6 +31,7 @@ function CheckMark(): JSX.Element {
  * the background, so the app stays usable and other projects can go at once.
  */
 export default function DeleteProjectModal({ project, onConfirm, onClose }: Props): JSX.Element {
+  const { t } = useTranslation('projects')
   useSuppressPreview()
   const titleId = useId()
   const folderId = useId()
@@ -64,15 +66,25 @@ export default function DeleteProjectModal({ project, onConfirm, onClose }: Prop
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>Remove project</h2>
-          <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+          <h2 id={titleId}>{t('remove.title')}</h2>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={t('actions.close')}
+            onClick={onClose}
+          >
             <span className="codicon codicon-close" aria-hidden="true" />
           </button>
         </div>
 
         <div className="modal-body remove-body">
           <p className="remove-lead">
-            Choose what to remove for <strong>{project.name}</strong>.
+            <Trans
+              t={t}
+              i18nKey="remove.lead"
+              values={{ name: project.name }}
+              components={{ strong: <strong /> }}
+            />
           </p>
 
           {/* Removing a project always trashes its folder; keeping it is Remove from recent projects. */}
@@ -91,12 +103,12 @@ export default function DeleteProjectModal({ project, onConfirm, onClose }: Prop
             <span className="remove-option-text">
               <span className="remove-option-head">
                 <span className="remove-option-title" id={`${folderId}-title`}>
-                  Local project folder
+                  {t('remove.folder.title')}
                 </span>
-                <span className="remove-badge">Recoverable</span>
+                <span className="remove-badge">{t('remove.folder.badge')}</span>
               </span>
               <span className="remove-option-desc" id={`${folderId}-desc`}>
-                Move to <strong>system trash</strong>. Restore it from there.
+                <Trans t={t} i18nKey="remove.folder.desc" components={{ strong: <strong /> }} />
               </span>
               <span className="remove-path" title={project.path}>
                 {project.path}
@@ -122,14 +134,18 @@ export default function DeleteProjectModal({ project, onConfirm, onClose }: Prop
               <span className="remove-option-text">
                 <span className="remove-option-head">
                   <span className="remove-option-title" id={`${appId}-title`}>
-                    Published Fabric app
+                    {t('remove.app.title')}
                   </span>
-                  <span className="remove-badge remove-badge--danger">Permanent</span>
+                  <span className="remove-badge remove-badge--danger">{t('remove.app.badge')}</span>
                 </span>
                 <span className="remove-option-desc" id={`${appId}-desc`}>
-                  Delete {project.name} and all app data in{' '}
-                  {project.workspaceName ?? 'its Fabric workspace'}.
-                  <span className="remove-option-warn">This cannot be undone.</span>
+                  {project.workspaceName != null
+                    ? t('remove.app.desc', {
+                        name: project.name,
+                        workspace: project.workspaceName
+                      })
+                    : t('remove.app.descNoWorkspace', { name: project.name })}
+                  <span className="remove-option-warn">{t('remove.app.warn')}</span>
                 </span>
               </span>
             </label>
@@ -138,19 +154,19 @@ export default function DeleteProjectModal({ project, onConfirm, onClose }: Prop
           <p className="remove-note">
             <span className="codicon codicon-info" aria-hidden="true" />
             {!hasDeploy
-              ? 'No published Fabric app is linked to this project.'
+              ? t('remove.note.noApp')
               : removesApp
-                ? 'Your Fabric workspace will be kept.'
-                : 'The published app and its data stay in Fabric.'}
+                ? t('remove.note.keepsWorkspace')
+                : t('remove.note.keepsApp')}
           </p>
         </div>
 
         <div className="modal-footer">
           <button type="button" className="btn" onClick={onClose}>
-            Cancel
+            {t('actions.cancel')}
           </button>
           <button type="button" className="btn btn--danger" autoFocus onClick={confirm}>
-            {removesApp ? 'Trash folder & delete app' : 'Move folder to trash'}
+            {removesApp ? t('remove.confirmBoth') : t('remove.confirmFolder')}
           </button>
         </div>
       </div>

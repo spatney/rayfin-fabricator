@@ -12,6 +12,7 @@ import { useSuppressPreview } from '../../overlay'
 import { authErrorMessage } from '../../authErrors'
 import { useAzureSignIn, type AzureSignIn } from '../../azureAuth'
 import { openDocs } from '../../docsLinks'
+import { Trans, translator, useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import './migrate.css'
 
@@ -67,12 +68,13 @@ export function pickFromInspection(inspection: ReportInspection): ReportPick | n
 
 /** "Sales · Finance · 4 pages · data from “Sales model”": the picked report, for the New project screen. */
 export function describePick(pick: ReportPick): string {
+  const t = translator('migrate')
   const { source, pages } = pick
   return [
     source.reportName,
-    source.workspaceName ?? (source.personal ? 'My workspace' : undefined),
-    pages.length ? `${pages.length} page${pages.length === 1 ? '' : 's'}` : undefined,
-    source.modelName ? `data from “${source.modelName}”` : undefined
+    source.personal ? t('myWorkspace') : source.workspaceName,
+    pages.length ? t('pages', { count: pages.length }) : undefined,
+    source.modelName ? t('dataFrom', { name: source.modelName }) : undefined
   ]
     .filter(Boolean)
     .join(' · ')
@@ -104,6 +106,7 @@ export default function MigrateReportScreen({
   onSignedIn
 }: Props): JSX.Element {
   useSuppressPreview()
+  const { t } = useTranslation('migrate')
   const [workspaces, setWorkspaces] = useState<Load<MigrationWorkspacesResult>>({ status: 'loading' })
   const [selectedWs, setSelectedWs] = useState<string | null>(null)
   const [reports, setReports] = useState<Record<string, Load<MigrationReportItem[]>>>({})
@@ -135,11 +138,13 @@ export default function MigrateReportScreen({
     window.api.migration.workspaces().then(
       (result) => {
         if (!alive) return
-        if (!result.ok) return setWorkspaces(failure(result, 'Could not list your workspaces.'))
+        if (!result.ok) return setWorkspaces(failure(result, t('errors.workspaces')))
         setWorkspaces({ status: 'ready', value: result })
         setSelectedWs((current) => current ?? ordered(result.workspaces, recentWorkspaces)[0]?.id ?? null)
       },
-      (reason) => alive && setWorkspaces({ status: 'error', error: authErrorMessage(reason, 'Could not list your workspaces.') })
+      (reason) =>
+        alive &&
+        setWorkspaces({ status: 'error', error: authErrorMessage(reason, t('errors.workspaces')) })
     )
     return () => {
       alive = false
@@ -155,10 +160,15 @@ export default function MigrateReportScreen({
       (result) =>
         setReports((all) => ({
           ...all,
-          [ws]: result.ok ? { status: 'ready', value: result.reports } : failure(result, 'Could not list the reports.')
+          [ws]: result.ok
+            ? { status: 'ready', value: result.reports }
+            : failure(result, t('errors.reports'))
         })),
       (reason) =>
-        setReports((all) => ({ ...all, [ws]: { status: 'error', error: authErrorMessage(reason, 'Could not list the reports.') } }))
+        setReports((all) => ({
+          ...all,
+          [ws]: { status: 'error', error: authErrorMessage(reason, t('errors.reports')) }
+        }))
     )
   }, [selectedWs, reports])
 
@@ -178,9 +188,15 @@ export default function MigrateReportScreen({
       window.api.migration.search(trimmed).then(
         (result) => {
           if (stale) return
-          setResults(result.ok ? { status: 'ready', value: result.reports } : failure(result, 'Could not search for reports.'))
+          setResults(
+            result.ok
+              ? { status: 'ready', value: result.reports }
+              : failure(result, t('errors.search'))
+          )
         },
-        (reason) => !stale && setResults({ status: 'error', error: authErrorMessage(reason, 'Could not search for reports.') })
+        (reason) =>
+          !stale &&
+          setResults({ status: 'error', error: authErrorMessage(reason, t('errors.search')) })
       )
     }, 350)
     return () => {
@@ -197,9 +213,13 @@ export default function MigrateReportScreen({
     window.api.migration.inspect(request).then(
       (result) => {
         if (seq !== inspectSeq.current) return
-        setInspection(result.ok ? { status: 'ready', value: result } : failure(result, 'Could not read the report.'))
+        setInspection(
+          result.ok ? { status: 'ready', value: result } : failure(result, t('errors.inspect'))
+        )
       },
-      (reason) => seq === inspectSeq.current && setInspection({ status: 'error', error: authErrorMessage(reason, 'Could not read the report.') })
+      (reason) =>
+        seq === inspectSeq.current &&
+        setInspection({ status: 'error', error: authErrorMessage(reason, t('errors.inspect')) })
     )
   }
 
@@ -216,18 +236,18 @@ export default function MigrateReportScreen({
   const account = workspaces.status === 'ready' ? workspaces.value.account : undefined
   const shown: Load<MigrationReportItem[]> = searching ? results : selectedWs ? (reports[selectedWs] ?? { status: 'loading' }) : { status: 'idle' }
   const pick = useMemo(() => (inspection.status === 'ready' ? pickFromInspection(inspection.value) : null), [inspection])
+  const readLink = (): void => inspect({ target: trimmed }, `link:${trimmed}`)
 
   return (
     <div className="create-screen mig-screen">
       <div className="create-shell mig-shell">
         <header className="create-head">
           <div className="create-head-text">
-            <h1 className="create-title">Migrate a Power BI report</h1>
+            <h1 className="create-title">{t('screen.title')}</h1>
             <p className="create-sub">
-              Pick a report. Fabricator turns it into a new app that reads the report&rsquo;s data live, and Copilot rebuilds
-              its pages one at a time.{' '}
+              {t('screen.sub')}{' '}
               <button type="button" className="link-btn" onClick={() => openDocs('migrate')}>
-                Learn more
+                {t('actions.learnMore')}
               </button>
             </p>
           </div>
@@ -235,32 +255,32 @@ export default function MigrateReportScreen({
 
         <div className="create-body mig-body">
           <label className="field">
-            <span className="field-label">Find a report</span>
+            <span className="field-label">{t('screen.find')}</span>
             <input
               className="field-input"
               type="search"
               value={query}
               autoFocus
-              placeholder="Search by name, or paste a report link"
+              placeholder={t('screen.placeholder')}
               spellCheck={false}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && pasted) inspect({ target: trimmed }, `link:${trimmed}`)
+                if (e.key === 'Enter' && pasted) readLink()
               }}
             />
             <span className="field-hint">
               {pasted && chosen !== `link:${trimmed}` ? (
-                <>
-                  Press Enter to read this report, or{' '}
-                  <button type="button" className="link-btn" onClick={() => inspect({ target: trimmed }, `link:${trimmed}`)}>
-                    read it now
-                  </button>
-                  .
-                </>
+                <Trans
+                  t={t}
+                  i18nKey="screen.pressEnter"
+                  components={{
+                    read: <button type="button" className="link-btn" onClick={readLink} />
+                  }}
+                />
               ) : account?.user ? (
-                `Reports you can open as ${account.user}, through the Azure CLI.`
+                t('screen.accountHint', { user: account.user })
               ) : (
-                'Reports you can open, through the Azure CLI.'
+                t('screen.hint')
               )}
             </span>
           </label>
@@ -268,7 +288,7 @@ export default function MigrateReportScreen({
           {workspaces.status === 'error' ? (
             workspaces.needsAz ? (
               <AzurePrompt
-                message="Fabricator reads your Power BI reports with your Azure sign-in. Sign in to Azure to pick one."
+                message={t('azure.pick')}
                 azure={azure}
                 onRetry={() => setReload((n) => n + 1)}
               />
@@ -278,9 +298,9 @@ export default function MigrateReportScreen({
           ) : (
             <div className="mig-panes">
               {!searching && (
-                <nav className="mig-pane mig-ws" aria-label="Workspaces">
+                <nav className="mig-pane mig-ws" aria-label={t('screen.workspaces')}>
                   {workspaces.status === 'loading' ? (
-                    <p className="mig-state">Loading workspaces…</p>
+                    <p className="mig-state">{t('screen.loadingWorkspaces')}</p>
                   ) : (
                     <ul>
                       {list.map((w) => (
@@ -292,7 +312,9 @@ export default function MigrateReportScreen({
                             onClick={() => setSelectedWs(w.id)}
                           >
                             <Codicon name={w.personal ? 'account' : 'folder'} />
-                            <span className="mig-ws-name">{w.name}</span>
+                            <span className="mig-ws-name">
+                              {w.personal ? t('myWorkspace') : w.name}
+                            </span>
                           </button>
                         </li>
                       ))}
@@ -300,12 +322,15 @@ export default function MigrateReportScreen({
                   )}
                 </nav>
               )}
-              <section className="mig-pane mig-reports" aria-label={searching ? 'Search results' : 'Reports'}>
+              <section
+                className="mig-pane mig-reports"
+                aria-label={searching ? t('screen.searchResults') : t('screen.reports')}
+              >
                 <ReportList
                   load={shown}
                   chosen={chosen}
                   showWorkspace={searching}
-                  empty={searching ? 'No reports match.' : 'This workspace has no reports.'}
+                  empty={searching ? t('screen.noMatches') : t('screen.noReports')}
                   azure={azure}
                   onChoose={(r) => inspect({ workspaceId: r.workspaceId, reportId: r.id }, r.id)}
                 />
@@ -318,10 +343,10 @@ export default function MigrateReportScreen({
 
         <footer className="create-foot mig-foot-bar">
           <button type="button" className="btn" onClick={onCancel}>
-            Cancel
+            {t('actions.cancel')}
           </button>
           <button type="button" className="btn btn--primary" disabled={!pick} onClick={() => pick && onPicked(pick)}>
-            Continue
+            {t('actions.continue')}
           </button>
         </footer>
       </div>
@@ -330,11 +355,12 @@ export default function MigrateReportScreen({
 }
 
 function LoadError({ error, onRetry }: { error: string; onRetry: () => void }): JSX.Element {
+  const { t } = useTranslation('migrate')
   return (
     <div className="mig-error" role="alert">
       <p>{error}</p>
       <button type="button" className="btn btn--sm" onClick={onRetry}>
-        Try again
+        {t('actions.tryAgain')}
       </button>
     </div>
   )
@@ -350,22 +376,21 @@ function AzurePrompt({
   azure: AzureSignIn
   onRetry?: () => void
 }): JSX.Element {
+  const { t } = useTranslation('migrate')
   return (
     <div className="mig-error" role="alert">
-      <p>
-        {azure.signingIn ? 'Finish signing in to Azure in your browser.' : (azure.error ?? message)}
-      </p>
+      <p>{azure.signingIn ? t('azure.finish') : (azure.error ?? message)}</p>
       <button
         type="button"
         className="btn btn--sm btn--primary"
         disabled={azure.signingIn}
         onClick={() => void azure.signIn()}
       >
-        {azure.signingIn ? 'Signing in…' : 'Sign in to Azure'}
+        {azure.signingIn ? t('azure.signingIn') : t('azure.signIn')}
       </button>
       {onRetry && (
         <button type="button" className="btn btn--sm" disabled={azure.signingIn} onClick={onRetry}>
-          Try again
+          {t('actions.tryAgain')}
         </button>
       )}
     </div>
@@ -387,11 +412,12 @@ function ReportList({
   azure: AzureSignIn
   onChoose: (report: MigrationReportItem) => void
 }): JSX.Element | null {
+  const { t } = useTranslation('migrate')
   if (load.status === 'idle') return null
-  if (load.status === 'loading') return <p className="mig-state">Loading reports…</p>
+  if (load.status === 'loading') return <p className="mig-state">{t('screen.loadingReports')}</p>
   if (load.status === 'error') {
     return load.needsAz ? (
-      <AzurePrompt message="Sign in to Azure to see the reports." azure={azure} />
+      <AzurePrompt message={t('azure.reports')} azure={azure} />
     ) : (
       <p className="mig-state mig-state--bad">{load.error}</p>
     )
@@ -417,11 +443,11 @@ function ReportList({
   )
 }
 
-const CHECKS: ReadonlyArray<['definition' | 'model' | 'images', string]> = [
-  ['definition', 'Definition'],
-  ['model', 'Data model'],
-  ['images', 'Page images']
-]
+const CHECKS = [
+  ['definition', 'inspect.checks.definition'],
+  ['model', 'inspect.checks.model'],
+  ['images', 'inspect.checks.images']
+] as const satisfies ReadonlyArray<readonly ['definition' | 'model' | 'images', string]>
 
 function Inspection({
   load,
@@ -430,17 +456,18 @@ function Inspection({
   load: Load<ReportInspection>
   azure: AzureSignIn
 }): JSX.Element | null {
+  const { t } = useTranslation('migrate')
   if (load.status === 'idle') return null
   if (load.status === 'loading') {
     return (
       <section className="mig-inspect" aria-busy="true">
-        <p className="mig-state">Reading the report…</p>
+        <p className="mig-state">{t('inspect.reading')}</p>
       </section>
     )
   }
   if (load.status === 'error') {
     if (load.needsAz) {
-      return <AzurePrompt message="Sign in to Azure to read this report." azure={azure} />
+      return <AzurePrompt message={t('azure.read')} azure={azure} />
     }
     return (
       <section className="mig-inspect">
@@ -455,24 +482,25 @@ function Inspection({
   const names = pages.map((p) => p.displayName)
   // A check that already gives the reason isn't repeated below the checks.
   const blockedNote = blocked && !CHECKS.some(([key]) => checks?.[key].message === blocked) ? blocked : null
+  const listed =
+    names.length > 6
+      ? t('inspect.more', { names: names.slice(0, 6).join(', '), rest: names.length - 6 })
+      : names.join(', ')
+  const meta = [
+    report.personal ? t('myWorkspace') : (report.workspaceName ?? t('inspect.workspace')),
+    model?.name ? t('dataFrom', { name: model.name }) : undefined,
+    pages.length > 0 ? t('inspect.pages', { count: pages.length, names: listed }) : undefined
+  ]
+    .filter(Boolean)
+    .join(' · ')
   return (
-    <section className="mig-inspect" aria-label={`About ${report.name}`}>
+    <section className="mig-inspect" aria-label={t('inspect.about', { name: report.name })}>
       <h2 className="mig-inspect-title">{report.name}</h2>
-      <p className="mig-inspect-meta">
-        {report.workspaceName ?? (report.personal ? 'My workspace' : 'Workspace')}
-        {model?.name && <> · data from “{model.name}”</>}
-        {pages.length > 0 && (
-          <>
-            {' '}
-            · {pages.length} page{pages.length === 1 ? '' : 's'}: {names.slice(0, 6).join(', ')}
-            {names.length > 6 && `, and ${names.length - 6} more`}
-          </>
-        )}
-      </p>
+      <p className="mig-inspect-meta">{meta}</p>
       {checks && (
         <ul className="mig-checks">
           {CHECKS.map(([key, label]) => (
-            <CheckRow key={key} label={label} check={checks[key]} />
+            <CheckRow key={key} label={t(label)} check={checks[key]} />
           ))}
         </ul>
       )}

@@ -1,5 +1,6 @@
 import { useId, type JSX } from 'react'
 import type { TeamRunner, TeamRunnerInfo } from '@shared/ipc'
+import { translator, useTranslation } from '../../i18n'
 
 export type RunnerKind = 'hosted' | 'group' | 'labels'
 
@@ -39,38 +40,40 @@ export function runnerDraftReady(draft: RunnerDraft): boolean {
 
 /** "Runner group deployers", "Runners labeled self-hosted, linux" or "GitHub-hosted runners". */
 export function describeRunner(runner?: TeamRunner | null): string {
+  const t = translator('team')
   const labels = runner?.labels ?? []
   if (runner?.group) {
-    return labels.length ? `Runner group ${runner.group}, labeled ${labels.join(', ')}` : `Runner group ${runner.group}`
+    return labels.length
+      ? t('runner.groupLabeled', { group: runner.group, labels: labels.join(', ') })
+      : t('runner.group', { group: runner.group })
   }
-  return labels.length ? `Runners labeled ${labels.join(', ')}` : 'GitHub-hosted runners'
+  return labels.length ? t('runner.labeled', { labels: labels.join(', ') }) : t('runner.hosted')
 }
 
 /** Where the pipeline runs now, in words, and whether that needs fixing. */
 export function runnerSummary(info: TeamRunnerInfo): { title: string; detail: string; invalid: boolean } {
+  const t = translator('team')
   const { repository, organization } = info
   if (repository) {
     return repository.runner
-      ? { title: describeRunner(repository.runner), detail: 'Every pipeline run uses these runners.', invalid: false }
+      ? { title: describeRunner(repository.runner), detail: t('runner.everyRun'), invalid: false }
       : {
-          title: 'The runner setting isn’t valid',
-          detail: `FABRICATOR_RUNS_ON is ${repository.value}, which GitHub can’t use, so pipeline runs can’t start.`,
+          title: t('runner.invalid'),
+          detail: t('runner.invalidDetail', { value: repository.value }),
           invalid: true
         }
   }
   if (organization) {
     return organization.runner
-      ? { title: describeRunner(organization.runner), detail: 'Your organization chose these runners.', invalid: false }
+      ? { title: describeRunner(organization.runner), detail: t('runner.orgChose'), invalid: false }
       : {
-          title: 'Your organization’s runner setting isn’t valid',
-          detail: `It shares FABRICATOR_RUNS_ON as ${organization.value}, which GitHub can’t use.`,
+          title: t('runner.orgInvalid'),
+          detail: t('runner.orgInvalidDetail', { value: organization.value }),
           invalid: true
         }
   }
-  return { title: 'GitHub-hosted runners', detail: 'GitHub runs the pipeline on its ubuntu-latest runners.', invalid: false }
+  return { title: t('runner.hosted'), detail: t('runner.hostedDetail'), invalid: false }
 }
-
-const NEEDS = 'Runners need Linux with bash, curl and git.'
 
 /**
  * Where a team workspace's pipeline runs: GitHub-hosted runners, or the
@@ -92,43 +95,44 @@ export default function RunnerFields({
   hideLabel?: boolean
   disabled?: boolean
 }): JSX.Element {
+  const { t } = useTranslation('team')
   const fieldId = useId()
   const set = (patch: Partial<RunnerDraft>): void => onChange({ ...value, ...patch })
   const hint =
     value.kind === 'group'
-      ? `Ask a GitHub organization owner which runner group this repository can use. ${NEEDS}`
+      ? t('runner.groupHint')
       : value.kind === 'labels'
-        ? `A runner needs every label. Separate labels with commas. ${NEEDS}`
+        ? t('runner.labelsHint')
         : organization
-          ? 'The runners your organization chose for Fabricator.'
-          : 'If your organization turned off GitHub-hosted runners, choose its runner group or labels instead.'
+          ? t('runner.orgHint')
+          : t('runner.hostedHint')
   return (
     <div className="field">
       {!hideLabel && (
         <label className="field-label" htmlFor={fieldId}>
-          Where the pipeline runs
+          {t('runner.label')}
         </label>
       )}
       <select
         id={fieldId}
         className="field-input"
-        aria-label={hideLabel ? 'Where the pipeline runs' : undefined}
+        aria-label={hideLabel ? t('runner.label') : undefined}
         value={value.kind}
         disabled={disabled}
         onChange={(event) => set({ kind: event.target.value as RunnerKind })}
       >
         <option value="hosted">
-          {organization ? `Your organization’s choice: ${describeRunner(organization)}` : 'GitHub-hosted runners'}
+          {organization ? t('runner.orgChoice', { runner: describeRunner(organization) }) : t('runner.hosted')}
         </option>
-        <option value="group">A runner group</option>
-        <option value="labels">Runners with labels</option>
+        <option value="group">{t('runner.optionGroup')}</option>
+        <option value="labels">{t('runner.optionLabels')}</option>
       </select>
       {value.kind === 'group' && (
         <div className="team-runner-inputs">
           <input
             className="field-input"
-            aria-label="Runner group name"
-            placeholder="Runner group name"
+            aria-label={t('runner.groupName')}
+            placeholder={t('runner.groupName')}
             value={value.group}
             spellCheck={false}
             disabled={disabled}
@@ -136,8 +140,8 @@ export default function RunnerFields({
           />
           <input
             className="field-input"
-            aria-label="Runner labels (optional)"
-            placeholder="Labels (optional), such as linux"
+            aria-label={t('runner.groupLabels')}
+            placeholder={t('runner.groupLabelsPlaceholder')}
             value={value.labels}
             spellCheck={false}
             disabled={disabled}
@@ -148,7 +152,7 @@ export default function RunnerFields({
       {value.kind === 'labels' && (
         <input
           className="field-input"
-          aria-label="Runner labels"
+          aria-label={t('runner.labels')}
           placeholder="self-hosted, linux"
           value={value.labels}
           spellCheck={false}

@@ -47,6 +47,7 @@ fn default_settings() -> AppSettings {
   AppSettings {
     theme: "system".to_string(),
     ui_scale: Some(1.0),
+    language: None,
     experiments: Some(default_flags()),
     full_diagnostics: Some(false),
     deploy_mode: None,
@@ -153,9 +154,12 @@ pub fn get_settings() -> AppSettings {
 }
 
 /// Patch fields of the settings (deep-merging experiment flags) and persist.
+/// A `language` Fabricator doesn't come in, such as "system", leaves it to the
+/// computer.
 pub fn set_settings(
   theme: Option<String>,
   ui_scale: Option<f64>,
+  language: Option<String>,
   experiments: Option<ExperimentFlags>,
   full_diagnostics: Option<bool>,
   deploy_mode: Option<String>,
@@ -166,6 +170,9 @@ pub fn set_settings(
     }
     if let Some(s) = ui_scale {
       c.settings.ui_scale = Some(s.clamp(0.8, 2.0));
+    }
+    if let Some(language) = language {
+      c.settings.language = crate::i18n::LANGUAGES.contains(&language.as_str()).then_some(language);
     }
     if let Some(v) = full_diagnostics {
       c.settings.full_diagnostics = Some(v);

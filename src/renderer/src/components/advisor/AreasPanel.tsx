@@ -8,8 +8,10 @@ import {
   type CheckOutcome,
   type CheckView
 } from '../../advisor/lifecycle'
+import { categoryTitle, ruleText } from '../../advisor/ruleText'
+import { translator, useTranslation } from '../../i18n'
 import { ChevronRightIcon, Codicon } from '../icons'
-import { CategoryIcon, CodeText, plural } from './format'
+import { CategoryIcon, CodeText } from './format'
 
 const CATALOG_ORDER = new Map(RULES.map((r, i) => [r.id, i]))
 
@@ -52,17 +54,25 @@ function countArea(checks: CheckView[]): AreaCounts {
 
 /** The area's one-line status and its tone. */
 export function areaStatus(n: AreaCounts, loading: boolean): { text: string; tone: AreaTone } {
-  if (loading) return { text: 'Checking…', tone: 'loading' }
-  if (n.applicable === 0) return { text: 'Doesn’t apply to this app', tone: 'na' }
+  const t = translator('advisor')
+  if (loading) return { text: t('status.checking'), tone: 'loading' }
+  if (n.applicable === 0) return { text: t('areas.notApplicable'), tone: 'na' }
   const issues = n.high + n.medium + n.low
   const parts: string[] = []
-  if (issues) parts.push(plural(issues, 'issue'))
-  if (n.note) parts.push(plural(n.note, 'suggestion'))
-  if (n.passed) parts.push(`${n.passed} passed`)
-  if (n.dismissed) parts.push(`${n.dismissed} dismissed`)
-  if (n.skipped) parts.push(`${n.skipped} not checked`)
-  if (n.waiting) parts.push(n.running ? `${n.waiting} being checked` : `${n.waiting} need a deep review`)
-  const text = n.passed === n.applicable ? `All ${plural(n.passed, 'check')} passed` : parts.join(' · ')
+  if (issues) parts.push(t('counts.issues', { count: issues }))
+  if (n.note) parts.push(t('counts.suggestions', { count: n.note }))
+  if (n.passed) parts.push(t('counts.passed', { count: n.passed }))
+  if (n.dismissed) parts.push(t('counts.dismissed', { count: n.dismissed }))
+  if (n.skipped) parts.push(t('areas.notChecked', { count: n.skipped }))
+  if (n.waiting) {
+    parts.push(
+      n.running
+        ? t('areas.beingChecked', { count: n.waiting })
+        : t('counts.needDeep', { count: n.waiting })
+    )
+  }
+  const text =
+    n.passed === n.applicable ? t('areas.allPassed', { count: n.passed }) : parts.join(' · ')
   const tone: AreaTone = n.high
     ? 'high'
     : n.medium
@@ -133,17 +143,18 @@ function CheckRow({
   onShowIssue: (findingId: string) => void
   onOpenUrl: (url: string) => void
 }): JSX.Element | null {
+  const { t } = useTranslation('advisor')
   const rule = ruleById(check.ruleId)
   if (!rule) return null
   const note =
     check.outcome === 'waiting'
       ? check.running
-        ? 'Copilot is checking this now.'
-        : 'Waiting for a deep review.'
+        ? t('areas.copilotChecking')
+        : t('areas.waitingDeep')
       : check.outcome === 'dismissed'
-        ? 'Dismissed for this app.'
+        ? t('areas.dismissedNote')
         : check.outcome === 'skipped'
-          ? check.note || 'Couldn’t be checked this time.'
+          ? check.note || t('areas.couldntCheck')
           : check.outcome === 'na'
             ? undefined
             : check.note
@@ -153,17 +164,17 @@ function CheckRow({
       <Codicon name={GLYPH[check.outcome]} className="adv-check-glyph" />
       <span className="adv-check-text">
         <span className="adv-check-title">
-          <CodeText text={rule.summary} />
+          <CodeText text={ruleText(rule, 'summary')} />
         </span>
         {note && <span className="adv-check-note">{note}</span>}
         {check.findingId && isIssueOutcome(check.outcome) && (
           <button type="button" className="adv-link adv-check-issue" onClick={() => onShowIssue(check.findingId!)}>
-            View issue <Codicon name="arrow-right" />
+            {t('areas.viewIssue')} <Codicon name="arrow-right" />
           </button>
         )}
         {check.findingId && check.outcome === 'note' && (
           <button type="button" className="adv-link adv-check-issue" onClick={() => onShowIssue(check.findingId!)}>
-            View suggestion <Codicon name="arrow-right" />
+            {t('areas.viewSuggestion')} <Codicon name="arrow-right" />
           </button>
         )}
       </span>
@@ -172,13 +183,13 @@ function CheckRow({
           type="button"
           className="adv-check-doc"
           onClick={() => onOpenUrl(rule.docs[0].url)}
-          title={`Learn more: ${rule.docs[0].title}`}
-          aria-label={`Learn more about “${rule.title}”`}
+          title={t('areas.docTitle', { title: rule.docs[0].title })}
+          aria-label={t('areas.docLabel', { title: ruleText(rule, 'title') })}
         >
           <Codicon name="link-external" />
         </button>
         {ai && (
-          <span className="adv-source" title="Checked by Copilot’s deep review">
+          <span className="adv-source" title={t('areas.checkedByDeep')}>
             <Codicon name="sparkle" />
           </span>
         )}
@@ -196,6 +207,7 @@ function AreaChecks({
   onShowIssue: (findingId: string) => void
   onOpenUrl: (url: string) => void
 }): JSX.Element {
+  const { t } = useTranslation('advisor')
   const [showNa, setShowNa] = useState(false)
   const sorted = useMemo(
     () =>
@@ -227,7 +239,7 @@ function AreaChecks({
             onClick={() => setShowNa((s) => !s)}
           >
             <ChevronRightIcon className="adv-checks-na-caret" />
-            {plural(na.length, 'check')} {na.length === 1 ? 'doesn’t' : 'don’t'} apply to this app
+            {t('areas.notApplicableCount', { count: na.length })}
           </button>
           {showNa && (
             <ul className="adv-checks-list adv-checks-list--na">
@@ -264,6 +276,7 @@ export function AreasPanel({
   onShowIssue: (findingId: string) => void
   onOpenUrl: (url: string) => void
 }): JSX.Element {
+  const { t } = useTranslation('advisor')
   const byArea = useMemo(() => {
     const map = new Map<string, CheckView[]>()
     for (const c of checks) {
@@ -277,12 +290,12 @@ export function AreasPanel({
   const applicable = checks.filter((c) => c.outcome !== 'na').length
 
   return (
-    <section className="adv-card adv-areas" aria-label="Checks by area">
+    <section className="adv-card adv-areas" aria-label={t('areas.title')}>
       <header className="adv-card-head">
-        <h3 className="adv-card-title">Checks by area</h3>
+        <h3 className="adv-card-title">{t('areas.title')}</h3>
         {!loading && (
           <span className="adv-card-sub">
-            {settled} of {applicable} checked
+            {t('areas.checked', { done: settled, total: applicable })}
           </span>
         )}
       </header>
@@ -305,7 +318,7 @@ export function AreasPanel({
                   <CategoryIcon id={c.id} />
                 </span>
                 <span className="adv-area-text">
-                  <span className="adv-area-title">{c.title}</span>
+                  <span className="adv-area-title">{categoryTitle(c.id, c.title)}</span>
                   <span className="adv-area-status">{status.text}</span>
                 </span>
                 <span className="adv-area-mark">

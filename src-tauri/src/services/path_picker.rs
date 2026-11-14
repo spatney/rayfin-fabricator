@@ -21,7 +21,7 @@ mod imp {
   use std::sync::{Arc, Mutex};
 
   use tauri::{AppHandle, Manager};
-  use windows::core::{implement, w, Interface, Ref, Result, BOOL, HRESULT, HSTRING};
+  use windows::core::{implement, Interface, Ref, Result, BOOL, HRESULT, HSTRING};
   use windows::Win32::Foundation::{E_NOTIMPL, ERROR_CANCELLED, HWND, S_OK};
   use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
@@ -71,8 +71,10 @@ mod imp {
         dialog.GetOptions()? | FOS_ALLOWMULTISELECT | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST,
       )?;
       dialog.SetTitle(&HSTRING::from(title))?;
-      dialog.SetOkButtonLabel(w!("Add"))?;
-      dialog.cast::<IFileDialogCustomize>()?.AddPushButton(ADD_FOLDER, w!("Add folder"))?;
+      dialog.SetOkButtonLabel(&HSTRING::from(t!("services.pathPicker.add").as_str()))?;
+      dialog
+        .cast::<IFileDialogCustomize>()?
+        .AddPushButton(ADD_FOLDER, &HSTRING::from(t!("services.pathPicker.addFolder").as_str()))?;
 
       let folders: Folders = Arc::default();
       let events: IFileDialogEvents = Events { folders: folders.clone() }.into();
@@ -202,7 +204,7 @@ mod imp {
     panel.setCanChooseDirectories(true);
     panel.setAllowsMultipleSelection(true);
     panel.setMessage(Some(&NSString::from_str(title)));
-    panel.setPrompt(Some(&NSString::from_str("Add")));
+    panel.setPrompt(Some(&NSString::from_str(&t!("services.pathPicker.add"))));
     if panel.runModal() != NSModalResponseOK {
       return Vec::new();
     }

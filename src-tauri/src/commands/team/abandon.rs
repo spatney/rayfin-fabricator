@@ -21,32 +21,27 @@ use crate::services::team::{self, entra, fabric, gh, naming, templates};
 use crate::types::{TeamAbandonItem, TeamAbandonPlan, TeamActionResult, TeamProblem, TeamSetupState, TeamWorkspace};
 
 /// Abandon steps in order: (id, label). The renderer shows the same checklist.
-pub const ABANDON_STEPS: &[(&str, &str)] = &[
-  ("check", "Look up what setup created"),
-  ("identity", "Delete the deploy identities"),
-  ("trust", "Remove the federated credentials from your app registration"),
-  ("fabric", "Delete the Fabric workspaces"),
-  ("cleanup", "Remove Fabricator's files and settings from the repository"),
-  ("github", "Delete the GitHub repository"),
-  ("local", "Remove the workspace from this computer"),
+pub const ABANDON_STEPS: &[(&str, fn() -> String)] = &[
+  ("check", || t!("team.abandon.step.check")),
+  ("identity", || t!("team.abandon.step.identity")),
+  ("trust", || t!("team.abandon.step.trust")),
+  ("fabric", || t!("team.abandon.step.fabric")),
+  ("cleanup", || t!("team.abandon.step.cleanup")),
+  ("github", || t!("team.abandon.step.github")),
+  ("local", || t!("team.abandon.step.local")),
 ];
 
-fn label(step: &str) -> &'static str {
-  ABANDON_STEPS.iter().find(|(id, _)| *id == step).map(|(_, l)| *l).unwrap_or("Abandon setup")
+fn label(step: &str) -> String {
+  ABANDON_STEPS.iter().find(|(id, _)| *id == step).map(|(_, l)| l()).unwrap_or_else(|| t!("team.abandon.step.abandon"))
 }
-
-const WRONG_TENANT: &str =
-  "The Azure CLI is signed in to a different organization than the one this workspace was set up in.";
-const SIGN_IN_AS_OWNER: &str =
-  "Sign in to GitHub with the account that set up the workspace (in the GitHub CLI), then try again.";
 
 /// The workspace and its setup record, when its setup can be abandoned.
 fn unfinished(workspace_id: &str) -> Result<(TeamWorkspace, TeamSetupState), String> {
   team::require_enabled()?;
-  let ws = store::find_team_workspace(workspace_id).ok_or("That team workspace is no longer on this computer.")?;
-  let setup = ws.setup.clone().ok_or("This workspace was joined, not set up, on this computer. Leave it instead.")?;
+  let ws = store::find_team_workspace(workspace_id).ok_or_else(|| t!("team.workspaceMissing"))?;
+  let setup = ws.setup.clone().ok_or_else(|| t!("team.abandon.joined"))?;
   if setup.done {
-    return Err("This workspace's setup finished. Delete it from its settings instead.".into());
+    return Err(t!("team.abandon.finished"));
   }
   Ok((ws, setup))
 }
@@ -107,9 +102,9 @@ async fn inventory(ws: &TeamWorkspace, setup: &TeamSetupState) -> Result<Found, 
   let (repo, provided) = if provided_repo { (None, repo) } else { (repo, None) };
   if let Some(info) = &provided {
     kept.push(if info.manages() {
-      format!("{} stays because you provided it. Fabricator removes what it added: its settings file, the pipeline and the pipeline's variables. It also puts back the repository's description.", info.full_name)
+      t!("team.abandon.providedRepo", repo = info.full_name)
     } else {
-      format!("{} stays because you provided it. Fabricator can't remove what it added, because you no longer have the Maintain or Admin role on it.", info.full_name)
+      t!("team.abandon.providedRepoNoRole", repo = info.full_name)
     });
   }
   Ok(Found {
@@ -145,10 +140,10 @@ async fn find_azure(
     return Ok(Default::default());
   }
   // Looked up by ID in another organization, everything would seem deleted.
-  let (tenant, _) = entra::account().await.map_err(|e| problem("check", e.describe("Check your Azure sign-in")))?;
+  let (tenant, _) = entra::account().await.map_err(|e| problem("check", e.describe(&t!("team.actions.checkAzureSignIn"))))?;
   if setup.tenant_id.as_deref().is_some_and(|t| !t.eq_ignore_ascii_case(&tenant)) {
-    let mut p = problem("check", WRONG_TENANT);
-    p.guidance = Some("Sign in to that organization from setup, then try again.".into());
+    let mut p = problem("check", t!("team.abandon.wrongTenant"));
+    p.guidance = Some(t!("team.abandon.wrongTenantHint"));
     return Err(p);
   }
   let (identities, trust, fabric) = tokio::join!(
@@ -170,11 +165,12 @@ async fn find_azure(
 /// The federated credentials setup added for `repo` to the app registration the
 /// user provided, with a note that the registration stays.
 async fn find_trust(app_id: &str, repo: &str) -> Result<(Option<Trust>, Option<String>), TeamProblem> {
-  let found = entra::app(app_id).await.map_err(|e| problem("check", e.describe("Look up the app registration you provided")))?;
+  let found =
+    entra::app(app_id).await.map_err(|e| problem("check", e.describe(&t!("team.actions.lookUpProvidedApp"))))?;
   let Some(app) = found else {
     return Ok((None, None));
   };
-  let stays = format!("The app registration you provided, \"{}\", stays.", app.display_name);
+  let stays = t!("team.abandon.appStays", name = app.display_name);
   if repo.is_empty() {
     return Ok((None, Some(stays)));
   }
@@ -184,18 +180,20 @@ async fn find_trust(app_id: &str, repo: &str) -> Result<(Option<Trust>, Option<S
       if names.is_empty() {
         return Ok((None, Some(stays)));
       }
-      let note = format!("{stays} Fabricator only removes the federated credentials that let {repo} sign in as it.");
+      let note = t!("team.abandon.appStaysTrust", stays = stays, repo = repo);
       Ok((Some((app, names)), Some(note)))
     }
     // Reading them can take an owner's rights; that mustn't hold the rest up.
     Err(e) if e.kind == entra::AzErrorKind::Blocked => Ok((
       None,
-      Some(format!(
-        "{stays} Fabricator can't read its federated credentials, so ask an owner of it to remove the ones that let {repo} sign in: {}.",
-        naming::CREDENTIAL_NAMES.join(", ")
+      Some(t!(
+        "team.abandon.appStaysUnreadable",
+        stays = stays,
+        repo = repo,
+        names = naming::CREDENTIAL_NAMES.join(", ")
       )),
     )),
-    Err(e) => Err(problem("check", e.describe("Look up the app registration's federated credentials"))),
+    Err(e) => Err(problem("check", e.describe(&t!("team.actions.lookUpFederatedCredentials")))),
   }
 }
 
@@ -214,12 +212,9 @@ async fn find_identities(ids: &[String]) -> Result<(Vec<entra::AppRegistration>,
   for id in ids {
     match entra::app(id).await {
       Ok(Some(app)) if naming::is_managed_identity_name(&app.display_name) => found.push(app),
-      Ok(Some(app)) => kept.push(format!(
-        "\"{}\" stays: Fabricator only deletes deploy identities that still have the name it gave them.",
-        app.display_name
-      )),
+      Ok(Some(app)) => kept.push(t!("team.abandon.identityRenamed", name = app.display_name)),
       Ok(None) => {}
-      Err(e) => return Err(problem("check", e.describe("Look up a deploy identity"))),
+      Err(e) => return Err(problem("check", e.describe(&t!("team.actions.lookUpIdentity")))),
     }
   }
   Ok((found, kept))
@@ -234,7 +229,7 @@ async fn find_fabric(ids: &[String]) -> Result<Vec<(String, String)>, TeamProble
         found.push((id.clone(), name.to_string()));
       }
       Err(e) if e.status == Some(404) => {}
-      Err(e) => return Err(problem("check", e.describe("Look up a Fabric workspace"))),
+      Err(e) => return Err(problem("check", e.describe(&t!("team.actions.lookUpFabricWorkspace")))),
     }
   }
   Ok(found)
@@ -256,26 +251,26 @@ async fn find_repo(ws: &TeamWorkspace, provided: bool) -> Result<(Option<gh::Rep
       Ok((Some(info), needs))
     }
     Ok(info) => {
-      let mut p = problem("github", format!("Only an admin of {} can delete it.", info.full_name));
-      p.guidance = Some(SIGN_IN_AS_OWNER.into());
+      let mut p = problem("github", t!("team.abandon.onlyAdmin", repo = info.full_name));
+      p.guidance = Some(t!("team.abandon.signInAsOwner"));
       Err(p)
     }
     // GitHub also answers 404 for private repositories an account can't see, so
     // it only counts as deleted when this account would see it. The account is
     // read fresh: `gh` may have switched accounts since it was cached.
     Err(e) if e.is_not_found() => {
-      let me = gh::viewer().await.map_err(|e| problem("github", e.describe("Check your GitHub sign-in")))?;
+      let me = gh::viewer().await.map_err(|e| problem("github", e.describe(&t!("team.actions.checkSignIn"))))?;
       let owner = ws.repo.split('/').next().unwrap_or_default();
       let would_see = me.login.eq_ignore_ascii_case(owner)
-        || gh::is_org_member(owner).await.map_err(|e| problem("github", e.describe("Check your GitHub organizations")))?;
+        || gh::is_org_member(owner).await.map_err(|e| problem("github", e.describe(&t!("team.actions.checkOrgs"))))?;
       if would_see {
         return Ok((None, false));
       }
-      let mut p = problem("github", format!("GitHub doesn't show {} to {}.", ws.repo, me.login));
-      p.guidance = Some(SIGN_IN_AS_OWNER.into());
+      let mut p = problem("github", t!("team.setup.repoHidden", repo = ws.repo, login = me.login));
+      p.guidance = Some(t!("team.abandon.signInAsOwner"));
       Err(p)
     }
-    Err(e) => Err(problem("github", e.describe("Look up the GitHub repository"))),
+    Err(e) => Err(problem("github", e.describe(&t!("team.actions.lookUpRepo")))),
   }
 }
 
@@ -345,7 +340,7 @@ struct Steps<'a> {
 
 impl Steps<'_> {
   fn set(&self, step: &str, state: &str, detail: Option<String>) {
-    progress(self.app, self.scope, step, state, label(step), detail);
+    progress(self.app, self.scope, step, state, &label(step), detail);
   }
 
   /// Mark `step` failed and return `p`, with the workspace as it now stands.
@@ -374,9 +369,9 @@ async fn abandon(steps: &Steps<'_>, ws: &TeamWorkspace, setup: &TeamSetupState) 
   for app in &found.identities {
     if let Err(e) = entra::delete_app(&app.app_id).await {
       failed.push(app.app_id.clone());
-      let mut p = problem("identity", e.describe(&format!("Delete the deploy identity \"{}\"", app.display_name)));
+      let mut p = problem("identity", e.describe(&t!("team.actions.deleteNamedIdentity", name = app.display_name)));
       if e.kind == entra::AzErrorKind::Blocked {
-        p.guidance = Some("Ask an administrator to delete it in Microsoft Entra ID, then try again.".into());
+        p.guidance = Some(t!("team.abandon.identityBlockedHint"));
       }
       problems.push(p);
     }
@@ -419,9 +414,9 @@ async fn abandon(steps: &Steps<'_>, ws: &TeamWorkspace, setup: &TeamSetupState) 
   for (id, name) in &found.fabric {
     if let Err(e) = fabric::delete_workspace(id).await {
       failed.push(id.clone());
-      let mut p = problem("fabric", e.describe(&format!("Delete the Fabric workspace \"{name}\"")));
+      let mut p = problem("fabric", e.describe(&t!("team.actions.deleteNamedFabricWorkspace", name = name)));
       if matches!(e.status, Some(401) | Some(403)) && !e.needs_login {
-        p.guidance = Some("Make sure you're an Admin of the Fabric workspace, or delete it in Fabric yourself, then try again.".into());
+        p.guidance = Some(t!("team.abandon.fabricRoleHint"));
       }
       problems.push(p);
     }
@@ -442,8 +437,8 @@ async fn abandon(steps: &Steps<'_>, ws: &TeamWorkspace, setup: &TeamSetupState) 
   if let Some(info) = &found.provided {
     steps.set("cleanup", "running", None);
     if let Err(e) = unset_up(info, setup).await {
-      let mut p = problem("cleanup", e.describe(&format!("Remove what Fabricator added to {}", info.full_name)));
-      p.guidance = Some("Make sure you still have the Maintain or Admin role on the repository, then try again. Or remove the workspace from this computer and tidy the repository up on GitHub.".into());
+      let mut p = problem("cleanup", e.describe(&t!("team.actions.removeAdded", repo = info.full_name)));
+      p.guidance = Some(t!("team.abandon.cleanupHint"));
       return steps.stop("cleanup", p, &ws.id);
     }
     steps.set("cleanup", "done", None);
@@ -472,7 +467,7 @@ fn finish_step(steps: &Steps<'_>, step: &str, problems: &[TeamProblem]) {
 
 /// One problem standing for several.
 fn merge(problems: Vec<TeamProblem>) -> TeamProblem {
-  let mut first = problems.first().cloned().unwrap_or_else(|| problem("check", "Abandoning the setup stopped."));
+  let mut first = problems.first().cloned().unwrap_or_else(|| problem("check", t!("team.abandon.stopped")));
   if problems.len() > 1 {
     first.message = problems.iter().map(|p| p.message.as_str()).collect::<Vec<_>>().join(" ");
     first.guidance = problems.iter().find_map(|p| p.guidance.clone());
@@ -481,8 +476,8 @@ fn merge(problems: Vec<TeamProblem>) -> TeamProblem {
 }
 
 fn permission_problem(repo: &str) -> TeamProblem {
-  let mut p = problem("github", format!("Fabricator needs your permission to delete {repo} on GitHub."));
-  p.guidance = Some("Select Grant GitHub access, approve deleting repositories in your browser, then try again.".into());
+  let mut p = problem("github", t!("team.abandon.needsPermission", repo = repo));
+  p.guidance = Some(t!("team.abandon.needsPermissionHint"));
   p
 }
 
@@ -493,9 +488,10 @@ const PIPELINE_VARIABLES: &[&str] =
 /// The federated credentials on the user's app registration couldn't all be
 /// removed: `names` are left.
 fn trust_problem(app: &entra::AppRegistration, repo: &str, names: &[String], e: &entra::AzError) -> TeamProblem {
-  let mut p = problem("trust", e.describe(&format!("Remove the federated credentials for {repo} from \"{}\"", app.display_name)));
+  let mut p =
+    problem("trust", e.describe(&t!("team.actions.removeCredentials", repo = repo, name = app.display_name)));
   if e.kind == entra::AzErrorKind::Blocked {
-    p.guidance = Some("Only an owner of the app registration or an administrator can remove them. Send them the instructions below, then try again.".into());
+    p.guidance = Some(t!("team.abandon.trustBlockedHint"));
     p.admin_note = Some(trust_admin_note(app, repo, names));
   }
   p
@@ -552,12 +548,10 @@ async fn unset_up(info: &gh::RepoInfo, setup: &TeamSetupState) -> Result<(), gh:
 }
 
 fn repo_problem(info: &gh::RepoInfo, e: &gh::GhError) -> TeamProblem {
-  let mut p = problem("github", e.describe(&format!("Delete {}", info.full_name)));
+  let mut p = problem("github", e.describe(&t!("team.actions.deleteRepo", repo = info.full_name)));
   if e.status == Some(403) && !e.message.contains("SAML") {
-    p.message = format!("GitHub didn't let you delete {}: {}", info.full_name, e.message);
-    p.guidance = Some(
-      "Organizations can limit deleting repositories to their owners. Ask an owner to delete it on GitHub, then try again, or remove the workspace from this computer and keep the repository.".into(),
-    );
+    p.message = t!("team.abandon.deleteRefused", repo = info.full_name, error = e.message);
+    p.guidance = Some(t!("team.abandon.deleteRefusedHint"));
   }
   p
 }

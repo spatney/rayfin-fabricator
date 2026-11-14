@@ -1670,9 +1670,25 @@ export interface ProjectsState {
 
 export type ThemePreference = 'dark' | 'light' | 'system'
 
+/**
+ * A language Fabricator's interface comes in, by its BCP 47 code. English is
+ * the source; the others are translations of it. Must match `i18n::LANGUAGES`
+ * in Rust and the folders in `src/renderer/src/i18n/locales/`.
+ */
+export type Language = 'en' | 'es' | 'de' | 'ja'
+
+/** A {@link Language}, or 'system' to follow the computer's language. */
+export type LanguagePreference = Language | 'system'
+
 export interface AppSettings {
   /** UI theme; 'system' follows the OS dark/light setting. */
   theme: ThemePreference
+  /**
+   * The interface's language (Settings → Appearance). Unset or 'system'
+   * follows the computer's language when Fabricator comes in it, and English
+   * otherwise. Fabricator's own messages from the core follow it too.
+   */
+  language?: LanguagePreference
   /** UI zoom factor (1 = 100%). Scales the whole interface for large monitors. */
   uiScale?: number
   /** Experimental, opt-in features (off by default). */
@@ -4691,6 +4707,12 @@ export interface RayfinStudioApi {
   settings: {
     get: () => Promise<AppSettings>
     set: (patch: Partial<AppSettings>) => Promise<AppSettings>
+    /**
+     * The language the computer's language settings ask for, of the ones
+     * Fabricator comes in: what the 'system' language preference shows.
+     * English when it comes in none of them.
+     */
+    systemLanguage: () => Promise<Language>
   }
 
   /**

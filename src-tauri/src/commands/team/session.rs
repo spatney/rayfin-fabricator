@@ -44,19 +44,14 @@ pub(crate) async fn save_and_share(project_id: &str, message: &str) -> Result<St
   let me = viewer().await?;
   let (name, email) = git_identity(&me);
   repo::set_identity(&tp.workspace, &name, &email).await?;
-  let branch = repo::current_branch(&wt)
-    .await
-    .ok_or("This app's working branch is missing. Reopen the app from Home.")?;
+  let branch = repo::current_branch(&wt).await.ok_or_else(|| t!("team.branchMissing"))?;
 
   // A merge with teammates' changes is concluded only once nothing is left unresolved.
   if repo::in_merge(&wt).await {
     let unmerged = repo::conflicted_files(&wt).await;
     let marked = repo::files_with_markers(&wt, &unmerged);
     if !marked.is_empty() {
-      return Err(format!(
-        "Some conflicts with your teammates' changes are still unresolved: {}. Ask Copilot to finish resolving them.",
-        marked.join(", ")
-      ));
+      return Err(t!("team.session.unresolved", files = marked.join(", ")));
     }
   }
   let message = summary(message, &format!("Update {}", tp.project.name));
@@ -83,7 +78,7 @@ pub(crate) async fn save_and_share(project_id: &str, message: &str) -> Result<St
         let title = format!("{}: {message}", tp.project.name);
         gh::create_pr(&full, &branch, &title, &pr_body(&tp.project.name))
           .await
-          .map_err(|e| e.describe("Open the pull request"))?
+          .map_err(|e| e.describe(&t!("team.actions.openPr")))?
       }
     };
     pr_number = Some(pr.number);
@@ -94,7 +89,7 @@ pub(crate) async fn save_and_share(project_id: &str, message: &str) -> Result<St
     b.pr_number = pr_number;
     b.pr_url = pr_url.clone();
   });
-  team::apply_view(project_id).ok_or_else(|| "Project not found.".to_string())
+  team::apply_view(project_id).ok_or_else(|| t!("team.services.projectNotFound"))
 }
 
 /// After a chat turn: save the app's changes to its working branch on GitHub
@@ -117,7 +112,7 @@ pub async fn team_sync(app: AppHandle, project_id: String, message: String) -> T
       }
     }
   }));
-  task.await.unwrap_or_else(|e| fail(format!("Saving to GitHub failed: {e}")))
+  task.await.unwrap_or_else(|e| fail(t!("team.session.saveFailed", error = e)))
 }
 
 /// Latest deployment records, keeping the previous value when GitHub can't be reached.
@@ -316,7 +311,7 @@ pub async fn team_update(app: AppHandle, project_id: String, keep_conflicts: boo
       }
       Ok(repo::MergeOutcome::Conflicts(files)) => TeamActionResult {
         ok: false,
-        error: Some("Your teammates changed some of the same files as you.".into()),
+        error: Some(t!("team.session.conflicts")),
         conflicts: Some(files),
         project: store::find_project(&project_id),
         ..Default::default()
@@ -324,7 +319,7 @@ pub async fn team_update(app: AppHandle, project_id: String, keep_conflicts: boo
       Err(e) => fail(e),
     }
   }));
-  task.await.unwrap_or_else(|e| fail(format!("Updating failed: {e}")))
+  task.await.unwrap_or_else(|e| fail(t!("team.session.updateFailed", error = e)))
 }
 
 /// Throw away your unpublished changes: close the pull request, delete the
@@ -378,7 +373,7 @@ pub async fn team_discard(app: AppHandle, project_id: String) -> TeamActionResul
       super::packages_changed(&tp.project.path, before.as_deref(), repo::head(&wt).await.as_deref()).await;
     result
   }));
-  task.await.unwrap_or_else(|e| fail(format!("Discarding failed: {e}")))
+  task.await.unwrap_or_else(|e| fail(t!("team.session.discardFailed", error = e)))
 }
 
 /// The log of a pipeline run (failed steps first), for "View logs".
@@ -387,7 +382,7 @@ pub async fn team_run_log(project_id: String, run_id: u64) -> Result<String, Str
   let tp = team::team_project(&project_id)?;
   gh::as_account(tp.workspace.account.clone(), gh::run_log(&tp.workspace.repo, run_id, 40_000))
     .await
-    .map_err(|e| e.describe("Read the pipeline log"))
+    .map_err(|e| e.describe(&t!("team.actions.readLog")))
 }
 
 #[cfg(test)]

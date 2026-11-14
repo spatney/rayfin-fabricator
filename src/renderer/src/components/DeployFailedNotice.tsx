@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import type { DeployOutcome, UnsupportedWorkspace } from '@shared/ipc'
 import { REGION_AVAILABILITY_URL } from '../fabric'
+import { translator, useTranslation } from '../i18n'
 import { Codicon } from './icons'
 import { Ray, RAY_VIEWBOX, type RayMood } from './mascot/Ray'
 import { SpeechBubble, TYPE_MS } from './mascot/SpeechBubble'
@@ -38,22 +39,22 @@ export function deployTrouble(outcome: DeployOutcome | undefined): DeployTrouble
 }
 
 /** The same news without Ray. */
-const PLAIN_LINES: Record<DeployTrouble, string> = {
-  failed: 'Couldn’t publish this app. Help can find out why.',
-  signin: 'Fabric needs you to sign in again before you can publish this app.',
-  stopped: 'Publishing was stopped before it finished.',
-  unsupported:
-    'Fabric apps aren’t available in this workspace’s region. Choose a workspace in another region.'
-}
+const PLAIN_LINES = {
+  failed: 'failedNotice.plain.failed',
+  signin: 'failedNotice.plain.signin',
+  stopped: 'failedNotice.plain.stopped',
+  unsupported: 'failedNotice.plain.unsupported'
+} as const satisfies Record<DeployTrouble, string>
 
 /** What the notice says: Ray's line or the plain one, naming the region when Fabric did. */
 function troubleLine(trouble: DeployTrouble, withRay: boolean, region?: string): string {
+  const t = translator('publish')
   if (trouble === 'unsupported' && region?.trim()) {
     return withRay
       ? unsupportedRegionLine(region.trim())
-      : `This workspace’s capacity is in ${region.trim()}, where Fabric apps aren’t available yet. Choose a workspace in another region.`
+      : t('failedNotice.plain.unsupportedRegion', { region: region.trim() })
   }
-  return withRay ? DEPLOY_TROUBLE_LINES[trouble] : PLAIN_LINES[trouble]
+  return withRay ? DEPLOY_TROUBLE_LINES[trouble] : t(PLAIN_LINES[trouble])
 }
 
 export interface DeployFailedNoticeProps {
@@ -86,6 +87,7 @@ export default function DeployFailedNotice({
   onChooseWorkspace,
   onDismiss
 }: DeployFailedNoticeProps): JSX.Element {
+  const { t } = useTranslation('publish')
   const [sentAway] = useState(isRaySentAway)
   const withRay = !sentAway
   useRayOnScreen(withRay)
@@ -147,7 +149,7 @@ export default function DeployFailedNotice({
   return (
     <section
       className={`deploy-trouble${withRay ? ' deploy-trouble--ray' : ''}${leaving ? ' is-leaving' : ''}`}
-      aria-label="Couldn’t publish"
+      aria-label={t('failedNotice.label')}
     >
       <div className="deploy-trouble-main">
         {withRay ? (
@@ -157,8 +159,8 @@ export default function DeployFailedNotice({
               className={`deploy-trouble-ray${arrived ? '' : ' is-arriving'}`}
               style={{ width: RAY_W, height: RAY_H }}
               onClick={diagnose}
-              aria-label="Ray, the Fabricator stingray. Select him to find out why publishing failed."
-              title="Find out why"
+              aria-label={t('failedNotice.ray')}
+              title={t('findOutWhy')}
             >
               {rayBody}
             </button>
@@ -200,32 +202,32 @@ export default function DeployFailedNotice({
           <div className="deploy-trouble-actions">
             {choose && (
               <button className="btn btn--sm btn--primary" onClick={choose}>
-                Choose another workspace
+                {t('region.chooseAnother')}
               </button>
             )}
             {trouble === 'unsupported' && (
               <button
                 className="btn btn--sm"
-                title="See which regions have Fabric apps (opens learn.microsoft.com)"
+                title={t('region.availabilityTitle')}
                 onClick={() => void window.api.openExternal(REGION_AVAILABILITY_URL)}
               >
                 <Codicon name="link-external" />
-                Region availability
+                {t('region.availability')}
               </button>
             )}
             {refresh && (
               <button className="btn btn--sm btn--primary" disabled={authBusy} onClick={refresh}>
-                Refresh Fabric authentication
+                {t('failedNotice.refreshAuth')}
               </button>
             )}
             {diagnose && (
               <button
                 className={`btn btn--sm${refresh ? '' : ' btn--primary'}`}
                 onClick={diagnose}
-                title="Open Help, which reads what happened and explains it"
+                title={t('failedNotice.diagnoseTitle')}
               >
                 <Codicon name="comment-discussion" />
-                Find out why
+                {t('findOutWhy')}
               </button>
             )}
             {output && (
@@ -236,11 +238,11 @@ export default function DeployFailedNotice({
               >
                 {log?.length
                   ? showOutput
-                    ? 'Hide logs'
-                    : 'View logs'
+                    ? t('logs.hide')
+                    : t('logs.show')
                   : showOutput
-                    ? 'Hide details'
-                    : 'Show details'}
+                    ? t('failedNotice.hideDetails')
+                    : t('failedNotice.showDetails')}
               </button>
             )}
           </div>
@@ -249,8 +251,8 @@ export default function DeployFailedNotice({
         <button
           type="button"
           className="icon-btn deploy-trouble-close"
-          aria-label="Dismiss"
-          title="Dismiss — it comes back if publishing fails again"
+          aria-label={t('actions.dismiss')}
+          title={t('failedNotice.dismissTitle')}
           onClick={dismiss}
         >
           <Codicon name="close" />

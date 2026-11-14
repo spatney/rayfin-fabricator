@@ -8,6 +8,7 @@ import type {
   TeamRepoChoice,
   TeamWorkspace
 } from '@shared/ipc'
+import { Trans, useTranslation } from '../../i18n'
 import { useSuppressPreview } from '../../overlay'
 import { useModalFocus } from '../../modalFocus'
 import {
@@ -26,19 +27,20 @@ import RunnerFields, { draftRunner, runnerDraft, runnerDraftReady, type RunnerDr
 
 /** Mirrors SETUP_STEPS in src-tauri/src/commands/team/setup.rs. */
 export const SETUP_STEPS = [
-  { id: 'github', label: 'Create the private GitHub repository' },
-  { id: 'fabric', label: 'Create the production and preview Fabric workspaces' },
-  { id: 'identity', label: 'Create the deploy identities (service principals)' },
-  { id: 'trust', label: "Let the repository's pipeline sign in as those identities" },
-  { id: 'access', label: 'Give the deploy identities access to Fabric' },
-  { id: 'files', label: 'Add the deploy pipeline to the repository' },
-  { id: 'protection', label: 'Protect the main branch' },
-  { id: 'clone', label: 'Download the workspace to this computer' },
-  { id: 'verify', label: 'Check that the pipeline can reach Fabric' }
+  { id: 'github', labelKey: 'create.step.github' },
+  { id: 'fabric', labelKey: 'create.step.fabric' },
+  { id: 'identity', labelKey: 'create.step.identity' },
+  { id: 'trust', labelKey: 'create.step.trust' },
+  { id: 'access', labelKey: 'create.step.access' },
+  { id: 'files', labelKey: 'create.step.files' },
+  { id: 'protection', labelKey: 'create.step.protection' },
+  { id: 'clone', labelKey: 'create.step.clone' },
+  { id: 'verify', labelKey: 'create.step.verify' }
 ] as const
 
 type Phase = 'prereq' | 'details' | 'running' | 'failed' | 'done'
 
+// Copilot's diagnosis reads this in English; the field shows create.noCapacity.
 const NO_CAPACITY =
   'You don’t have access to a Fabric capacity. Ask your Fabric administrator for one, then try again.'
 
@@ -71,6 +73,7 @@ interface Props {
 /** Sets up a team workspace automatically, step by step. */
 export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, onAbandon }: Props): JSX.Element {
   useSuppressPreview()
+  const { t } = useTranslation('team')
   const titleId = useId()
   const ownerFieldId = useId()
   const repoModeId = useId()
@@ -105,7 +108,8 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [problem, setProblem] = useState<TeamProblem | null>(null)
   const [workspace, setWorkspace] = useState<TeamWorkspace | undefined>(resume)
-  const [rows, setRows] = useStepProgress(SETUP_STEPS, scope)
+  const setupSteps = useMemo(() => SETUP_STEPS.map((s) => ({ id: s.id, label: t(s.labelKey) })), [t])
+  const [rows, setRows] = useStepProgress(setupSteps, scope)
   const running = phase === 'running'
 
   useEffect(() => {
@@ -126,10 +130,10 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
       const result = await window.api.team.owners(account || undefined)
       list = result.owners
       if (!result.ok || list.length === 0) {
-        setOwnersError(result.error ?? 'Fabricator couldn’t find your GitHub account.')
+        setOwnersError(result.error ?? t('create.noAccount'))
       }
     } catch (reason) {
-      setOwnersError(teamError(reason, 'Could not list your GitHub accounts.'))
+      setOwnersError(teamError(reason, t('create.ownersFailed')))
     }
     setOwners(list)
     setOwner((current) => (list.some((o) => o.login === current) ? current : (list[0]?.login ?? '')))
@@ -147,9 +151,9 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
     try {
       const result = await window.api.team.repos(account || undefined)
       list = result.repos
-      if (!result.ok) setRepoChoicesError(result.error ?? 'Could not list your repositories.')
+      if (!result.ok) setRepoChoicesError(result.error ?? t('create.reposFailed'))
     } catch (reason) {
-      setRepoChoicesError(teamError(reason, 'Could not list your repositories.'))
+      setRepoChoicesError(teamError(reason, t('create.reposFailed')))
     }
     setRepoChoices(list)
   }
@@ -165,9 +169,9 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
     try {
       const result = await window.api.team.capacities()
       list = result.capacities ?? []
-      if (!result.ok) setCapacitiesError(result.error ?? 'Could not list Fabric capacities.')
+      if (!result.ok) setCapacitiesError(result.error ?? t('create.capacitiesFailed'))
     } catch (reason) {
-      setCapacitiesError(teamError(reason, 'Could not list Fabric capacities.'))
+      setCapacitiesError(teamError(reason, t('create.capacitiesFailed')))
     }
     setCapacities(list)
     setCapacityId((current) => (list.some((c) => c.id === current) ? current : (list[0]?.id ?? '')))
@@ -188,7 +192,7 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
     setRows(
       SETUP_STEPS.map((s) => ({
         id: s.id,
-        label: s.label,
+        label: t(s.labelKey),
         state: completed.includes(s.id) ? 'done' : 'pending'
       }))
     )
@@ -220,10 +224,10 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
     let error: string | undefined
     try {
       const saved = await window.api.team.setRunner(target.id, draftRunner(runner))
-      if (!saved.ok) error = saved.error ?? 'Could not save where the pipeline runs.'
+      if (!saved.ok) error = saved.error ?? t('create.runnerFailed')
       else if (saved.workspace) setWorkspace(saved.workspace)
     } catch (reason) {
-      error = teamError(reason, 'Could not save where the pipeline runs.')
+      error = teamError(reason, t('create.runnerFailed'))
     }
     if (error) {
       setProblem({ step: 'verify', kind: 'runner', message: error })
@@ -245,7 +249,7 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
         result = await window.api.team.create(currentRequest(), scope)
       }
     } catch (reason) {
-      result = { ok: false, error: teamError(reason, 'Setup stopped unexpectedly.') }
+      result = { ok: false, error: teamError(reason, t('create.stoppedUnexpectedly')) }
     }
     if (result.workspace) setWorkspace(result.workspace)
     onChanged(result.workspace)
@@ -253,7 +257,7 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
       setPhase('done')
       return
     }
-    const next = result.problem ?? { step: 'setup', message: result.error ?? 'Setup stopped.' }
+    const next = result.problem ?? { step: 'setup', message: result.error ?? t('create.stopped') }
     setProblem(next)
     setPhase(result.workspace ? 'failed' : 'details')
   }
@@ -301,16 +305,14 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>{resume ? `Finish setting up ${resume.name}` : 'Create a team workspace'}</h2>
+          <h2 id={titleId}>
+            {resume ? t('create.titleResume', { name: resume.name }) : t('shared.createTeamWorkspace')}
+          </h2>
         </div>
         <div className="modal-body team-form">
           {phase === 'prereq' && (
             <>
-              <p className="team-muted">
-                A team workspace keeps your team&apos;s apps in a private GitHub repository. Each person
-                works on their own copy, and a pipeline publishes the apps to Microsoft Fabric with
-                a deploy identity that Fabricator creates for you.
-              </p>
+              <p className="team-muted">{t('create.intro')}</p>
               <TeamPrerequisites
                 onReady={onPrereqsReady}
                 account={resume?.account}
@@ -322,28 +324,26 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
           {phase === 'details' && (
             <>
               <label className="field">
-                <span className="field-label">Workspace name</span>
+                <span className="field-label">{t('create.name')}</span>
                 <input
                   className="field-input"
                   value={name}
                   autoFocus
-                  placeholder="Sales team apps"
+                  placeholder={t('create.namePlaceholder')}
                   spellCheck={false}
                   onChange={(event) => setName(event.target.value)}
                 />
-                <span className="field-hint">
-                  Used for the GitHub repository and the Fabric workspaces.
-                </span>
+                <span className="field-hint">{t('create.nameHint')}</span>
               </label>
               <GithubAccountField
                 value={account}
                 onChange={setAccount}
                 onReady={setAccountReady}
-                hint="Fabricator always uses this account for the workspace, whichever account the GitHub CLI has active."
+                hint={t('create.accountHint')}
               />
               <div className="field">
                 <span className="field-label" id={repoModeId}>
-                  GitHub repository
+                  {t('create.repo')}
                 </span>
                 <div className="seg team-repo-mode" role="radiogroup" aria-labelledby={repoModeId}>
                   {(['new', 'existing'] as const).map((mode) => (
@@ -355,7 +355,7 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
                       className={`seg-btn${repoMode === mode ? ' seg-btn--active' : ''}`}
                       onClick={() => setRepoMode(mode)}
                     >
-                      {mode === 'new' ? 'New repository' : 'Existing repository'}
+                      {mode === 'new' ? t('create.newRepo') : t('create.existingRepo')}
                     </button>
                   ))}
                 </div>
@@ -363,14 +363,14 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
               {usingExisting ? (
                 <div className="field">
                   <label className="field-label" htmlFor={repoFieldId}>
-                    Repository
+                    {t('create.repoLabel')}
                   </label>
                   <input
                     id={repoFieldId}
                     className="field-input"
                     list={repoListId}
                     value={existingRepo}
-                    placeholder="owner/repository"
+                    placeholder={t('shared.repoPlaceholder')}
                     spellCheck={false}
                     autoComplete="off"
                     onChange={(event) => setExistingRepo(event.target.value)}
@@ -383,29 +383,25 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
                     ))}
                   </datalist>
                   {repoText && !repo ? (
-                    <FieldProblem text="Enter the repository as owner/name, for example contoso/sales-apps, or paste its GitHub address." />
+                    <FieldProblem text={t('create.repoInvalid')} />
                   ) : (
                     repoChoicesError && <FieldProblem text={repoChoicesError} onRetry={() => void loadRepoChoices()} />
                   )}
                   <span className="field-hint">
-                    {repoChoices && repoChoices.length > 0
-                      ? 'Choose one of your repositories, or enter owner/name. '
-                      : 'Enter owner/name, or paste the repository’s GitHub address. '}
-                    It must be private or internal, and you need the Maintain or Admin role on it. If
-                    you can&apos;t create one, an owner of your organization can create it for you.
+                    {repoChoices && repoChoices.length > 0 ? t('create.repoHintChoose') : t('create.repoHintEnter')}
                   </span>
                 </div>
               ) : (
                 <div className="field">
                   <label className="field-label" htmlFor={ownerFieldId}>
-                    GitHub owner
+                    {t('create.owner')}
                   </label>
                   {!accountReady ? (
                     <select id={ownerFieldId} className="field-input" disabled>
-                      <option>Choose a GitHub account first</option>
+                      <option>{t('create.chooseAccountFirst')}</option>
                     </select>
                   ) : owners === null ? (
-                    <FieldLoading text={`Finding where ${account} can create repositories…`} />
+                    <FieldLoading text={t('create.findingOwners', { account })} />
                   ) : (
                     owners.length > 0 && (
                       <select
@@ -416,8 +412,11 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
                       >
                         {owners.map((o) => (
                           <option key={o.login} value={o.login}>
-                            {o.login}
-                            {!o.isOrg ? ' (you)' : o.canCreate === false ? ' (organization · you can’t create repositories)' : ' (organization)'}
+                            {!o.isOrg
+                              ? t('create.ownerYou', { login: o.login })
+                              : o.canCreate === false
+                                ? t('create.ownerOrgLocked', { login: o.login })
+                                : t('create.ownerOrg', { login: o.login })}
                           </option>
                         ))}
                       </select>
@@ -428,22 +427,20 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
                   )}
                   {ownerLocked && (
                     <FieldProblem
-                      text={`${owner} doesn’t let you create repositories. Ask one of its owners to create an empty private repository for the workspace and give you the Maintain role, then use it as an existing repository.`}
-                      action="Use an existing repository"
+                      text={t('create.ownerLocked', { owner })}
+                      action={t('create.useExisting')}
                       onRetry={() => setRepoMode('existing')}
                     />
                   )}
-                  <span className="field-hint">
-                    Fabricator creates a private repository. Use an organization if your team already has one.
-                  </span>
+                  <span className="field-hint">{t('create.ownerHint')}</span>
                 </div>
               )}
               <div className="field">
                 <label className="field-label" htmlFor={capacityFieldId}>
-                  Fabric capacity
+                  {t('create.capacity')}
                 </label>
                 {capacities === null ? (
-                  <FieldLoading text="Finding the Fabric capacities you can use…" />
+                  <FieldLoading text={t('create.findingCapacities')} />
                 ) : capacities.length > 0 ? (
                   <select
                     id={capacityFieldId}
@@ -460,15 +457,14 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
                     ))}
                   </select>
                 ) : (
-                  !capacitiesError && <FieldProblem text={NO_CAPACITY} onRetry={() => void loadCapacities()} />
+                  !capacitiesError && (
+                    <FieldProblem text={t('create.noCapacity')} onRetry={() => void loadCapacities()} />
+                  )
                 )}
                 {capacities !== null && capacitiesError && (
                   <FieldProblem text={capacitiesError} onRetry={() => void loadCapacities()} />
                 )}
-                <span className="field-hint">
-                  Fabricator creates two Fabric workspaces on it: one for published apps and one
-                  for everyone&apos;s previews.
-                </span>
+                <span className="field-hint">{t('create.capacityHint')}</span>
               </div>
               <button
                 type="button"
@@ -476,23 +472,20 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
                 onClick={() => setShowAdvanced((v) => !v)}
                 aria-expanded={showAdvanced}
               >
-                {showAdvanced ? 'Hide advanced options' : 'Advanced options'}
+                {showAdvanced ? t('create.hideAdvanced') : t('create.advanced')}
               </button>
               {showAdvanced && (
                 <>
                   <label className="field">
-                    <span className="field-label">Existing app registration (optional)</span>
+                    <span className="field-label">{t('create.existingApp')}</span>
                     <input
                       className="field-input"
                       value={clientId}
-                      placeholder="Application (client) ID"
+                      placeholder={t('shared.clientIdPlaceholder')}
                       spellCheck={false}
                       onChange={(event) => setClientId(event.target.value)}
                     />
-                    <span className="field-hint">
-                      Use one an administrator created if your organization doesn&apos;t let you
-                      register apps. Fabricator adds the pipeline&apos;s sign-in to it.
-                    </span>
+                    <span className="field-hint">{t('create.existingAppHint')}</span>
                   </label>
                   <RunnerFields value={runner} onChange={setRunner} />
                 </>
@@ -504,21 +497,17 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
           {(phase === 'running' || phase === 'failed' || phase === 'done') && (
             <>
               <StepList rows={rows} />
-              {phase === 'running' && (
-                <p className="team-muted">
-                  This takes a few minutes. You can keep this window open while Fabricator works.
-                </p>
-              )}
+              {phase === 'running' && <p className="team-muted">{t('create.takesMinutes')}</p>}
               {phase === 'failed' && problem && (
                 <ProblemView problem={problem} account={(workspace ?? resume)?.account ?? account} />
               )}
               {phase === 'failed' && identityProblem && (
                 <label className="field">
-                  <span className="field-label">App registration from your administrator</span>
+                  <span className="field-label">{t('create.adminApp')}</span>
                   <input
                     className="field-input"
                     value={clientId}
-                    placeholder="Application (client) ID"
+                    placeholder={t('shared.clientIdPlaceholder')}
                     spellCheck={false}
                     onChange={(event) => setClientId(event.target.value)}
                   />
@@ -528,10 +517,12 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
               {phase === 'done' && (
                 <div className="team-notice">
                   <span className="team-notice-text">
-                    <strong>{workspace?.name ?? name}</strong> is ready. Create an app in it, or
-                    invite your teammates from its settings.
-                    {workspace?.setup?.protection === 'app' &&
-                      " GitHub doesn't protect its main branch, so Fabricator keeps everyone on the publish flow."}
+                    <Trans
+                      t={t}
+                      i18nKey={workspace?.setup?.protection === 'app' ? 'create.readyUnprotected' : 'create.ready'}
+                      values={{ name: workspace?.name ?? name }}
+                      components={{ b: <strong /> }}
+                    />
                   </span>
                 </div>
               )}
@@ -546,16 +537,16 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
               className="btn btn--ghost team-footer-start"
               onClick={() => onAbandon((workspace ?? resume)!)}
             >
-              Abandon setup…
+              {t('shared.abandonSetup')}
             </button>
           )}
           {phase === 'running' ? (
             <button type="button" className="btn btn--ghost" onClick={() => void window.api.team.cancel(scope)}>
-              Stop waiting
+              {t('shared.stopWaiting')}
             </button>
           ) : (
             <button type="button" className="btn btn--ghost" onClick={onClose}>
-              {phase === 'done' ? 'Done' : 'Cancel'}
+              {phase === 'done' ? t('actions.done') : t('actions.cancel')}
             </button>
           )}
           {phase === 'details' && (
@@ -565,7 +556,7 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
               disabled={!canCreate}
               onClick={() => void run(false)}
             >
-              Create workspace
+              {t('create.create')}
             </button>
           )}
           {phase === 'failed' && (
@@ -575,7 +566,7 @@ export default function CreateTeamWorkspaceModal({ resume, onClose, onChanged, o
               disabled={runnerProblem && !runnerDraftReady(runner)}
               onClick={() => void (runnerProblem ? retryWithRunner() : run(true))}
             >
-              Retry
+              {t('actions.retry')}
             </button>
           )}
         </div>

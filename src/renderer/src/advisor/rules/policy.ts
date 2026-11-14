@@ -1,7 +1,7 @@
 import { parseClasses } from '../../model/parseSchema'
 import { isUnder } from '../../model/projectLayout'
 import type { QuickHit, QuickRuleImpl } from '../quick'
-import { listLabels } from '../quick'
+import { listLabels, say } from '../quick'
 import { lineOf, matchAll } from '../source'
 import { actionsLabel, code, grantsOf, grantsWrite } from './util'
 
@@ -28,14 +28,22 @@ export const policyRules: QuickRuleImpl[] = [
             file: e.file,
             line: g.decorator.line,
             label: e.name,
-            message: `${code(e.name)} stores ${code(owner.name)}, but its ${code(`@${g.decorator.name}(${actionsLabel(p)})`)} grant has no row policy, so any signed-in user can change other users' rows.`
+            ...say((w) =>
+              w.t('policy/owner-field-without-policy.hit', {
+                entity: code(e.name),
+                owner: code(owner.name),
+                grant: code(`@${g.decorator.name}(${actionsLabel(p)})`)
+              })
+            )
           })
         }
       }
       return hits
     },
     summarize: (hits) =>
-      `These entities store an owner but let any signed-in user change every row: ${listLabels(hits)}.`
+      say((w) =>
+        w.t('policy/owner-field-without-policy.summary', { entities: listLabels(hits, w) })
+      )
   },
   {
     id: 'policy/anonymous-write',
@@ -48,7 +56,12 @@ export const policyRules: QuickRuleImpl[] = [
             file: e.file,
             line: g.decorator.line,
             label: e.name,
-            message: `${code(e.name)} grants ${code(actionsLabel(g.permission))} to anonymous callers, so anyone can change its rows without signing in.`
+            ...say((w) =>
+              w.t('policy/anonymous-write.hit', {
+                entity: code(e.name),
+                actions: code(actionsLabel(g.permission))
+              })
+            )
           })
         }
       }
@@ -67,17 +80,22 @@ export const policyRules: QuickRuleImpl[] = [
           file: e.file,
           line: grants[0].decorator.line,
           label: e.name,
-          message: ctx.runsLocally
-            ? `${code(e.name)} allows anonymous reads. They work in the local preview, but publishing fails unless your tenant admin has turned on anonymous data access for Fabric apps.`
-            : `${code(e.name)} allows anonymous reads, which Fabric refuses unless your tenant admin has turned on anonymous data access for Fabric apps.`
+          ...say((w) =>
+            ctx.runsLocally
+              ? w.t('policy/anonymous-grant.hitLocal', { entity: code(e.name) })
+              : w.t('policy/anonymous-grant.hitFabric', { entity: code(e.name) })
+          )
         })
       }
       return hits
     },
     summarize: (hits, ctx) =>
-      ctx.runsLocally
-        ? `${hits.length} entities allow anonymous reads. They work in the local preview, but publishing fails unless your tenant admin has turned on anonymous data access for Fabric apps: ${listLabels(hits)}.`
-        : `${hits.length} entities allow anonymous reads, which Fabric refuses unless your tenant admin has turned on anonymous data access for Fabric apps: ${listLabels(hits)}.`
+      say((w) => {
+        const values = { count: hits.length, entities: listLabels(hits, w) }
+        return ctx.runsLocally
+          ? w.t('policy/anonymous-grant.summaryLocal', values)
+          : w.t('policy/anonymous-grant.summaryFabric', values)
+      })
   },
   {
     id: 'policy/unsupported-claim',
@@ -96,7 +114,15 @@ export const policyRules: QuickRuleImpl[] = [
               file: e.file,
               line: g.decorator.line,
               label: `${e.name} (${param}.${claim})`,
-              message: `${code(e.name)}'s policy compares ${code(`${param}.${claim}`)}, but policies only support ${code('sub')}, ${code('email')}, and ${code('role')}.`
+              ...say((w) =>
+                w.t('policy/unsupported-claim.hit', {
+                  entity: code(e.name),
+                  claim: code(`${param}.${claim}`),
+                  sub: code('sub'),
+                  email: code('email'),
+                  role: code('role')
+                })
+              )
             })
           }
         }
@@ -123,7 +149,12 @@ export const policyRules: QuickRuleImpl[] = [
             file: src.path,
             line: lineOf(src, cls.offset),
             label: cls.name,
-            message: `The ${code(`@blob()`)} storage class ${code(cls.name)} has no permission decorator.`
+            ...say((w) =>
+              w.t('policy/blob-without-permission.hit', {
+                blob: code(`@blob()`),
+                storageClass: code(cls.name)
+              })
+            )
           })
         }
       }
@@ -142,7 +173,13 @@ export const policyRules: QuickRuleImpl[] = [
             file: e.file,
             line: g.decorator.line,
             label: e.name,
-            message: `${code(e.name)} uses ${code(`@role('${role}', …)`)}; ${code(`@${role}(…)`)} is the documented shorthand.`
+            ...say((w) =>
+              w.t('policy/prefer-shorthand.hit', {
+                entity: code(e.name),
+                longhand: code(`@role('${role}', …)`),
+                shorthand: code(`@${role}(…)`)
+              })
+            )
           })
         }
       }

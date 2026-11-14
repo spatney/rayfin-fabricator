@@ -1,7 +1,7 @@
 import type { ModelEntity, SourceDecorator, EntityPermission } from '../../model/parseSchema'
 import { permissionFromDecorator } from '../../model/parseSchema'
 import type { QuickContext } from '../context'
-import type { QuickHit } from '../quick'
+import type { QuickHit, Said } from '../quick'
 import { lineOf, matchAll, type SourceFile } from '../source'
 
 export const CODE_FILE = /\.(tsx?|jsx?|mts|cts|mjs|cjs)$/i
@@ -12,7 +12,7 @@ export function code(text: string): string {
 }
 
 /** Items as a person lists them: "a, b and c". */
-export function andList(items: string[]): string {
+export function andList(items: readonly string[]): string {
   return items.length <= 1
     ? (items[0] ?? '')
     : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
@@ -22,7 +22,7 @@ export function andList(items: string[]): string {
 export function regexHits(
   files: SourceFile[],
   re: RegExp,
-  message: (file: SourceFile, match: RegExpExecArray) => string,
+  message: (file: SourceFile, match: RegExpExecArray) => Said,
   label?: (file: SourceFile, line: number, match: RegExpExecArray) => string
 ): QuickHit[] {
   const hits: QuickHit[] = []
@@ -33,7 +33,7 @@ export function regexHits(
         file: src.path,
         line,
         label: label ? label(src, line, m) : `${src.path}:${line}`,
-        message: message(src, m)
+        ...message(src, m)
       })
     }
   }

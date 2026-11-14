@@ -76,7 +76,7 @@ fn detect() -> Vec<Shell> {
     .filter(|path| path.is_file())
     .unwrap_or_else(|| system.join("cmd.exe"));
   if cmd.is_file() {
-    shells.push(Shell::new("cmd", "Command Prompt", cmd, &[]));
+    shells.push(Shell::new("cmd", &t!("services.terminal.commandPrompt"), cmd, &[]));
   }
   if let Some(bash) = find_git_bash() {
     let mut shell = Shell::new("git-bash", "Git Bash", bash, &["--login", "-i"]);

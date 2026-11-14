@@ -19,8 +19,6 @@ fn joined(full_name: &str) -> Option<TeamWorkspace> {
   store::team_workspaces().into_iter().find(|w| w.repo.eq_ignore_ascii_case(full_name))
 }
 
-const DELETED: &str = "This team workspace was deleted: its GitHub repository is archived.";
-
 /// Accept the user's pending invitation to a repository, if there is one.
 pub(crate) async fn accept_pending_invitation(full_name: &str) -> Result<bool, gh::GhError> {
   let invitations = gh::user_invitations().await?;
@@ -76,7 +74,7 @@ async fn join_options_for(account: Option<String>) -> TeamJoinOptions {
         .collect()
     })
     .unwrap_or_else(|e| {
-      error = Some(e.describe("List your GitHub invitations"));
+      error = Some(e.describe(&t!("team.actions.listInvitations")));
       vec![]
     });
   let discovered = repos
@@ -88,7 +86,7 @@ async fn join_options_for(account: Option<String>) -> TeamJoinOptions {
         .collect()
     })
     .unwrap_or_else(|e| {
-      error.get_or_insert(e.describe("Find your team workspaces"));
+      error.get_or_insert(e.describe(&t!("team.actions.findWorkspaces")));
       vec![]
     });
   TeamJoinOptions { ok: error.is_none(), error, invitations, discovered }
@@ -102,7 +100,7 @@ pub async fn team_accept_invitation(invitation_id: u64, repo: String, account: O
   }
   gh::as_account(account, async move {
     if let Err(e) = gh::accept_invitation(invitation_id).await {
-      return fail_github("Accept the invitation", &e);
+      return fail_github(&t!("team.actions.acceptInvitation"), &e);
     }
     join_repo(&repo).await
   })
@@ -134,18 +132,18 @@ async fn join_repo_inner(full_name: &str) -> TeamActionResult {
     Err(e) if e.is_not_found() => match accept_pending_invitation(full_name).await {
       Ok(true) => match gh::repo(full_name).await {
         Ok(info) => info,
-        Err(e) => return fail_github("Open the repository", &e),
+        Err(e) => return fail_github(&t!("team.actions.openRepo"), &e),
       },
-      Ok(false) => return fail(e.describe("Open the repository")),
-      Err(e) => return fail_github("Accept the invitation", &e),
+      Ok(false) => return fail(e.describe(&t!("team.actions.openRepo"))),
+      Err(e) => return fail_github(&t!("team.actions.acceptInvitation"), &e),
     },
-    Err(e) => return fail_github("Open the repository", &e),
+    Err(e) => return fail_github(&t!("team.actions.openRepo"), &e),
   };
   if info.archived {
-    return fail(DELETED);
+    return fail(t!("team.join.deleted"));
   }
   if !info.push {
-    return fail("You can view this repository but not change it. Ask its owner to give you write access.");
+    return fail(t!("team.join.readOnly"));
   }
   let me = match viewer().await {
     Ok(v) => v,
@@ -179,7 +177,7 @@ async fn join_repo_inner(full_name: &str) -> TeamActionResult {
   };
   let Some(manifest) = manifest else {
     cleanup(&dir);
-    return fail("That repository isn't a Fabricator team workspace (it has no fabricator.workspace.json).");
+    return fail(t!("team.join.notWorkspace"));
   };
   if !manifest.name.trim().is_empty() {
     ws.name = manifest.name.clone();
@@ -208,7 +206,7 @@ async fn detail(workspace_id: String) -> TeamWorkspaceDetail {
     return empty(e);
   }
   let Some(ws) = store::find_team_workspace(&workspace_id) else {
-    return empty("That team workspace is no longer on this computer.".into());
+    return empty(t!("team.workspaceMissing"));
   };
   let mut error = None;
   if let Err(e) = repo::ensure_clone(&ws, None).await {
@@ -223,7 +221,7 @@ async fn detail(workspace_id: String) -> TeamWorkspaceDetail {
     super::pin_account(&ws).await;
   }
   if info.as_ref().is_some_and(|r| r.archived) {
-    error = Some(format!("{DELETED} Leave it to remove it from this computer."));
+    error = Some(t!("team.join.deletedLeave"));
   }
   let role = info.map(|r| if r.manages() { "owner" } else { "member" });
   let ws = store::mutate_team_workspace(&ws.id, |w| {
@@ -271,7 +269,7 @@ async fn detail(workspace_id: String) -> TeamWorkspaceDetail {
 #[tauri::command]
 pub async fn team_leave(app: AppHandle, workspace_id: String) -> Result<ProjectsState, String> {
   team::require_enabled()?;
-  let ws = store::find_team_workspace(&workspace_id).ok_or("That team workspace is no longer on this computer.")?;
+  let ws = store::find_team_workspace(&workspace_id).ok_or_else(|| t!("team.workspaceMissing"))?;
   forget_workspace(&app, &ws).await;
   Ok(annotate_state(store::get_state()))
 }
@@ -294,12 +292,9 @@ pub(crate) async fn forget_workspace(app: &AppHandle, ws: &TeamWorkspace) {
 /// Why someone without the Admin role can't delete a workspace.
 fn not_deletable(info: &gh::RepoInfo) -> String {
   if info.manages() {
-    format!(
-      "Deleting the workspace archives {}, which GitHub only lets its admins do. Ask one of them to delete it, or leave it instead.",
-      info.full_name
-    )
+    t!("team.join.adminOnlyDelete", repo = info.full_name)
   } else {
-    "Only the workspace's owners can delete it. You can leave it instead.".into()
+    t!("team.join.ownersOnlyDelete")
   }
 }
 
@@ -317,12 +312,12 @@ async fn delete(app: AppHandle, workspace_id: String, delete_fabric: bool) -> Te
     return fail(e);
   }
   let Some(ws) = store::find_team_workspace(&workspace_id) else {
-    return fail("That team workspace is no longer on this computer.");
+    return fail(t!("team.workspaceMissing"));
   };
   match gh::repo(&ws.repo).await {
     // Deleting archives the repository, which GitHub only lets admins do.
     Ok(info) if !info.admin => return fail(not_deletable(&info)),
-    Err(e) if !e.is_not_found() => return fail(e.describe("Check your access to the workspace")),
+    Err(e) if !e.is_not_found() => return fail(e.describe(&t!("team.actions.checkAccess"))),
     _ => {}
   }
   let mut problems: Vec<String> = Vec::new();
@@ -339,28 +334,28 @@ async fn delete(app: AppHandle, workspace_id: String, delete_fabric: bool) -> Te
         match entra::app(&client_id).await {
           Ok(Some(app)) if naming::is_managed_identity_name(&app.display_name) => {
             if let Err(e) = entra::delete_app(&client_id).await {
-              problems.push(e.describe("Remove a deploy identity"));
+              problems.push(e.describe(&t!("team.actions.removeIdentity")));
             }
           }
           Ok(_) => {}
-          Err(e) => problems.push(e.describe("Check a deploy identity")),
+          Err(e) => problems.push(e.describe(&t!("team.actions.checkAnIdentity"))),
         }
       }
       if delete_fabric {
         for target in [&targets.production_workspace_id, &targets.previews_workspace_id] {
           if !target.is_empty() {
             if let Err(e) = fabric::delete_workspace(target).await {
-              problems.push(e.describe("Delete a Fabric workspace"));
+              problems.push(e.describe(&t!("team.actions.deleteFabricWorkspace")));
             }
           }
         }
       }
     }
-    Err(e) => problems.push(format!("The deploy identities and Fabric workspaces weren't removed: {e}")),
+    Err(e) => problems.push(t!("team.join.notRemoved", error = e)),
   }
   if let Err(e) = gh::archive_repo(&ws.repo).await {
     if !e.is_not_found() {
-      problems.push(e.describe("Archive the GitHub repository"));
+      problems.push(e.describe(&t!("team.actions.archiveRepo")));
     }
   }
   forget_workspace(&app, &ws).await;

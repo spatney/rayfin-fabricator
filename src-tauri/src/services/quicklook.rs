@@ -26,9 +26,9 @@ static SHOWN: Lazy<Mutex<Option<String>>> = Lazy::new(Default::default);
 
 /// Only `https` pages get a quick look: published apps and Fabric.
 fn https(url: &str) -> AppResult<Url> {
-  let parsed: Url = url.parse().map_err(|_| AppError::Msg("That isn't an address.".into()))?;
+  let parsed: Url = url.parse().map_err(|_| AppError::Msg(t!("services.quickLook.notAnAddress")))?;
   if parsed.scheme() != "https" || parsed.host_str().is_none_or(str::is_empty) {
-    return Err(AppError::Msg("Quick look opens https addresses only.".into()));
+    return Err(AppError::Msg(t!("services.quickLook.httpsOnly")));
   }
   Ok(parsed)
 }
@@ -72,7 +72,7 @@ pub async fn quicklook_show(app: AppHandle, url: String, bounds: PreviewBounds) 
     .as_ref()
     .window()
     .add_child(builder, rect.position, rect.size)
-    .map_err(|e| AppError::Msg(format!("Couldn't open the quick look: {e}")))?;
+    .map_err(|e| AppError::Msg(t!("services.quickLook.openFailed", error = e)))?;
   *SHOWN.lock().unwrap() = Some(url);
   Ok(())
 }

@@ -1,0 +1,203 @@
+{
+  "ui": {
+    "ray": "Ray, the Fabricator stingray. Select to pet him.",
+    "sendAway": "Send Ray away for now",
+    "another": "Click for another"
+  },
+  "labels": {
+    "rayfin": "Rayfin fact",
+    "tip": "Fabricator tip",
+    "ray": "Ray fact"
+  },
+  "facts": {
+    "rayfin": {
+      "classes": "Rayfin turns TypeScript classes into a database, APIs and a type-safe client.",
+      "decorators": "Your data model is plain TypeScript. Decorators like @text, @int and @date describe each field.",
+      "rayfinUp": "One command, rayfin up, publishes the whole app to Microsoft Fabric.",
+      "boundary": "Rayfin apps run on Microsoft Fabric, inside your organization’s boundary.",
+      "signIn": "Sign-in comes built in: Rayfin apps sign people in with Microsoft Entra ID.",
+      "rowLevelSecurity": "A policy on @authenticated can show each person only their own rows. Row-level security, in one line.",
+      "relations": "@one and @many link entities, so a customer can have many orders.",
+      "queries": "Rayfin queries are type-safe chains: select, where, orderBy, then execute.",
+      "aggregates": "Need totals? groupBy() and aggregate() handle sums, averages and counts.",
+      "validators": "Rayfin can generate a validator from an entity, so a form can check input before it’s saved.",
+      "connectors": "Connectors read data that already lives in Fabric: warehouses, SQL databases, semantic models and KQL databases.",
+      "dax": "With a connector, your app can run DAX against a Fabric semantic model.",
+      "functions": "Functions run server-side TypeScript next to your data. Heads up: they aren’t in every Fabric region yet.",
+      "secrets": "Functions can call outside APIs with keys kept as secrets, so the keys never sit in your code.",
+      "versions": "Every @microsoft/rayfin-* package shares one version number, so upgrades move in lockstep.",
+      "universalApp": "New apps start from Rayfin’s Universal App. It starts small and grows into whatever you describe.",
+      "hosting": "Rayfin hosts your frontend too. The built app is served from Fabric, next to its data.",
+      "files": "Rayfin apps can keep files too, like photos and receipts, in their own file storage.",
+      "typeScript": "Rayfin is TypeScript all the way down: data model, client code and app logic.",
+      "docs": "Rayfin’s docs are written for agents too. Add .md to any page on rayfin.ai to get it as Markdown."
+    },
+    "tip": {
+      "describe": "Describe what you want in plain English. Copilot writes the code, and I cheer.",
+      "design": "In the preview, Design lets you point at anything and ask for a change.",
+      "history": "Every change is kept. Code → History can restore an earlier version.",
+      "advisor": "The Advisor grades your app’s health, and every finding comes with a one-click fix.",
+      "blueprint": "Blueprint shows how your app is put together, data model included.",
+      "secrets": "An API key for a function? Add it in Code → Secrets, so it never sits in your code.",
+      "publish": "Publishing puts your app on Microsoft Fabric, where people in your organization can open it.",
+      "autoPublish": "Publish after each chat turn decides whether every change goes to Fabric right away.",
+      "share": "Once your app is published, Share lets people in your organization open it.",
+      "help": "Stuck later? Select Help in the status bar, and I’ll dig through the logs with you."
+    },
+    "ray": {
+      "cartilage": "Rays are cousins of sharks. Our skeletons are cartilage, not bone.",
+      "rayFinned": "Plot twist: despite the name, rays aren’t ray-finned fish. We’re closer to sharks.",
+      "eyes": "A stingray’s eyes are on top and its mouth is underneath, so it can watch while it eats.",
+      "electric": "Rays can sense the faint electric fields of prey hiding in the sand.",
+      "fever": "A group of stingrays is called a fever. I’m not making that up.",
+      "mantaBrain": "Manta rays have the biggest brains of any fish.",
+      "mantaSpan": "The giant manta ray can grow about 7 meters from wingtip to wingtip."
+    },
+    "quip": {
+      "school": "A group of fish is a school. A group of packages is node_modules.",
+      "spots": "I tried counting the packages npm is fetching. I ran out of spots.",
+      "wings": "I’d carry some packages, but I’m all wings.",
+      "blink": "Most fish can’t blink. I practiced."
+    }
+  },
+  "install": {
+    "intro": "Hi, I’m Ray! While npm fetches your packages, I’ll tell you about Rayfin.",
+    "introPrepare": "Hi, I’m Ray! While this app gets its packages, I’ll tell you about Rayfin.",
+    "hello": {
+      "create": "Ooh, a new app! I’ll share some Rayfin facts while npm does its thing.",
+      "createBack": "Welcome back! New app, new packages. I’ll keep you company.",
+      "clone": "Cloning, nice. I’ll keep you company while the packages arrive.",
+      "cloneBack": "Welcome back! I’ll share some Rayfin facts while this installs.",
+      "prepare": "This app needs its packages first. I’ll keep you company.",
+      "prepareBack": "Welcome back! A quick install, then you’re in."
+    },
+    "success": {
+      "create": "Your app is ready! It runs right here on your computer. Let’s build.",
+      "team": "Your app is ready! The team pipeline is deploying your first preview.",
+      "ready": "All set! Your app is ready."
+    },
+    "error": {
+      "prepare": "Oh no, that didn’t work. The message says why. Retry, or ask Help to dig in.",
+      "details": "Oh no, that didn’t work. The details show why, and Help can dig in."
+    },
+    "retry": "Round two. I believe in you.",
+    "resume": "Oh! More to install. I’ll stay.",
+    "slow": "npm is being extra thorough today.",
+    "bye": "Okay, bye for now! I’ll be in Help if you need me."
+  },
+  "play": {
+    "pet": {
+      "hehe": "Hehe!",
+      "tickles": "That tickles!",
+      "again": "Again! Again!",
+      "favorite": "You’re my favorite human.",
+      "likeYou": "I like you too.",
+      "wiggle": "Happy wiggle!"
+    },
+    "dizzy": {
+      "spinning": "Whoa… the room is spinning.",
+      "tooMany": "Too… many… pets…"
+    },
+    "lift": "Wheee!",
+    "drop": {
+      "thanks": "Thanks for the lift!",
+      "niceSpot": "Ooh, nice spot.",
+      "canFly": "I can fly, you know. Underwater. But thanks."
+    },
+    "hover": {
+      "hi": "Oh, hi!",
+      "hello": "Hello there.",
+      "psst": "Psst. You can pet me."
+    },
+    "wake": {
+      "up": "Huh? I’m up! I’m up.",
+      "resting": "I wasn’t asleep. I was resting my wings."
+    }
+  },
+  "help": {
+    "hello": {
+      "morning": "Good morning! I’m Ray.",
+      "afternoon": "Good afternoon! I’m Ray.",
+      "evening": "Good evening! I’m Ray.",
+      "late": "Up late? Me too. I’m Ray."
+    },
+    "working": {
+      "logs": "looking through your logs",
+      "clues": "fishing for clues",
+      "docs": "gliding through the docs",
+      "source": "reading the source",
+      "trail": "following the trail",
+      "sand": "sifting through the sand",
+      "dots": "connecting the dots",
+      "answer": "reeling in an answer"
+    }
+  },
+  "splash": {
+    "intro": "Hi, I’m Ray! Let’s get you ready to build.",
+    "hello": "Welcome back! Let me get things ready.",
+    "launch": {
+      "welcomeBack": "Welcome back!",
+      "hey": "Hey, welcome back!",
+      "build": "Welcome back! Let’s build.",
+      "morning": "Morning! Welcome back.",
+      "evening": "Evening! Welcome back.",
+      "late": "Up late? Welcome back."
+    },
+    "tools": {
+      "toolbox": "Rummaging through the toolbox…",
+      "fins": "Fins? Check. Flippers? Check. Still looking…"
+    },
+    "accounts": {
+      "knocking": "Knocking on a few doors…",
+      "knuckles": "Still knocking. Fins make terrible knuckles."
+    },
+    "ready": "All set! Let’s make something great.",
+    "setup": "A few things to set up first. I’ll show you around!",
+    "error": "Hmm, something got tangled in the seaweed. Let’s take a look."
+  },
+  "deploy": {
+    "hello": "Taking your latest changes to Fabric!",
+    "helloFirst": "{{name}}’s first trip to Fabric! I’ll swim it over.",
+    "live": "{{name}} is live! Go take a look.",
+    "trouble": {
+      "failed": "Your app didn’t make it to Fabric. Want me to find out why?",
+      "signin": "Fabric wants you to sign in again before you can publish this app.",
+      "stopped": "Publishing was stopped before it finished.",
+      "unsupported": "Fabric apps aren’t available in that workspace’s region yet. Let’s pick a workspace in another region.",
+      "unsupportedRegion": "That workspace’s capacity is in {{region}}, and Fabric apps aren’t there yet. Let’s pick a workspace in another region."
+    },
+    "steps": {
+      "packages": "Grabbing a few packages before we set off…",
+      "suitcase": "npm is packing the suitcase…",
+      "hiFabric": "Saying hi to Fabric…",
+      "knock": "Knock knock, Fabric. It’s Ray.",
+      "id": "Fabric wants to see some ID. Check your browser!",
+      "room": "Finding your app some room to swim…",
+      "pond": "Clearing a spot in the pond…",
+      "swimOver": "Swimming over to your workspace…",
+      "workspaceRoom": "Making sure your workspace has room…",
+      "spot": "Saving your app a spot in Fabric…",
+      "welcomeMat": "Rolling out the welcome mat…",
+      "knobs": "Tuning a few knobs…",
+      "guestList": "Checking who’s on the guest list…",
+      "tables": "Tidying up your tables…",
+      "tricks": "Teaching your database some new tricks…",
+      "files": "Making room for your files…",
+      "shelves": "Dusting off some shelves…",
+      "plugging": "Plugging in your data connections…",
+      "cables": "Untangling a few cables…",
+      "building": "Building your app. Fins crossed!",
+      "bundling": "Bundling it all up nice and tidy…",
+      "current": "Sending it up the current to Fabric…",
+      "waking": "Waking up your functions…",
+      "riseAndShine": "Functions, rise and shine!",
+      "ready": "Getting everything ready in Fabric…",
+      "bow": "Wrapping it up with a bow…",
+      "almost": "Almost there. Swim, Ray, swim!",
+      "magic": "Doing a little Fabric magic…",
+      "new": "Something new! Watching closely…",
+      "busy": "Fabric’s a bit busy. Trying again…",
+      "live": "It’s live! Go take a look."
+    }
+  }
+}

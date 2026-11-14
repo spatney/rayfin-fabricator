@@ -415,11 +415,41 @@ mod tests {
     assert!(!frame.contains("`local.fallback`"), "only records something writes are described");
   }
 
-  /// Whether `source` shows `label`: as a string literal, or as the whole text
-  /// of a JSX element or line.
-  fn shows(source: &str, label: &str) -> bool {
+  /// Every text of the renderer's English catalogs, as (namespace, key, text).
+  fn english_texts(renderer: &std::path::Path) -> Vec<(String, String, String)> {
+    fn walk(ns: &str, key: &str, value: &serde_json::Value, out: &mut Vec<(String, String, String)>) {
+      match value {
+        serde_json::Value::String(text) => out.push((ns.to_string(), key.to_string(), text.clone())),
+        serde_json::Value::Object(map) => {
+          for (k, v) in map {
+            walk(ns, &if key.is_empty() { k.clone() } else { format!("{key}.{k}") }, v, out);
+          }
+        }
+        _ => {}
+      }
+    }
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(renderer.join("i18n").join("locales").join("en")).into_iter().flatten().flatten() {
+      let path = entry.path();
+      let Some(ns) = path.file_stem().and_then(|s| s.to_str()).filter(|_| path.extension().is_some_and(|e| e == "json")) else {
+        continue;
+      };
+      let Some(value) = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()) else {
+        continue;
+      };
+      walk(ns, "", &value, &mut out);
+    }
+    out
+  }
+
+  /// Whether `source` shows `label`: as a string literal, as the whole text of
+  /// a JSX element or line, or through a key of the English catalogs that holds it.
+  fn shows(source: &str, label: &str, english: &[(String, String, String)]) -> bool {
     [format!("'{label}'"), format!("\"{label}\""), format!(">{label}<")].iter().any(|form| source.contains(form.as_str()))
       || source.lines().any(|line| line.trim() == label)
+      || english.iter().filter(|(_, _, text)| text == label).any(|(ns, key, _)| {
+        [format!("'{key}'"), format!("\"{key}\""), format!("{ns}:{key}")].iter().any(|form| source.contains(form.as_str()))
+      })
   }
 
   /// The controls the instructions name in bold are the app's own labels, so a
@@ -428,6 +458,7 @@ mod tests {
   fn the_controls_it_names_are_the_apps_own_labels() {
     let renderer = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("src").join("renderer").join("src");
     let frame = system_frame(&ctx());
+    let english = english_texts(&renderer);
     for (label, file) in [
       ("Publish", "components/DeploymentsControl.tsx"),
       ("Publish after each chat turn", "components/DeploymentsControl.tsx"),
@@ -451,7 +482,7 @@ mod tests {
       assert!(frame.contains(&format!("**{label}**")), "Help's instructions don't name **{label}**");
       let source = std::fs::read_to_string(renderer.join(file)).unwrap_or_default();
       assert!(
-        shows(&source, label),
+        shows(&source, label, &english),
         "Help's instructions (commands/help/prompt.rs) send people to **{label}**, but {file} doesn't show it any more: \
 update the instructions to the new label"
       );

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
+import { Trans, useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { useToast } from '../../toast'
 import { reportThrown } from '../../errorReport'
@@ -22,6 +23,7 @@ function autoSize(el: HTMLTextAreaElement): void {
  * usually the fastest way to describe it).
  */
 export function HelpComposer({ busy, onAsk, onStop }: HelpComposerProps): JSX.Element {
+  const { t } = useTranslation('help')
   const toast = useToast()
   const [text, setText] = useState('')
   const [files, setFiles] = useState<string[]>([])
@@ -65,27 +67,27 @@ export function HelpComposer({ busy, onAsk, onStop }: HelpComposerProps): JSX.El
 
   const pickFiles = useCallback(async (): Promise<void> => {
     try {
-      const picked = await window.api.help.pickPaths(false, 'Attach files for Help to read')
+      const picked = await window.api.help.pickPaths(false, t('composer.attachFilesTitle'))
       if (picked.length) addFiles(picked)
     } catch (reason) {
       toast.error(reportThrown(reason, { operation: 'help_attach', area: 'ui' }), {
-        title: "Couldn't attach that",
+        title: t('composer.attachFailed'),
         record: false
       })
     }
-  }, [addFiles, toast])
+  }, [addFiles, toast, t])
 
   const pickFolder = useCallback(async (): Promise<void> => {
     try {
-      const picked = await window.api.help.pickPaths(true, 'Attach a folder for Help to read')
+      const picked = await window.api.help.pickPaths(true, t('composer.attachFolderTitle'))
       if (picked.length) addFiles(picked)
     } catch (reason) {
       toast.error(reportThrown(reason, { operation: 'help_attach', area: 'ui' }), {
-        title: "Couldn't attach that",
+        title: t('composer.attachFailed'),
         record: false
       })
     }
-  }, [addFiles, toast])
+  }, [addFiles, toast, t])
 
   const onPaste = useCallback(
     (event: React.ClipboardEvent<HTMLTextAreaElement>): void => {
@@ -100,14 +102,14 @@ export function HelpComposer({ busy, onAsk, onStop }: HelpComposerProps): JSX.El
             addFiles([await savePastedImage(image)])
           } catch (reason) {
             toast.error(reportThrown(reason, { operation: 'help_paste_image', area: 'ui' }), {
-              title: "Couldn't attach the image",
+              title: t('composer.imageFailed'),
               record: false
             })
           }
         }
       })()
     },
-    [addFiles, toast]
+    [addFiles, toast, t]
   )
 
   // Dropping a file or folder onto the prompt attaches it. The webview gives us
@@ -147,7 +149,7 @@ export function HelpComposer({ busy, onAsk, onStop }: HelpComposerProps): JSX.El
               <span>{path.split(/[\\/]/).pop()}</span>
               <button
                 type="button"
-                aria-label={`Remove ${path}`}
+                aria-label={t('composer.removeFile', { path })}
                 onClick={() => setFiles((prev) => prev.filter((p) => p !== path))}
               >
                 <Codicon name="close" />
@@ -166,8 +168,8 @@ export function HelpComposer({ busy, onAsk, onStop }: HelpComposerProps): JSX.El
           className="help-input"
           rows={1}
           value={text}
-          placeholder="Describe what went wrong, or paste a screenshot"
-          aria-label="Ask Help"
+          placeholder={t('composer.placeholder')}
+          aria-label={t('composer.label')}
           spellCheck={false}
           onChange={(e) => {
             setText(e.target.value)
@@ -177,14 +179,18 @@ export function HelpComposer({ busy, onAsk, onStop }: HelpComposerProps): JSX.El
           onPaste={onPaste}
         />
         <div className="help-prompt-tools">
-          <button type="button" onClick={() => void pickFiles()} title="Attach files">
+          <button type="button" onClick={() => void pickFiles()} title={t('composer.attachFiles')}>
             <Codicon name="new-file" />
           </button>
-          <button type="button" onClick={() => void pickFolder()} title="Attach a folder">
+          <button
+            type="button"
+            onClick={() => void pickFolder()}
+            title={t('composer.attachFolder')}
+          >
             <Codicon name="folder-opened" />
           </button>
           {busy ? (
-            <button type="button" className="help-stop" onClick={onStop} title="Stop (Esc)">
+            <button type="button" className="help-stop" onClick={onStop} title={t('composer.stop')}>
               <Codicon name="primitive-square" />
             </button>
           ) : (
@@ -192,7 +198,7 @@ export function HelpComposer({ busy, onAsk, onStop }: HelpComposerProps): JSX.El
               type="submit"
               className="help-send"
               disabled={!text.trim()}
-              title="Ask (Enter)"
+              title={t('composer.ask')}
             >
               <Codicon name="arrow-right" />
             </button>
@@ -201,8 +207,11 @@ export function HelpComposer({ busy, onAsk, onStop }: HelpComposerProps): JSX.El
       </div>
 
       <p className="help-hint">
-        <kbd>Enter</kbd> to ask · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line ·{' '}
-        <kbd>Esc</kbd> to {busy ? 'stop' : 'close'}
+        <Trans
+          t={t}
+          i18nKey={busy ? 'composer.hintBusy' : 'composer.hintIdle'}
+          components={{ kbd: <kbd /> }}
+        />
       </p>
     </form>
   )

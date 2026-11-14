@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   LEGACY_PHASES,
   deployRuns,
@@ -6,6 +6,7 @@ import {
   readDeployProgress,
   type DeployProgress
 } from './deployProgress'
+import { setLanguage } from './i18n'
 
 /**
  * A Rayfin 1.36 deploy, as a piped `rayfin up -y --force` prints it: the
@@ -196,6 +197,30 @@ describe('reading any deploy', () => {
   it('says when an older CLI is trying a request again', () => {
     const p = readDeployProgress(['⏳ Waiting 2s before retry... (1/5)\n'], 0)
     expect(p.topic).toBe('retry')
+  })
+})
+
+describe('reading a deploy in another language', () => {
+  afterEach(async () => {
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('reads the CLI’s English and names the steps in German', async () => {
+    await setLanguage('de')
+    const item = readDeployProgress(v2('item'), 0)
+    expect(item.current.label).toBe('Deine App wird in Fabric eingerichtet')
+    // The CLI's own words stay as it wrote them.
+    expect(item.detail).toBe('Resolving workload endpoint')
+    expect(labels(item, 'todo')).toEqual([
+      'Einstellungen werden angewendet',
+      'Deine App wird erstellt und hochgeladen',
+      'Deine App wird live geschaltet'
+    ])
+    // A CLI line that only repeats a step's English name adds nothing.
+    const repeating = v2('start', '[rayfin] license: Connecting to Fabric\n')
+    expect(readDeployProgress(repeating, 0).detail).toBeNull()
+    expect(readDeployProgress(v2('start'), 25).current.label).toBe('Deine App wird erstellt')
   })
 })
 

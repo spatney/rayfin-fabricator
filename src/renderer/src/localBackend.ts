@@ -16,6 +16,7 @@ import type {
   StudioProject,
   TeamDeployRecord
 } from '@shared/ipc'
+import { formatList, i18n, translator } from './i18n'
 
 /** A failed `window.api.local` command: an `Error` with its stable `code` and a `hint`. */
 export class LocalBackendError extends Error {
@@ -138,36 +139,33 @@ function problemDetail(...texts: (string | null | undefined)[]): string | null {
  */
 export function runningProblems(status: LocalStatus | null | undefined): LocalRunningProblem[] {
   if (status?.state !== 'running') return []
+  const t = translator('preview')
   const problems: LocalRunningProblem[] = []
   if (status.analysis && !status.analysis.ok) {
     problems.push({
       kind: 'analysis',
-      summary:
-        'Your app’s latest data model change couldn’t be read, so it still uses the previous data model.',
+      summary: t('runningProblem.analysis'),
       detail: problemDetail(status.analysis.message)
     })
   }
   if (status.schema?.result === 'failed') {
     problems.push({
       kind: 'schema',
-      summary:
-        'Your app’s latest data model change couldn’t be applied to its local database, so it still uses the previous one.',
+      summary: t('runningProblem.schema'),
       detail: problemDetail(status.schema.message)
     })
   }
   if (status.functions?.state === 'failed') {
     problems.push({
       kind: 'functions',
-      summary:
-        'Your app’s functions didn’t build, so calling them fails or runs their previous build.',
+      summary: t('runningProblem.functions'),
       detail: problemDetail(status.functions.errors.join('\n'), status.functions.message)
     })
   }
   if (status.vite?.state === 'failed') {
     problems.push({
       kind: 'vite',
-      summary:
-        'Your app’s Vite dev server stopped and couldn’t start again, so the preview can’t show it.',
+      summary: t('runningProblem.vite'),
       detail: problemDetail(status.vite.message)
     })
   }
@@ -181,23 +179,22 @@ export function runningProblems(status: LocalStatus | null | undefined): LocalRu
  * stopped one Starting….
  */
 export function localStateLabel(status: LocalStatus | null | undefined, pending = false): string {
+  const t = translator('preview')
   switch (status?.state) {
     case 'starting':
-      return 'Starting…'
+      return t('localState.starting')
     case 'running': {
       const problems = runningProblems(status).length
       return problems === 0
-        ? 'Running'
-        : problems === 1
-          ? 'Running · problem'
-          : `Running · ${problems} problems`
+        ? t('localState.running')
+        : t('localState.runningProblems', { count: problems })
     }
     case 'restarting':
-      return 'Restarting…'
+      return t('localState.restarting')
     case 'error':
-      return 'Error'
+      return t('status.error')
     default:
-      return pending ? 'Starting…' : 'Stopped'
+      return pending ? t('localState.starting') : t('localState.stopped')
   }
 }
 
@@ -334,29 +331,42 @@ export function hasFabricBackend(project: StudioProject | null | undefined): boo
  * `connector-unsupported` warnings. A Rayfin version of a newer line runs here
  * anyway, with {@link localSdkWarning}, unless the app couldn't start with it.
  * A team app's preview uses the team's deployment of it instead (`team`).
+ * In the interface's language, or in English for logs (`english`).
  */
 export function localFallbackReason(
   status: LocalStatus | null | undefined,
-  { team = false }: { team?: boolean } = {}
+  { team = false, english = false }: { team?: boolean; english?: boolean } = {}
 ): string | null {
   if (!status) return null
-  const backend = team ? 'the team’s deployment of it in Fabric' : 'your published app’s backend'
+  const t = english ? i18n.getFixedT('en', 'preview') : translator('preview')
   const sdk = sdkFallback(status)
   if (sdk?.newer) {
-    return sdk.version
-      ? `This app uses Rayfin ${sdk.version}, which is newer than the Rayfin versions Fabricator runs on this computer and couldn’t start here, so the preview uses ${backend}.`
-      : `This app’s newer Rayfin version couldn’t start on this computer, so the preview uses ${backend}.`
+    if (sdk.version) {
+      return team
+        ? t('fallback.team.newerVersion', { version: sdk.version })
+        : t('fallback.published.newerVersion', { version: sdk.version })
+    }
+    return team ? t('fallback.team.newer') : t('fallback.published.newer')
   }
   if (sdk) {
-    return sdk.version
-      ? `This app uses Rayfin ${sdk.version}, which Fabricator can’t run on this computer, so the preview uses ${backend}.`
-      : `This app’s Rayfin version can’t run on this computer, so the preview uses ${backend}.`
+    if (sdk.version) {
+      return team
+        ? t('fallback.team.oldVersion', { version: sdk.version })
+        : t('fallback.published.oldVersion', { version: sdk.version })
+    }
+    return team ? t('fallback.team.old') : t('fallback.published.old')
   }
   const names = unsupportedConnectors(status)
   if (names.length === 0) return null
-  return names.length === 1
-    ? `The ${names[0]} connector runs only on Fabric, so the preview uses ${backend}.`
-    : `The ${sentenceList(names)} connectors run only on Fabric, so the preview uses ${backend}.`
+  if (names.length === 1) {
+    return team
+      ? t('fallback.team.connector', { name: names[0] })
+      : t('fallback.published.connector', { name: names[0] })
+  }
+  const list = english ? sentenceList(names) : formatList(names)
+  return team
+    ? t('fallback.team.connectors', { names: list })
+    : t('fallback.published.connectors', { names: list })
 }
 
 /** The code behind {@link localFallbackReason}: `sdk-unsupported` or `connector-unsupported`. */
@@ -392,14 +402,15 @@ export function installedSdkVersion(info: RayfinVersionInfo | null | undefined):
 export function localSdkWarning(status: LocalStatus | null | undefined): string | null {
   const sdk = status ? unsupportedSdk(status) : null
   if (!sdk) return null
+  const t = translator('preview')
   if (sdk.newer) {
     return sdk.version
-      ? `This app uses Rayfin ${sdk.version}, which is newer than the Rayfin versions Fabricator runs on this computer, so some things might not work as expected.`
-      : 'This app uses a newer Rayfin version than Fabricator runs on this computer, so some things might not work as expected.'
+      ? t('sdkWarning.newerVersion', { version: sdk.version })
+      : t('sdkWarning.newer')
   }
   return sdk.version
-    ? `This app uses Rayfin ${sdk.version}, which isn’t one of the Rayfin versions Fabricator runs on this computer, so some things might not work as expected.`
-    : 'This app’s Rayfin version isn’t one Fabricator runs on this computer, so some things might not work as expected.'
+    ? t('sdkWarning.olderVersion', { version: sdk.version })
+    : t('sdkWarning.older')
 }
 
 /**

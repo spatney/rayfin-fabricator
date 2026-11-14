@@ -50,7 +50,7 @@ fn localhost_port(uri: &str) -> Option<u16> {
 
 fn load(text: &str) -> Result<Value, String> {
   serde_yaml::from_str(text.strip_prefix('\u{feff}').unwrap_or(text))
-    .map_err(|e| format!("rayfin/rayfin.yml isn't valid YAML: {e}"))
+    .map_err(|e| t!("services.redirectUris.invalidYaml", error = e))
 }
 
 fn auth(doc: &Value) -> Option<&Value> {
@@ -63,7 +63,7 @@ fn redirect_list(doc: &Value) -> Result<Option<Vec<String>>, String> {
   match auth(doc).and_then(|a| a.get("allowedRedirectUris")) {
     None | Some(Value::Null) => Ok(None),
     Some(Value::Sequence(items)) => Ok(Some(items.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())),
-    Some(_) => Err("`services.auth.allowedRedirectUris` in rayfin/rayfin.yml isn't a list.".into()),
+    Some(_) => Err(t!("services.redirectUris.notAList")),
   }
 }
 
@@ -82,7 +82,7 @@ pub fn parse(text: &str) -> Result<LocalOrigins, String> {
 
 pub fn read(project_dir: &Path) -> Result<LocalOrigins, String> {
   let text = std::fs::read_to_string(config_path(project_dir))
-    .map_err(|e| format!("Couldn't read rayfin/rayfin.yml: {e}"))?;
+    .map_err(|e| t!("services.redirectUris.readFailed", error = e))?;
   parse(&text)
 }
 
@@ -92,11 +92,7 @@ pub fn read(project_dir: &Path) -> Result<LocalOrigins, String> {
 /// port never drops `localhost:5173`.
 pub fn with_origin(text: &str, port: u16) -> Result<Option<String>, String> {
   let uri = origin(port);
-  let manual = || {
-    format!(
-      "Couldn't update rayfin.yml automatically. Add `{uri}` to `services.auth.allowedRedirectUris` in rayfin/rayfin.yml, then retry."
-    )
-  };
+  let manual = || t!("services.redirectUris.manual", uri = uri);
   let before = load(text)?;
   let mut expected = redirect_list(&before)?.unwrap_or_else(|| vec![origin(DEFAULT_PORT)]);
   if expected.iter().any(|listed| localhost_port(listed) == Some(port)) {
@@ -122,11 +118,11 @@ fn without_redirects(mut doc: Value) -> Value {
 /// it's already allowed (nothing written).
 pub fn add(project_dir: &Path, port: u16) -> Result<Option<OriginEdit>, String> {
   let path = config_path(project_dir);
-  let original = std::fs::read_to_string(&path).map_err(|e| format!("Couldn't read rayfin/rayfin.yml: {e}"))?;
+  let original = std::fs::read_to_string(&path).map_err(|e| t!("services.redirectUris.readFailed", error = e))?;
   let Some(updated) = with_origin(&original, port)? else {
     return Ok(None);
   };
-  std::fs::write(&path, &updated).map_err(|e| format!("Couldn't write rayfin/rayfin.yml: {e}"))?;
+  std::fs::write(&path, &updated).map_err(|e| t!("services.redirectUris.writeFailed", error = e))?;
   Ok(Some(OriginEdit { original, updated }))
 }
 

@@ -2,6 +2,7 @@
 import type { FileNode, GalleryApp, StudioProject, TeamWorkspace } from '@shared/ipc'
 import type { DocsIndexPage } from 'virtual:docs-index'
 import { docsPageUrl } from '../../docsLinks'
+import { translator } from '../../i18n'
 import { flattenFiles } from '../chat/mentions'
 import { displayPath } from '../projectDisplay'
 import { HUE, type ItemAction, type SearchItem } from './model'
@@ -14,10 +15,10 @@ function baseName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path
 }
 
-/** An action that copies `text`, and says so once it has. */
-function copy(title: string, text: string, notice: string): ItemAction {
+/** An action that copies `text`, and says so once it has. Its id is `copy:<what>`. */
+function copy(what: string, title: string, text: string, notice: string): ItemAction {
   return {
-    id: `copy:${title}`,
+    id: `copy:${what}`,
     title,
     icon: 'copy',
     notice,
@@ -38,9 +39,10 @@ export function projectItems(
     openInEditor?: (project: StudioProject) => void
   }
 ): SearchItem[] {
+  const t = translator('spotlight')
   return projects.map((project) => {
     const team = project.team
-      ? (options.teamNames.get(project.team.workspaceId) ?? 'Team')
+      ? (options.teamNames.get(project.team.workspaceId) ?? t('sources.team'))
       : undefined
     const folder = baseName(project.path)
     const where = displayPath(project.path)
@@ -49,29 +51,33 @@ export function projectItems(
       const openInEditor = options.openInEditor
       actions.push({
         id: 'vscode',
-        title: 'Open in VS Code',
+        title: t('sources.openInVsCode'),
         icon: 'vscode',
         run: () => openInEditor(project)
       })
     }
-    actions.push(copy('Copy path', project.path, `Copied ${where}`))
+    actions.push(
+      copy('path', t('sources.copyPath'), project.path, t('sources.copied', { text: where }))
+    )
     if (!project.missing) {
       actions.push({
         id: 'manage',
-        title: 'Manage project',
+        title: t('sources.manageProject'),
         icon: 'gear',
         run: () => options.manage(project)
       })
     }
+    const live = project.id === options.activeId
     return {
       id: `project:${project.id}`,
       group: 'projects',
       title: project.name,
-      subtitle: team ? `${team} · team workspace` : where,
+      subtitle: team ? t('sources.teamWorkspace', { team }) : where,
       keywords: folder && folder !== project.name ? [folder] : undefined,
       icon: { kind: 'mark', name: project.name },
-      verb: project.missing ? 'Manage project' : undefined,
-      hint: project.id === options.activeId ? 'Open now' : project.missing ? 'Missing' : undefined,
+      verb: project.missing ? t('sources.manageProject') : undefined,
+      hint: live ? t('sources.openNow') : project.missing ? t('sources.missing') : undefined,
+      live: live || undefined,
       actions,
       run: () => (project.missing ? options.manage(project) : options.open(project))
     }
@@ -82,6 +88,7 @@ export function workspaceItems(
   workspaces: readonly TeamWorkspace[],
   open: (workspace: TeamWorkspace) => void
 ): SearchItem[] {
+  const t = translator('spotlight')
   return workspaces.map((workspace) => ({
     id: `workspace:${workspace.id}`,
     group: 'projects',
@@ -89,9 +96,16 @@ export function workspaceItems(
     subtitle: workspace.repo,
     keywords: ['team workspace', 'overview'],
     icon: { kind: 'codicon', name: 'organization', hue: HUE.violet },
-    kind: 'Workspace',
-    verb: 'Open overview',
-    actions: [copy('Copy repository', workspace.repo, `Copied ${workspace.repo}`)],
+    kind: t('sources.workspace'),
+    verb: t('sources.openOverview'),
+    actions: [
+      copy(
+        'repo',
+        t('sources.copyRepository'),
+        workspace.repo,
+        t('sources.copied', { text: workspace.repo })
+      )
+    ],
     run: () => open(workspace)
   }))
 }
@@ -110,12 +124,13 @@ export function galleryAppItems(
     openProject: (projectId: string) => void
   }
 ): SearchItem[] {
+  const t = translator('spotlight')
   return apps.map(({ app, address }) => {
     const actions: ItemAction[] = []
     if (address) {
       actions.push({
         id: 'fabric',
-        title: 'Open in Fabric',
+        title: t('sources.openInFabric'),
         icon: 'globe',
         run: () => options.open(app, app.portalUrl)
       })
@@ -124,12 +139,14 @@ export function galleryAppItems(
     if (local) {
       actions.push({
         id: 'project',
-        title: 'Open in Fabricator',
+        title: t('sources.openInFabricator'),
         icon: 'go-to-file',
         run: () => options.openProject(local.projectId)
       })
     }
-    actions.push(copy('Copy link', address ?? app.portalUrl, 'Copied the link'))
+    actions.push(
+      copy('link', t('sources.copyLink'), address ?? app.portalUrl, t('sources.copiedLink'))
+    )
     const keywords = [app.description, local?.projectName, app.team?.name].filter(
       (word): word is string => Boolean(word)
     )
@@ -137,10 +154,12 @@ export function galleryAppItems(
       id: `fabric-app:${app.id.toLowerCase()}`,
       group: 'apps',
       title: app.name,
-      subtitle: local ? `${app.workspaceName} · on this computer` : app.workspaceName,
+      subtitle: local
+        ? t('sources.onThisComputer', { workspace: app.workspaceName })
+        : app.workspaceName,
       keywords: keywords.length ? keywords : undefined,
       icon: { kind: 'mark', name: app.name },
-      verb: address ? 'Open app' : 'Open in Fabric',
+      verb: address ? t('verbs.apps') : t('sources.openInFabric'),
       actions,
       run: () => options.open(app, address ?? app.portalUrl)
     }
@@ -152,6 +171,10 @@ export function docItems(
   pages: readonly DocsIndexPage[],
   open: (url: string) => void
 ): SearchItem[] {
+  const t = translator('spotlight')
+  const copyTitle = t('sources.copyLink')
+  const copied = t('sources.copiedLink')
+  const copyLink = (url: string): ItemAction => copy('link', copyTitle, url, copied)
   const items: SearchItem[] = []
   for (const page of pages) {
     const url = docsPageUrl(page.path)
@@ -162,7 +185,7 @@ export function docItems(
       subtitle: page.section || undefined,
       body: page.description,
       icon: { kind: 'codicon', name: 'book', hue: HUE.blue },
-      actions: [copy('Copy link', url, 'Copied the link')],
+      actions: [copyLink(url)],
       run: () => open(url)
     })
     for (const heading of page.headings) {
@@ -175,7 +198,7 @@ export function docItems(
         body: heading.snippet || undefined,
         prior: -0.04,
         icon: { kind: 'codicon', name: 'note', hue: HUE.blue },
-        actions: [copy('Copy link', anchor, 'Copied the link')],
+        actions: [copyLink(anchor)],
         run: () => open(anchor)
       })
     }
@@ -219,6 +242,9 @@ function fileIcon(name: string): { name: string; hue?: number } {
 
 /** The open project's files (not the ones git ignores). They open in Code. */
 export function fileItems(tree: readonly FileNode[], open: (path: string) => void): SearchItem[] {
+  const t = translator('spotlight')
+  const copyTitle = t('sources.copyPath')
+  const projectFolder = t('sources.projectFolder')
   return flattenFiles(tree as FileNode[])
     .slice(0, MAX_FILES)
     .map((file) => {
@@ -227,11 +253,11 @@ export function fileItems(tree: readonly FileNode[], open: (path: string) => voi
         id: `file:${file.path}`,
         group: 'files',
         title: file.name,
-        subtitle: dir || 'Project folder',
+        subtitle: dir || projectFolder,
         // So a path ("src/app") finds it too.
         keywords: [file.path],
         icon: { kind: 'codicon', ...fileIcon(file.name) },
-        actions: [copy('Copy path', file.path, `Copied ${file.path}`)],
+        actions: [copy('path', copyTitle, file.path, t('sources.copied', { text: file.path }))],
         run: () => open(file.path)
       }
     })

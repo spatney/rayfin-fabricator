@@ -309,7 +309,7 @@ fn authorize_url(challenge: &str, state: &str) -> String {
 #[derive(Debug, PartialEq)]
 enum Callback {
   Code(String),
-  Failed(String),
+  Failed(Refusal),
   Other,
 }
 
@@ -327,7 +327,7 @@ fn callback(head: &str, state: &str) -> Callback {
     return Callback::Code(code.clone());
   }
   match query.get("error") {
-    Some(error) => Callback::Failed(explain(error, query.get("error_description").map_or("", String::as_str))),
+    Some(error) => Callback::Failed(Refusal::of(error, query.get("error_description").map_or("", String::as_str))),
     None => Callback::Other,
   }
 }
@@ -339,15 +339,15 @@ async fn receive(listener: &TcpListener, state: &str) -> Result<String, String> 
     let head = read_head(&mut stream).await;
     match callback(&head, state) {
       Callback::Code(code) => {
-        reply(&mut stream, "200 OK", "You're signed in to Work IQ. You can close this tab and return to Fabricator.").await;
+        reply(&mut stream, "200 OK", &t!("services.iq.callbackSignedIn")).await;
         return Ok(code);
       }
-      Callback::Failed(why) => {
-        let message = format!("Work IQ sign-in didn't finish: {why}. You can close this tab and return to Fabricator.");
+      Callback::Failed(refusal) => {
+        let message = t!("services.iq.callbackFailed", reason = refusal.shown());
         reply(&mut stream, "200 OK", &message).await;
-        return Err(why);
+        return Err(refusal.english());
       }
-      Callback::Other => reply(&mut stream, "404 Not Found", "Not found.").await,
+      Callback::Other => reply(&mut stream, "404 Not Found", &t!("services.iq.callbackNotFound")).await,
     }
   }
 }
@@ -426,25 +426,59 @@ async fn redeem(params: &[(&str, &str)]) -> Result<Grant, Refused> {
   let field = |key: &str| value.get(key).and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
   let error = field("error");
   Err(Refused {
-    message: explain(&error, &field("error_description")),
+    message: Refusal::of(&error, &field("error_description")).english(),
     signed_out: matches!(error.as_str(), "invalid_grant" | "interaction_required"),
   })
 }
 
-/// Microsoft's sign-in error, in words the user can act on.
-fn explain(error: &str, description: &str) -> String {
-  const APPROVAL: [&str; 4] = ["AADSTS65001", "AADSTS90094", "AADSTS90095", "AADSTS650052"];
-  if APPROVAL.iter().any(|code| description.contains(code)) {
-    return "the organization has to approve Work IQ first: an administrator grants consent, and each user needs a \
-            Microsoft 365 Copilot license"
-      .into();
+/// Why Microsoft's sign-in turned the user down.
+#[derive(Debug, PartialEq)]
+enum Refusal {
+  /// The organization hasn't approved Work IQ.
+  Approval,
+  Declined,
+  /// Microsoft's own words, clipped.
+  Said(String),
+  /// Only an error code, if even that.
+  Code(String),
+}
+
+impl Refusal {
+  fn of(error: &str, description: &str) -> Self {
+    const APPROVAL: [&str; 4] = ["AADSTS65001", "AADSTS90094", "AADSTS90095", "AADSTS650052"];
+    if APPROVAL.iter().any(|code| description.contains(code)) {
+      return Refusal::Approval;
+    }
+    if error == "access_denied" {
+      return Refusal::Declined;
+    }
+    match description.lines().next().map(str::trim).filter(|d| !d.is_empty()) {
+      Some(detail) => Refusal::Said(clip(detail)),
+      None => Refusal::Code(error.to_string()),
+    }
   }
-  if error == "access_denied" {
-    return "the sign-in was declined or cancelled".into();
+
+  /// In words the user can act on, in English: Copilot relays it.
+  fn english(&self) -> String {
+    match self {
+      Refusal::Approval => "the organization has to approve Work IQ first: an administrator grants consent, and each \
+                            user needs a Microsoft 365 Copilot license"
+        .into(),
+      Refusal::Declined => "the sign-in was declined or cancelled".into(),
+      Refusal::Said(detail) => format!("Microsoft's sign-in said: {detail}"),
+      Refusal::Code(error) => format!("Microsoft's sign-in said {}", if error.is_empty() { "no" } else { error }),
+    }
   }
-  match description.lines().next().map(str::trim).filter(|d| !d.is_empty()) {
-    Some(detail) => format!("Microsoft's sign-in said: {}", clip(detail)),
-    None => format!("Microsoft's sign-in said {}", if error.is_empty() { "no" } else { error }),
+
+  /// The same, in the user's language, for the page the browser lands on.
+  fn shown(&self) -> String {
+    match self {
+      Refusal::Approval => t!("services.iq.refused.approval"),
+      Refusal::Declined => t!("services.iq.refused.declined"),
+      Refusal::Said(detail) => t!("services.iq.refused.said", detail = detail),
+      Refusal::Code(error) if error.is_empty() => t!("services.iq.refused.no"),
+      Refusal::Code(error) => t!("services.iq.refused.code", error = error),
+    }
   }
 }
 
@@ -480,9 +514,9 @@ mod tests {
     assert_eq!(callback(&get("/favicon.ico"), "s1"), Callback::Other);
     assert_eq!(callback("POST /?code=abc&state=s1 HTTP/1.1\r\n\r\n", "s1"), Callback::Other);
     let approval = get("/?state=s1&error=consent_required&error_description=AADSTS65001%3A+The+user+or+administrator+has+not+consented");
-    assert!(matches!(callback(&approval, "s1"), Callback::Failed(why) if why.starts_with("the organization has to approve Work IQ")));
+    assert_eq!(callback(&approval, "s1"), Callback::Failed(Refusal::Approval));
     let declined = get("/?state=s1&error=access_denied");
-    assert_eq!(callback(&declined, "s1"), Callback::Failed("the sign-in was declined or cancelled".into()));
+    assert_eq!(callback(&declined, "s1"), Callback::Failed(Refusal::Declined));
   }
 
   #[test]
