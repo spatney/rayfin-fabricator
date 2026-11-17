@@ -42,7 +42,7 @@ The update reaches your published app the way any chat change does: when the tur
 
 ## Update to a newer release, such as a preview
 
-Rayfin publishes some releases before they become its latest release (the one npm's `latest` tag names), such as Rayfin 2.0.0 while its latest release is 1.36.2. Fabricator doesn't stop you from using them, but they might be unstable. New projects stay on the release line Fabricator starts them on, such as 1.36.x, so you choose when an app moves.
+Rayfin publishes some releases before they become its latest release (the one npm's `latest` tag names), such as previews of its next version. Fabricator doesn't stop you from using them, but they might be unstable. New projects stay on the release line Fabricator starts them on, such as 2.0.x, so you choose when an app moves.
 
 1. Select the Rayfin version in the status bar.
 2. Under "Rayfin `<version>` is available", read why the release needs care. A release that isn't Rayfin's latest says "It isn’t Rayfin’s latest release yet, so it might be unstable." A release the local backend doesn't run yet says "Fabricator doesn’t run it on this computer yet, so some things might not work as expected here."
@@ -61,7 +61,7 @@ Upgrade this app to Rayfin 2.0.0. Move every Rayfin package, the CLI included, t
 Fabricator runs your app on this computer with a local backend that runs some lines of Rayfin releases, such as 1.36.x and 2.0.x. So:
 
 - **Update with Copilot** offers Rayfin's latest release that the local backend runs.
-- New projects, team apps included, start on one of those lines, such as 1.36.x, and pin every `@microsoft/rayfin-*` package to it with a `~` range, such as `~1.36.0`, so a later `npm install` doesn't move them to another release.
+- New projects, team apps included, start on one of those lines, such as 2.0.x, and pin every `@microsoft/rayfin-*` package to it with a `~` range, such as `~2.0.0`, so a later `npm install` doesn't move them to another release.
 - The Advisor flags **Rayfin packages aren't pinned to a release Fabricator runs locally** when a package is on a release older than those lines, or declared with a range that lets the next install leave its line.
 
 An app on a newer release than the local backend runs still runs on this computer, but a note above the preview says some things might not work as expected. See [The preview says some things might not work](/docs/troubleshooting/preview#the-preview-says-some-things-might-not-work). An app on an older release can misbehave on this computer. Once it's published, its preview uses the published app's backend instead. See [What runs only on Fabric](/docs/build/local-development#what-runs-only-on-fabric).

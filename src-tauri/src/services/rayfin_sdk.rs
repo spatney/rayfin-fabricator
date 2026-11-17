@@ -5,7 +5,7 @@
 //! which runs the lines of Rayfin SDK releases in `sdk.supported` of the repo's
 //! `rayfin-local.json`, such as 1.36.x and 2.0.x. A new project scaffolds with
 //! the newest stable release of one of them, `sdk.newProjects`, and pins its
-//! `@microsoft/rayfin-*` packages to that minor (`~1.36.0`): the templates'
+//! `@microsoft/rayfin-*` packages to that minor (`~2.0.0`): the templates'
 //! caret ranges would otherwise pull a newer minor. Updates go to the newest
 //! release rayfin-local runs that isn't newer than Rayfin's latest, and a newer
 //! one is offered too, with a warning (see [`update_targets`]).
@@ -638,7 +638,8 @@ mod tests {
     let tested = tested_release();
     assert!(is_newer_than_supported(&format!("{}.{}.0-alpha.1", tested.major, tested.minor + 1)));
     assert!(!is_newer_than_supported(&tested.to_string()));
-    assert!(!is_newer_than_supported(&format!("{}.{}.9", tested.major, tested.minor - 1)));
+    let (oldest_major, _) = supported_lines()[0];
+    assert!(!is_newer_than_supported(&format!("{}.99.0", oldest_major - 1)), "older than every line it runs");
   }
 
   #[test]

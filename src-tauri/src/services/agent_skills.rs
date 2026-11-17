@@ -209,11 +209,11 @@ secret's value in chat, and never write one into a file.
 
 ## Rayfin package versions
 This project keeps every `@microsoft/rayfin-*` package on the same `~X.Y.0` range, such as
-`~1.36.0`, in every `package.json`, so an install never moves it to another release. Install a new
-one on that range, such as `npm install @microsoft/rayfin-<name>@~1.36.0` with the project's own
+`~2.0.0`, in every `package.json`, so an install never moves it to another release. Install a new
+one on that range, such as `npm install @microsoft/rayfin-<name>@~2.0.0` with the project's own
 version; an exact version in the range, such as the one `rayfin connector add` prints, is fine too.
 Never install one without a version: npm would add Rayfin's latest release with a caret range, such
-as `^1.36.2`, whatever release the project is on. If that happens, set it back to the project's `~`
+as `^2.0.0`, whatever release the project is on. If that happens, set it back to the project's `~`
 range.
 
 Don't change the project's Rayfin version on your own. When the user asks for another one, move
@@ -1276,8 +1276,8 @@ mod tests {
       "**Secrets** view",
       "`secret-missing`",
       // The packages stay on one `~` range, and change only when the user asks.
-      "`~1.36.0`",
-      "`npm install @microsoft/rayfin-<name>@~1.36.0`",
+      "`~2.0.0`",
+      "`npm install @microsoft/rayfin-<name>@~2.0.0`",
       "Don't change the project's Rayfin version on your own",
       "Don't refuse a release",
       "might be unstable",
