@@ -379,8 +379,8 @@ async fn remove_project(app: AppHandle, workspace_id: String, folder: String, de
   }
   let _ = gh::delete_branch(&ws.repo, &branch).await;
   if let Some(local) = local_project(&ws.id, &folder) {
-    // Its local backend holds files in the worktree (the database, the logs).
-    crate::services::local_backend::state(&app).forget(&local.id).await;
+    // What Fabricator runs in the worktree stops before the worktree goes.
+    projects_impl::release_project(&app, &app.state::<AppState>(), &local.id).await;
     history::clear_history(&local.id);
     store::remove_project(&local.id);
   }

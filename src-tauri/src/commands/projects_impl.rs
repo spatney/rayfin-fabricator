@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::commands::util::{annotate_project, is_rayfin_project, normalize, same_path};
 use crate::services::exec::{run, OnData, RunOptions, RunResult, Stream};
@@ -807,11 +807,9 @@ pub async fn remove_project(
   id: String,
   delete_files: bool,
 ) -> Result<ProjectsState, String> {
-  // Stop any in-flight chat before the project folder goes away.
-  state.cancel_chat(&id);
-  // Its local backend holds files in the folder (the database, the logs), so it
-  // stops first, and doesn't outlive a project that's only forgotten either.
-  crate::services::local_backend::state(app).forget(&id).await;
+  // What Fabricator runs in the folder stops first, and doesn't outlive a
+  // project that's only forgotten either.
+  release_project(app, state, &id).await;
 
   if delete_files {
     if let Some(project) = store::find_project(&id) {
@@ -830,6 +828,49 @@ pub async fn remove_project(
   }
   history::clear_history(&id);
   Ok(crate::commands::util::annotate_state(store::remove_project(&id)))
+}
+
+/// How long releasing a project waits for its chat turn to stop.
+const TURN_STOP_WAIT: Duration = Duration::from_secs(10);
+
+/// Stop what Fabricator runs in a project's folder, which Windows can't move or
+/// delete while a process runs in it: its chat turn, its chat's Copilot
+/// session, whose MCP servers and shells run in the folder, its terminals, and
+/// its local backend, which also holds the app's database and logs there.
+pub(crate) async fn release_project(app: &AppHandle, state: &AppState, id: &str) {
+  // A turn that's still starting could open the session again after it goes.
+  if state.cancel_chat(id) {
+    let deadline = Instant::now() + TURN_STOP_WAIT;
+    while state.is_chat_running(id) && Instant::now() < deadline {
+      tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+  }
+  state.copilot.forget(id).await;
+  if let Some(terminals) = app.try_state::<crate::services::terminal::Terminals>() {
+    let (terminals, id) = (terminals.inner().clone(), id.to_string());
+    let _ = tokio::task::spawn_blocking(move || terminals.kill_all(Some(&id))).await;
+  }
+  crate::services::local_backend::state(app).forget(id).await;
+}
+
+/// The waits between attempts to move a folder to the trash: the processes
+/// [`release_project`] stopped take a moment to let go of it.
+const TRASH_RETRY_WAITS: [Duration; 4] =
+  [Duration::from_millis(250), Duration::from_millis(500), Duration::from_secs(1), Duration::from_secs(2)];
+
+/// Move `root` to the trash, trying again a few times while it's in use.
+fn trash_folder(root: &Path) -> Result<(), trash::Error> {
+  let mut waits = TRASH_RETRY_WAITS.into_iter();
+  loop {
+    match trash::delete(root) {
+      Ok(()) => return Ok(()),
+      Err(_) if !root.exists() => return Ok(()),
+      Err(error) => match waits.next() {
+        Some(wait) => std::thread::sleep(wait),
+        None => return Err(error),
+      },
+    }
+  }
 }
 
 /// Why a folder couldn't be moved to trash, in words: the crate's own message is
@@ -881,7 +922,7 @@ fn count_and_trash(app: &AppHandle, id: &str, root: &Path) -> Result<(), String>
   }
 
   emit_delete_progress(app, id, "trashing", files, Some(files));
-  trash::delete(root).map_err(|error| trash_failure(&error))
+  trash_folder(root).map_err(|error| trash_failure(&error))
 }
 
 /// Emit one `delete:progress` event (file-count progress for a project delete).

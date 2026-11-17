@@ -182,7 +182,7 @@ Moving the folder uses your system trash, so you can restore it there. An app th
 
 The removal runs in the background, so you can keep working and remove other projects at the same time. If the project is open, it closes first. Until the removal finishes, the project's row on **Your projects** shows **Removing** and what's happening, such as how many files are moving to the trash. When it's done, the project leaves the list, and a notification says its folder is in your system trash.
 
-If a removal can't finish, the project stays, and its row shows **Not removed** with the reason. For example, the folder can't move to the trash while another program, such as an editor or a terminal, has one of its files open. Close that program, then select **Try again**. To stop trying, select **Keep**.
+If a removal can't finish, the project stays, and its row shows **Not removed** with the reason. Fabricator first stops what it runs in the folder: the project's chat, the MCP servers and commands Copilot started there, its terminals and its local backend. So the reason is usually another program, such as an editor or a terminal, that has one of the folder's files open or runs in the folder. Close that program, then select **Try again**. To stop trying, select **Keep**.
 
 ## Change where new projects are saved
 
