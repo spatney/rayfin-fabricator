@@ -2,9 +2,22 @@ import type { ModelEntity, SourceDecorator, EntityPermission } from '../../model
 import { permissionFromDecorator } from '../../model/parseSchema'
 import type { QuickContext } from '../context'
 import type { QuickHit, Said } from '../quick'
-import { lineOf, matchAll, type SourceFile } from '../source'
+import { compareSemver, lineOf, matchAll, semverCore, type SemverCore, type SourceFile } from '../source'
 
 export const CODE_FILE = /\.(tsx?|jsx?|mts|cts|mjs|cjs)$/i
+
+/**
+ * False when the project's installed Rayfin (core, else CLI) predates `min`, so
+ * checks for what that release changed don't flag code that's correct for an
+ * older one. Unknown versions count as current.
+ */
+export function onRayfin(ctx: QuickContext, min: SemverCore): boolean {
+  const installed =
+    ctx.packages.find((p) => p.name === '@microsoft/rayfin-core')?.installed ??
+    ctx.packages.find((p) => p.name === '@microsoft/rayfin-cli')?.installed
+  const core = semverCore(installed)
+  return !core || compareSemver(core, min) >= 0
+}
 
 /** `access`, `owner`, … as inline code for messages. */
 export function code(text: string): string {

@@ -329,7 +329,7 @@
       "openModel": "Open the data model"
     },
     "storage": {
-      "lead": "Blob storage for files people upload. It’s experimental and not available in every Fabric region."
+      "lead": "Blob storage for files people upload. Before Rayfin 2.0, it’s experimental and not available in every Fabric region."
     },
     "functions": {
       "lead": "Server-side code. Calls to outside services use the <strong>app identity</strong>; reading the app’s own data still uses the identity of the user who called the function.",

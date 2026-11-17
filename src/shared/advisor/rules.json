@@ -1043,10 +1043,11 @@
       "severity": "low",
       "title": "Feature flag turns on a capability that no longer needs one",
       "summary": "`RAYFIN_FEATURE_FLAGS` lists only capabilities that still need a flag",
-      "why": "Functions and connectors are generally available since Rayfin 1.36, so `functions` and `connectors` in `RAYFIN_FEATURE_FLAGS` do nothing. Only `storage` still uses the flag.",
-      "fix": "Remove `functions` and `connectors` from `RAYFIN_FEATURE_FLAGS`, and the variable itself if nothing is left.",
+      "why": "Functions and connectors are generally available since Rayfin 1.36, and Storage since Rayfin 2.0, so `functions` and `connectors` in `RAYFIN_FEATURE_FLAGS` do nothing, and neither does `storage` in an app on Rayfin 2.0 or newer.",
+      "fix": "Remove them from `RAYFIN_FEATURE_FLAGS`, and the variable itself if nothing is left.",
       "docs": [
-        { "title": "Upgrade to 1.36", "url": "https://rayfin.ai/docs/reference/changelog#upgrade-to-136" }
+        { "title": "Upgrade to 1.36", "url": "https://rayfin.ai/docs/reference/changelog#upgrade-to-136" },
+        { "title": "Rayfin 2.0 release notes", "url": "https://rayfin.ai/docs/reference/changelog#rayfin-20" }
       ]
     },
     {
@@ -1243,10 +1244,10 @@
       "appliesWhen": ["storage"],
       "title": "App uses experimental Rayfin Storage",
       "summary": "Experimental Storage is noted for availability",
-      "why": "Storage is experimental: it isn't available in every Fabric region or tenant, and `@microsoft/rayfin-storage` may change substantially between releases.",
-      "fix": "Before you depend on storage, confirm that publishing with storage succeeds in your target workspace (it also runs in the local preview), and keep every Rayfin package on the same release.",
+      "why": "Before Rayfin 2.0, Storage is experimental: it isn't available in every Fabric region or tenant, and `@microsoft/rayfin-storage` may change substantially between releases. It's generally available since Rayfin 2.0.",
+      "fix": "Update the app to Rayfin 2.0, where Storage is generally available. Until then, before you depend on storage, confirm that publishing with storage succeeds in your target workspace (it also runs in the local preview), and keep every Rayfin package on the same release.",
       "docs": [
-        { "title": "Storage is experimental", "url": "https://rayfin.ai/docs/reference/known-limitations#storage-is-experimental" }
+        { "title": "Rayfin 2.0 release notes", "url": "https://rayfin.ai/docs/reference/changelog#rayfin-20" }
       ]
     },
     {

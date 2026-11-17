@@ -145,6 +145,12 @@ backend on this computer, and shows it live in its preview while you work:
   connectors and storage. When you change the entities, Fabricator updates the local database to
   match. Functions rebuild when you save them, and changes to `rayfin/rayfin.yml` apply as you
   save them.
+- Rayfin Storage runs here like the rest: uploads, downloads, listing and deleting work in the
+  preview, on files kept in `.rayfin-local/storage`, under each folder's `@blob` rules. Rayfin's
+  docs and skills say Storage is remote-only, with no local service or emulator, and that uploads
+  always go to OneLake: that's about Rayfin's own `rayfin dev`, not Fabricator, so ignore it here.
+  Don't tell the user that files can only be uploaded once the app is published.
+  `fabricator_local_status` lists the folders the backend runs (`features.storage.folders`).
 - The local data stays on this computer, separate from any published app's. It starts empty,
   unless the project declares seed data in `rayfin/seed` for the user to load (see the
   seed-data skill).
@@ -563,11 +569,12 @@ Treat a feature as experimental — and therefore off by default — whenever th
 (non-exhaustively):
 
 - Anything imported from the **`@microsoft/rayfin-core/experimental`** subpath, such as storage's
-  `@blob()`. By default import only from `@microsoft/rayfin-core` and the other stable packages,
-  never from its `/experimental` subpath.
-- Capabilities gated behind **`RAYFIN_FEATURE_FLAGS`**, such as `storage` and `postgresql`.
-  (Fabric apps are MSSQL-only regardless.) Functions and connectors are generally available since
-  Rayfin 1.36 and need no flag; in an app on an older Rayfin version they are experimental too.
+  `@blob()` before Rayfin 2.0. By default import only from `@microsoft/rayfin-core` and the other
+  stable packages, never from its `/experimental` subpath.
+- Capabilities gated behind **`RAYFIN_FEATURE_FLAGS`**, such as `postgresql`. (Fabric apps are
+  MSSQL-only regardless.) Functions and connectors are generally available since Rayfin 1.36, and
+  Storage since Rayfin 2.0, where `@blob()` and `StorageObject` come from `@microsoft/rayfin-core`:
+  none of them needs a flag. In an app on an earlier Rayfin version, each is experimental too.
 - `rayfin dev` and the `RAYFIN_WEBSERVICE_IMAGE_NAME` override, which are explicitly experimental.
 
 Treat anonymous (public) data access the same way. `@anonymous()` and `@role('anonymous', …)` are
@@ -1275,6 +1282,11 @@ mod tests {
       "Don't run `rayfin secret set`",
       "**Secrets** view",
       "`secret-missing`",
+      // Storage runs here, whatever Rayfin's docs say about `rayfin dev`.
+      "Rayfin Storage runs here",
+      "`.rayfin-local/storage`",
+      "remote-only",
+      "`features.storage.folders`",
       // The packages stay on one `~` range, and change only when the user asks.
       "`~2.0.0`",
       "`npm install @microsoft/rayfin-<name>@~2.0.0`",
@@ -1375,11 +1387,13 @@ mod tests {
         "@authenticated()",
         "Enable anonymous data access for Fabric Apps",
         "Functions and connectors are generally available",
+        "Storage since Rayfin 2.0",
       ] {
         assert!(text.contains(marker), "{guidance:?} stable-only instructions should mention {marker}");
       }
-      // Functions and connectors are no longer behind a flag (Rayfin 1.36).
+      // Functions and connectors are no longer behind a flag (Rayfin 1.36), nor storage (2.0).
       assert!(!text.contains("`storage`, `functions`"), "{guidance:?}");
+      assert!(!text.contains("such as `storage`"), "{guidance:?}");
     }
     assert!(stable_only_instructions(Guidance::Local).contains("even though it works here"));
     assert!(stable_only_instructions(Guidance::FabricBacked).contains("once it's deployed"));

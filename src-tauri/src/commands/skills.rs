@@ -470,7 +470,7 @@ fn managed_presentation(id: &str) -> Option<(&'static str, &'static str, &'stati
       "Use existing Fabric data: lakehouses, warehouses, SQL databases, semantic models and KQL.",
       "⇄",
     )),
-    "rayfin-storage" => Some(("Rayfin Storage", "File storage for your app. Experimental.", "▤")),
+    "rayfin-storage" => Some(("Rayfin Storage", "File storage for your app.", "▤")),
     _ => None,
   }
 }

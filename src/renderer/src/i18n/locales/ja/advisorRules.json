@@ -399,8 +399,8 @@
     "config/stale-feature-flags": {
       "title": "フラグが不要になった機能を機能フラグで有効にしている",
       "summary": "`RAYFIN_FEATURE_FLAGS` に、まだフラグが必要な機能だけを指定している",
-      "why": "Functions とコネクタは Rayfin 1.36 から一般提供されているため、`RAYFIN_FEATURE_FLAGS` の `functions` と `connectors` は何の効果もありません。現在もフラグを使うのは `storage` だけです。",
-      "fix": "`RAYFIN_FEATURE_FLAGS` から `functions` と `connectors` を削除してください。何も残らない場合は、変数自体を削除します。"
+      "why": "Functions とコネクタは Rayfin 1.36 から、Storage は Rayfin 2.0 から一般提供されているため、`RAYFIN_FEATURE_FLAGS` の `functions` と `connectors` は何の効果もありません。Rayfin 2.0 以降のアプリでは `storage` も同様です。",
+      "fix": "`RAYFIN_FEATURE_FLAGS` からそれらを削除してください。何も残らない場合は、変数自体を削除します。"
     },
     "platform/cli-outdated": {
       "title": "Rayfin CLI が最新ではない",
@@ -483,8 +483,8 @@
     "platform/experimental-services": {
       "title": "アプリで試験段階の Rayfin Storage を使っている",
       "summary": "試験段階の Storage の利用可否に関する注意",
-      "why": "Storage は試験段階の機能です。すべての Fabric リージョンやテナントで利用できるわけではなく、`@microsoft/rayfin-storage` はリリース間で大きく変わる可能性があります。",
-      "fix": "ストレージに依存する前に、対象のワークスペースでストレージを含めた公開が成功することを確認し (ストレージはローカル プレビューでも動作します)、すべての Rayfin パッケージを同じリリースにそろえてください。"
+      "why": "Rayfin 2.0 より前のバージョンでは、Storage は試験段階の機能です。すべての Fabric リージョンやテナントで利用できるわけではなく、`@microsoft/rayfin-storage` はリリース間で大きく変わる可能性があります。Rayfin 2.0 からは一般提供されています。",
+      "fix": "アプリを、Storage が一般提供されている Rayfin 2.0 に更新してください。それまでは、ストレージに依存する前に、対象のワークスペースでストレージを含めた公開が成功することを確認し (ストレージはローカル プレビューでも動作します)、すべての Rayfin パッケージを同じリリースにそろえてください。"
     },
     "platform/deprecated-fabric-callback": {
       "title": "非推奨の Fabric コールバック ブリッジを使っている",

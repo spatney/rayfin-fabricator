@@ -517,7 +517,7 @@
         "description": "既存の Fabric データを使用します: レイクハウス、ウェアハウス、SQL データベース、セマンティック モデル、KQL。"
       },
       "rayfinStorage": {
-        "description": "アプリ用のファイル ストレージです。試験段階です。"
+        "description": "アプリ用のファイル ストレージです。"
       }
     },
     "inThisApp": "このアプリのスキルです。",

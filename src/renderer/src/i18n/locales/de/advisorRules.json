@@ -399,8 +399,8 @@
     "config/stale-feature-flags": {
       "title": "Feature-Flag schaltet eine Funktionalität frei, die kein Flag mehr braucht",
       "summary": "`RAYFIN_FEATURE_FLAGS` führt nur Funktionalitäten auf, die noch ein Flag brauchen",
-      "why": "Functions und Connectors sind seit Rayfin 1.36 allgemein verfügbar, daher bewirken `functions` und `connectors` in `RAYFIN_FEATURE_FLAGS` nichts. Nur `storage` nutzt das Flag noch.",
-      "fix": "Entferne `functions` und `connectors` aus `RAYFIN_FEATURE_FLAGS` – und die Variable selbst, wenn nichts übrig bleibt."
+      "why": "Functions und Connectors sind seit Rayfin 1.36 allgemein verfügbar und Storage seit Rayfin 2.0, daher bewirken `functions` und `connectors` in `RAYFIN_FEATURE_FLAGS` nichts, und in einer App ab Rayfin 2.0 auch `storage` nicht.",
+      "fix": "Entferne sie aus `RAYFIN_FEATURE_FLAGS` – und die Variable selbst, wenn nichts übrig bleibt."
     },
     "platform/cli-outdated": {
       "title": "Rayfin CLI ist veraltet",
@@ -483,8 +483,8 @@
     "platform/experimental-services": {
       "title": "App verwendet das experimentelle Rayfin Storage",
       "summary": "Bei experimentellem Storage wird auf die Verfügbarkeit hingewiesen",
-      "why": "Storage ist experimentell: Es ist nicht in jeder Fabric-Region und jedem Mandanten verfügbar, und `@microsoft/rayfin-storage` kann sich zwischen Releases erheblich ändern.",
-      "fix": "Bevor du dich auf Storage verlässt, prüfe, ob die Veröffentlichung mit Storage in deinem Zielarbeitsbereich gelingt (es läuft auch in der lokalen Vorschau), und halte alle Rayfin-Pakete auf demselben Release."
+      "why": "Vor Rayfin 2.0 ist Storage experimentell: Es ist nicht in jeder Fabric-Region und jedem Mandanten verfügbar, und `@microsoft/rayfin-storage` kann sich zwischen Releases erheblich ändern. Seit Rayfin 2.0 ist Storage allgemein verfügbar.",
+      "fix": "Aktualisiere die App auf Rayfin 2.0, wo Storage allgemein verfügbar ist. Bis dahin: Bevor du dich auf Storage verlässt, prüfe, ob die Veröffentlichung mit Storage in deinem Zielarbeitsbereich gelingt (es läuft auch in der lokalen Vorschau), und halte alle Rayfin-Pakete auf demselben Release."
     },
     "platform/deprecated-fabric-callback": {
       "title": "Veraltete Fabric-Callback-Bridge wird verwendet",

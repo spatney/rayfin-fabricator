@@ -14,7 +14,7 @@ import {
   yamlKeyLine,
   type SourceFile
 } from '../source'
-import { code } from './util'
+import { code, onRayfin } from './util'
 
 type Obj = Record<string, unknown>
 
@@ -381,6 +381,8 @@ export const configRules: QuickRuleImpl[] = [
     id: 'config/stale-feature-flags',
     run: (ctx) => {
       const hits: QuickHit[] = []
+      // Functions and connectors need no flag since Rayfin 1.36, and storage since 2.0.
+      const unflagged = new Set(['functions', 'connectors', ...(onRayfin(ctx, [2, 0, 0]) ? ['storage'] : [])])
       const files = ctx.sources(
         (p) =>
           ENV_FILE.test(p) || p === 'package.json' || p.startsWith('.github/workflows/') || p.startsWith('scripts/')
@@ -390,7 +392,7 @@ export const configRules: QuickRuleImpl[] = [
           const stale = m[1]
             .split(/[,\s]+/)
             .map((f) => f.trim().toLowerCase())
-            .filter((f) => f === 'functions' || f === 'connectors')
+            .filter((f) => unflagged.has(f))
           if (stale.length === 0) continue
           const flags = [...new Set(stale)]
           const line = lineOf(src, m.index)

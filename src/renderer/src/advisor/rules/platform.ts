@@ -27,7 +27,7 @@ import {
   type SourceFile,
   type VersionSpan
 } from '../source'
-import { CODE_FILE, code, lineContaining, packageLine, regexHits } from './util'
+import { CODE_FILE, code, lineContaining, onRayfin, packageLine, regexHits } from './util'
 
 const CLI = '@microsoft/rayfin-cli'
 const FABRIC_PROVIDER = '@microsoft/rayfin-auth-provider-fabric'
@@ -72,19 +72,6 @@ const functionsCode = (ctx: QuickContext): SourceFile[] =>
   ctx.sources((p) => isUnder(p, ctx.layout.functionsRoot) && CODE_FILE.test(p))
 
 type Obj = Record<string, unknown>
-
-/**
- * False when the project's installed Rayfin (core, else CLI) predates 1.36, so
- * checks for APIs 1.36 removed or replaced don't flag code that's correct for
- * the older release. Unknown versions count as current.
- */
-function onRayfin136(ctx: QuickContext): boolean {
-  const installed =
-    ctx.packages.find((p) => p.name === '@microsoft/rayfin-core')?.installed ??
-    ctx.packages.find((p) => p.name === CLI)?.installed
-  const core = semverCore(installed)
-  return !core || compareSemver(core, [1, 36, 0]) >= 0
-}
 
 function outdatedSeverity(installed: SemverCore, latest: SemverCore): AdvisorSeverity {
   if (latest[0] > installed[0]) return 'high'
@@ -500,7 +487,7 @@ export const platformRules: QuickRuleImpl[] = [
   {
     id: 'platform/removed-experimental-import',
     run: (ctx) => {
-      if (!onRayfin136(ctx)) return 'na'
+      if (!onRayfin(ctx, [1, 36, 0])) return 'na'
       const hits: QuickHit[] = []
       const { frontendSrc, dataDir, functionsRoot } = ctx.layout
       const appCode = (p: string): boolean =>
@@ -684,7 +671,7 @@ export const platformRules: QuickRuleImpl[] = [
   {
     id: 'platform/functions-removed-audience',
     run: (ctx) => {
-      if (!onRayfin136(ctx)) return 'na'
+      if (!onRayfin(ctx, [1, 36, 0])) return 'na'
       return regexHits(functionsCode(ctx), REMOVED_AUDIENCE, (src, m) =>
         say((w) =>
           w.t('platform/functions-removed-audience.hit', {
@@ -698,7 +685,7 @@ export const platformRules: QuickRuleImpl[] = [
   {
     id: 'platform/functions-legacy-context-api',
     run: (ctx) => {
-      if (!onRayfin136(ctx)) return 'na'
+      if (!onRayfin(ctx, [1, 36, 0])) return 'na'
       return regexHits(functionsCode(ctx), /\bctx\.(getToken|getSecret)\s*\(/, (src, m) =>
         say((w) =>
           w.t('platform/functions-legacy-context-api.hit', {
@@ -728,6 +715,8 @@ export const platformRules: QuickRuleImpl[] = [
     id: 'platform/experimental-services',
     run: (ctx) => {
       if (!ctx.yml || !ctx.enabled('storage')) return []
+      // Storage is generally available since Rayfin 2.0.
+      if (onRayfin(ctx, [2, 0, 0])) return 'na'
       return [
         {
           file: ctx.yml.path,

@@ -399,8 +399,8 @@
     "config/stale-feature-flags": {
       "title": "Una marca de característica activa una funcionalidad que ya no la necesita",
       "summary": "`RAYFIN_FEATURE_FLAGS` solo incluye funcionalidades que aún necesitan una marca",
-      "why": "Functions y los conectores están disponibles con carácter general desde Rayfin 1.36, así que `functions` y `connectors` en `RAYFIN_FEATURE_FLAGS` no hacen nada. Solo `storage` sigue usando la marca.",
-      "fix": "Quita `functions` y `connectors` de `RAYFIN_FEATURE_FLAGS`, y también la propia variable si no queda nada."
+      "why": "Functions y los conectores están disponibles con carácter general desde Rayfin 1.36, y Storage desde Rayfin 2.0, así que `functions` y `connectors` en `RAYFIN_FEATURE_FLAGS` no hacen nada, y tampoco `storage` en una aplicación con Rayfin 2.0 o posterior.",
+      "fix": "Quítalas de `RAYFIN_FEATURE_FLAGS`, y también la propia variable si no queda nada."
     },
     "platform/cli-outdated": {
       "title": "La CLI de Rayfin no está actualizada",
@@ -483,8 +483,8 @@
     "platform/experimental-services": {
       "title": "La aplicación usa Rayfin Storage, que es experimental",
       "summary": "Se señala la disponibilidad de Storage, que es experimental",
-      "why": "Storage es experimental: no está disponible en todas las regiones ni inquilinos de Fabric, y `@microsoft/rayfin-storage` puede cambiar mucho entre versiones.",
-      "fix": "Antes de depender del almacenamiento, confirma que la publicación con almacenamiento se completa correctamente en tu área de trabajo de destino (también funciona en la vista previa local) y mantén todos los paquetes de Rayfin en la misma versión."
+      "why": "Antes de Rayfin 2.0, Storage es experimental: no está disponible en todas las regiones ni inquilinos de Fabric, y `@microsoft/rayfin-storage` puede cambiar mucho entre versiones. Desde Rayfin 2.0, está disponible con carácter general.",
+      "fix": "Actualiza la aplicación a Rayfin 2.0, donde Storage está disponible con carácter general. Mientras tanto, antes de depender del almacenamiento, confirma que la publicación con almacenamiento se completa correctamente en tu área de trabajo de destino (también funciona en la vista previa local) y mantén todos los paquetes de Rayfin en la misma versión."
     },
     "platform/deprecated-fabric-callback": {
       "title": "La aplicación usa el puente de devolución de llamada de Fabric, que está en desuso",

@@ -329,7 +329,7 @@
       "openModel": "Datenmodell öffnen"
     },
     "storage": {
-      "lead": "Blobspeicher für Dateien, die Personen hochladen. Er ist experimentell und nicht in jeder Fabric-Region verfügbar."
+      "lead": "Blobspeicher für Dateien, die Personen hochladen. Vor Rayfin 2.0 ist er experimentell und nicht in jeder Fabric-Region verfügbar."
     },
     "functions": {
       "lead": "Serverseitiger Code. Aufrufe externer Dienste verwenden die <strong>App-Identität</strong>; beim Lesen der eigenen Daten der App wird weiterhin die Identität der Person verwendet, die die Funktion aufgerufen hat.",

@@ -518,7 +518,7 @@
         "description": "Verwende vorhandene Fabric-Daten: Lakehouses, Warehouses, SQL-Datenbanken, semantische Modelle und KQL."
       },
       "rayfinStorage": {
-        "description": "Dateispeicher für deine App. Experimentell."
+        "description": "Dateispeicher für deine App."
       }
     },
     "inThisApp": "Ein Skill in dieser App.",

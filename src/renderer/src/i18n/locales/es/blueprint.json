@@ -329,7 +329,7 @@
       "openModel": "Abrir el modelo de datos"
     },
     "storage": {
-      "lead": "Almacenamiento de blobs para los archivos que suben los usuarios. Es experimental y no está disponible en todas las regiones de Fabric."
+      "lead": "Almacenamiento de blobs para los archivos que suben los usuarios. Antes de Rayfin 2.0, es experimental y no está disponible en todas las regiones de Fabric."
     },
     "functions": {
       "lead": "Código del lado del servidor. Las llamadas a servicios externos usan la <strong>identidad de la aplicación</strong>; la lectura de los datos propios de la aplicación sigue usando la identidad del usuario que llamó a la función.",

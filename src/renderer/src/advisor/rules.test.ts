@@ -839,6 +839,13 @@ describe('platform rules', () => {
     })
     expect(withAuth.ids).not.toContain('config/functions-auth')
     expect(withAuth.finding('platform/experimental-services')!.detail).toContain('storage')
+
+    // Storage is generally available since Rayfin 2.0.
+    const onRayfin2 = await check(
+      { 'rayfin/rayfin.yml': YML.replace('  staticHosting:', '  storage:\n    enabled: true\n  staticHosting:') },
+      { packages: [{ name: '@microsoft/rayfin-core', installed: '2.0.0', declared: '~2.0.0' }] }
+    )
+    expect(onRayfin2.status('platform/experimental-services')).toBe('na')
   })
 
   it('flags deprecated Fabric callbacks and missing agent files', async () => {
@@ -928,7 +935,14 @@ describe('Rayfin 1.36 rules', () => {
     expect(deprecated.detail).toMatch(/anonymousAccess/)
     const flags = out.finding('config/stale-feature-flags')!
     expect(flags.detail).toContain('`functions`')
+    expect(flags.detail).not.toContain('`storage`')
     expect(flags.excerpt).not.toContain('SECRET_TOKEN')
+    // Storage needs no flag either since Rayfin 2.0.
+    const onRayfin2 = await check(
+      { 'rayfin/.env.local': 'RAYFIN_FEATURE_FLAGS=storage\n' },
+      { packages: [{ name: '@microsoft/rayfin-core', installed: '2.0.0', declared: '~2.0.0' }] }
+    )
+    expect(onRayfin2.finding('config/stale-feature-flags')!.detail).toContain('`storage`')
 
     const embedded = await check({
       'rayfin/rayfin.yml': YML.replace('    assetAccess: protected', '    assetAccess: public\n    embedded:\n      only: true')

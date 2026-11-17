@@ -518,7 +518,7 @@
         "description": "Usa datos existentes de Fabric: almacenes de lago, almacenes, bases de datos SQL, modelos semánticos y KQL."
       },
       "rayfinStorage": {
-        "description": "Almacenamiento de archivos para tu aplicación. Experimental."
+        "description": "Almacenamiento de archivos para tu aplicación."
       }
     },
     "inThisApp": "Una habilidad de esta aplicación.",
