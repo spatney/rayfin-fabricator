@@ -533,7 +533,7 @@
     if (!state.on) return;
     ui.hint.className = 'hint' + (state.under ? ' under' : '');
     var n = state.picks.length;
-    var what = n ? n + ' picked · say in chat what to change' : 'Click anything you want to change';
+    var what = n ? n + ' picked · say in chat what to change' : 'Click what to change, then say how in chat';
     ui.hint.appendChild(h('span', { class: 'dot' }));
     ui.hint.appendChild(h('span', { class: 'what', text: what }));
     ui.hint.appendChild(h('span', { class: 'sep' }));

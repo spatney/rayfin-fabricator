@@ -55,7 +55,7 @@
     },
     "textSize": {
       "title": "Tamaño del texto",
-      "desc": "Escala toda la interfaz: muy útil en monitores grandes."
+      "desc": "Escala toda la interfaz: más grande en monitores grandes y más pequeña para que quepa más en la pantalla de un portátil."
     }
   },
   "diagnostics": {

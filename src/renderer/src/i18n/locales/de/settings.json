@@ -55,7 +55,7 @@
     },
     "textSize": {
       "title": "Textgröße",
-      "desc": "Skaliert die gesamte Oberfläche – praktisch auf großen Monitoren."
+      "desc": "Skaliert die gesamte Oberfläche: größer auf großen Monitoren, kleiner, damit mehr auf einen Laptop-Bildschirm passt."
     }
   },
   "diagnostics": {

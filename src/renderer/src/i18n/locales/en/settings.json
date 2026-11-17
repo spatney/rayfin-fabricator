@@ -55,7 +55,7 @@
     },
     "textSize": {
       "title": "Text size",
-      "desc": "Scale the whole interface — handy on large monitors."
+      "desc": "Scale the whole interface: larger on big monitors, smaller to fit more on a laptop screen."
     }
   },
   "diagnostics": {

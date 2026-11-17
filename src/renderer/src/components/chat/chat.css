@@ -2263,6 +2263,41 @@ button.thinking-head:hover {
   border-color: var(--accent);
 }
 
+/* Picks from Point & Edit wait here: the box glows in the accent, so the next
+   step, saying what to change, stands out even when the app being picked looks
+   like Fabricator. */
+.composer-box--picks,
+.composer-box--picks:focus-within {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 3px var(--accent-soft),
+    0 0 24px 2px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+/* Each new pick sends a ripple around the box. */
+.composer-ripple {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: composer-ripple 0.9s ease-out 2;
+}
+
+@keyframes composer-ripple {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 12px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-ripple {
+    display: none;
+  }
+}
+
 /* A thin indeterminate line along the box's top edge while a turn runs. */
 .composer-busyline {
   position: absolute;

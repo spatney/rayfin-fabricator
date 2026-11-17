@@ -169,7 +169,7 @@ pub fn set_settings(
       c.settings.theme = t;
     }
     if let Some(s) = ui_scale {
-      c.settings.ui_scale = Some(s.clamp(0.8, 2.0));
+      c.settings.ui_scale = Some(s.clamp(0.5, 2.0));
     }
     if let Some(language) = language {
       c.settings.language = crate::i18n::LANGUAGES.contains(&language.as_str()).then_some(language);

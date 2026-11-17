@@ -469,6 +469,16 @@ export default function ChatPanel({
       .finally(() => taRef.current?.focus())
   }, [stagedCount])
 
+  // Picks glow in the box while they wait, and each new one sends a ripple
+  // around it, so the eye follows the keyboard here even when the app being
+  // picked looks like Fabricator. The ripple remounts on each pick (its key).
+  const [pickRipple, setPickRipple] = useState(0)
+  const seenPicks = useRef(picks.length)
+  useEffect(() => {
+    if (picks.length > seenPicks.current) setPickRipple((n) => n + 1)
+    seenPicks.current = picks.length
+  }, [picks.length])
+
   // Keep the caret in view inside the composer's single scrollport
   // (`.composer-input-sizer`). The textarea is sized to its full content height so
   // it never scrolls internally — that is what makes text and the highlight
@@ -1831,7 +1841,13 @@ export default function ChatPanel({
 
       <div className={`composer${sending ? ' composer--busy' : ''}`}>
         {banner}
-        <div ref={boxRef} className={`composer-box${dragOver ? ' composer-box--drag' : ''}`}>
+        <div
+          ref={boxRef}
+          className={`composer-box${dragOver ? ' composer-box--drag' : ''}${picks.length > 0 ? ' composer-box--picks' : ''}`}
+        >
+          {pickRipple > 0 && picks.length > 0 && (
+            <span key={pickRipple} className="composer-ripple" aria-hidden="true" />
+          )}
           {sending && <div className="composer-busyline" aria-hidden="true" />}
           {dragOver && (
             <div className="composer-drop" aria-hidden="true">
