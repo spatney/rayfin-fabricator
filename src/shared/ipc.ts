@@ -1940,6 +1940,12 @@ export interface CreateProjectInput {
    * exist: New project offers to create it.
    */
   location?: string
+  /**
+   * The line of Rayfin releases it starts on, such as `'1.36'`: one of
+   * `projects.rayfinLines()`. The first of those when absent. When the npm
+   * registry lists none of its releases, it starts on the newest line it lists.
+   */
+  rayfinLine?: string
 }
 
 export interface ProjectActionResult {
@@ -4145,6 +4151,12 @@ export interface RayfinStudioApi {
     state: () => Promise<ProjectsState>
     /** Fetch a community template gallery (defaults to microsoft/awesome-rayfin). */
     communityTemplates: (repoUrl?: string) => Promise<CommunityGalleryResult>
+    /**
+     * The lines of Rayfin releases a new project can start on, newest first,
+     * such as `['2.0', '1.36']`. The first is the one it starts on unless
+     * `CreateProjectInput.rayfinLine` picks another.
+     */
+    rayfinLines: () => Promise<string[]>
     /**
      * Whether a new project's name is free: in the projects folder (or the
      * folder chosen instead, `location`), or in a team workspace (its apps and

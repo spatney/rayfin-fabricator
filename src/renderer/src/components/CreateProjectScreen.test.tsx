@@ -409,6 +409,32 @@ describe('CreateProjectScreen starting point', () => {
     })
   })
 
+  it('starts on the newest Rayfin line unless an earlier one is picked', async () => {
+    const projects = (window as unknown as { api: { projects: Record<string, unknown> } }).api.projects
+    projects.rayfinLines = vi.fn(async () => ['2.0', '1.36'])
+    await act(async () => renderCreate())
+
+    const version = screen.getByRole('combobox', { name: /Rayfin version/ }) as HTMLSelectElement
+    expect(Array.from(version.options, (option) => option.textContent)).toEqual([
+      'Rayfin 2.0 (recommended)',
+      'Rayfin 1.36'
+    ])
+    expect(version.value).toBe('2.0')
+    expect(screen.getByText(/if your npm registry doesn’t have the newest Rayfin packages/)).toBeTruthy()
+
+    fireEvent.change(version, { target: { value: '1.36' } })
+    fireEvent.change(screen.getByPlaceholderText('My Rayfin App'), { target: { value: 'Trip Logger' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Create project' }))
+    })
+    expect(api().create).toHaveBeenCalledWith({
+      name: 'Trip Logger',
+      template: 'universal-app',
+      templateName: undefined,
+      rayfinLine: '1.36'
+    })
+  })
+
   it('offers community examples on request, and goes back to the starter', async () => {
     const gallery = {
       repoUrl: 'https://github.com/microsoft/awesome-rayfin',

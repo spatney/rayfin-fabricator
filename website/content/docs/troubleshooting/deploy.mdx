@@ -145,6 +145,20 @@ Fabricator 1.27.1 and later work around it: when npm can't work out an app's pac
 
 If it keeps failing, [Report a problem](/docs/troubleshooting/report-a-problem) and include npm's error and the log it names.
 
+## A new project can't get Rayfin packages from your npm registry
+
+Creating a project fails, or its packages don't install, and the message ends with "If your npm registry doesn't have this Rayfin release yet, choose an earlier one under Rayfin version and create the project again." **Show details** has npm's error, such as `E404`, `E403` or `ETARGET`, for a `@microsoft/create-rayfin` or `@microsoft/rayfin-*` package.
+
+Fabricator installs Rayfin from the npm registry your npm configuration names, such as a company proxy set in your `.npmrc` file. Some registries add new packages later than npm does, or refuse them for a while after they're published, so they don't have the Rayfin release a new project starts on. When the registry lists no release of the version you chose, Fabricator already starts the project on the newest version it lists. A registry that lists a release but refuses to download it fails like this instead.
+
+1. If Fabricator created the project anyway, move it to the trash. See [Move a local project to trash](/docs/build/projects#move-a-local-project-to-trash).
+2. On **Your projects**, select **New project**.
+3. Under **Rayfin version**, choose an earlier version, such as **Rayfin 1.36**.
+4. Select **Create project**.
+5. If it still fails, ask your registry's administrator to add Rayfin's packages, `@microsoft/create-rayfin` and the `@microsoft/rayfin-*` packages, of the version you need.
+
+If it keeps failing, [Report a problem](/docs/troubleshooting/report-a-problem) and include npm's error.
+
 ## Recipients can't open the shared app
 
 You shared a published app, but another person cannot open it.

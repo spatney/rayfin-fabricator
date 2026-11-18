@@ -1,11 +1,12 @@
 {
-  "$comment": "The rayfin-local release Fabricator bundles as a sidecar (scripts/rayfin-local/fetch.mjs), and the Rayfin SDK versions it runs (sdk.supported, as its `version --json` says). New projects get the newest Rayfin version within sdk.newProjects, one of those lines (sdk.tested when npm can't be reached); apps can update to the others.",
+  "$comment": "The rayfin-local release Fabricator bundles as a sidecar (scripts/rayfin-local/fetch.mjs), and the Rayfin SDK versions it runs (sdk.supported, sdk.tested and sdk.testedVersions, as its `version --json` says). New projects get the newest Rayfin version within sdk.newProjects, one of those lines, unless New project picks an older one; a line's release in sdk.testedVersions (sdk.tested for sdk.newProjects) when npm can't be reached. Apps can update to the others.",
   "version": "0.2.11",
   "repository": "spatney/rayfin-local",
   "sdk": {
     "supported": ">=1.36.0-0 <1.37.0 || >=2.0.0-0 <2.1.0",
     "newProjects": ">=2.0.0 <2.1.0",
-    "tested": "2.0.0"
+    "tested": "2.0.0",
+    "testedVersions": ["1.36.2", "2.0.0"]
   },
   "targets": {
     "x86_64-pc-windows-msvc": {

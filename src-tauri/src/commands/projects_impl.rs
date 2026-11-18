@@ -303,6 +303,8 @@ pub(crate) struct ScaffoldRequest {
   template: String,
   template_name: Option<String>,
   is_url: bool,
+  /// The line of Rayfin releases New project picked, when it picked one.
+  line: Option<rayfin_sdk::Line>,
 }
 
 impl ScaffoldRequest {
@@ -423,7 +425,17 @@ pub(crate) fn scaffold_request(input: &CreateProjectInput) -> Result<ScaffoldReq
   if slug.is_empty() {
     return Err(t!("commands.projects.nameNeedsLettersOrNumbers"));
   }
-  Ok(ScaffoldRequest { name, slug, template, template_name, is_url })
+  let line = match input.rayfin_line.as_deref().map(str::trim).filter(|line| !line.is_empty()) {
+    None => None,
+    Some(asked) => match rayfin_sdk::new_project_line(asked) {
+      Some(line) => Some(line),
+      None => {
+        let lines = rayfin_sdk::new_project_lines().join(", ");
+        return Err(t!("commands.projects.unknownRayfinLine", line = asked, lines = lines));
+      }
+    },
+  };
+  Ok(ScaffoldRequest { name, slug, template, template_name, is_url, line })
 }
 
 /// The `npm` arguments that scaffold `request` into `<cwd>/<folder>`:
@@ -501,17 +513,39 @@ fn scaffold_failure(init: &RunResult, dir: &Path, request: &ScaffoldRequest) -> 
     return None;
   }
   let code = init.exit_code.map(|c| c.to_string()).unwrap_or_else(|| t!("commands.shared.unknown"));
-  Some(if request.is_url {
+  let failure = if request.is_url {
     t!("commands.projects.createFromUrlFailed", code = code)
   } else {
     t!("commands.projects.createFailed", code = code)
-  })
+  };
+  Some(with_earlier_rayfin_hint(failure, init))
+}
+
+/// Whether npm couldn't get a Rayfin package from its registry, which hasn't
+/// got it (`E404`), has no release that matches (`ETARGET`) or refuses it
+/// (`E403`), as an npm registry without the newest Rayfin packages does.
+fn registry_lacks_rayfin(result: &RunResult) -> bool {
+  let errors: Vec<String> = [result.stderr.as_str(), result.stdout.as_str()]
+    .into_iter()
+    .flat_map(str::lines)
+    .map(|line| line.trim().to_ascii_lowercase())
+    .filter(|line| line.starts_with("npm error") || line.starts_with("npm err!"))
+    .collect();
+  let missing = errors.iter().any(|line| ["code e404", "code etarget", "code e403"].iter().any(|code| line.ends_with(code)));
+  missing && errors.iter().any(|line| line.contains("microsoft") && line.contains("rayfin"))
+}
+
+/// `message`, saying how to start on an earlier Rayfin release when npm
+/// couldn't get a Rayfin package from its registry.
+fn with_earlier_rayfin_hint(message: String, result: &RunResult) -> String {
+  if registry_lacks_rayfin(result) { format!("{message} {}", t!("commands.projects.tryEarlierRayfin")) } else { message }
 }
 
 /// Run the Rayfin scaffolder into `<root>/<folder>` on the release new projects
-/// start on, pin the project's Rayfin packages to its line, install them, and add
-/// Fabricator's agent instructions. Doesn't touch git. Returns the project dir.
-/// Every new project gets this, personal or team.
+/// start on (of the line New project picked, when it picked one), pin the
+/// project's Rayfin packages to its line, install them, and add Fabricator's
+/// agent instructions. Doesn't touch git. Returns the project dir. Every new
+/// project gets this, personal or team.
 pub(crate) async fn scaffold_project(
   root: &Path,
   folder: &str,
@@ -519,8 +553,12 @@ pub(crate) async fn scaffold_project(
   on: &OnData,
 ) -> Result<PathBuf, String> {
   let dir = root.join(folder);
-  let sdk = rayfin_sdk::new_project_sdk(root).await;
+  let sdk = rayfin_sdk::new_project_sdk(root, request.line).await;
   let release = sdk.version.to_string();
+  if let Some(asked) = sdk.instead_of {
+    let asked = rayfin_sdk::line_name(asked);
+    say(on, &format!("{}\n", t!("commands.projects.startsOnOtherLine", asked = asked, release = release)));
+  }
   let creating = if request.is_url {
     t!("commands.projects.creatingFromCommunity", folder = folder, release = release)
   } else {
@@ -617,7 +655,7 @@ async fn install_new_project(dir: &Path, release: &str, built_in: bool, on: &OnD
   let outcome = if result.ok {
     ensure_functions_dependencies(dir, Some(on.clone())).await
   } else {
-    Err(install_failure(&t!("commands.projects.theProject"), &result))
+    Err(with_earlier_rayfin_hint(install_failure(&t!("commands.projects.theProject"), &result), &result))
   };
   if let Err(e) = outcome {
     say(on, &format!("\n⚠️ {e}\n{}\n", t!("commands.shared.retryOnOpen")));
@@ -1013,6 +1051,7 @@ entries:
       template: template.into(),
       template_name: template_name.map(String::from),
       location: None,
+      rayfin_line: None,
     };
     let args = |request: &ScaffoldRequest| create_args(&request.slug, request, "1.36.2", true).join(" ");
 
@@ -1101,10 +1140,59 @@ entries:
       template: String::new(),
       template_name: None,
       location: None,
+      rayfin_line: None,
     };
     assert_eq!(
       scaffold_request(&input).err().as_deref(),
       Some("Use only letters, numbers, spaces, hyphens and underscores.")
     );
+  }
+
+  #[test]
+  fn new_projects_start_on_the_rayfin_line_new_project_picked() {
+    let input = |line: Option<&str>| CreateProjectInput {
+      name: "Trip Logger".into(),
+      template: String::new(),
+      template_name: None,
+      location: None,
+      rayfin_line: line.map(String::from),
+    };
+    assert_eq!(scaffold_request(&input(None)).unwrap().line, None, "the line new projects start on");
+    assert_eq!(scaffold_request(&input(Some(" "))).unwrap().line, None);
+    for name in rayfin_sdk::new_project_lines() {
+      let line = scaffold_request(&input(Some(&name))).unwrap().line;
+      assert_eq!(line.map(rayfin_sdk::line_name), Some(name));
+    }
+    let refused = scaffold_request(&input(Some("0.9"))).err().unwrap_or_default();
+    assert!(refused.contains("0.9") && refused.contains(&rayfin_sdk::new_project_lines().join(", ")), "{refused}");
+  }
+
+  #[test]
+  fn npm_errors_from_a_registry_without_a_rayfin_release_suggest_an_earlier_one() {
+    let failed = |stderr: &str| RunResult {
+      ok: false,
+      exit_code: Some(1),
+      stdout: String::new(),
+      stderr: stderr.into(),
+      not_found: false,
+    };
+    let lacking = [
+      "npm error code ETARGET\nnpm error notarget No matching version found for @microsoft/create-rayfin@2.0.1.",
+      "npm error code E404\nnpm error 404 Not Found - GET https://proxy.example/npm/@microsoft%2fcreate-rayfin - Not found",
+      "npm ERR! code E403\nnpm ERR! 403 403 Forbidden - GET https://proxy.example/npm/@microsoft/rayfin-core/-/rayfin-core-2.0.0.tgz",
+    ];
+    for stderr in lacking {
+      assert!(registry_lacks_rayfin(&failed(stderr)), "{stderr}");
+      let message = with_earlier_rayfin_hint("Project creation failed (exit code 1).".into(), &failed(stderr));
+      assert!(message.starts_with("Project creation failed (exit code 1). ") && message.contains("Rayfin version"), "{message}");
+    }
+    for stderr in [
+      "npm error code E404\nnpm error 404 Not Found - GET https://registry.npmjs.org/left-padd - Not found",
+      "npm error code ERESOLVE\nnpm error ERESOLVE could not resolve @microsoft/rayfin-core",
+      "npm error code ECONNRESET\nnpm error network aborted",
+    ] {
+      assert!(!registry_lacks_rayfin(&failed(stderr)), "{stderr}");
+      assert_eq!(with_earlier_rayfin_hint("Failed.".into(), &failed(stderr)), "Failed.");
+    }
   }
 }

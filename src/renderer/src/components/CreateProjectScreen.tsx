@@ -209,6 +209,10 @@ export default function CreateProjectScreen({
   >(null)
   const [creatingFolder, setCreatingFolder] = useState(false)
   const locationId = useId()
+  /** The lines of Rayfin releases the app can start on, newest first; the first is the default. */
+  const [rayfinLines, setRayfinLines] = useState<string[]>([])
+  /** The line it starts on: the newest unless another is picked, for a registry without it. */
+  const [rayfinLine, setRayfinLine] = useState('')
   const [start, setStart] = useState<Start>(initialExample ? 'example' : 'scratch')
   const [gallery, setGallery] = useState<CommunityGallery | null>(null)
   const [loadingGallery, setLoadingGallery] = useState(false)
@@ -274,6 +278,22 @@ export default function CreateProjectScreen({
       if (e.channel === 'create:project') setLog((prev) => prev + e.data)
     })
     return off
+  }, [])
+
+  useEffect(() => {
+    let stale = false
+    // Without the lines, the app starts on the newest, and the choice isn't offered.
+    Promise.resolve()
+      .then(() => window.api.projects.rayfinLines())
+      .then((lines) => {
+        if (stale || !Array.isArray(lines)) return
+        setRayfinLines(lines)
+        setRayfinLine((current) => current || lines[0] || '')
+      })
+      .catch(() => {})
+    return () => {
+      stale = true
+    }
   }, [])
 
   useEffect(() => {
@@ -426,7 +446,8 @@ export default function CreateProjectScreen({
         const teamResult = await window.api.team.createProject(destination, {
           name,
           template: tmpl,
-          templateName: tmplName
+          templateName: tmplName,
+          ...(rayfinLine ? { rayfinLine } : {})
         })
         if (teamResult.project) {
           setDone(true)
@@ -443,7 +464,8 @@ export default function CreateProjectScreen({
         name,
         template: tmpl,
         templateName: tmplName,
-        ...(customLocation ? { location: customLocation } : {})
+        ...(customLocation ? { location: customLocation } : {}),
+        ...(rayfinLine ? { rayfinLine } : {})
       })
       if (result.ok) {
         if (wantsGithub && result.project) await createRepo(result.project.id, slug)
@@ -745,6 +767,27 @@ export default function CreateProjectScreen({
                 />
               )}
             </div>
+          )}
+
+          {rayfinLines.length > 1 && (
+            <label className={`field${hideFields ? ' create-field-hidden' : ''}`}>
+              <span className="field-label">{t('create.rayfinVersion')}</span>
+              <select
+                className="field-input"
+                value={rayfinLine}
+                disabled={busy}
+                onChange={(e) => setRayfinLine(e.target.value)}
+              >
+                {rayfinLines.map((line, i) => (
+                  <option key={line} value={line}>
+                    {i === 0
+                      ? t('create.rayfinLineRecommended', { line })
+                      : t('create.rayfinLine', { line })}
+                  </option>
+                ))}
+              </select>
+              <span className="field-hint">{t('create.rayfinVersionHint')}</span>
+            </label>
           )}
 
           <div className={`field${hideFields ? ' create-field-hidden' : ''}`}>

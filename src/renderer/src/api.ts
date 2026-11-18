@@ -286,6 +286,7 @@ export const api: RayfinStudioApi = {
   projects: {
     state: () => invoke('projects_state'),
     communityTemplates: (repoUrl?: string) => invoke('projects_community_templates', { repoUrl }),
+    rayfinLines: () => invoke('projects_rayfin_lines'),
     checkName: (name: string, teamWorkspaceId?: string, location?: string) =>
       invoke('projects_check_name', {
         name,

@@ -1059,6 +1059,10 @@ pub struct CreateProjectInput {
   /// must exist (New project offers to create it).
   #[serde(default)]
   pub location: Option<String>,
+  /// The line of Rayfin releases it starts on, such as `1.36`: one of
+  /// `projects_rayfin_lines`. The first of those when absent.
+  #[serde(default)]
+  pub rayfin_line: Option<String>,
 }
 
 #[derive(Serialize, Clone)]

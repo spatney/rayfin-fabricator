@@ -7,7 +7,7 @@ Fabricator wraps the tools you would otherwise run by hand. You describe the app
 
 ## The loop
 
-1. You create, open, or clone a Rayfin project. A new project starts on the newest release of the Rayfin line Fabricator starts new projects on (`sdk.newProjects` in its `rayfin-local.json`), one of the lines the local backend runs, with its `@microsoft/rayfin-*` packages pinned to that minor version, such as `~2.0.0`.
+1. You create, open, or clone a Rayfin project. A new project starts on the newest release of the Rayfin line Fabricator starts new projects on (`sdk.newProjects` in its `rayfin-local.json`), or of an older line the local backend runs that you choose under **Rayfin version**, with its `@microsoft/rayfin-*` packages pinned to that minor version, such as `~2.0.0`. When npm lists no release of that line, the project starts on the newest line npm lists, and when npm can't be reached, on the line's release in `sdk.testedVersions`.
 2. When a project opens, Fabricator starts its local backend: the bundled rayfin-local runs the app's data API, sign-in, functions, connectors and storage, and starts the app's own Vite dev server.
 3. You type a request in chat.
 4. The bundled Copilot engine reads and edits files in the project folder. It follows Fabricator's own guidance and your [custom instructions](/docs/reference/settings#custom-instructions), which Fabricator gives each chat from its app data rather than the project. It doesn't run or publish the app: Fabricator runs it, and publishing is your choice.
