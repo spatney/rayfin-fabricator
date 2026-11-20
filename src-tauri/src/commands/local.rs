@@ -164,9 +164,7 @@ pub async fn local_files(app: AppHandle, project_id: String, folder: String, off
 }
 
 /// A stored file's bytes, as base64, for a preview: the first `max_bytes` of
-/// them when given. Base64 because the renderer's IPC runs over postMessage
-/// (its CSP keeps Tauri's IPC protocol out), which sends raw bytes as a JSON
-/// array of numbers: about five times slower for a 20 MB file.
+/// them when given.
 #[tauri::command]
 pub async fn local_file(
   app: AppHandle,
