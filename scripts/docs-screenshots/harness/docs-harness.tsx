@@ -2079,7 +2079,6 @@ function Deployments(): JSX.Element {
               onSignIn={noop}
               onSignOut={noop}
               onRefresh={noop}
-              onManageAccounts={noop}
               onOpenSettings={noop}
             />
           </div>
@@ -2091,8 +2090,8 @@ function Deployments(): JSX.Element {
 
 /**
  * The account menu, open from the avatar beside the sample app's deployment control: the
- * signed-in Fabric account, its actions and Settings. Opening it focuses its first item, which
- * a mouse click wouldn't show, so the shot hides the focus styling.
+ * signed-in Fabric account, Settings and the account's actions. Opening it focuses its first item,
+ * which a mouse click wouldn't show, so the shot hides the focus styling.
  */
 function AccountMenuShot(): JSX.Element {
   const app: StudioProject = { ...expensesApp, deploymentNames: { [APPS_WS]: 'Development' } }
@@ -2127,7 +2126,6 @@ function AccountMenuShot(): JSX.Element {
                 onSignIn={noop}
                 onSignOut={noop}
                 onRefresh={noop}
-                onManageAccounts={noop}
                 onOpenSettings={noop}
               />
             </Open>

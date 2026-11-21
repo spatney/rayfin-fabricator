@@ -1368,13 +1368,6 @@ code {
   height: 15px;
 }
 
-/* Between the account's actions and the app's (Settings). */
-.account-sep {
-  height: 1px;
-  margin: 4px 2px;
-  background: var(--border);
-}
-
 /* Splash: the startup screen (SplashScreen.tsx). One lockup in every form: Ray,
    the "Fabricator" wordmark building itself, and a plain status line under it.
    Flat like the rest of Ray: a bordered bubble, hairline ripples, solid dots,

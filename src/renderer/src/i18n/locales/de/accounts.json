@@ -45,8 +45,6 @@
     "notSignedIn": "Nicht bei Fabric angemeldet",
     "refreshHint": "Beim Aktualisieren werden veraltete Anmeldeinformationen gelöscht, und du wirst erneut angemeldet.",
     "fabricAccount": "Fabric-Konto",
-    "manageTitle": "Alle Konten anzeigen und ändern, die Fabricator verwendet",
-    "manage": "Konten verwalten…",
     "settingsTitle": "Design, Textgröße, Experimente und mehr",
     "settings": "Einstellungen"
   },

@@ -45,8 +45,6 @@
     "notSignedIn": "Fabric にサインインしていません",
     "refreshHint": "更新すると、古い資格情報をクリアしてから、もう一度サインインします。",
     "fabricAccount": "Fabric アカウント",
-    "manageTitle": "Fabricator が使用するすべてのアカウントを表示して変更します",
-    "manage": "アカウントの管理…",
     "settingsTitle": "テーマ、テキスト サイズ、試験的機能など",
     "settings": "設定"
   },

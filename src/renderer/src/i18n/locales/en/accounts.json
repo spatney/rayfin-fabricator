@@ -45,8 +45,6 @@
     "notSignedIn": "Not signed in to Fabric",
     "refreshHint": "Refresh clears stale credentials, then signs you in again.",
     "fabricAccount": "Fabric account",
-    "manageTitle": "See and change every account Fabricator uses",
-    "manage": "Manage accounts…",
     "settingsTitle": "Theme, text size, experiments and more",
     "settings": "Settings"
   },

@@ -62,7 +62,7 @@ This is an open reliability issue for some long sessions.
 
 A publish repeatedly fails even though setup shows you signed in, or the notice above the preview says "Fabric wants you to sign in again before you can publish this app." and offers **Refresh Fabric authentication**.
 
-![The account menu opened from the avatar in the top-right corner, showing the signed-in Fabric account with Manage accounts, Refresh Fabric authentication, Sign out and Settings.](/screenshots/account-menu.webp)
+![The account menu opened from the avatar in the top-right corner, showing the signed-in Fabric account with Settings, Refresh Fabric authentication and Sign out.](/screenshots/account-menu.webp)
 
 Fabricator publishes with the Rayfin CLI credentials for the project. **Refresh Fabric authentication** runs the selected project's `rayfin logout`, then `rayfin login`, and verifies the refreshed credential against Fabric. It does not clear Copilot, Azure CLI, or preview-browser sessions.
 

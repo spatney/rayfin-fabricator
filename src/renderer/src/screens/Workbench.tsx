@@ -3199,7 +3199,6 @@ export default function Workbench({
                 onRefresh={() => {
                   if (active) openAuthRefresh(active)
                 }}
-                onManageAccounts={() => setShowAccounts(true)}
                 onOpenSettings={() => setShowSettings(true)}
               />
             </div>
