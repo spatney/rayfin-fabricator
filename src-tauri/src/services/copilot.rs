@@ -163,6 +163,10 @@ struct Engine {
   client: Option<Client>,
   sessions: HashMap<String, Entry>,
   generation: u64,
+  /// The runtime said Copilot isn't signed in, so a session meant for Copilot
+  /// runs on the user's own model without waiting on the account each time.
+  /// Cleared when it says otherwise, and for a new runtime.
+  signed_out: bool,
   #[cfg(test)]
   mock: bool,
 }
@@ -218,6 +222,12 @@ fn concrete_model(model: &Option<String>) -> Option<String> {
 /// default model otherwise, and a resumed one keeps its last concrete model.
 fn set_model_target(model: &Option<String>) -> String {
   concrete_model(model).unwrap_or_else(|| AUTO_MODEL_ID.to_string())
+}
+
+/// Whether `choice` runs on one of the user's own models (Your own API keys),
+/// which needs no Copilot sign-in.
+fn is_own_model(choice: &ModelChoice) -> bool {
+  choice.model.as_deref().is_some_and(crate::services::byok::is_provider_selection)
 }
 
 /// Whether a cached session can be reused as-is, or needs `set_model` re-applied.
@@ -794,7 +804,9 @@ async fn open_session(
         .with_enable_host_git_operations(false)
         .with_memory(MemoryConfiguration::disabled());
     }
-    cfg.reasoning_effort = choice.effort.clone();
+    // No effort here: the runtime checks one against the model the session
+    // last ran on, which may take none or be gone (a provider since removed).
+    // The effort goes with the model in `apply_options`, just below.
     match client.resume_session(cfg).await {
       Ok(session) => {
         if let Err(e) = apply_options(&session, choice).await {
@@ -1035,8 +1047,12 @@ impl Engine {
   async fn authenticated_client(&mut self) -> Result<(Client, GetAuthStatusResponse), String> {
     let client = self.ensure_client().await?;
     match client.get_auth_status().await {
-      Ok(auth) if auth.is_authenticated => Ok((client, auth)),
+      Ok(auth) if auth.is_authenticated => {
+        self.signed_out = false;
+        Ok((client, auth))
+      }
       Ok(auth) => {
+        self.signed_out = true;
         let detail = auth.status_message.as_deref().map(str::trim).filter(|s| !s.is_empty());
         Err(match detail {
           Some(detail) => format!("{COPILOT_SIGN_IN_REQUIRED} {detail}"),
@@ -1090,6 +1106,8 @@ impl Engine {
   /// call restarts a fresh CLI server.
   async fn reset_client(&mut self) {
     self.generation += 1;
+    // A new runtime (after a sign-in or sign-out) checks the account afresh.
+    self.signed_out = false;
     let sessions: Vec<Entry> = self.sessions.drain().map(|(_, entry)| entry).collect();
     if let Some(client) = self.client.take() {
       let client = StopClientOnDrop(client);
@@ -1141,6 +1159,61 @@ impl CopilotManager {
     };
     tokio::time::timeout(AUTH_TIMEOUT, wait).await
       .map_err(|_| t!("services.copilot.authTimedOut"))?
+  }
+
+  /// The client a session on `choice` runs in: one of the user's own models
+  /// needs no Copilot sign-in, so it doesn't wait on the account.
+  async fn client_for(engine: &mut Engine, choice: &ModelChoice) -> Result<Client, String> {
+    if is_own_model(choice) {
+      engine.ensure_client().await
+    } else {
+      Self::wait_for_auth(engine).await
+    }
+  }
+
+  /// The model a session on `choice` runs on. One of the user's own models
+  /// runs as chosen, and so does Auto or a Copilot model while Copilot is
+  /// signed in. When Copilot isn't, a session meant for it runs on the user's
+  /// own default model instead (see `ByokManager::default_own_model`) at that
+  /// model's own effort; without one, Copilot's sign-in error stands. So does
+  /// a model of their own that can't run anymore (its provider removed, or the
+  /// model turned off), as the model pickers show it.
+  pub async fn resolve_choice(&self, choice: ModelChoice) -> Result<ModelChoice, String> {
+    let mut engine = self.engine.lock().await;
+    self.check_available()?;
+    let byok = crate::services::byok::ByokManager;
+    Ok(Self::resolve_in(&mut engine, choice, |m| byok.ensure_ready(m).is_ok(), || byok.default_own_model()).await?.1)
+  }
+
+  /// [`Self::resolve_choice`], with the client the session runs in. `runs`
+  /// says whether one of the user's own models can run, and `own` is their
+  /// default model; each is asked only when it's needed.
+  async fn resolve_in(
+    engine: &mut Engine,
+    choice: ModelChoice,
+    runs: impl FnOnce(&str) -> bool,
+    own: impl FnOnce() -> Option<String>,
+  ) -> Result<(Client, ModelChoice), String> {
+    if is_own_model(&choice) {
+      let model = choice.model.as_deref().unwrap_or_default();
+      if engine.signed_out && !runs(model) {
+        if let Some(own) = own().filter(|own| own != model) {
+          log::info!("{model} can't run anymore, so the session runs on the user's own default model");
+          return Ok((engine.ensure_client().await?, ModelChoice::of(Some(own), None)));
+        }
+      }
+      return Ok((engine.ensure_client().await?, choice));
+    }
+    let own = own();
+    if own.is_none() || !engine.signed_out {
+      match Self::wait_for_auth(engine).await {
+        Ok(client) => return Ok((client, choice)),
+        Err(e) if own.is_none() || !e.starts_with(COPILOT_SIGN_IN_REQUIRED) => return Err(e),
+        Err(_) => {}
+      }
+    }
+    log::info!("Copilot isn't signed in, so the session runs on the user's own model");
+    Ok((engine.ensure_client().await?, ModelChoice::of(own, None)))
   }
 
   /// Verify credentials in the same runtime that serves chat, without sending a
@@ -1210,6 +1283,10 @@ impl CopilotManager {
     let (client, generation) = {
       let mut engine = self.engine.lock().await;
       self.check_available()?;
+      // Copilot's catalog needs a sign-in: don't wait on one the runtime said is missing.
+      if engine.signed_out {
+        return Err(COPILOT_SIGN_IN_REQUIRED.to_string());
+      }
       (engine.ensure_client().await?, engine.generation)
     };
     let mut last_err = String::new();
@@ -1242,6 +1319,11 @@ impl CopilotManager {
   /// session so the probe leaves nothing in Copilot's saved sessions. `None`
   /// when Copilot offers no choice.
   pub async fn auto_tiers(&self) -> Result<Option<crate::types::AutoTiers>, String> {
+    // Auto is Copilot's: signed out, with models of their own to run instead,
+    // the user has nothing to choose.
+    if self.engine.lock().await.signed_out && crate::services::byok::ByokManager.has_ready_model() {
+      return Ok(None);
+    }
     let cwd = std::env::temp_dir();
     let session = self.transient_session(&cwd.to_string_lossy(), ModelChoice::default()).await?;
     let listed = session.rpc().model().list().await;
@@ -1255,11 +1337,15 @@ impl CopilotManager {
 
   /// The signed-in account's Copilot allowance, read fresh from GitHub. Read
   /// raw: the SDK's typed quota leaves out whether it counts AI credits.
-  /// `None` when the account has no premium quota.
+  /// `None` when the account has no premium quota, or when no one is signed
+  /// in to Copilot (chats run on the user's own models).
   pub async fn account_quota(&self) -> Result<Option<crate::types::CopilotQuota>, String> {
     let client = {
       let mut engine = self.engine.lock().await;
       self.check_available()?;
+      if engine.signed_out {
+        return Ok(None);
+      }
       engine.ensure_client().await?
     };
     let raw = client
@@ -1278,7 +1364,7 @@ impl CopilotManager {
     // Unlike Client::list_models, this issues a fresh RPC on every check, so a
     // previously successful model lookup cannot mask revoked/expired credentials.
     client.rpc().models().list().await.map_err(|e| t!("services.copilot.accessUnverified", error = e))?;
-    Ok(CopilotAuthStatus { signed_in: true, user: auth.login, host: auth.host, error: None })
+    Ok(CopilotAuthStatus { signed_in: true, user: auth.login, host: auth.host, ..Default::default() })
   }
 
   /// Get the persistent, cached session for a project turn, creating or
@@ -1311,7 +1397,7 @@ impl CopilotManager {
     let mcp_rev = mcp.revision();
     let mut engine = self.engine.lock().await;
     self.check_available()?;
-    let client = Self::wait_for_auth(&mut engine).await?;
+    let client = Self::client_for(&mut engine, &choice).await?;
 
     // Decide reuse vs reopen without holding a borrow across the await points.
     enum Action {
@@ -1379,7 +1465,7 @@ impl CopilotManager {
       Err(e) if e.is_transport_failure() => {
         // The CLI server died — restart it and try once more.
         engine.reset_client().await;
-        let client = Self::wait_for_auth(&mut engine).await?;
+        let client = Self::client_for(&mut engine, &choice).await?;
         open_session(&client, cwd, session_id, &choice, &opts, true)
           .await
           .map_err(|e| e.to_string())?
@@ -1413,23 +1499,30 @@ impl CopilotManager {
 
   /// Open a one-off, uncached session with custom tools, permissions, and tool
   /// restrictions (used by the Advisor). The caller is responsible for
-  /// [`Session::disconnect`]ing it when done.
+  /// [`Session::disconnect`]ing it when done. Without a Copilot sign-in, a
+  /// session meant for Copilot runs on the user's own model (see
+  /// [`Self::resolve_choice`]).
   pub async fn transient_session_with(
     &self,
     cwd: &str,
     choice: ModelChoice,
-    opts: SessionOptions,
+    mut opts: SessionOptions,
   ) -> Result<Arc<Session>, String> {
-    let choice = with_own_key_effort(choice, opts.byok.as_ref());
     let mut engine = self.engine.lock().await;
     self.check_available()?;
-    let client = Self::wait_for_auth(&mut engine).await?;
+    let byok = crate::services::byok::ByokManager;
+    let (client, choice) =
+      Self::resolve_in(&mut engine, choice, |m| byok.ensure_ready(m).is_ok(), || byok.default_own_model()).await?;
+    if is_own_model(&choice) && opts.byok.is_none() {
+      opts.byok = crate::services::byok::ByokManager.session_registry();
+    }
+    let choice = with_own_key_effort(choice, opts.byok.as_ref());
     let id = uuid::Uuid::new_v4().to_string();
     let opened = match open_session(&client, cwd, &id, &choice, &opts, false).await {
       Ok(s) => s,
       Err(e) if e.is_transport_failure() => {
         engine.reset_client().await;
-        let client = Self::wait_for_auth(&mut engine).await?;
+        let client = Self::client_for(&mut engine, &choice).await?;
         open_session(&client, cwd, &id, &choice, &opts, false)
           .await
           .map_err(|e| e.to_string())?
@@ -1910,7 +2003,7 @@ pub(crate) mod tests {
     settings.providers.insert("google".into(), crate::types::ByokProviderSettings {
       models: vec![model("gemini-3.8-flash", None), model("gemini-3.9-pro", Some("high"))],
       enabled: vec!["gemini-3.8-flash".into(), "gemini-3.9-pro".into()],
-      checked_at: None,
+      ..Default::default()
     });
     let keys = HashMap::from([("google".to_string(), "AIza-test".to_string())]);
     let registry = crate::services::byok::registry::build(&settings, &keys);
@@ -2245,12 +2338,12 @@ pub(crate) mod tests {
   /// resume without it silently runs a provider selection on a Copilot model.
   /// So a changed registry (a key replaced, a model added) reopens the cached
   /// session with it; and switching with no effort clears the previous one
-  /// (explicit null).
+  /// (explicit null). A turn on the user's own model doesn't wait on a Copilot
+  /// sign-in, so the runtime isn't asked about one.
   #[tokio::test]
   async fn a_changed_provider_registry_reopens_the_session_with_it() {
     let (client, server) = fake_client(vec![
       ("session.create", json!({ "result": { "sessionId": "thread" } })),
-      ("auth.getStatus", json!({ "result": { "isAuthenticated": true } })),
       ("session.detach", json!({ "result": {} })),
       ("session.resume", json!({ "result": { "sessionId": "thread" } })),
       ("session.skills.reload", json!({ "result": {} })),
@@ -2270,7 +2363,7 @@ pub(crate) mod tests {
         ..Default::default()
       }],
       enabled: vec!["claude-opus-5-5".into()],
-      checked_at: None,
+      ..Default::default()
     });
     let keys = HashMap::from([("anthropic".to_string(), "sk-ant-test".to_string())]);
     let registry = crate::services::byok::registry::build(&settings, &keys);
@@ -2278,10 +2371,11 @@ pub(crate) mod tests {
       "project", ".", "thread", choice, None, None, Vec::new(), None, Some(registry.clone()), IqConfig::default(), McpServers::default(), None,
     ).await.unwrap();
     let requests = server.await.unwrap();
-    let resume = &requests[3]["params"];
+    assert!(requests.iter().all(|r| r["method"] != "auth.getStatus"));
+    let resume = &requests[2]["params"];
     assert_eq!(resume["providers"][0]["name"], "anthropic");
     assert!(resume["models"].as_array().unwrap().iter().any(|m| m["id"] == "claude-opus-5-5"));
-    let switch = requests[5]["params"].as_object().unwrap();
+    let switch = requests[4]["params"].as_object().unwrap();
     assert_eq!(switch["modelId"], "anthropic/claude-opus-5-5");
     assert!(switch.contains_key("reasoningEffort") && switch["reasoningEffort"].is_null());
     assert!(!switch.contains_key("autoTier") && !switch.contains_key("contextTier"));
@@ -2391,6 +2485,40 @@ pub(crate) mod tests {
     let probe = &requests[1]["params"]["sessionId"];
     assert!(probe.is_string());
     assert_eq!(&requests[4]["params"]["sessionId"], probe);
+    client.force_stop();
+  }
+
+  /// Signed out of Copilot, a session meant for it (Auto, or one of its models)
+  /// runs on the user's own model, waiting on the account only until the
+  /// runtime has said it's signed out; with no model of their own, Copilot's
+  /// sign-in error stands. Their own model never waits on the account, and one
+  /// that can't run anymore gives way to their default, as the pickers show.
+  #[tokio::test]
+  async fn signed_out_of_copilot_a_session_runs_on_the_users_own_model() {
+    let signed_out = || ("auth.getStatus", json!({ "result": { "isAuthenticated": false } }));
+    let (client, server) = fake_client(vec![signed_out(), signed_out(), signed_out(), signed_out(), signed_out(), signed_out()]);
+    let manager = manager_with(client.clone());
+    let own = || Some("ollama/gpt-oss:20b".to_string());
+    let resolve = |choice: ModelChoice, runs: bool, own: Option<String>| {
+      let manager = &manager;
+      async move {
+        let mut engine = manager.engine.lock().await;
+        tokio::time::timeout(Duration::from_secs(10), CopilotManager::resolve_in(&mut engine, choice, |_| runs, || own))
+          .await
+          .expect("resolving waited on a request the runtime never got")
+          .map(|(_, choice)| choice.model)
+      }
+    };
+    assert_eq!(resolve(ModelChoice::default(), true, own()).await.unwrap().as_deref(), Some("ollama/gpt-oss:20b"));
+    // Now known to be signed out: no more waiting on the account.
+    assert_eq!(resolve(ModelChoice::of(m("gpt-6-astra"), m("high")), true, own()).await.unwrap().as_deref(), Some("ollama/gpt-oss:20b"));
+    assert_eq!(resolve(ModelChoice::of(m("anthropic/claude-opus-5-5"), None), true, None).await.unwrap().as_deref(), Some("anthropic/claude-opus-5-5"));
+    // A server that was removed: its model gives way, unless there's nothing to run instead.
+    assert_eq!(resolve(ModelChoice::of(m("custom/qwen3"), None), false, own()).await.unwrap().as_deref(), Some("ollama/gpt-oss:20b"));
+    assert_eq!(resolve(ModelChoice::of(m("custom/qwen3"), None), false, None).await.unwrap().as_deref(), Some("custom/qwen3"));
+    let error = resolve(ModelChoice::default(), true, None).await.unwrap_err();
+    assert!(error.starts_with(COPILOT_SIGN_IN_REQUIRED), "{error}");
+    assert_eq!(server.await.unwrap().len(), 6, "the account was asked about only while it wasn't known");
     client.force_stop();
   }
 

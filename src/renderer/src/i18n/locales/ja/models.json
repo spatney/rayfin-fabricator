@@ -43,8 +43,8 @@
     "missing": "利用できなくなりました。別のモデルを選択してください。",
     "runsOnKey": "{{provider}} の API キーで実行されます",
     "fast": "高速",
-    "yourKeys": "自分の API キー",
-    "addKeyModels": "API キーでモデルを追加…",
+    "yourKeys": "自分のモデル",
+    "addKeyModels": "自分のモデルを追加…",
     "more": "その他のモデル",
     "loading": "モデルを読み込んでいます…",
     "loadFailed": "モデルを読み込めませんでした。もう一度試すには、いったん閉じてから開き直してください。",
@@ -56,7 +56,11 @@
     "busy": "アシスタントの作業中はモデルを変更できません",
     "pill": "{{label}}: {{choice}}",
     "pillOnKey": "{{label}}: {{choice}} — {{provider}} の API キーを使用",
-    "manageKeys": "API キーの管理…"
+    "manageKeys": "モデル プロバイダーの管理…",
+    "runsOnServer": "{{provider}} で実行されます",
+    "pillOnServer": "{{label}}: {{choice}} — {{provider}} で実行",
+    "yourServer": "自分のサーバー",
+    "ownOnly": "GitHub Copilot にサインインしていないため、チャットでは自分のモデルを使用します。"
   },
   "providers": {
     "state": {
@@ -64,13 +68,17 @@
       "off": "キーなし",
       "error": "要対応"
     },
+    "serverState": {
+      "ok": "接続済み",
+      "off": "未設定"
+    },
     "errors": {
       "read": "モデル プロバイダーを読み取れませんでした。",
       "generic": "うまくいきませんでした。もう一度お試しください。",
       "saveModels": "モデルの選択を保存できませんでした。"
     },
     "title": "モデル プロバイダー",
-    "sub": "[作成] のチャット、アドバイザー、デザインで、これらのプロバイダーのモデルを自分の API キーで使用できます。料金はプロバイダーから請求されます。会話は引き続き Copilot が実行するため、GitHub Copilot にはサインインしたままにしてください。",
+    "sub": "[作成] のチャット、アドバイザー、デザインで、さらに多くのモデルを使用できます。これらのプロバイダーのモデルは自分の API キーで使用し、料金はプロバイダーから請求されます。Ollama など自分で実行するサーバーのモデルも使用できます。GitHub Copilot は不要です。",
     "unsupported": "このオペレーティング システムでは、Fabricator はまだ API キーを安全に保管できません。",
     "purpose": "{{description}}。料金は {{name}} アカウントに請求されます。",
     "addKeyLabel": "{{name}} の API キーを追加",
@@ -96,7 +104,27 @@
     "keyHint": "Fabricator は {{name}} でキーを確認してから、このコンピューターの {{store}}に保存します。",
     "getKey": "キーの取得",
     "replaceKey": "キーの置き換え",
-    "saveKey": "キーの保存"
+    "saveKey": "キーの保存",
+    "purposeLocal": "{{description}}。自分のハードウェアで実行されるため、使用ごとの料金はかかりません。",
+    "purposeServer": "{{description}}。",
+    "connect": "接続",
+    "connectLabel": "{{name}} に接続",
+    "addressLabel": "{{name}} のアドレス",
+    "optionalKey": "API キー (省略可能)",
+    "ollamaHint": "このコンピューターの Ollama のアドレスは http://localhost:11434 です。Fabricator は、取得したモデルのうちツールを呼び出せるものを表示します。",
+    "ollamaContext": "Fabricator のエージェントには 64k 以上のコンテキスト長が必要です。Ollama の設定でコンテキスト長を 64k 以上にしてください。",
+    "serverHint": "サーバーの OpenAI 互換 API のアドレスです (LM Studio の場合は http://localhost:1234/v1 など)。追加したキーは {{store}}に保存されます。",
+    "serverHintAgain": "サーバーの OpenAI 互換 API のアドレスです。API キーが必要な場合は、もう一度入力してください。キーは {{store}}に保存されます。",
+    "getOllama": "Ollama の入手",
+    "change": "変更",
+    "removeServerLabel": "{{name}} を削除",
+    "confirmRemoveServer": "{{name}} とそのモデルを削除しますか?",
+    "keySavedIn": "API キーは {{store}}に保存済み",
+    "noKeyUsed": "API キーなし",
+    "checkServerTitle": "{{name}} をもう一度確認し、モデルを更新します",
+    "filterLabel": "{{name}} のモデルを検索",
+    "filterPlaceholder": "モデルを検索",
+    "noMatches": "一致するモデルはありません。"
   },
   "chatDefaults": {
     "title": "チャットの既定値",

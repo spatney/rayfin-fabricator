@@ -175,6 +175,7 @@
     "providerKey": "自分の {{provider}} キーを使用 (料金はプロバイダーが請求)",
     "ownKey": "自分のキーを使用 (料金はプロバイダーが請求)",
     "yourKey": "自分のキー",
+    "yourServer": "自分のサーバー",
     "plan": "Copilot プラン",
     "percentLeft": "残り {{percent}}",
     "planFailed": "Copilot プランを確認できませんでした。",
@@ -199,7 +200,9 @@
     "byModel": "モデル別の使用量",
     "tokenDetails": "トークンの詳細",
     "viewUsage": "使用量を表示",
-    "otherModels": "その他のモデル"
+    "otherModels": "その他のモデル",
+    "providerServer": "自分で実行するサーバー ({{provider}}) を使用",
+    "yourServerTitle": "自分の OpenAI 互換サーバーを使用"
   },
   "imageMarkup": {
     "hint": "描き込んで、伝えたいことを Copilot に示しましょう",

@@ -237,10 +237,30 @@ describe('ChatPanel authentication recovery', () => {
     )
     expect(screen.queryByRole('button', { name: 'Sign in to Copilot' })).toBeNull()
     rerender(
-      <ChatPanel project={makeProject('p1')} messages={[]} onChange={() => {}}
-        copilotAuth={{ signedIn: false, error: 'Session expired' }} />
+      <ChatPanel
+        project={makeProject('p1')}
+        messages={[]}
+        onChange={() => {}}
+        copilotAuth={{ signedIn: false, ownModels: true }}
+      />
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Sign in to Copilot' }),
+      'their own models need no Copilot'
+    ).toBeNull()
+    const onManageKeys = vi.fn()
+    rerender(
+      <ChatPanel
+        project={makeProject('p1')}
+        messages={[]}
+        onChange={() => {}}
+        onManageKeys={onManageKeys}
+        copilotAuth={{ signedIn: false, error: 'Session expired' }}
+      />
     )
     expect(await screen.findByRole('button', { name: 'Sign in to Copilot' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Use your own models' }))
+    expect(onManageKeys).toHaveBeenCalledOnce()
   })
   it('handles a failed result without streamed events and signs in without losing drafts or replaying', async () => {
     const api = installApi()

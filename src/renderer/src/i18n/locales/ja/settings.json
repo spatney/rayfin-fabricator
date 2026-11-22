@@ -9,9 +9,9 @@
       "action": "アカウントの管理"
     },
     "apiKeys": {
-      "title": "API キー",
-      "desc": "Copilot のモデルに加えて、自分の API キーで Anthropic、OpenAI、xAI、Google のモデルを使えます。料金はプロバイダーから請求されます。",
-      "action": "API キーの管理"
+      "title": "モデル プロバイダー",
+      "desc": "自分の API キーで Anthropic、OpenAI、xAI、Google、OpenRouter のモデルを使用したり、Ollama など自分で実行するサーバーのモデルを使用したりできます。GitHub Copilot がなくても使用できます。",
+      "action": "モデル プロバイダーの管理"
     },
     "mcpServers": {
       "title": "MCP サーバー",

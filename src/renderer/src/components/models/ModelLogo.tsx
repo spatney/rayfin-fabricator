@@ -87,6 +87,12 @@ export function ProviderLogo({
         <GrokLogo className="brand-logo-mark" />
       ) : provider === 'google' ? (
         <img src={geminiSvg} alt="" draggable={false} />
+      ) : provider === 'openrouter' ? (
+        <Codicon name="layers" />
+      ) : provider === 'ollama' ? (
+        <Codicon name="device-desktop" />
+      ) : provider === 'custom' ? (
+        <Codicon name="server" />
       ) : (
         <Codicon name="key" />
       )}

@@ -116,6 +116,39 @@ afterEach(() => {
 })
 
 describe('ModelPicker', () => {
+  it('without Copilot, names the model of the user’s own a chat on Auto runs on, and has no Auto', async () => {
+    const ollama = model('ollama/gpt-oss:20b', 'gpt-oss:20b', {
+      vendor: 'Ollama',
+      byok: { provider: 'ollama', providerName: 'Ollama', ready: true, standIn: true }
+    })
+    const server = model('custom/qwen3', 'qwen3', {
+      byok: { provider: 'custom', providerName: 'OpenAI-compatible server', ready: true }
+    })
+    ;(window as unknown as { api: { chat: { listModels: unknown } } }).api.chat.listModels = vi.fn(
+      async () => [MODELS[2], ollama, server]
+    )
+    const onChange = renderPicker(AUTO_SELECTION)
+    await waitFor(() => expect(pill().textContent).toBe('gpt-oss:20b · Medium'))
+    expect(pill().title).toBe('Model: gpt-oss:20b · Medium — on Ollama')
+    fireEvent.click(pill())
+    expect(
+      await screen.findByText(
+        'You’re not signed in to GitHub Copilot, so chats run on your own models.'
+      )
+    ).toBeTruthy()
+    expect(screen.queryByRole('menuitemcheckbox', { name: /Auto/ })).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: /Model/ }))
+    const list = await screen.findByRole('menu', { name: 'Models' })
+    // The server added by its address is tagged "Your server": its full name doesn't fit.
+    const qwen = within(list).getByRole('menuitemradio', { name: /qwen3/ })
+    expect(qwen.textContent).toContain('Your server')
+    expect(qwen.title).toBe('Runs on OpenAI-compatible server')
+    fireEvent.click(within(list).getByRole('menuitemradio', { name: /Claude Opus 5\.5/ }))
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ model: 'anthropic/claude-opus-5-5' })
+    )
+  })
+
   it('offers what Auto optimizes for, with a tier the account can’t use disabled and why', async () => {
     const onChange = renderPicker(AUTO_SELECTION)
     expect(pill().textContent).toContain('Auto')
@@ -203,7 +236,7 @@ describe('ModelPicker', () => {
 
     expect(onChange).toHaveBeenLastCalledWith({ ...AUTO_SELECTION, model: 'claude-sonnet-5.5' })
     const list = await screen.findByRole('menu', { name: 'Models' })
-    const keys = within(list).getByRole('group', { name: 'Your API keys' })
+    const keys = within(list).getByRole('group', { name: 'Your models' })
     expect(within(keys).getByRole('menuitemradio', { name: /Claude Opus 5\.5/ }).textContent).toContain('Anthropic')
     const grok = within(keys).getByRole('menuitemradio', { name: /Grok 4\.7/ }) as HTMLButtonElement
     expect(grok.disabled).toBe(true)
@@ -304,7 +337,7 @@ describe('ModelPicker', () => {
     expect(within(more).getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual(['Model 8', 'Model 9'])
 
     // Without keys yet, the list offers to add some.
-    fireEvent.click(within(list).getByRole('menuitem', { name: 'Add models with your API keys…' }))
+    fireEvent.click(within(list).getByRole('menuitem', { name: 'Add your own models…' }))
     expect(onManageKeys).toHaveBeenCalledOnce()
     expect(screen.queryByRole('menu', { name: 'Models' })).toBeNull()
   })

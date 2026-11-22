@@ -412,7 +412,8 @@ function installApi(active = false) {
       status: vi.fn<RayfinStudioApi['byok']['status']>().mockResolvedValue({
         supported: true,
         store: 'Windows Credential Manager',
-        providers: []
+        providers: [],
+        ownModels: false
       })
     },
     onProcLog: vi.fn<(callback: (event: ProcLogEvent) => void) => () => void>(() => () => {})

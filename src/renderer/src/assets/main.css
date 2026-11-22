@@ -2283,6 +2283,19 @@ code {
   stroke-width: 2.6;
 }
 
+/* Models of the user's own, instead of a Copilot sign-in. */
+.setup-own-models {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 10px 0 0 32px;
+}
+
+.setup-own-models-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* ----------------------------- finish ----------------------------- */
 
 /* The conclusion of the checklist. Sits in the flow rather than in the toolbar,

@@ -77,11 +77,11 @@ The Advisor's **Run deep review** also uses Copilot in a read-only mode.
 
 **Diagnose with Copilot** for team workspaces also uses Copilot in a read-only mode. It sends what failed, the IDs and names of the workspace's repository, deploy identities, tenant, and Fabric workspaces, your sign-in names, and the results of read-only checks, including the end of a failed pipeline log. Values that look like secrets or tokens are masked. Select **Details sent to Copilot** to see what was sent.
 
-## Your own API keys
+## Your own models
 
-You can choose models from Anthropic, OpenAI, xAI and Google that run on your own API keys. When you use one, Copilot on your computer sends the request and the project context it needs to that provider, under the provider's terms for your account, instead of to a GitHub Copilot model.
+You can choose models from Anthropic, OpenAI, xAI, Google and OpenRouter that run on your own API keys, or from an Ollama or OpenAI-compatible server you connect. When you use one, Copilot on your computer sends the request and the project context it needs to that provider, under the provider's terms for your account, instead of to a GitHub Copilot model. With Ollama on your computer, the request doesn't leave it.
 
-Fabricator keeps your keys in Windows Credential Manager, or in your Keychain on macOS. They never go into Fabricator's settings, logs, diagnostics or telemetry. Requests to OpenAI, xAI and Google pass through a relay on your computer that adapts them to what each provider's API accepts; it sends them only to that provider, and keeps nothing on disk. See [Use your own API keys](/docs/build/your-own-api-keys).
+Fabricator keeps your keys in Windows Credential Manager, or in your Keychain on macOS. They never go into Fabricator's settings, logs, diagnostics or telemetry. Fabricator keeps the address of a server you connect in its settings. Requests to OpenAI, xAI, Google, OpenRouter, Ollama and OpenAI-compatible servers pass through a relay on your computer that adapts them to what each API accepts; it sends them only to that provider, and keeps nothing on disk. See [Use your own models](/docs/build/your-own-api-keys).
 
 ## Power BI report migrations
 

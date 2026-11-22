@@ -43,8 +43,8 @@
     "missing": "Ya no está disponible. Elige otro modelo.",
     "runsOnKey": "Se ejecuta con tu clave de API de {{provider}}",
     "fast": "Rápido",
-    "yourKeys": "Tus claves de API",
-    "addKeyModels": "Agregar modelos con tus claves de API…",
+    "yourKeys": "Tus modelos",
+    "addKeyModels": "Agregar tus propios modelos…",
     "more": "Más modelos",
     "loading": "Cargando modelos…",
     "loadFailed": "No se pudieron cargar los modelos. Cierra esto y vuelve a abrirlo para reintentarlo.",
@@ -56,7 +56,11 @@
     "busy": "No se puede cambiar el modelo mientras el asistente está trabajando",
     "pill": "{{label}}: {{choice}}",
     "pillOnKey": "{{label}}: {{choice}} — con tu clave de API de {{provider}}",
-    "manageKeys": "Administrar claves de API…"
+    "manageKeys": "Administrar proveedores de modelos…",
+    "runsOnServer": "Se ejecuta en {{provider}}",
+    "pillOnServer": "{{label}}: {{choice}} — en {{provider}}",
+    "yourServer": "Tu servidor",
+    "ownOnly": "No iniciaste sesión en GitHub Copilot, así que los chats usan tus propios modelos."
   },
   "providers": {
     "state": {
@@ -64,13 +68,17 @@
       "off": "Sin clave",
       "error": "Requiere atención"
     },
+    "serverState": {
+      "ok": "Conectado",
+      "off": "Sin configurar"
+    },
     "errors": {
       "read": "No se pudieron leer tus proveedores de modelos.",
       "generic": "No funcionó. Inténtalo de nuevo.",
       "saveModels": "No se pudo guardar tu selección de modelos."
     },
     "title": "Proveedores de modelos",
-    "sub": "Usa modelos de estos proveedores con tus propias claves de API en el chat de Crear, el Asesor y Diseño. El proveedor te los factura. Copilot sigue dirigiendo la conversación, así que mantén la sesión iniciada en GitHub Copilot.",
+    "sub": "Usa más modelos en el chat de Crear, el Asesor y Diseño: de estos proveedores con tus propias claves de API, que te los facturan, o de Ollama y otros servidores que ejecutes. No necesitas GitHub Copilot para usarlos.",
     "unsupported": "Fabricator todavía no puede guardar claves de API de forma segura en este sistema operativo.",
     "purpose": "{{description}}, facturados a tu cuenta de {{name}}.",
     "addKeyLabel": "Agregar tu clave de API de {{name}}",
@@ -96,7 +104,27 @@
     "keyHint": "Fabricator la comprueba con {{name}} y luego la guarda en {{store}} en este dispositivo.",
     "getKey": "Obtener una clave",
     "replaceKey": "Reemplazar clave",
-    "saveKey": "Guardar clave"
+    "saveKey": "Guardar clave",
+    "purposeLocal": "{{description}}. Se ejecutan en tu propio hardware, sin pagar por uso.",
+    "purposeServer": "{{description}}.",
+    "connect": "Conectar",
+    "connectLabel": "Conectar {{name}}",
+    "addressLabel": "Dirección de {{name}}",
+    "optionalKey": "Clave de API (opcional)",
+    "ollamaHint": "La dirección de Ollama en este dispositivo es http://localhost:11434. Fabricator muestra los modelos que descargaste que pueden llamar a herramientas.",
+    "ollamaContext": "El agente de Fabricator necesita una longitud de contexto de al menos 64k. Establece la longitud de contexto en 64k o más en la configuración de Ollama.",
+    "serverHint": "La dirección de la API compatible con OpenAI del servidor, por ejemplo http://localhost:1234/v1 para LM Studio. La clave que agregues se guarda en {{store}}.",
+    "serverHintAgain": "La dirección de la API compatible con OpenAI del servidor. Vuelve a escribir su clave de API si la necesita. Se guarda en {{store}}.",
+    "getOllama": "Obtener Ollama",
+    "change": "Cambiar",
+    "removeServerLabel": "Quitar {{name}}",
+    "confirmRemoveServer": "¿Quitar {{name}} y sus modelos?",
+    "keySavedIn": "Clave de API guardada en {{store}}",
+    "noKeyUsed": "Sin clave de API",
+    "checkServerTitle": "Volver a comprobar {{name}} y actualizar sus modelos",
+    "filterLabel": "Buscar un modelo de {{name}}",
+    "filterPlaceholder": "Buscar un modelo",
+    "noMatches": "Ningún modelo coincide."
   },
   "chatDefaults": {
     "title": "Valores predeterminados del chat",

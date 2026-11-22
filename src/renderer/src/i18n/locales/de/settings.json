@@ -9,9 +9,9 @@
       "action": "Konten verwalten"
     },
     "apiKeys": {
-      "title": "API-Schlüssel",
-      "desc": "Nutze Modelle von Anthropic, OpenAI, xAI und Google mit deinen eigenen API-Schlüsseln, neben deinen Copilot-Modellen. Der Anbieter stellt sie dir in Rechnung.",
-      "action": "API-Schlüssel verwalten"
+      "title": "Modellanbieter",
+      "desc": "Nutze Modelle von Anthropic, OpenAI, xAI, Google und OpenRouter mit deinen eigenen API-Schlüsseln oder von Ollama und anderen Servern, die du betreibst. Du kannst sie ohne GitHub Copilot verwenden.",
+      "action": "Modellanbieter verwalten"
     },
     "mcpServers": {
       "title": "MCP-Server",

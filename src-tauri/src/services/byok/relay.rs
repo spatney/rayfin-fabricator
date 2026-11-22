@@ -1,13 +1,13 @@
 //! A relay on this computer for providers that take less than the Copilot
-//! runtime sends them: OpenAI, xAI and Google (Gemini, through its
-//! OpenAI-compatible endpoint).
+//! runtime sends them: OpenAI, xAI, Google (Gemini, through its
+//! OpenAI-compatible endpoint), OpenRouter, Ollama and OpenAI-compatible servers.
 //!
 //! For each of them it fits the reasoning effort to the model. When none was
 //! chosen, the runtime asks for `medium`, and models without effort levels
-//! (OpenAI's GPT-4.1, xAI's Grok Build, Google's Gemma) fail the request with
-//! any effort at all ("'reasoning.effort' is not supported with this model").
-//! So an effort the chosen model doesn't take is left out, and the provider
-//! uses its default.
+//! (OpenAI's GPT-4.1, xAI's Grok Build, Google's Gemma, most local models)
+//! fail the request with any effort at all ("'reasoning.effort' is not
+//! supported with this model"). So an effort the chosen model doesn't take is
+//! left out, and the provider uses its default.
 //!
 //! Google needs more. Without it, every conversation failed from its second
 //! model call. On the way out the relay adapts the request:
@@ -30,7 +30,8 @@
 //! reply that called tools finish with `tool_calls` rather than `stop`.
 //!
 //! It listens on 127.0.0.1 only, under a random path token, and only forwards to
-//! the provider's own host. It keeps nothing but Gemini's thought signatures, in
+//! the provider's own host, or for a server people run, the address saved for
+//! it. It keeps nothing but Gemini's thought signatures, in
 //! memory: the runtime's credentials pass through, and it never logs a request
 //! or a header.
 
@@ -143,15 +144,23 @@ fn start() -> Result<Relay, String> {
   Ok(Relay { port, token })
 }
 
-/// The base URL a session reaches `spec` at through the relay, e.g.
-/// `http://127.0.0.1:52811/<token>/google/v1beta/openai`.
-pub fn base_url(spec: &ProviderSpec) -> Result<String, String> {
+/// The base URL a session reaches `spec` at through the relay, for its base
+/// URL `upstream`, e.g. `http://127.0.0.1:52811/<token>/google/v1beta/openai`.
+pub fn base_url(spec: &ProviderSpec, upstream: &str) -> Result<String, String> {
   let relay = relay()?;
-  Ok(format!("http://127.0.0.1:{}/{}/{}{}", relay.port, relay.token, spec.id, path_of(spec.base_url)))
+  Ok(format!("http://127.0.0.1:{}/{}/{}{}", relay.port, relay.token, spec.id, path_of(upstream)))
+}
+
+/// Where the relay forwards `spec`'s requests: its own base URL, or the one
+/// saved for a server people run (read for each request, so a changed address
+/// takes effect at once).
+fn upstream_of(spec: &ProviderSpec) -> Option<String> {
+  let settings = store::byok_settings();
+  spec.base_url_with(settings.providers.get(spec.id).and_then(|p| p.base_url.as_deref()))
 }
 
 /// `https://generativelanguage.googleapis.com/v1beta/openai` → `https://generativelanguage.googleapis.com`.
-fn origin_of(url: &str) -> &str {
+pub(super) fn origin_of(url: &str) -> &str {
   let host_start = url.find("://").map_or(0, |i| i + 3);
   url[host_start..].find('/').map_or(url, |i| &url[..host_start + i])
 }
@@ -202,7 +211,8 @@ async fn forward(
     .ok_or_else(not_found)?;
   let (provider, rest) = rest.split_once('/').ok_or_else(not_found)?;
   let spec = catalog::find(provider).filter(|s| s.relay).ok_or_else(not_found)?;
-  let mut url = format!("{}/{rest}", origin_of(spec.base_url));
+  let upstream = upstream_of(spec).ok_or_else(not_found)?;
+  let mut url = format!("{}/{rest}", origin_of(&upstream));
   if let Some(query) = req.uri().query() {
     url.push('?');
     url.push_str(query);
@@ -807,13 +817,16 @@ mod tests {
     assert_eq!(origin_of(google), "https://generativelanguage.googleapis.com");
     assert_eq!(path_of(google), "/v1beta/openai");
     assert_eq!(path_of("https://api.example.com"), "");
+    assert_eq!(origin_of("http://192.168.1.20:11434/v1"), "http://192.168.1.20:11434");
   }
 
   #[tokio::test]
   async fn the_relay_answers_only_under_its_token_and_only_for_relayed_providers() {
     let google = catalog::find("google").unwrap();
-    let url = base_url(google).unwrap();
+    let url = base_url(google, google.base_url).unwrap();
     assert!(url.starts_with("http://127.0.0.1:") && url.ends_with("/google/v1beta/openai"), "{url}");
+    let ollama = catalog::find("ollama").unwrap();
+    assert!(base_url(ollama, "http://192.168.1.20:11434/v1").unwrap().ends_with("/ollama/v1"));
     let client = reqwest::Client::new();
     let port = url.trim_start_matches("http://127.0.0.1:").split('/').next().unwrap();
     for path in [

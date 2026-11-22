@@ -53,7 +53,7 @@ export function ModelProviders({ focus = false }: { focus?: boolean }): JSX.Elem
   }
   useEffect(load, [])
 
-  // Opened from a model picker's "Manage API keys…": show this section.
+  // Opened from a model picker's "Manage model providers…": show this section.
   const loaded = status !== null
   useEffect(() => {
     if (focus && loaded) sectionRef.current?.scrollIntoView?.({ block: 'start' })
@@ -98,6 +98,11 @@ export function ModelProviders({ focus = false }: { focus?: boolean }): JSX.Elem
     if (await run(provider, 'save', () => window.api.byok.setKey(provider, key))) setEditing(null)
   }
 
+  const connect = async (provider: string, url: string, key?: string): Promise<void> => {
+    if (await run(provider, 'save', () => window.api.byok.connect(provider, url, key)))
+      setEditing(null)
+  }
+
   function toggleModel(p: ByokProviderStatus, id: string, on: boolean): void {
     const enabled = on ? [...p.enabled, id] : p.enabled.filter((m) => m !== id)
     update({ ...p, enabled })
@@ -119,15 +124,27 @@ export function ModelProviders({ focus = false }: { focus?: boolean }): JSX.Elem
 
   function stateOf(p: ByokProviderStatus): CardState {
     if (action === `${p.id}:save` || action === `${p.id}:refresh`) return 'checking'
-    if (!p.hasKey) return 'off'
+    if (!p.connected) return 'off'
     return p.error ? 'error' : 'ok'
   }
 
   const busy = action !== null
-  const stateLabels: Partial<Record<CardState, string>> = {
+  const keyLabels: Partial<Record<CardState, string>> = {
     ok: t('providers.state.ok'),
     off: t('providers.state.off'),
     error: t('providers.state.error')
+  }
+  const serverLabels: Partial<Record<CardState, string>> = {
+    ok: t('providers.serverState.ok'),
+    off: t('providers.serverState.off'),
+    error: t('providers.state.error')
+  }
+
+  /** What a provider is for: billed to the user's account, or run on their own hardware. */
+  function purposeOf(p: ByokProviderStatus): string {
+    if (p.endpoint === 'local') return t('providers.purposeLocal', { description: p.description })
+    if (p.endpoint === 'custom') return t('providers.purposeServer', { description: p.description })
+    return t('providers.purpose', { description: p.description, name: p.name })
   }
 
   return (
@@ -155,92 +172,116 @@ export function ModelProviders({ focus = false }: { focus?: boolean }): JSX.Elem
       ) : (
         status.providers.map((p) => {
           const open = editing === p.id
+          const server = p.endpoint !== 'fixed'
+          const cancel = (): void => {
+            setEditing(null)
+            setErrors((all) => ({ ...all, [p.id]: undefined }))
+          }
+          const remove = (
+            <>
+              <span className="acct-confirm">
+                {server
+                  ? t('providers.confirmRemoveServer', { name: p.name })
+                  : t('providers.confirmRemove', { name: p.name })}
+              </span>
+              <button
+                className="btn btn--xs btn--danger"
+                disabled={busy}
+                onClick={() => void run(p.id, 'remove', () => window.api.byok.removeKey(p.id))}
+              >
+                {t('actions.remove')}
+              </button>
+              <button className="btn btn--xs btn--ghost" onClick={() => setConfirming(null)}>
+                {t('actions.cancel')}
+              </button>
+            </>
+          )
+          const actions = (
+            <>
+              <button
+                className="btn btn--xs btn--ghost"
+                disabled={busy}
+                title={
+                  server
+                    ? t('providers.checkServerTitle', { name: p.name })
+                    : t('providers.checkTitle', { name: p.name })
+                }
+                onClick={() => void run(p.id, 'refresh', () => window.api.byok.refresh(p.id))}
+              >
+                {action === `${p.id}:refresh` ? t('status.checking') : t('providers.checkAgain')}
+              </button>
+              {!open && (
+                <button
+                  className="btn btn--xs btn--ghost"
+                  disabled={busy}
+                  onClick={() => setEditing(p.id)}
+                >
+                  {server ? t('providers.change') : t('providers.replace')}
+                </button>
+              )}
+              <button
+                className="btn btn--xs btn--ghost acct-quiet"
+                disabled={busy}
+                aria-label={
+                  server
+                    ? t('providers.removeServerLabel', { name: p.name })
+                    : t('providers.removeLabel', { name: p.name })
+                }
+                onClick={() => setConfirming(p.id)}
+              >
+                {action === `${p.id}:remove` ? t('providers.removing') : t('actions.remove')}
+              </button>
+            </>
+          )
           return (
             <AccountCard
               key={p.id}
               icon={<ProviderLogo provider={p.id} />}
               title={p.name}
-              purpose={t('providers.purpose', { description: p.description, name: p.name })}
+              purpose={purposeOf(p)}
               state={stateOf(p)}
-              stateLabels={stateLabels}
+              stateLabels={server ? serverLabels : keyLabels}
               action={
-                !p.hasKey &&
+                !p.connected &&
                 !open && (
                   <button
                     className="btn btn--sm btn--primary"
                     disabled={busy}
-                    aria-label={t('providers.addKeyLabel', { name: p.name })}
+                    aria-label={
+                      server
+                        ? t('providers.connectLabel', { name: p.name })
+                        : t('providers.addKeyLabel', { name: p.name })
+                    }
                     onClick={() => setEditing(p.id)}
                   >
-                    {t('providers.addKey')}
+                    {server ? t('providers.connect') : t('providers.addKey')}
                   </button>
                 )
               }
             >
-              {p.hasKey && (
-                <Row
-                  name={t('providers.apiKey')}
-                  meta={t('providers.savedIn', { store: status.store })}
-                >
-                  {confirming === p.id ? (
-                    <>
-                      <span className="acct-confirm">
-                        {t('providers.confirmRemove', { name: p.name })}
-                      </span>
-                      <button
-                        className="btn btn--xs btn--danger"
-                        disabled={busy}
-                        onClick={() =>
-                          void run(p.id, 'remove', () => window.api.byok.removeKey(p.id))
-                        }
-                      >
-                        {t('actions.remove')}
-                      </button>
-                      <button
-                        className="btn btn--xs btn--ghost"
-                        onClick={() => setConfirming(null)}
-                      >
-                        {t('actions.cancel')}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        className="btn btn--xs btn--ghost"
-                        disabled={busy}
-                        title={t('providers.checkTitle', { name: p.name })}
-                        onClick={() =>
-                          void run(p.id, 'refresh', () => window.api.byok.refresh(p.id))
-                        }
-                      >
-                        {action === `${p.id}:refresh`
-                          ? t('status.checking')
-                          : t('providers.checkAgain')}
-                      </button>
-                      {!open && (
-                        <button
-                          className="btn btn--xs btn--ghost"
-                          disabled={busy}
-                          onClick={() => setEditing(p.id)}
-                        >
-                          {t('providers.replace')}
-                        </button>
-                      )}
-                      <button
-                        className="btn btn--xs btn--ghost acct-quiet"
-                        disabled={busy}
-                        aria-label={t('providers.removeLabel', { name: p.name })}
-                        onClick={() => setConfirming(p.id)}
-                      >
-                        {action === `${p.id}:remove`
-                          ? t('providers.removing')
-                          : t('actions.remove')}
-                      </button>
-                    </>
-                  )}
-                </Row>
-              )}
-              {p.hasKey && p.models.length > 0 && (
+              {p.connected &&
+                (server ? (
+                  <Row
+                    name={serverAddress(p)}
+                    meta={
+                      p.keyNeed === 'optional'
+                        ? p.hasKey
+                          ? t('providers.keySavedIn', { store: status.store })
+                          : t('providers.noKeyUsed')
+                        : undefined
+                    }
+                  >
+                    {confirming === p.id ? remove : actions}
+                  </Row>
+                ) : (
+                  <Row
+                    name={t('providers.apiKey')}
+                    meta={t('providers.savedIn', { store: status.store })}
+                  >
+                    {confirming === p.id ? remove : actions}
+                  </Row>
+                ))}
+              {p.connected && p.models.length > 0 && (
                 <ModelChoices
                   provider={p}
                   expanded={Boolean(showAll[p.id])}
@@ -249,19 +290,29 @@ export function ModelProviders({ focus = false }: { focus?: boolean }): JSX.Elem
                 />
               )}
               <Foot>
-                {open && (
-                  <KeyForm
-                    provider={p}
-                    store={status.store}
-                    replacing={p.hasKey}
-                    busy={busy}
-                    checking={action === `${p.id}:save`}
-                    onSubmit={(key) => saveKey(p.id, key)}
-                    onCancel={() => {
-                      setEditing(null)
-                      setErrors((all) => ({ ...all, [p.id]: undefined }))
-                    }}
-                  />
+                {open &&
+                  (server ? (
+                    <ServerForm
+                      provider={p}
+                      store={status.store}
+                      busy={busy}
+                      checking={action === `${p.id}:save`}
+                      onSubmit={(url, key) => connect(p.id, url, key)}
+                      onCancel={cancel}
+                    />
+                  ) : (
+                    <KeyForm
+                      provider={p}
+                      store={status.store}
+                      replacing={p.hasKey}
+                      busy={busy}
+                      checking={action === `${p.id}:save`}
+                      onSubmit={(key) => saveKey(p.id, key)}
+                      onCancel={cancel}
+                    />
+                  ))}
+                {p.endpoint === 'local' && (p.connected || open) && (
+                  <p className="acct-note">{t('providers.ollamaContext')}</p>
                 )}
                 {errorLine(errors[p.id] ?? p.error)}
               </Foot>
@@ -273,8 +324,18 @@ export function ModelProviders({ focus = false }: { focus?: boolean }): JSX.Elem
   )
 }
 
+/** Where a server the user runs is, as they'd write it: Ollama's address without
+ *  the `/v1` its OpenAI-compatible API is under. */
+function serverAddress(p: ByokProviderStatus): string {
+  const url = p.baseUrl ?? p.defaultBaseUrl ?? ''
+  return p.endpoint === 'local' ? url.replace(/\/v1\/?$/, '') : url
+}
+
+/** Lists this long get a box to find a model in (OpenRouter offers hundreds). */
+const FILTER_FROM = 12
+
 /** Which of a provider's models the model pickers show: the ones turned on and
- *  the recommended ones first, then all of them on request. */
+ *  the recommended ones first, then all of them on request, or the ones a search finds. */
 function ModelChoices({
   provider,
   expanded,
@@ -287,10 +348,19 @@ function ModelChoices({
   onToggle: (id: string, on: boolean) => void
 }): JSX.Element {
   const { t } = useTranslation('models')
+  const [query, setQuery] = useState('')
   const enabled = new Set(provider.enabled)
   const preferred = provider.models.filter((m) => enabled.has(m.id) || m.recommended)
-  const shown = expanded || preferred.length === 0 ? provider.models : preferred
-  const hidden = provider.models.length - shown.length
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const found = (m: ByokProviderStatus['models'][number]): boolean =>
+    words.every((w) => `${m.name} ${m.id}`.toLowerCase().includes(w))
+  const shown =
+    words.length > 0
+      ? provider.models.filter(found)
+      : expanded || preferred.length === 0
+        ? provider.models
+        : preferred
+  const hidden = words.length > 0 ? 0 : provider.models.length - shown.length
   return (
     <div className="byok-models">
       <div className="byok-models-head">
@@ -299,6 +369,16 @@ function ModelChoices({
           {t('providers.enabledCount', { enabled: enabled.size, total: provider.models.length })}
         </span>
       </div>
+      {provider.models.length >= FILTER_FROM && (
+        <input
+          type="search"
+          className="field-input byok-filter"
+          aria-label={t('providers.filterLabel', { name: provider.name })}
+          placeholder={t('providers.filterPlaceholder')}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      )}
       <ul
         className="byok-model-list"
         aria-label={t('providers.pickerList', { name: provider.name })}
@@ -331,12 +411,119 @@ function ModelChoices({
           </li>
         ))}
       </ul>
+      {words.length > 0 && shown.length === 0 && (
+        <p className="acct-note">{t('providers.noMatches')}</p>
+      )}
       {hidden > 0 && (
         <button type="button" className="btn btn--xs btn--ghost byok-more" onClick={onExpand}>
           {t('providers.showAll', { total: provider.models.length })}
         </button>
       )}
     </div>
+  )
+}
+
+/** Where a server the user runs is, with its key when it wants one; Fabricator
+ *  reaches it and lists its models before keeping it. */
+function ServerForm({
+  provider,
+  store,
+  busy,
+  checking,
+  onSubmit,
+  onCancel
+}: {
+  provider: ByokProviderStatus
+  store: string
+  busy: boolean
+  checking: boolean
+  onSubmit: (url: string, key?: string) => Promise<void>
+  onCancel: () => void
+}): JSX.Element {
+  const { t } = useTranslation('models')
+  const local = provider.endpoint === 'local'
+  const [url, setUrl] = useState(() => serverAddress(provider))
+  const [key, setKey] = useState('')
+  const urlId = useId()
+  const keyId = useId()
+
+  async function submit(event: FormEvent): Promise<void> {
+    event.preventDefault()
+    if (url.trim()) await onSubmit(url.trim(), key.trim() || undefined)
+  }
+
+  return (
+    <form
+      className="acct-add"
+      aria-label={t('providers.connectLabel', { name: provider.name })}
+      onSubmit={(event) => void submit(event)}
+    >
+      <label className="field-label" htmlFor={urlId}>
+        {t('providers.addressLabel', { name: provider.name })}
+      </label>
+      <input
+        id={urlId}
+        className="field-input"
+        type="text"
+        inputMode="url"
+        autoCapitalize="none"
+        autoComplete="off"
+        spellCheck={false}
+        autoFocus
+        value={url}
+        placeholder={local ? 'http://localhost:11434' : 'http://localhost:1234/v1'}
+        disabled={checking}
+        onChange={(event) => setUrl(event.target.value)}
+      />
+      {provider.keyNeed === 'optional' && (
+        <>
+          <label className="field-label" htmlFor={keyId}>
+            {t('providers.optionalKey')}
+          </label>
+          <input
+            id={keyId}
+            className="field-input"
+            type="password"
+            autoCapitalize="none"
+            autoComplete="off"
+            spellCheck={false}
+            value={key}
+            disabled={checking}
+            onChange={(event) => setKey(event.target.value)}
+          />
+        </>
+      )}
+      <span className="field-hint">
+        {local
+          ? t('providers.ollamaHint')
+          : provider.hasKey
+            ? t('providers.serverHintAgain', { store })
+            : t('providers.serverHint', { store })}{' '}
+        {provider.keyUrl && (
+          <button
+            type="button"
+            className="byok-link"
+            onClick={() => void window.api.openExternal(provider.keyUrl)}
+          >
+            {t('providers.getOllama')}
+            <Codicon name="link-external" />
+          </button>
+        )}
+      </span>
+      <div className="acct-add-actions">
+        <button type="submit" className="btn btn--sm btn--primary" disabled={busy || !url.trim()}>
+          {checking ? t('status.checking') : t('providers.connect')}
+        </button>
+        <button
+          type="button"
+          className="btn btn--sm btn--ghost"
+          disabled={checking}
+          onClick={onCancel}
+        >
+          {t('actions.cancel')}
+        </button>
+      </div>
+    </form>
   )
 }
 

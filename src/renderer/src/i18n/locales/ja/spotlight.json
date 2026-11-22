@@ -263,8 +263,8 @@
       "subtitle": "Fabricator が使用するすべてのアカウントを表示して変更します"
     },
     "apiKeys": {
-      "title": "API キーの管理",
-      "subtitle": "独自のキーで Anthropic、OpenAI、xAI、Google のモデルを使用します"
+      "title": "モデル プロバイダーの管理",
+      "subtitle": "OpenRouter、Ollama、または自分の API キーのモデルを使用します"
     },
     "mcpServers": {
       "title": "MCP サーバーの管理",

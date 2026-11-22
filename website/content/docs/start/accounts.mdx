@@ -20,14 +20,14 @@ Changes apply to every project on this computer. Select **Re-check** to verify e
 
 | Account | What Fabricator uses it for | Several accounts |
 | --- | --- | --- |
-| **GitHub Copilot** | Writes and edits your app's code when you chat. It's the only account Fabricator requires. | One at a time |
+| **GitHub Copilot** | Writes and edits your app's code when you chat. It's the only account Fabricator requires, unless you use models of your own instead. | One at a time |
 | **Microsoft Fabric** | Publishes, hosts and shares your apps, lists your Fabric workspaces, and manages your published apps' secrets. Your apps run on this computer while you build them, so you need it only when you publish. | Yes |
 | **Azure CLI** | Optional. Finds people when you share an app, connects Fabric data, reads the Power BI reports you migrate, lists your apps in the app gallery, and sets up team workspaces. Apps that run on this computer read Fabric data with this account too. | Yes |
 | **GitHub** | Clones repositories and runs team workspaces. It's optional and uses the GitHub CLI. | Yes |
 
 Features that need Azure ask you to **Sign in to Azure** when you use them, so you can leave it until then.
 
-**Accounts** also has **Model providers**, where you add API keys for Anthropic, OpenAI, xAI and Google. See [Use your own API keys](/docs/build/your-own-api-keys).
+**Accounts** also has **Model providers**, where you add models of your own: API keys for Anthropic, OpenAI, xAI, Google and OpenRouter, Ollama on this computer, or another server with an OpenAI-compatible API. With them, you can use Fabricator without GitHub Copilot. See [Use your own models](/docs/build/your-own-api-keys).
 
 A check mark next to a service's name means you're signed in. Otherwise the service says **Not signed in**, **Checking…** or **Needs attention**. **Needs attention** means Fabricator couldn't verify the sign-in; the message in that service's card says why.
 

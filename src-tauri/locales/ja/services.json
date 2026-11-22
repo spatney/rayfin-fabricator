@@ -103,19 +103,33 @@
     "stoppedEarly": "モデルが完了前に停止しました。[再試行] を選択するか、別のモデルを選んでください。",
     "addKeyInAccounts": "[アカウント] で {{name}} のキーを追加してください",
     "thisModel": "このモデル",
+    "ollamaUnreachable": "{{url}} で Ollama が応答しません。Ollama を起動してから、もう一度お試しください。",
+    "serverUnreachable": "{{url}} から応答がありませんでした。アドレスとサーバーが実行中であることを確認してから、もう一度お試しください。",
+    "serverNeedsKey": "このサーバーには API キーが必要です。キーを追加してから、もう一度お試しください。",
+    "badServerUrl": "サーバーのアドレスを入力してください (例: http://localhost:1234/v1)。",
+    "noOllamaModels": "Ollama のモデルに、Fabricator が必要とするツール呼び出しに対応したものがありません。gpt-oss や qwen3 など対応するモデルを取得してから、もう一度お試しください。",
+    "noServerModels": "サーバーにモデルが表示されませんでした。アドレスを確認してから、もう一度お試しください。",
+    "connectFirst": "{{name}} が設定されていません。[アカウント] で設定するか、別のモデルを選んでください。",
     "failure": {
       "keyRejected": "{{provider}} は API キーを受け付けませんでした。[アカウント] でキーを置き換えるか、別のモデルを選んでください。",
       "outOfCredit": "{{provider}} アカウントのクレジットが不足しているか、利用上限を超えています。{{provider}} で請求情報を確認するか、別のモデルを選んでください。",
       "tooLarge": "この要求は、{{provider}} プランで 1 分あたりに許可されているサイズを超えています。Fabricator の要求はサイズが大きいため、{{provider}} プランをアップグレードするか、別のモデルを選んでください。",
       "rateLimited": "{{provider}} がキーの使用頻度を制限しています。1 分待ってからもう一度お試しいただくか、別のモデルを選んでください。",
       "overloaded": "{{provider}} は現在過負荷状態です。1 分後にもう一度お試しいただくか、別のモデルを選んでください。",
-      "modelGone": "{{provider}} では、このキーで {{model}} を使用できなくなりました。[アカウント] でモデルを確認するか、別のモデルを選んでください。"
+      "modelGone": "{{provider}} では、このキーで {{model}} を使用できなくなりました。[アカウント] でモデルを確認するか、別のモデルを選んでください。",
+      "unreachable": "Fabricator は {{provider}} に接続できませんでした。このコンピューターまたはネットワーク上で実行している場合は起動し、それ以外の場合は接続を確認してください。その後、もう一度お試しいただくか、別のモデルを選んでください。"
+    },
+    "names": {
+      "custom": "OpenAI 互換サーバー"
     },
     "models": {
       "anthropic": "Claude モデル",
       "openai": "GPT モデル",
       "xai": "Grok モデル",
-      "google": "Gemini と Gemma のモデル"
+      "google": "Gemini と Gemma のモデル",
+      "openrouter": "1 つのキーで使える多くのメーカーのモデル",
+      "ollama": "このコンピューターで実行するオープン モデル",
+      "custom": "LM Studio、vLLM、LiteLLM など、OpenAI 互換 API を持つサーバーのモデル"
     }
   },
   "copilot": {

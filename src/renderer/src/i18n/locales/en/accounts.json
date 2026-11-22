@@ -25,6 +25,7 @@
     "signInHere": "Sign in to GitHub Copilot here, then retry your message.",
     "signingIn": "Signing in to Copilot...",
     "signIn": "Sign in to Copilot",
+    "ownModels": "Use your own models",
     "help": "Sign-in help",
     "inBrowser": "Complete sign-in in your browser, or follow the device-code instructions below."
   },

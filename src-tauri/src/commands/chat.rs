@@ -1086,20 +1086,25 @@ pub(crate) async fn run_turn(
   // Your own API keys: every session gets the provider registry so
   // a thread can switch between Copilot's models and the user's own, and a turn
   // on a provider's model first checks it can run, so it never quietly runs on
-  // another model.
+  // another model. Without a Copilot sign-in, a chat on Auto or one of
+  // Copilot's models runs on the user's own default model (the picker shows it).
   let byok_registry = state.byok.session_registry();
   // The plugins on in this chat: the Fabric IQ and Work IQ servers it can research
   // with, and the MCP servers the user added (an experiment).
   let iq = IqConfig::for_project(&project, &settings);
   let mcp_servers = McpServers::for_project(&project, &settings);
-  let provider_model = project.model.clone().filter(|m| byok::is_provider_selection(m));
+  let resolved = state
+    .copilot
+    .resolve_choice(ModelChoice::new(
+      project.model.clone(),
+      project.effort.clone(),
+      project.auto_tier.clone(),
+      project.context_tier.clone(),
+    ))
+    .await;
+  let choice = resolved.clone().unwrap_or_default();
+  let provider_model = choice.model.clone().filter(|m| byok::is_provider_selection(m));
   let provider = provider_model.as_deref().and_then(byok::describe);
-  let choice = ModelChoice::new(
-    project.model.clone(),
-    project.effort.clone(),
-    project.auto_tier.clone(),
-    project.context_tier.clone(),
-  );
 
   // Open (or resume) this project's persistent SDK session, reconciling the model choice.
   let open_turn_session = || state.copilot.turn_session(
@@ -1116,12 +1121,13 @@ pub(crate) async fn run_turn(
       mcp_servers.clone(),
       custom_instructions.clone(),
     );
-  let first_open = match &provider_model {
-    Some(model) => match state.byok.ensure_ready(model) {
+  let first_open = match (&resolved, &provider_model) {
+    (Err(e), _) => Err(e.clone()),
+    (Ok(_), Some(model)) => match state.byok.ensure_ready(model) {
       Ok(()) => open_turn_session().await,
       Err(e) => Err(e),
     },
-    None => open_turn_session().await,
+    (Ok(_), None) => open_turn_session().await,
   };
   let opened = match first_open {
     Ok(s) => s,
@@ -1938,13 +1944,26 @@ pub(crate) fn new_project_chat(settings: &AppSettings) -> (ModelChoice, Vec<Stri
 }
 
 /// List the Copilot models available to the signed-in user, for the chat model
-/// picker, followed by the models on the user's own keys while that experiment
-/// is on. Returns an `Err` (the renderer then falls back to its static
-/// suggestions) when the engine can't be reached or the user isn't signed in.
+/// picker, followed by the user's own models (Your own API keys). Without
+/// Copilot, the user's own models are the choices; with neither, it returns an
+/// `Err` (the renderer then falls back to its static suggestions).
 #[tauri::command]
 pub async fn chat_models(state: State<'_, AppState>) -> Result<Vec<CopilotModel>, String> {
-  let mut models = state.copilot.list_models().await?;
-  models.extend(state.byok.picker_models());
+  let mut own = state.byok.picker_models();
+  let mut models = match state.copilot.list_models().await {
+    Ok(models) => models,
+    Err(e) if own.iter().any(|m| m.byok.as_ref().is_some_and(|b| b.ready)) => {
+      log::info!("Copilot's models aren't available ({e}); offering the user's own");
+      // A chat on Auto or one of Copilot's models runs on this one now.
+      let stand_in = state.byok.default_own_model();
+      for meta in own.iter_mut().filter(|m| Some(&m.id) == stand_in.as_ref()).filter_map(|m| m.byok.as_mut()) {
+        meta.stand_in = true;
+      }
+      Vec::new()
+    }
+    Err(e) => return Err(e),
+  };
+  models.extend(own);
   Ok(models)
 }
 

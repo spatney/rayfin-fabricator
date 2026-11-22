@@ -2353,15 +2353,19 @@ export default function Workbench({
   /** Fabric sign-in runs a project's Rayfin CLI, so it waits until there's a project. */
   const canSignInToFabric = listedProjects.some((p) => !p.missing)
 
-  // Open Help. The assistant needs Copilot, and being signed out is exactly the
-  // kind of problem someone opens Help about — so instead of a dead end, show
-  // the static version of the same offer. `checking` means the background check
-  // hasn't finished: assume it will work rather than pre-empting with a dialog.
-  // `question` is asked straight away, as when a failed deploy offers to find
-  // out why.
+  /** Help runs on Copilot, or signed out of it, on a model of the user's own. */
+  const helpAvailable =
+    auth.copilot.signedIn || Boolean(auth.copilot.ownModels) || Boolean(auth.copilot.checking)
+
+  // Open Help. The assistant needs Copilot or a model of the user's own, and
+  // being signed out is exactly the kind of problem someone opens Help about —
+  // so instead of a dead end, show the static version of the same offer.
+  // `checking` means the background check hasn't finished: assume it will work
+  // rather than pre-empting with a dialog. `question` is asked straight away,
+  // as when a failed deploy offers to find out why.
   function openHelp(question?: string): void {
     setShowSearch(false)
-    if (!auth.copilot.signedIn && !auth.copilot.checking) setShowHelpOffline(true)
+    if (!helpAvailable) setShowHelpOffline(true)
     else {
       setHelpQuestion(question ?? null)
       setHelpContinues(false)
@@ -3026,7 +3030,7 @@ export default function Workbench({
         openUrl={(url) => void window.api.openExternal(url)}
         notify={(message, kind = 'success') => toast.show(kind, message)}
         help={{
-          available: auth.copilot.signedIn || Boolean(auth.copilot.checking),
+          available: helpAvailable,
           context: { projectId: active?.id, facts: helpFacts, surface: helpSurface },
           onUnavailable: () => setShowHelpOffline(true),
           onOpen: openHelpFromSearch,

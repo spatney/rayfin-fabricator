@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type JSX } from 'react'
 import { createPortal } from 'react-dom'
 import type { ChatModelUsage, ChatUsage, CopilotQuota } from '@shared/ipc'
 import { openDocs } from '@renderer/docsLinks'
+import { isCustomServer, isServerProvider } from '@renderer/copilotModels'
 import { menuLayout, type MenuLayout } from '@renderer/menuLayout'
 import { useSuppressPreview } from '@renderer/overlay'
 import { Trans, useTranslation } from '../../i18n'
@@ -37,9 +38,10 @@ function readUsage(projectId: string): Promise<ChatUsage | null | undefined> {
     .catch(() => undefined)
 }
 
-/** A model's maker's logo, else (on your own key) its provider's. */
+/** A model's maker's logo, else (on your own key or server) its provider's. */
 function Logo({ model: m }: { model: ChatModelUsage }): JSX.Element {
-  const provider = m.provider?.toLowerCase()
+  const name = m.provider?.toLowerCase()
+  const provider = name === 'openai-compatible server' ? 'custom' : name
   return (
     <ModelLogo
       model={{
@@ -50,18 +52,26 @@ function Logo({ model: m }: { model: ChatModelUsage }): JSX.Element {
   )
 }
 
-/** The key a model on your own key runs on: its provider's name, like the model picker's. */
+/** The key (or server) a model of your own runs on: its provider's name, like the model picker's. */
 function KeyTag({ model: m }: { model: ChatModelUsage }): JSX.Element {
   const { t } = useTranslation('chat')
+  const server = isServerProvider(m.provider)
+  const custom = isCustomServer(m.provider)
   return (
     <span
       className="mp-tag usage-key"
       title={
-        m.provider ? t('usageMeter.providerKey', { provider: m.provider }) : t('usageMeter.ownKey')
+        custom
+          ? t('usageMeter.yourServerTitle')
+          : m.provider
+            ? server
+              ? t('usageMeter.providerServer', { provider: m.provider })
+              : t('usageMeter.providerKey', { provider: m.provider })
+            : t('usageMeter.ownKey')
       }
     >
-      <Codicon name="key" />
-      {m.provider ?? t('usageMeter.yourKey')}
+      <Codicon name={server ? 'server' : 'key'} />
+      {custom ? t('usageMeter.yourServer') : (m.provider ?? t('usageMeter.yourKey'))}
     </span>
   )
 }
@@ -180,14 +190,15 @@ function PlanSection({
 /**
  * The chat toolbar's usage meter: what this chat's Copilot session has used, in
  * AI credits (or premium requests) on Copilot's models and in tokens on your own
- * keys. It opens to each model's share, its tokens, and what's left of your
+ * models. It opens to each model's share, its tokens, and what's left of your
  * Copilot plan.
  */
 export function UsageMeter({
   projectId,
   sending,
   hidden,
-  host
+  host,
+  copilot = true
 }: {
   projectId: string
   /** A turn is running: the totals are read again as it starts and ends. */
@@ -196,6 +207,9 @@ export function UsageMeter({
   hidden: boolean
   /** The signed-in Copilot account's host (`https://github.com`, or a GHE.com one). */
   host?: string
+  /** Signed in to GitHub Copilot. Without it, chats run on the user's own models
+   *  and there's no Copilot plan to show or link to. */
+  copilot?: boolean
 }): JSX.Element | null {
   const { t } = useTranslation('chat')
   const [usage, setUsage] = useState<ChatUsage | null>(null)
@@ -255,6 +269,7 @@ export function UsageMeter({
     void readUsage(projectId).then((next) => {
       if (next !== undefined) setUsage(next)
     })
+    if (!copilot) return
     setQuotaFailed(false)
     Promise.resolve()
       .then(() => window.api.chat.quota())
@@ -415,24 +430,26 @@ export function UsageMeter({
                   ))}
                 </ul>
               )}
-              {quota !== null && (
+              {copilot && quota !== null && (
                 <>
                   <div className="usage-rule" role="separator" />
                   <PlanSection quota={quota} failed={quotaFailed} />
                 </>
               )}
-              <div className="usage-links">
-                <button
-                  type="button"
-                  className="usage-link"
-                  onClick={() => {
-                    void window.api.openExternal(copilotUsageUrl(host))
-                    closePanel(false)
-                  }}
-                >
-                  {t('usageMeter.viewUsage')} <Codicon name="arrow-right" />
-                </button>
-              </div>
+              {copilot && (
+                <div className="usage-links">
+                  <button
+                    type="button"
+                    className="usage-link"
+                    onClick={() => {
+                      void window.api.openExternal(copilotUsageUrl(host))
+                      closePanel(false)
+                    }}
+                  >
+                    {t('usageMeter.viewUsage')} <Codicon name="arrow-right" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>,
           document.body

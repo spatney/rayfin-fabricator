@@ -168,6 +168,15 @@
   color: var(--text-dim);
 }
 
+/* Instead of the Auto switch, while Copilot isn't signed in. */
+.mp-note {
+  margin: 0;
+  padding: 6px 10px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
 .mp-auto .mp-item-label {
   font-weight: 600;
 }

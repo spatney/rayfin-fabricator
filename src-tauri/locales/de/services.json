@@ -103,19 +103,33 @@
     "stoppedEarly": "Das Modell hat aufgehört, bevor es fertig war. Wähle „Wiederholen“, oder wähle ein anderes Modell.",
     "addKeyInAccounts": "Füge deinen {{name}}-Schlüssel unter „Konten“ hinzu",
     "thisModel": "dieses Modell",
+    "ollamaUnreachable": "Ollama antwortet nicht unter {{url}}. Starte Ollama, und versuche es dann erneut.",
+    "serverUnreachable": "Unter {{url}} hat nichts geantwortet. Prüfe die Adresse und ob der Server läuft, und versuche es dann erneut.",
+    "serverNeedsKey": "Dieser Server verlangt einen API-Schlüssel. Füge einen hinzu, und versuche es dann erneut.",
+    "badServerUrl": "Gib die Adresse des Servers ein, z. B. http://localhost:1234/v1.",
+    "noOllamaModels": "Keines der Modelle in Ollama kann Tools aufrufen, was Fabricator benötigt. Lade eines herunter, das es kann, z. B. gpt-oss oder qwen3, und versuche es dann erneut.",
+    "noServerModels": "Der Server hat keine Modelle aufgelistet. Prüfe seine Adresse, und versuche es dann erneut.",
+    "connectFirst": "{{name}} ist nicht eingerichtet. Richte es unter „Konten“ ein, oder wähle ein anderes Modell.",
     "failure": {
       "keyRejected": "{{provider}} hat deinen API-Schlüssel nicht akzeptiert. Ersetze ihn unter „Konten“, oder wähle ein anderes Modell.",
       "outOfCredit": "Dein {{provider}}-Konto hat kein Guthaben mehr oder sein Ausgabenlimit überschritten. Prüfe deine Abrechnung bei {{provider}}, oder wähle ein anderes Modell.",
       "tooLarge": "Diese Anfrage ist größer, als dein {{provider}}-Tarif pro Minute erlaubt. Die Anfragen von Fabricator sind groß. Führe also ein Upgrade deines {{provider}}-Tarifs durch, oder wähle ein anderes Modell.",
       "rateLimited": "{{provider}} begrenzt, wie oft dein Schlüssel verwendet werden kann. Warte eine Minute, und versuche es erneut, oder wähle ein anderes Modell.",
       "overloaded": "{{provider}} ist gerade überlastet. Versuche es in einer Minute erneut, oder wähle ein anderes Modell.",
-      "modelGone": "{{provider}} bietet {{model}} für deinen Schlüssel nicht mehr an. Prüfe deine Modelle unter „Konten“, oder wähle ein anderes Modell."
+      "modelGone": "{{provider}} bietet {{model}} für deinen Schlüssel nicht mehr an. Prüfe deine Modelle unter „Konten“, oder wähle ein anderes Modell.",
+      "unreachable": "Fabricator konnte {{provider}} nicht erreichen. Wenn es auf diesem Computer oder in deinem Netzwerk läuft, starte es, andernfalls prüfe deine Verbindung. Versuche es dann erneut, oder wähle ein anderes Modell."
+    },
+    "names": {
+      "custom": "OpenAI-kompatibler Server"
     },
     "models": {
       "anthropic": "Claude-Modelle",
       "openai": "GPT-Modelle",
       "xai": "Grok-Modelle",
-      "google": "Gemini- und Gemma-Modelle"
+      "google": "Gemini- und Gemma-Modelle",
+      "openrouter": "Modelle vieler Anbieter mit einem Schlüssel",
+      "ollama": "Offene Modelle, die auf diesem Computer laufen",
+      "custom": "Modelle aus LM Studio, vLLM, LiteLLM oder einem anderen Server mit OpenAI-kompatibler API"
     }
   },
   "copilot": {

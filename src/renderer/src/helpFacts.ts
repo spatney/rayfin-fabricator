@@ -98,9 +98,10 @@ export function setupFacts(
  * "the tool check has not finished" to someone who is already inside the app
  * would be worse than saying nothing.
  *
- * Only GitHub Copilot is required: apps build and run on this computer. Azure
- * and Microsoft Fabric are optional: the features that need them ask for a
- * sign-in when they're used.
+ * GitHub Copilot is required unless the user has models of their own (Accounts
+ * → Model providers): apps build and run on this computer. Azure and Microsoft
+ * Fabric are optional: the features that need them ask for a sign-in when
+ * they're used.
  */
 export function accountFacts(auth: AuthStatus | null): string[] {
   const facts: string[] = []
@@ -114,6 +115,10 @@ export function accountFacts(auth: AuthStatus | null): string[] {
     )
   } else if (copilot?.checking) {
     facts.push('The GitHub Copilot account is still being checked.')
+  } else if (copilot?.ownModels) {
+    facts.push(
+      "Not signed in to GitHub Copilot: chat runs on the user's own models (Accounts → Model providers), so Copilot isn't needed."
+    )
   } else {
     facts.push('Not signed in to GitHub Copilot.')
   }

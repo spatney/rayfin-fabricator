@@ -39,7 +39,7 @@ Chat uses a plugin only when a request needs it. Fabric IQ and Work IQ only read
 
 Open the model pill in the composer to choose the model Copilot uses.
 
-![The model picker with Auto off, the model list open, Copilot's models with their makers' logos, and the models on the user's own Anthropic and OpenAI keys under Your API keys](/screenshots/model-picker.webp)
+![The model picker with Auto off, the model list open, Copilot's models with their makers' logos, and the models on the user's own Anthropic and OpenAI keys under Your models](/screenshots/model-picker.webp)
 
 **Copilot Fusion** is on to start, unless you chose another model in your [chat defaults](/docs/reference/settings#chat-defaults). With it on, Copilot picks the models for each request and how long they think. [Copilot Fusion](https://docs.github.com/en/copilot/concepts/models/copilot-fusion) is Copilot's Auto on accounts that have it; on others, the switch is named **Auto**. **Effort** under **Copilot Fusion** sets how much work Copilot puts into each request:
 
@@ -60,7 +60,7 @@ The pill shows your choice, such as `Claude Opus 5.5 · High`. When you choose a
 
 Each app's chat keeps its own choice. To start every new app's chat with your model, choose it in **Settings → Chat defaults**. See [Chat defaults](/docs/reference/settings#chat-defaults).
 
-Fabricator uses the GitHub Copilot account you signed in with. The models shown come from that account's available Copilot models. When you add your own API keys, the list also has models on your own Anthropic, OpenAI, xAI or Google key. See [Use your own API keys](/docs/build/your-own-api-keys).
+Fabricator uses the GitHub Copilot account you signed in with. The models shown come from that account's available Copilot models. When you add models of your own, the list also has them under **Your models**: models on your own Anthropic, OpenAI, xAI, Google or OpenRouter key, from Ollama, or from another OpenAI-compatible server. Without a Copilot sign-in, the list has only your own models and there's no **Auto**. See [Use your own models](/docs/build/your-own-api-keys).
 
 ## What happens during a turn
 
@@ -110,15 +110,17 @@ If a turn failed, use **Retry**. If Fabricator closed during a response, use **R
 
 ## See what a chat has used
 
-Once a chat has used Copilot, a button next to **New chat** shows how much: AI credits on Copilot's models, and tokens on models on your own API keys, such as `24.8 credits · 1.2M tokens`. One AI credit is US$0.01. If your Copilot plan counts premium requests instead of AI credits, the button shows premium requests.
+Once a chat has used Copilot, a button next to **New chat** shows how much: AI credits on Copilot's models, and tokens on models of your own, such as `24.8 credits · 1.2M tokens`. One AI credit is US$0.01. If your Copilot plan counts premium requests instead of AI credits, the button shows premium requests.
 
 Select the button to open **Session credits**:
 
 - The chat's total, such as `39.6 credits used`, and about what that costs, such as `≈ $0.40`. A bar under it shows each model's share in that model's color.
-- **Usage by model** lists each model the chat used, with its credits and its share. A model on your own key shows its provider with a key, such as **Anthropic**: the provider bills it, so it uses no credits. When a chat used only your own keys, the view is called **Session usage** and counts tokens instead.
+- **Usage by model** lists each model the chat used, with its credits and its share. A model on your own key shows its provider with a key, such as **Anthropic**, and a model from a server you run shows it with a server, such as **Ollama**, or **Your server** for an OpenAI-compatible server: they use no credits. When a chat used only your own models, the view is called **Session usage** and counts tokens instead.
 - **Token details** shows what each model read and wrote, such as `1.2M in · 18K out`. Hover a model's tokens to see exact counts, including the tokens read from the prompt cache.
 - **Copilot plan** shows how much of your plan's allowance is left, such as `998,000 of 1,000,000 credits remaining`, and when it resets.
 - **View usage** opens your Copilot usage on GitHub.
+
+While you're not signed in to GitHub Copilot, the view leaves out **Copilot plan** and **View usage**.
 
 The count covers this chat since it started and updates after each turn. **New chat** starts it again. Other features that use Copilot, such as the Advisor and Help, aren't counted here.
 

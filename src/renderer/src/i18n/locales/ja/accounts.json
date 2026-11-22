@@ -25,6 +25,7 @@
     "signInHere": "ここで GitHub Copilot にサインインしてから、メッセージを再送信してください。",
     "signingIn": "Copilot にサインインしています…",
     "signIn": "Copilot にサインイン",
+    "ownModels": "自分のモデルを使用",
     "help": "サインインのヘルプ",
     "inBrowser": "ブラウザーでサインインを完了するか、下に表示されるデバイス コードの手順に従ってください。"
   },

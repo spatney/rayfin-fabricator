@@ -183,6 +183,7 @@
     "providerKey": "On your {{provider}} key, which its provider bills",
     "ownKey": "On your own key, which its provider bills",
     "yourKey": "Your key",
+    "yourServer": "Your server",
     "plan": "Copilot plan",
     "percentLeft": "{{percent}} left",
     "planFailed": "Couldn’t check your Copilot plan.",
@@ -209,7 +210,9 @@
     "byModel": "Usage by model",
     "tokenDetails": "Token details",
     "viewUsage": "View usage",
-    "otherModels": "Other models"
+    "otherModels": "Other models",
+    "providerServer": "On {{provider}}, a server you run",
+    "yourServerTitle": "On your OpenAI-compatible server"
   },
   "imageMarkup": {
     "hint": "Draw on it to show Copilot what you mean",

@@ -268,8 +268,8 @@
       "subtitle": "See and change every account Fabricator uses"
     },
     "apiKeys": {
-      "title": "Manage API keys",
-      "subtitle": "Use models from Anthropic, OpenAI, xAI and Google with your own keys"
+      "title": "Manage model providers",
+      "subtitle": "Use models from OpenRouter, Ollama or your own API keys"
     },
     "mcpServers": {
       "title": "Manage MCP servers",

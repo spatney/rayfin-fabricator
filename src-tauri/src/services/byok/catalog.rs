@@ -4,8 +4,15 @@
 //! What a model can do comes from, in order: the provider's own model list
 //! (Anthropic's lists limits, effort levels, image input and thinking types;
 //! xAI's lists context sizes, effort levels and image input; Google's lists
-//! limits), the same model in Copilot's catalog (matched by id, which also gives
-//! the session Copilot's agent configuration for it), then family defaults.
+//! limits; OpenRouter's lists limits, image input and whether a model calls
+//! tools and reasons; Ollama says what each of its models can do), the same
+//! model in Copilot's catalog (matched by id, which also gives the session
+//! Copilot's agent configuration for it), then family defaults.
+//!
+//! Most providers are cloud APIs at a fixed address that take a key. Ollama
+//! runs on this computer (or another one people give the address of) and takes
+//! no key, and any other OpenAI-compatible server can be added by its address,
+//! with a key when it needs one.
 
 use serde_json::Value;
 
@@ -22,6 +29,50 @@ pub enum Auth {
   Google,
 }
 
+/// Where a provider's API is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Endpoint {
+  /// Always at `base_url`.
+  Fixed,
+  /// A server people run themselves (Ollama): at `base_url` unless they give
+  /// another address.
+  Local,
+  /// Any OpenAI-compatible server, at the address people give.
+  Custom,
+}
+
+impl Endpoint {
+  /// How the renderer names it.
+  pub fn as_str(self) -> &'static str {
+    match self {
+      Endpoint::Fixed => "fixed",
+      Endpoint::Local => "local",
+      Endpoint::Custom => "custom",
+    }
+  }
+}
+
+/// Whether a provider takes an API key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyNeed {
+  Required,
+  /// Only some servers want one (an OpenAI-compatible server).
+  Optional,
+  /// Ollama: none.
+  Unused,
+}
+
+impl KeyNeed {
+  /// How the renderer names it.
+  pub fn as_str(self) -> &'static str {
+    match self {
+      KeyNeed::Required => "required",
+      KeyNeed::Optional => "optional",
+      KeyNeed::Unused => "unused",
+    }
+  }
+}
+
 pub struct ProviderSpec {
   /// Stable id, also the registry provider name: `provider/model` selection ids.
   pub id: &'static str,
@@ -30,28 +81,63 @@ pub struct ProviderSpec {
   pub description: fn() -> String,
   /// The Copilot runtime's provider type: `"anthropic"` or `"openai"`.
   pub kind: &'static str,
-  /// The base URL the Copilot runtime calls.
+  /// The base URL the Copilot runtime calls; for a [`Endpoint::Local`] server,
+  /// the one it calls unless people give another (empty for [`Endpoint::Custom`]).
   pub base_url: &'static str,
   /// `"responses"` or `"completions"` (OpenAI-compatible providers only).
   pub wire_api: Option<&'static str>,
   /// The runtime's telemetry tag, when it has one for this provider.
   pub telemetry: Option<&'static str>,
-  /// Lists the models a key can use.
+  /// Lists the models a key can use: a full URL, or for a provider at an
+  /// address people give, a path after its base URL.
   pub models_url: &'static str,
   /// A second list that fills in what the first leaves out: xAI lists image
   /// input under `/language-models`, but context sizes only under `/models`.
   pub details_url: Option<&'static str>,
   pub auth: Auth,
-  /// Where people create a key.
+  /// Where people create a key, or for a provider that takes none, where they get it.
   pub key_url: &'static str,
   /// How keys start (the input's placeholder).
   pub key_prefix: &'static str,
   /// Sessions reach it through Fabricator's relay, which adapts requests (and,
   /// for Google, replies) to what its API takes (see `relay`).
   pub relay: bool,
+  pub endpoint: Endpoint,
+  pub key: KeyNeed,
+  /// Turns a bad key down, for a provider that lists its models to anyone
+  /// (OpenRouter).
+  pub key_check_url: Option<&'static str>,
 }
 
-pub const PROVIDERS: [ProviderSpec; 4] = [
+impl ProviderSpec {
+  /// The base URL sessions reach it at: its own, or the one saved for it
+  /// (`None` for an OpenAI-compatible server that hasn't been given one).
+  pub fn base_url_with(&self, saved: Option<&str>) -> Option<String> {
+    let saved = saved.map(str::trim).filter(|url| !url.is_empty());
+    match self.endpoint {
+      Endpoint::Fixed => Some(self.base_url.to_string()),
+      Endpoint::Local => Some(saved.unwrap_or(self.base_url).to_string()),
+      Endpoint::Custom => saved.map(str::to_string),
+    }
+  }
+
+  /// Whether a session can use it with `has_key`: it needs no key, or has one.
+  pub fn usable(&self, has_key: bool) -> bool {
+    self.key != KeyNeed::Required || has_key
+  }
+
+  /// Its name as people read it: a provider's own name, or for a server at an
+  /// address people give, what kind of server it is, in their language.
+  /// [`Self::name`] stays the same in every language, for session names.
+  pub fn display_name(&self) -> String {
+    match self.endpoint {
+      Endpoint::Custom => t!("services.byok.names.custom"),
+      _ => self.name.to_string(),
+    }
+  }
+}
+
+pub const PROVIDERS: [ProviderSpec; 7] = [
   ProviderSpec {
     id: "anthropic",
     name: "Anthropic",
@@ -66,6 +152,9 @@ pub const PROVIDERS: [ProviderSpec; 4] = [
     key_url: "https://platform.claude.com/settings/keys",
     key_prefix: "sk-ant-",
     relay: false,
+    endpoint: Endpoint::Fixed,
+    key: KeyNeed::Required,
+    key_check_url: None,
   },
   ProviderSpec {
     id: "openai",
@@ -81,6 +170,9 @@ pub const PROVIDERS: [ProviderSpec; 4] = [
     key_url: "https://platform.openai.com/settings/organization/api-keys",
     key_prefix: "sk-",
     relay: true,
+    endpoint: Endpoint::Fixed,
+    key: KeyNeed::Required,
+    key_check_url: None,
   },
   ProviderSpec {
     id: "xai",
@@ -96,6 +188,9 @@ pub const PROVIDERS: [ProviderSpec; 4] = [
     key_url: "https://console.x.ai/team/default/api-keys",
     key_prefix: "xai-",
     relay: true,
+    endpoint: Endpoint::Fixed,
+    key: KeyNeed::Required,
+    key_check_url: None,
   },
   ProviderSpec {
     id: "google",
@@ -111,6 +206,64 @@ pub const PROVIDERS: [ProviderSpec; 4] = [
     key_url: "https://aistudio.google.com/apikey",
     key_prefix: "AIza",
     relay: true,
+    endpoint: Endpoint::Fixed,
+    key: KeyNeed::Required,
+    key_check_url: None,
+  },
+  ProviderSpec {
+    id: "openrouter",
+    name: "OpenRouter",
+    description: || t!("services.byok.models.openrouter"),
+    kind: "openai",
+    base_url: "https://openrouter.ai/api/v1",
+    wire_api: Some("completions"),
+    telemetry: None,
+    models_url: "https://openrouter.ai/api/v1/models",
+    details_url: None,
+    auth: Auth::Bearer,
+    key_url: "https://openrouter.ai/settings/keys",
+    key_prefix: "sk-or-",
+    relay: true,
+    endpoint: Endpoint::Fixed,
+    key: KeyNeed::Required,
+    key_check_url: Some("https://openrouter.ai/api/v1/key"),
+  },
+  ProviderSpec {
+    id: "ollama",
+    name: "Ollama",
+    description: || t!("services.byok.models.ollama"),
+    kind: "openai",
+    base_url: "http://localhost:11434/v1",
+    wire_api: Some("completions"),
+    telemetry: None,
+    // Ollama's own API, beside its OpenAI-compatible one (see `ollama_root`).
+    models_url: "/api/tags",
+    details_url: None,
+    auth: Auth::Bearer,
+    key_url: "https://ollama.com/download",
+    key_prefix: "",
+    relay: true,
+    endpoint: Endpoint::Local,
+    key: KeyNeed::Unused,
+    key_check_url: None,
+  },
+  ProviderSpec {
+    id: "custom",
+    name: "OpenAI-compatible server",
+    description: || t!("services.byok.models.custom"),
+    kind: "openai",
+    base_url: "",
+    wire_api: Some("completions"),
+    telemetry: None,
+    models_url: "/models",
+    details_url: None,
+    auth: Auth::Bearer,
+    key_url: "",
+    key_prefix: "",
+    relay: true,
+    endpoint: Endpoint::Custom,
+    key: KeyNeed::Optional,
+    key_check_url: None,
   },
 ];
 
@@ -124,6 +277,13 @@ const EFFORTS: [&str; 6] = ["none", "low", "medium", "high", "xhigh", "max"];
 /// Models whose context window is smaller than this can't hold Fabricator's
 /// agent prompt (system prompt, skills and tool definitions) plus a task.
 const MIN_CONTEXT: u32 = 32_768;
+
+/// The most context Fabricator counts on from an Ollama model. Ollama sets the
+/// context it gives a model itself (its Context length setting), and requests
+/// can't change it, so sessions keep to what Fabricator asks people to set:
+/// 64k, which is 65,536 tokens in Ollama. Counting 64,000 stays inside that and
+/// shows as "64K", as Ollama names it.
+pub const OLLAMA_CONTEXT: u32 = 64_000;
 
 /// A model as a provider lists it, before it's matched with Copilot's catalog.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -144,6 +304,9 @@ pub struct Listed {
   /// False: the model can't be called (Anthropic's retired models, Google's
   /// models that can't hold a conversation).
   pub active: bool,
+  /// Whether it can call tools, when the provider says (OpenRouter, Ollama).
+  /// Fabricator's agent can't work without them.
+  pub tools: Option<bool>,
 }
 
 /// What Copilot's catalog knows about a model (its "twin").
@@ -194,9 +357,15 @@ pub fn parse_models(provider: &str, body: &Value) -> Vec<Listed> {
         "anthropic" => parse_anthropic(id, m),
         "xai" => parse_xai(id, m),
         "google" => parse_google(id, m),
+        "openrouter" => parse_openrouter(id, m),
         _ => Listed {
           created: m.get("created").and_then(Value::as_i64).unwrap_or(0),
           deprecated: m.get("shutdown_date").is_some_and(|d| d.is_string()),
+          // What some OpenAI-compatible servers add: vLLM's `max_model_len`,
+          // and the context others report under one of these names.
+          context: ["context_length", "context_window", "max_model_len", "max_context_length"]
+            .iter()
+            .find_map(|k| m.get(*k).and_then(as_u32)),
           active: true,
           id,
           ..Default::default()
@@ -204,6 +373,59 @@ pub fn parse_models(provider: &str, body: &Value) -> Vec<Listed> {
       })
     })
     .collect()
+}
+
+/// OpenRouter lists each model's context, output limit and input kinds, and
+/// the request parameters it takes, which say whether it calls tools and reasons.
+fn parse_openrouter(id: String, m: &Value) -> Listed {
+  let takes = |parameter: &str| {
+    m.get("supported_parameters").and_then(Value::as_array).is_some_and(|p| p.iter().any(|v| v == parameter))
+  };
+  Listed {
+    name: m.get("name").and_then(Value::as_str).map(str::to_string),
+    created: m.get("created").and_then(Value::as_i64).unwrap_or(0),
+    context: m.get("context_length").and_then(as_u32),
+    max_output: m.pointer("/top_provider/max_completion_tokens").and_then(as_u32),
+    vision: m
+      .pointer("/architecture/input_modalities")
+      .and_then(Value::as_array)
+      .map(|kinds| kinds.iter().any(|k| k == "image")),
+    efforts: Some(if takes("reasoning_effort") { ["low", "medium", "high"].map(String::from).to_vec() } else { Vec::new() }),
+    tools: Some(takes("tools")),
+    // Batch variants answer hours later, not in a conversation.
+    active: !id.ends_with(":batch"),
+    id,
+    ..Default::default()
+  }
+}
+
+/// One of Ollama's models, from its entry in `/api/tags` and what `/api/show`
+/// says about it: what it can do (`completion`, `tools`, `vision`, `thinking`)
+/// and the context it was trained for.
+pub fn parse_ollama(tag: &Value, show: &Value) -> Option<Listed> {
+  let id = tag.get("name").or_else(|| tag.get("model")).and_then(Value::as_str)?.trim().to_string();
+  if id.is_empty() {
+    return None;
+  }
+  let can = |capability: &str| {
+    show.get("capabilities").and_then(Value::as_array).is_some_and(|c| c.iter().any(|v| v == capability))
+  };
+  let trained = show
+    .get("model_info")
+    .and_then(Value::as_object)
+    .and_then(|info| info.iter().find(|(k, _)| k.ends_with(".context_length")).and_then(|(_, v)| as_u32(v)));
+  Some(Listed {
+    created: tag.get("modified_at").map(rfc3339_secs).unwrap_or(0),
+    context: Some(trained.unwrap_or(OLLAMA_CONTEXT).min(OLLAMA_CONTEXT)),
+    vision: Some(can("vision")),
+    // gpt-oss takes effort levels; Ollama's other thinking models only think or don't.
+    efforts: Some(if id.starts_with("gpt-oss") { ["low", "medium", "high"].map(String::from).to_vec() } else { Vec::new() }),
+    tools: Some(can("tools")),
+    // Embedding models can't hold a conversation.
+    active: can("completion"),
+    id,
+    ..Default::default()
+  })
 }
 
 /// Fill in what `listed` doesn't say from a second list of the same models.
@@ -298,17 +520,22 @@ fn parse_anthropic(id: String, m: &Value) -> Listed {
     deprecated: m.get("lifecycle").and_then(Value::as_str) == Some("deprecated"),
     line: m.get("line").and_then(Value::as_str).map(str::to_string),
     active: m.get("lifecycle").and_then(Value::as_str) != Some("retired"),
+    tools: None,
     id,
   }
 }
 
 /// Whether a listed model is a chat model Fabricator's agent can use.
 pub fn is_chat_model(provider: &str, m: &Listed) -> bool {
-  if !m.active || m.context.is_some_and(|c| c < MIN_CONTEXT) {
+  if !m.active || m.context.is_some_and(|c| c < MIN_CONTEXT) || m.tools == Some(false) {
     return false;
   }
   let id = m.id.to_ascii_lowercase();
   match provider {
+    // They list what each model can do, and the agent needs only tools.
+    "openrouter" | "ollama" => m.tools == Some(true),
+    // An OpenAI-compatible server lists only names: offer them all.
+    "custom" => true,
     "anthropic" => id.starts_with("claude"),
     "openai" => {
       const NOT_CHAT: [&str; 16] = [
@@ -424,6 +651,7 @@ fn defaults(provider: &str, id: &str) -> Defaults {
     "xai" => d(256_000, 32_768, true, &[]),
     "google" if id.starts_with("gemma") => d(262_144, 32_768, true, &[]),
     "google" => d(1_048_576, 65_536, true, &["low", "medium", "high"]),
+    "ollama" => d(OLLAMA_CONTEXT, 16_384, false, &[]),
     _ => d(128_000, 16_384, false, &[]),
   }
 }
@@ -434,6 +662,8 @@ pub fn pretty_name(provider: &str, id: &str) -> String {
   match provider {
     "openai" => openai_name(bare),
     "xai" => grok_name(bare),
+    // Local and self-hosted models go by the names people pulled or served them as.
+    "ollama" | "custom" => id.to_string(),
     _ => bare.to_string(),
   }
 }
@@ -541,7 +771,13 @@ pub fn resolve(provider: &str, listed: Vec<Listed>, copilot: &[CopilotTwin]) -> 
         efforts,
         default_effort,
         copilot_id: twin.map(|t| t.id.clone()),
-        adaptive_thinking: m.adaptive_thinking.clone().or(twin.and_then(|t| t.adaptive_thinking.clone())),
+        // Adaptive thinking is a setting of Anthropic's Messages API, which a
+        // Claude model reached through an OpenAI-compatible API (OpenRouter's) doesn't take.
+        adaptive_thinking: if find(provider).is_some_and(|spec| spec.kind == "anthropic") {
+          m.adaptive_thinking.clone().or(twin.and_then(|t| t.adaptive_thinking.clone()))
+        } else {
+          None
+        },
         deprecated: m.deprecated,
         recommended: false,
         created: m.created,
@@ -565,19 +801,22 @@ pub fn resolve(provider: &str, listed: Vec<Listed>, copilot: &[CopilotTwin]) -> 
 }
 
 /// Suggest a few models when a key is added: Anthropic's newest Opus, Sonnet
-/// and Haiku; for the others, the newest models Copilot also offers (it has
-/// tuned its agent for them), else the provider's newest main models.
+/// and Haiku; the models last pulled into Ollama; for the others, the newest
+/// models Copilot also offers (it has tuned its agent for them), else the
+/// provider's newest main models.
 fn recommend(provider: &str, models: &mut [(String, ByokModelInfo)]) {
   let mut picked: Vec<usize> = Vec::new();
   let active = |m: &ByokModelInfo| !m.deprecated;
-  if provider == "anthropic" {
+  if provider == "ollama" {
+    picked = (0..models.len()).filter(|i| active(&models[*i].1)).take(3).collect();
+  } else if provider == "anthropic" {
     for line in ["opus", "sonnet", "haiku"] {
       if let Some(i) = models.iter().position(|(f, m)| f == line && active(m)) {
         picked.push(i);
       }
     }
   } else {
-    let limit = if provider == "openai" { 3 } else { 2 };
+    let limit = if matches!(provider, "openai" | "openrouter" | "custom") { 3 } else { 2 };
     let main = |family: &str, m: &ByokModelInfo| match provider {
       "openai" => m.id.starts_with("gpt-"),
       "xai" => family == "grok",
@@ -781,5 +1020,78 @@ mod tests {
     assert_eq!(pretty_name("openai", "o3"), "o3");
     assert_eq!(pretty_name("xai", "grok-4.20-0309-reasoning"), "Grok 4.20 Reasoning");
     assert_eq!(pretty_name("google", "models/gemini-4-argon"), "gemini-4-argon");
+  }
+
+  #[test]
+  fn openrouter_offers_models_that_call_tools_with_their_limits() {
+    let model = |id: &str, params: &[&str], created: i64| {
+      json!({
+        "id": id, "name": format!("Maker: {id}"), "created": created, "context_length": 1_000_000,
+        "top_provider": { "max_completion_tokens": 128_000 },
+        "architecture": { "input_modalities": ["text", "image"] },
+        "supported_parameters": params,
+      })
+    };
+    let body = json!({ "data": [
+      model("anthropic/claude-sonnet-5.5", &["tools", "reasoning", "reasoning_effort"], 300),
+      model("anthropic/claude-sonnet-5.5:batch", &["tools", "reasoning_effort"], 300),
+      model("acme/story-writer", &["temperature"], 400),
+      model("qwen/qwen3-coder", &["tools"], 200),
+    ]});
+    let mut sonnet = twin("claude-sonnet-5.5", "Claude Sonnet 5.5");
+    sonnet.adaptive_thinking = Some("required".into());
+    let models = resolve("openrouter", parse_models("openrouter", &body), &[sonnet]);
+    let ids: Vec<&str> = models.iter().map(|m| m.id.as_str()).collect();
+    assert_eq!(ids, ["anthropic/claude-sonnet-5.5", "qwen/qwen3-coder"], "only models that call tools, no batch variants");
+    let claude = &models[0];
+    assert_eq!((claude.name.as_str(), claude.context_window, claude.max_output), ("Maker: anthropic/claude-sonnet-5.5", 1_000_000, 128_000));
+    assert_eq!((claude.vision, claude.efforts.len()), (true, 3));
+    assert_eq!(claude.copilot_id.as_deref(), Some("claude-sonnet-5.5"));
+    assert_eq!(claude.adaptive_thinking, None, "Anthropic's thinking setting doesn't travel over an OpenAI-compatible API");
+    assert!(models[1].efforts.is_empty());
+    assert!(claude.recommended, "Copilot offers it");
+  }
+
+  #[test]
+  fn ollama_offers_its_models_that_call_tools_within_the_context_people_set() {
+    let tag = |name: &str| json!({ "name": name, "modified_at": "2026-11-01T10:00:00Z" });
+    let show = |caps: &[&str], context: u64| json!({ "capabilities": caps, "model_info": { "general.architecture": "x", "x.context_length": context } });
+    let gpt_oss = parse_ollama(&tag("gpt-oss:20b"), &show(&["completion", "tools", "thinking"], 131_072)).unwrap();
+    assert_eq!((gpt_oss.context, gpt_oss.tools, gpt_oss.vision), (Some(OLLAMA_CONTEXT), Some(true), Some(false)));
+    assert_eq!(gpt_oss.efforts.as_deref().map(<[String]>::len), Some(3));
+    let listed = vec![
+      gpt_oss,
+      parse_ollama(&tag("gemma3:latest"), &show(&["completion", "vision"], 131_072)).unwrap(),
+      parse_ollama(&tag("nomic-embed-text"), &show(&["embedding"], 8_192)).unwrap(),
+      parse_ollama(&tag("tiny:1b"), &show(&["completion", "tools"], 8_192)).unwrap(),
+      parse_ollama(&tag("llama3.2:latest"), &Value::Null).unwrap(),
+    ];
+    let models = resolve("ollama", listed, &[]);
+    assert_eq!(models.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), ["gpt-oss:20b"]);
+    assert_eq!((models[0].name.as_str(), models[0].context_window), ("gpt-oss:20b", OLLAMA_CONTEXT));
+    assert!(models[0].recommended, "the models last pulled are suggested");
+  }
+
+  #[test]
+  fn an_openai_compatible_server_offers_every_model_it_lists() {
+    let body = json!({ "object": "list", "data": [
+      { "id": "qwen3-coder-30b", "object": "model", "max_model_len": 262_144 },
+      { "id": "local-model", "object": "model" },
+    ]});
+    let models = resolve("custom", parse_models("custom", &body), &[]);
+    let windows: Vec<(&str, u32)> = models.iter().map(|m| (m.id.as_str(), m.context_window)).collect();
+    assert_eq!(windows, [("local-model", 128_000), ("qwen3-coder-30b", 262_144)]);
+    assert!(models.iter().all(|m| m.recommended));
+  }
+
+  #[test]
+  fn servers_people_run_are_where_they_say() {
+    let ollama = find("ollama").unwrap();
+    assert_eq!(ollama.base_url_with(None).as_deref(), Some("http://localhost:11434/v1"));
+    assert_eq!(ollama.base_url_with(Some("http://studio:11434/v1")).as_deref(), Some("http://studio:11434/v1"));
+    let custom = find("custom").unwrap();
+    assert_eq!(custom.base_url_with(Some(" ")), None);
+    assert_eq!(find("openrouter").unwrap().base_url_with(Some("http://elsewhere")).as_deref(), Some("https://openrouter.ai/api/v1"));
+    assert!(ollama.usable(false) && custom.usable(false) && !find("openrouter").unwrap().usable(false));
   }
 }

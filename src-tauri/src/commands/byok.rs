@@ -32,6 +32,19 @@ pub async fn byok_set_key(state: State<'_, AppState>, provider: String, key: Str
   state.byok.set_key(&provider, &key, &twins).await
 }
 
+/// Reach a server the user runs (Ollama, an OpenAI-compatible server) at `url`,
+/// with `key` when it wants one, then save it and the models it offers.
+#[tauri::command]
+pub async fn byok_connect(
+  state: State<'_, AppState>,
+  provider: String,
+  url: String,
+  key: Option<String>,
+) -> Result<ByokProviderStatus, String> {
+  let twins = twins(&state).await;
+  state.byok.connect(&provider, &url, key.as_deref(), &twins).await
+}
+
 /// Check the saved key again and update its models.
 #[tauri::command]
 pub async fn byok_refresh(state: State<'_, AppState>, provider: String) -> Result<ByokProviderStatus, String> {

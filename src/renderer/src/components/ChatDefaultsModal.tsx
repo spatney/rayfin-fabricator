@@ -28,7 +28,7 @@ export default function ChatDefaultsModal({
   /** Save the defaults. */
   onChange: (next: ChatDefaults) => void
   onClose: () => void
-  /** Open Accounts at Model providers (the model picker's Manage API keys…). */
+  /** Open Accounts at Model providers (the model picker's Manage model providers…). */
   onManageKeys?: () => void
   /** Open the MCP servers dialog. */
   onManageMcpServers?: () => void

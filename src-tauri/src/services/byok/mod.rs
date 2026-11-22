@@ -1,16 +1,19 @@
-//! Your own API keys: models from Anthropic, OpenAI, xAI and Google
-//! on the user's own keys, next to Copilot's in Build chat, the Advisor and Design.
+//! Your own API keys: models from Anthropic, OpenAI, xAI, Google and
+//! OpenRouter on the user's own keys, and from Ollama or any OpenAI-compatible
+//! server they run, next to Copilot's in Build chat, the Advisor and Design.
 //!
 //! - [`keychain`](crate::services::keychain) keeps keys in the OS credential
 //!   store (never in settings).
 //! - [`catalog`] knows each provider and turns its model list into models a
-//!   Copilot session can use; settings keep that list and the user's choices.
+//!   Copilot session can use; settings keep that list, the user's choices, and
+//!   where a server they run is.
 //! - [`registry`] hands the chosen models to sessions as BYOK providers.
 //! - [`relay`] passes OpenAI-compatible providers' traffic through a local relay
 //!   that adapts requests (and Google's replies) to what each API takes.
 //!
-//! Copilot sign-in is still required: the Copilot engine runs the agent loop and
-//! calls the provider directly with the key.
+//! The Copilot engine runs the agent loop and calls the provider directly
+//! (through the relay), so a session on one of these models needs no Copilot
+//! sign-in.
 
 pub mod catalog;
 pub mod registry;
@@ -24,7 +27,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::Value;
 
-use self::catalog::{Auth, CopilotTwin, Listed, ProviderSpec};
+use self::catalog::{Auth, CopilotTwin, Endpoint, KeyNeed, Listed, ProviderSpec};
 use self::registry::ByokRegistry;
 use crate::services::keychain;
 use crate::services::store;
@@ -72,42 +75,67 @@ fn error_detail(body: &Value) -> String {
     .to_string()
 }
 
-/// GET one of a provider's model lists with `key`, the user's saved key when `saved`.
-async fn get_list(spec: &ProviderSpec, url: &str, key: &str, saved: bool) -> Result<Value, String> {
-  let request = HTTP.get(url);
-  let request = match spec.auth {
-    Auth::Anthropic => request.header("x-api-key", key).header("anthropic-version", "2023-06-01"),
-    Auth::Bearer => request.bearer_auth(key),
-    Auth::Google => request.header("x-goog-api-key", key),
-  };
+/// Why a provider couldn't be reached: a cloud API's connection, or for a
+/// server people run, that it isn't running at the address they gave.
+fn unreachable(spec: &ProviderSpec, url: &str, timeout: bool) -> String {
+  match spec.endpoint {
+    Endpoint::Local => t!("services.byok.ollamaUnreachable", url = relay::origin_of(url)),
+    Endpoint::Custom => t!("services.byok.serverUnreachable", url = relay::origin_of(url)),
+    Endpoint::Fixed if timeout => t!("services.byok.noAnswer", name = spec.display_name()),
+    Endpoint::Fixed => t!("services.byok.unreachable", name = spec.display_name()),
+  }
+}
+
+/// GET one of a provider's model lists with `key`, the user's saved key when
+/// `saved` (with none, for a server that takes none).
+async fn get_list(spec: &ProviderSpec, url: &str, key: Option<&str>, saved: bool) -> Result<Value, String> {
+  let mut request = HTTP.get(url);
+  if let Some(key) = key {
+    request = match spec.auth {
+      Auth::Anthropic => request.header("x-api-key", key).header("anthropic-version", "2023-06-01"),
+      Auth::Bearer => request.bearer_auth(key),
+      Auth::Google => request.header("x-goog-api-key", key),
+    };
+  }
   let response = request.send().await.map_err(|e| {
     log::warn!("listing {} models failed: {e}", spec.name);
-    if e.is_timeout() {
-      t!("services.byok.noAnswer", name = spec.name)
-    } else {
-      t!("services.byok.unreachable", name = spec.name)
-    }
+    unreachable(spec, url, e.is_timeout())
   })?;
   let status = response.status();
   let body: Value = response.json().await.unwrap_or(Value::Null);
   let detail = error_detail(&body);
   // xAI and Google turn a bad key down with a 400, not a 401.
   if status.as_u16() == 401 || (!status.is_success() && classify(&detail) == Some(Failure::KeyRejected)) {
-    return Err(if saved {
-      t!("services.byok.savedKeyRefused", name = spec.name)
+    return Err(if key.is_none() {
+      t!("services.byok.serverNeedsKey")
+    } else if saved {
+      t!("services.byok.savedKeyRefused", name = spec.display_name())
     } else {
-      t!("services.byok.keyRefused", name = spec.name)
+      t!("services.byok.keyRefused", name = spec.display_name())
     });
   }
   if !status.is_success() {
-    return Err(t!("services.byok.listFailed", name = spec.name, status = status.as_u16(), detail = detail).trim().to_string());
+    return Err(t!("services.byok.listFailed", name = spec.display_name(), status = status.as_u16(), detail = detail).trim().to_string());
   }
   Ok(body)
 }
 
-/// List the models `key` can use, which also checks the key (the saved one when `saved`).
-async fn list_models(spec: &ProviderSpec, key: &str, saved: bool) -> Result<Vec<Listed>, String> {
-  let mut listed = catalog::parse_models(spec.id, &get_list(spec, spec.models_url, key, saved).await?);
+/// List the models a provider offers at `base` with `key`, which also checks
+/// the key (the saved one when `saved`).
+async fn list_models(spec: &ProviderSpec, base: &str, key: Option<&str>, saved: bool) -> Result<Vec<Listed>, String> {
+  if spec.id == "ollama" {
+    return list_ollama(spec, base).await;
+  }
+  // OpenRouter lists its models to anyone, so the key is checked on its own.
+  if let Some(url) = spec.key_check_url {
+    get_list(spec, url, key, saved).await?;
+  }
+  let url = if spec.models_url.starts_with('/') {
+    format!("{}{}", base.trim_end_matches('/'), spec.models_url)
+  } else {
+    spec.models_url.to_string()
+  };
+  let mut listed = catalog::parse_models(spec.id, &get_list(spec, &url, key, saved).await?);
   if let Some(url) = spec.details_url {
     match get_list(spec, url, key, saved).await {
       Ok(details) => catalog::fill_in(&mut listed, catalog::parse_models(spec.id, &details)),
@@ -115,6 +143,54 @@ async fn list_models(spec: &ProviderSpec, key: &str, saved: bool) -> Result<Vec<
     }
   }
   Ok(listed)
+}
+
+/// Ollama's own API, beside its OpenAI-compatible one: `http://localhost:11434`
+/// for `http://localhost:11434/v1`.
+fn ollama_root(base: &str) -> &str {
+  let base = base.trim_end_matches('/');
+  base.strip_suffix("/v1").unwrap_or(base)
+}
+
+/// The models pulled into Ollama, with what `/api/show` says each one can do.
+async fn list_ollama(spec: &ProviderSpec, base: &str) -> Result<Vec<Listed>, String> {
+  let root = ollama_root(base);
+  let tags = get_list(spec, &format!("{root}{}", spec.models_url), None, false).await?;
+  let entries = tags.get("models").and_then(Value::as_array).cloned().unwrap_or_default();
+  let shows = futures::future::join_all(entries.iter().map(|tag| async move {
+    let name = tag.get("name").or_else(|| tag.get("model")).and_then(Value::as_str)?;
+    let reply = HTTP
+      .post(format!("{root}/api/show"))
+      .json(&serde_json::json!({ "model": name }))
+      .send()
+      .await
+      .map_err(|e| log::warn!("Ollama couldn't describe {name}: {e}"))
+      .ok()?;
+    reply.json::<Value>().await.ok()
+  }))
+  .await;
+  Ok(
+    entries
+      .iter()
+      .zip(shows)
+      .filter_map(|(tag, show)| catalog::parse_ollama(tag, &show.unwrap_or(Value::Null)))
+      .collect(),
+  )
+}
+
+/// The address people gave for a server, tidied: `http://` when they left the
+/// scheme out, no trailing slash, and for Ollama, its OpenAI-compatible API
+/// under `/v1`.
+fn server_url(spec: &ProviderSpec, url: &str) -> Result<String, String> {
+  let url = url.trim();
+  let url = if url.contains("://") { url.to_string() } else { format!("http://{url}") };
+  let valid = reqwest::Url::parse(&url)
+    .is_ok_and(|parsed| matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_some_and(|h| !h.is_empty()));
+  if !valid {
+    return Err(t!("services.byok.badServerUrl"));
+  }
+  let url = url.trim_end_matches('/');
+  Ok(if spec.id == "ollama" && !url.ends_with("/v1") { format!("{url}/v1") } else { url.to_string() })
 }
 
 /// What Copilot's catalog says about one of its models.
@@ -152,54 +228,85 @@ fn keep_enabled(previous: Option<Vec<String>>, models: &[ByokModelInfo]) -> Vec<
   models.iter().filter(|m| m.recommended).map(|m| m.id.clone()).collect()
 }
 
-/// Who makes a model, for its logo in the picker: each provider's models are its own.
-fn vendor_for(spec: &ProviderSpec) -> String {
-  spec.name.to_string()
+/// Who makes a model, for its logo in the picker: each provider's models are
+/// its own, but OpenRouter's come from many makers, named in their ids
+/// (`anthropic/claude-sonnet-5.5`).
+fn vendor_for(spec: &ProviderSpec, model: &str) -> String {
+  if spec.id != "openrouter" {
+    return spec.name.to_string();
+  }
+  match model.split('/').next().unwrap_or_default() {
+    "anthropic" => "Anthropic",
+    "openai" => "OpenAI",
+    "google" => "Google",
+    "x-ai" => "xAI",
+    "meta-llama" => "Meta",
+    "microsoft" => "Microsoft",
+    _ => spec.name,
+  }
+  .to_string()
 }
 
 fn now() -> String {
   chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
+/// Keys read from the credential store, by provider (`None`: no key saved).
+/// Shared by every [`ByokManager`], so the Copilot engine's own handle sees a
+/// key the moment Accounts saves it.
+static KEYS: Lazy<Mutex<HashMap<String, Option<String>>>> = Lazy::new(Default::default);
+/// Why the last check of a provider's key failed.
+static ERRORS: Lazy<Mutex<HashMap<String, String>>> = Lazy::new(Default::default);
+
+/// Your own API keys and servers. A handle: what it knows is shared (see
+/// [`KEYS`]), so any part of the core can make one.
 #[derive(Default)]
-pub struct ByokManager {
-  /// Keys read from the credential store, by provider (`None`: no key saved).
-  keys: Mutex<HashMap<String, Option<String>>>,
-  /// Why the last check of a provider's key failed.
-  errors: Mutex<HashMap<String, String>>,
-}
+pub struct ByokManager;
 
 impl ByokManager {
-  /// The saved key for a provider (read from the credential store once).
+  /// The saved key for a provider (read from the credential store once); never
+  /// one for a provider that takes none.
   fn key(&self, provider: &str) -> Option<String> {
-    if let Some(cached) = self.keys.lock().unwrap().get(provider) {
+    if catalog::find(provider).is_some_and(|spec| spec.key == KeyNeed::Unused) {
+      return None;
+    }
+    if let Some(cached) = KEYS.lock().unwrap().get(provider) {
       return cached.clone();
     }
     let key = match keychain::get(provider) {
       Ok(key) => key,
       Err(e) => {
         log::warn!("reading the {provider} key failed: {e}");
-        self.errors.lock().unwrap().insert(provider.to_string(), e);
+        ERRORS.lock().unwrap().insert(provider.to_string(), e);
         None
       }
     };
-    self.keys.lock().unwrap().insert(provider.to_string(), key.clone());
+    KEYS.lock().unwrap().insert(provider.to_string(), key.clone());
     key
   }
 
   fn provider_status(&self, spec: &ProviderSpec) -> ByokProviderStatus {
-    let saved = store::byok_settings().providers.remove(spec.id).unwrap_or_default();
+    let saved = store::byok_settings().providers.remove(spec.id);
+    let has_key = self.key(spec.id).is_some();
+    // A server people run is set up once Fabricator has reached it.
+    let connected = if spec.endpoint == Endpoint::Fixed { has_key } else { saved.is_some() };
+    let saved = saved.unwrap_or_default();
     ByokProviderStatus {
       id: spec.id.into(),
-      name: spec.name.into(),
+      name: spec.display_name(),
       description: (spec.description)(),
       key_url: spec.key_url.into(),
       key_prefix: spec.key_prefix.into(),
-      has_key: self.key(spec.id).is_some(),
+      endpoint: spec.endpoint.as_str().into(),
+      key_need: spec.key.as_str().into(),
+      has_key,
+      connected,
+      base_url: saved.base_url,
+      default_base_url: (spec.endpoint == Endpoint::Local).then(|| spec.base_url.to_string()),
       models: saved.models,
       enabled: saved.enabled,
       checked_at: saved.checked_at,
-      error: self.errors.lock().unwrap().get(spec.id).cloned(),
+      error: ERRORS.lock().unwrap().get(spec.id).cloned(),
     }
   }
 
@@ -209,6 +316,7 @@ impl ByokManager {
       supported: keychain::supported(),
       store: keychain::store_name().into(),
       providers: catalog::PROVIDERS.iter().map(|spec| self.provider_status(spec)).collect(),
+      own_models: self.has_ready_model(),
     }
   }
 
@@ -216,9 +324,13 @@ impl ByokManager {
     catalog::find(provider).ok_or_else(|| t!("services.byok.unsupportedProvider", provider = provider))
   }
 
-  /// Check `key` against the provider, then save it and the models it can use.
+  /// Check `key` against a provider at a fixed address, then save it and the
+  /// models it can use.
   pub async fn set_key(&self, provider: &str, key: &str, twins: &[CopilotTwin]) -> Result<ByokProviderStatus, String> {
     let spec = Self::spec(provider)?;
+    if spec.endpoint != Endpoint::Fixed {
+      return Err(t!("services.byok.unsupportedProvider", provider = provider));
+    }
     let key = key.trim();
     if key.is_empty() {
       return Err(t!("services.byok.pasteKey"));
@@ -226,45 +338,113 @@ impl ByokManager {
     if key.chars().any(char::is_whitespace) {
       return Err(t!("services.byok.keyHasSpaces"));
     }
-    let models = catalog::resolve(spec.id, list_models(spec, key, false).await?, twins);
+    let models = catalog::resolve(spec.id, list_models(spec, spec.base_url, Some(key), false).await?, twins);
     if models.is_empty() {
-      return Err(t!("services.byok.noModels", name = spec.name));
+      return Err(t!("services.byok.noModels", name = spec.display_name()));
     }
     keychain::set(spec.id, key)?;
-    self.keys.lock().unwrap().insert(spec.id.into(), Some(key.to_string()));
-    let previous = store::byok_settings().providers.remove(spec.id).map(|p| p.enabled);
-    let enabled = keep_enabled(previous, &models);
-    store::set_byok_provider(spec.id, Some(ByokProviderSettings { models, enabled, checked_at: Some(now()) }));
-    self.errors.lock().unwrap().remove(spec.id);
+    KEYS.lock().unwrap().insert(spec.id.into(), Some(key.to_string()));
+    self.save(spec, models, None);
     Ok(self.provider_status(spec))
   }
 
-  /// Check the saved key again and update the models it can use.
+  /// Reach a server people run (Ollama, an OpenAI-compatible server) at `url`,
+  /// with `key` when it wants one, then save it and the models it offers.
+  pub async fn connect(
+    &self,
+    provider: &str,
+    url: &str,
+    key: Option<&str>,
+    twins: &[CopilotTwin],
+  ) -> Result<ByokProviderStatus, String> {
+    let spec = Self::spec(provider)?;
+    if spec.endpoint == Endpoint::Fixed {
+      return Err(t!("services.byok.unsupportedProvider", provider = provider));
+    }
+    let base = server_url(spec, url)?;
+    let key = key.map(str::trim).filter(|k| !k.is_empty() && spec.key != KeyNeed::Unused);
+    if key.is_some_and(|k| k.chars().any(char::is_whitespace)) {
+      return Err(t!("services.byok.keyHasSpaces"));
+    }
+    // Servers differ on whether their OpenAI-compatible API is under /v1
+    // (LM Studio's and vLLM's are), so try there when the address people gave
+    // doesn't list any models.
+    let (base, listed) = match list_models(spec, &base, key, false).await {
+      Ok(listed) if !listed.is_empty() => (base, listed),
+      first if spec.endpoint == Endpoint::Custom && !base.ends_with("/v1") => {
+        let under_v1 = format!("{base}/v1");
+        match list_models(spec, &under_v1, key, false).await {
+          Ok(listed) if !listed.is_empty() => (under_v1, listed),
+          _ => (base, first?),
+        }
+      }
+      other => (base, other?),
+    };
+    let models = catalog::resolve(spec.id, listed, twins);
+    if models.is_empty() {
+      return Err(if spec.id == "ollama" {
+        t!("services.byok.noOllamaModels")
+      } else {
+        t!("services.byok.noServerModels")
+      });
+    }
+    if spec.key == KeyNeed::Optional {
+      match key {
+        Some(key) => keychain::set(spec.id, key)?,
+        None => keychain::delete(spec.id)?,
+      }
+      KEYS.lock().unwrap().insert(spec.id.into(), key.map(str::to_string));
+    }
+    self.save(spec, models, Some(base));
+    Ok(self.provider_status(spec))
+  }
+
+  /// Save a provider's models, keeping the ones the user had chosen that it
+  /// still offers (else its suggestions), and where it is.
+  fn save(&self, spec: &ProviderSpec, models: Vec<ByokModelInfo>, base_url: Option<String>) {
+    let previous = store::byok_settings().providers.remove(spec.id).map(|p| p.enabled);
+    let enabled = keep_enabled(previous, &models);
+    store::set_byok_provider(spec.id, Some(ByokProviderSettings { models, enabled, checked_at: Some(now()), base_url }));
+    ERRORS.lock().unwrap().remove(spec.id);
+  }
+
+  /// Check the provider again with the saved key (or at the saved address) and
+  /// update the models it offers.
   pub async fn refresh(&self, provider: &str, twins: &[CopilotTwin]) -> Result<ByokProviderStatus, String> {
     let spec = Self::spec(provider)?;
-    let key = self.key(spec.id).ok_or_else(|| t!("services.byok.addKeyFirst", name = spec.name))?;
-    let listed = match list_models(spec, &key, true).await {
+    let saved = store::byok_settings().providers.remove(spec.id);
+    let key = self.key(spec.id);
+    if spec.endpoint != Endpoint::Fixed && saved.is_none() {
+      return Err(t!("services.byok.connectFirst", name = spec.display_name()));
+    }
+    if !spec.usable(key.is_some()) {
+      return Err(t!("services.byok.addKeyFirst", name = spec.display_name()));
+    }
+    let saved_url = saved.and_then(|p| p.base_url);
+    let base = spec
+      .base_url_with(saved_url.as_deref())
+      .ok_or_else(|| t!("services.byok.connectFirst", name = spec.display_name()))?;
+    let listed = match list_models(spec, &base, key.as_deref(), true).await {
       Ok(listed) => listed,
       Err(e) => {
-        self.errors.lock().unwrap().insert(spec.id.into(), e.clone());
+        ERRORS.lock().unwrap().insert(spec.id.into(), e.clone());
         return Err(e);
       }
     };
-    let models = catalog::resolve(spec.id, listed, twins);
-    let previous = store::byok_settings().providers.remove(spec.id).map(|p| p.enabled);
-    let enabled = keep_enabled(previous, &models);
-    store::set_byok_provider(spec.id, Some(ByokProviderSettings { models, enabled, checked_at: Some(now()) }));
-    self.errors.lock().unwrap().remove(spec.id);
+    self.save(spec, catalog::resolve(spec.id, listed, twins), saved_url);
     Ok(self.provider_status(spec))
   }
 
-  /// Delete the saved key and forget the provider's models.
+  /// Delete the saved key (for a server people run, forget it) and the
+  /// provider's models.
   pub fn remove_key(&self, provider: &str) -> Result<ByokProviderStatus, String> {
     let spec = Self::spec(provider)?;
-    keychain::delete(spec.id)?;
-    self.keys.lock().unwrap().insert(spec.id.into(), None);
+    if spec.key != KeyNeed::Unused {
+      keychain::delete(spec.id)?;
+      KEYS.lock().unwrap().insert(spec.id.into(), None);
+    }
     store::set_byok_provider(spec.id, None);
-    self.errors.lock().unwrap().remove(spec.id);
+    ERRORS.lock().unwrap().remove(spec.id);
     Ok(self.provider_status(spec))
   }
 
@@ -274,15 +454,15 @@ impl ByokManager {
     let mut saved = store::byok_settings()
       .providers
       .remove(spec.id)
-      .ok_or_else(|| t!("services.byok.addKeyFirst", name = spec.name))?;
+      .ok_or_else(|| t!("services.byok.addKeyFirst", name = spec.display_name()))?;
     saved.enabled = saved.models.iter().filter(|m| ids.contains(&m.id)).map(|m| m.id.clone()).collect();
     store::set_byok_provider(spec.id, Some(saved));
     Ok(self.provider_status(spec))
   }
 
   /// The registry every chat, Advisor and Design session gets when a provider
-  /// has a key and a chosen model. A provider that needs the relay is reached
-  /// through it (left out if it can't start).
+  /// can be used and has a chosen model. A provider that needs the relay is
+  /// reached through it (left out if it can't start).
   pub fn session_registry(&self) -> Option<ByokRegistry> {
     let settings = store::byok_settings();
     let keys: HashMap<String, String> = settings
@@ -290,11 +470,11 @@ impl ByokManager {
       .keys()
       .filter_map(|p| self.key(p).map(|k| (p.clone(), k)))
       .collect();
-    let registry = registry::build_routed(&settings, &keys, |spec| {
+    let registry = registry::build_routed(&settings, &keys, |spec, base| {
       if !spec.relay {
-        return Some(spec.base_url.to_string());
+        return Some(base.to_string());
       }
-      relay::base_url(spec).map_err(|e| log::error!("{} isn't reachable: {e}", spec.name)).ok()
+      relay::base_url(spec, base).map_err(|e| log::error!("{} isn't reachable: {e}", spec.name)).ok()
     });
     (!registry.providers.is_empty()).then_some(registry)
   }
@@ -307,18 +487,42 @@ impl ByokManager {
     };
     let settings = store::byok_settings();
     let Some((_, info)) = registry::find_model(&settings, selection) else {
-      return Err(t!("services.byok.modelGone", name = spec.name));
+      return Err(t!("services.byok.modelGone", name = spec.display_name()));
     };
-    if self.key(spec.id).is_none() {
-      return Err(t!("services.byok.keyMissing", name = spec.name));
+    if !spec.usable(self.key(spec.id).is_some()) {
+      return Err(t!("services.byok.keyMissing", name = spec.display_name()));
     }
-    if !settings.providers.get(spec.id).is_some_and(|p| p.enabled.contains(&info.id)) {
-      return Err(t!("services.byok.modelOff", model = info.name, name = spec.name));
+    let saved = settings.providers.get(spec.id);
+    if !saved.is_some_and(|p| p.enabled.contains(&info.id)) {
+      return Err(t!("services.byok.modelOff", model = info.name, name = spec.display_name()));
     }
+    let base = spec
+      .base_url_with(saved.and_then(|p| p.base_url.as_deref()))
+      .ok_or_else(|| t!("services.byok.connectFirst", name = spec.display_name()))?;
     if spec.relay {
-      relay::base_url(spec).map_err(|e| t!("services.byok.relayFailed", name = spec.name, error = e))?;
+      relay::base_url(spec, &base).map_err(|e| t!("services.byok.relayFailed", name = spec.display_name(), error = e))?;
     }
     Ok(())
+  }
+
+  /// Whether any provider's model can run a session: Fabricator can be used
+  /// without a GitHub Copilot sign-in then.
+  pub fn has_ready_model(&self) -> bool {
+    self.picker_models().iter().any(|m| m.byok.as_ref().is_some_and(|b| b.ready))
+  }
+
+  /// The model a session meant for Copilot runs on when Copilot isn't signed
+  /// in: Chat defaults' model when it's one of the user's own that can run,
+  /// else the first of their models that can, in the order the pickers list them.
+  pub fn default_own_model(&self) -> Option<String> {
+    let ready: Vec<String> = self
+      .picker_models()
+      .into_iter()
+      .filter(|m| m.byok.as_ref().is_some_and(|b| b.ready))
+      .map(|m| m.id)
+      .collect();
+    let preferred = store::get_settings().chat_defaults.and_then(|d| d.model).filter(|m| ready.contains(m));
+    preferred.or_else(|| ready.into_iter().next()).filter(|m| self.ensure_ready(m).is_ok())
   }
 
   /// The chosen models of every provider, for the model pickers.
@@ -329,7 +533,7 @@ impl ByokManager {
       let Some(saved) = settings.providers.get(spec.id) else {
         continue;
       };
-      let ready = self.key(spec.id).is_some();
+      let ready = spec.usable(self.key(spec.id).is_some()) && spec.base_url_with(saved.base_url.as_deref()).is_some();
       for m in saved.models.iter().filter(|m| saved.enabled.contains(&m.id)) {
         out.push(CopilotModel {
           id: registry::selection_id(spec.id, &m.id),
@@ -339,13 +543,14 @@ impl ByokManager {
           category: None,
           price_category: None,
           vision: m.vision,
-          vendor: Some(vendor_for(spec)),
+          vendor: Some(vendor_for(spec, &m.id)),
           context_tiers: Vec::new(),
           byok: Some(ByokModelMeta {
             provider: spec.id.into(),
-            provider_name: spec.name.into(),
+            provider_name: spec.display_name(),
             ready,
-            note: (!ready).then(|| t!("services.byok.addKeyInAccounts", name = spec.name)),
+            note: (!ready).then(|| t!("services.byok.addKeyInAccounts", name = spec.display_name())),
+            stand_in: false,
           }),
         });
       }
@@ -361,7 +566,7 @@ pub fn describe(selection: &str) -> Option<(String, String)> {
   let model = registry::find_model(&settings, selection)
     .map(|(_, m)| m.name.clone())
     .unwrap_or_else(|| t!("services.byok.thisModel"));
-  Some((spec.name.to_string(), model))
+  Some((spec.display_name(), model))
 }
 
 /// A provider's error for a turn on `selection`, in plain language.
@@ -379,6 +584,9 @@ pub enum Failure {
   RateLimited,
   Overloaded,
   ModelGone,
+  /// Nothing answered: a server people run (Ollama) isn't running, or the
+  /// relay couldn't connect.
+  Unreachable,
 }
 
 static STATUS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(401|402|403|404|413|429|503|529)\b").unwrap());
@@ -435,6 +643,10 @@ pub fn classify(raw: &str) -> Option<Failure> {
   {
     return Some(Failure::ModelGone);
   }
+  // The relay's own reply when it can't connect (see `relay::forward`).
+  if has(&["couldn't reach", "connection refused", "actively refused"]) {
+    return Some(Failure::Unreachable);
+  }
   None
 }
 
@@ -452,6 +664,7 @@ pub fn explain(provider: &str, model: &str, raw: &str) -> Option<String> {
     Failure::RateLimited => t!("services.byok.failure.rateLimited", provider = provider),
     Failure::Overloaded => t!("services.byok.failure.overloaded", provider = provider),
     Failure::ModelGone => t!("services.byok.failure.modelGone", provider = provider, model = model),
+    Failure::Unreachable => t!("services.byok.failure.unreachable", provider = provider),
   })
 }
 
@@ -505,6 +718,9 @@ mod tests {
     }
     assert_eq!(classify("Session not found abc"), None);
     assert_eq!(classify("listening on port 4013"), None);
+    // Ollama not running: the relay couldn't connect. Worth retrying once it's started.
+    assert_eq!(classify("502 Couldn't reach Ollama (error sending request for url (http://localhost:11434/v1/chat/completions))."), Some(Failure::Unreachable));
+    assert!(!is_permanent("Couldn't reach Ollama (connection refused)."));
     // A request over the plan isn't retried; a per-minute limit is, after a pause.
     assert!(is_permanent(cases[4].0) && is_permanent(cases[7].0) && is_permanent(cases[13].0));
     assert!(!is_permanent(cases[5].0) && !is_permanent(cases[6].0));
@@ -529,5 +745,29 @@ mod tests {
     assert_eq!(error_detail(&json!({ "code": "invalid-argument", "error": "Incorrect API key provided." })), "Incorrect API key provided.");
     assert_eq!(error_detail(&json!({ "message": "Nope" })), "Nope");
     assert_eq!(error_detail(&Value::Null), "");
+  }
+
+  #[test]
+  fn server_addresses_are_tidied_or_turned_down() {
+    let ollama = catalog::find("ollama").unwrap();
+    let custom = catalog::find("custom").unwrap();
+    assert_eq!(server_url(ollama, " localhost:11434/ ").unwrap(), "http://localhost:11434/v1");
+    assert_eq!(server_url(ollama, "http://studio.local:11434/v1").unwrap(), "http://studio.local:11434/v1");
+    assert_eq!(server_url(custom, "https://llm.contoso.com/v1/").unwrap(), "https://llm.contoso.com/v1");
+    assert_eq!(server_url(custom, "http://localhost:1234").unwrap(), "http://localhost:1234");
+    for bad in ["", "ftp://files.contoso.com", "http://", "not a url"] {
+      assert!(server_url(custom, bad).is_err(), "{bad:?}");
+    }
+    assert_eq!(ollama_root("http://localhost:11434/v1"), "http://localhost:11434");
+    assert_eq!(ollama_root("https://gpu.contoso.com/ollama/v1/"), "https://gpu.contoso.com/ollama");
+  }
+
+  #[test]
+  fn openrouter_models_show_their_makers_logo() {
+    let openrouter = catalog::find("openrouter").unwrap();
+    assert_eq!(vendor_for(openrouter, "anthropic/claude-sonnet-5.5"), "Anthropic");
+    assert_eq!(vendor_for(openrouter, "x-ai/grok-code-fast-1"), "xAI");
+    assert_eq!(vendor_for(openrouter, "qwen/qwen3-coder"), "OpenRouter");
+    assert_eq!(vendor_for(catalog::find("ollama").unwrap(), "llama3.2"), "Ollama");
   }
 }
