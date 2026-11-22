@@ -282,7 +282,8 @@ const MIN_CONTEXT: u32 = 32_768;
 /// context it gives a model itself (its Context length setting), and requests
 /// can't change it, so sessions keep to what Fabricator asks people to set:
 /// 64k, which is 65,536 tokens in Ollama. Counting 64,000 stays inside that and
-/// shows as "64K", as Ollama names it.
+/// shows as "64K", as Ollama names it. The relay turns a request down when
+/// Ollama gives the model less (see `relay`).
 pub const OLLAMA_CONTEXT: u32 = 64_000;
 
 /// A model as a provider lists it, before it's matched with Copilot's catalog.

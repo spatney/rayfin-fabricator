@@ -587,6 +587,10 @@ pub enum Failure {
   /// Nothing answered: a server people run (Ollama) isn't running, or the
   /// relay couldn't connect.
   Unreachable,
+  /// The conversation needs more context than a server people run (Ollama)
+  /// gives the model: the relay turned the request down, or Ollama dropped
+  /// the start of it, the user's request with it.
+  ContextTooShort,
 }
 
 static STATUS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(401|402|403|404|413|429|503|529)\b").unwrap());
@@ -594,6 +598,10 @@ static STATUS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(401|402|403|404|413
 pub fn classify(raw: &str) -> Option<Failure> {
   let lower = raw.to_ascii_lowercase();
   let has = |needles: &[&str]| needles.iter().any(|n| lower.contains(n));
+  // First, as the relay's reply names the model, which might look like a status.
+  if raw.contains(relay::CONTEXT_TOO_SHORT) || has(&["no user query found in messages"]) {
+    return Some(Failure::ContextTooShort);
+  }
   let status = STATUS_RE.captures(&lower).map(|c| c[1].to_string());
   let status = status.as_deref();
   if has(&[
@@ -652,7 +660,17 @@ pub fn classify(raw: &str) -> Option<Failure> {
 
 /// A failure that trying again won't fix.
 pub fn is_permanent(raw: &str) -> bool {
-  matches!(classify(raw), Some(Failure::KeyRejected | Failure::OutOfCredit | Failure::TooLarge | Failure::ModelGone))
+  matches!(
+    classify(raw),
+    Some(Failure::KeyRejected | Failure::OutOfCredit | Failure::TooLarge | Failure::ModelGone | Failure::ContextTooShort)
+  )
+}
+
+/// The context the relay turned a request down for, in Ollama's units (`32k`).
+fn short_context(raw: &str) -> Option<String> {
+  let after = &raw[raw.find(relay::CONTEXT_TOO_SHORT)? + relay::CONTEXT_TOO_SHORT.len()..];
+  let tokens: u32 = after.trim_start().split(|c: char| !c.is_ascii_digit()).next()?.parse().ok()?;
+  Some(if tokens < 1024 { tokens.to_string() } else { format!("{}k", tokens / 1024) })
 }
 
 /// A provider's error, in plain language.
@@ -665,6 +683,10 @@ pub fn explain(provider: &str, model: &str, raw: &str) -> Option<String> {
     Failure::Overloaded => t!("services.byok.failure.overloaded", provider = provider),
     Failure::ModelGone => t!("services.byok.failure.modelGone", provider = provider, model = model),
     Failure::Unreachable => t!("services.byok.failure.unreachable", provider = provider),
+    Failure::ContextTooShort => match short_context(raw) {
+      Some(context) => t!("services.byok.failure.contextTooShort", provider = provider, model = model, context = context),
+      None => t!("services.byok.failure.contextOutgrown", provider = provider, model = model),
+    },
   })
 }
 
@@ -727,6 +749,25 @@ mod tests {
     assert_eq!(
       explain("OpenAI", "GPT-6.1 Sol", cases[4].0).unwrap(),
       "This request is bigger than your OpenAI plan allows per minute. Fabricator's requests are large, so upgrade your OpenAI plan, or choose another model."
+    );
+  }
+
+  #[test]
+  fn a_context_too_short_for_the_conversation_reads_plainly() {
+    // The relay turned the request down. Its reply names the model, which mustn't read as a status.
+    let turned_down = format!("400 {}", relay::too_short("llama-404:latest", 32_768, 64_000));
+    assert_eq!(classify(&turned_down), Some(Failure::ContextTooShort));
+    assert!(is_permanent(&turned_down));
+    assert_eq!(
+      explain("Ollama", "llama-404:latest", &turned_down).unwrap(),
+      "Ollama runs llama-404:latest with a context length of 32k, which is too short for Fabricator. In Ollama's settings, set Context length to 64k or more, then try again, or choose another model."
+    );
+    // Ollama dropped the start of a conversation too long for it, the user's request with it.
+    let dropped = "Failed to get response from the AI model; retried 5 times (total retry wait time: 17.43 seconds) Last error: 500 no user query found in messages";
+    assert_eq!(classify(dropped), Some(Failure::ContextTooShort));
+    assert_eq!(
+      explain("Ollama", "qwen3.8:latest", dropped).unwrap(),
+      "This conversation got longer than the context length Ollama gives qwen3.8:latest. In Ollama's settings, set Context length to 64k or more, then try again, or choose another model."
     );
   }
 

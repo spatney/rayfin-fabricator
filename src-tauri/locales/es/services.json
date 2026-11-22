@@ -117,7 +117,9 @@
       "rateLimited": "{{provider}} está limitando la frecuencia con la que se puede usar tu clave. Espera un minuto y vuelve a intentarlo, o elige otro modelo.",
       "overloaded": "{{provider}} está sobrecargado en este momento. Vuelve a intentarlo en un minuto o elige otro modelo.",
       "modelGone": "{{provider}} ya no ofrece {{model}} para tu clave. Revisa tus modelos en Cuentas o elige otro modelo.",
-      "unreachable": "Fabricator no pudo conectarse con {{provider}}. Si se ejecuta en este dispositivo o en tu red, inícialo; si no, comprueba tu conexión. Luego vuelve a intentarlo o elige otro modelo."
+      "unreachable": "Fabricator no pudo conectarse con {{provider}}. Si se ejecuta en este dispositivo o en tu red, inícialo; si no, comprueba tu conexión. Luego vuelve a intentarlo o elige otro modelo.",
+      "contextTooShort": "{{provider}} ejecuta {{model}} con una longitud de contexto de {{context}}, demasiado corta para Fabricator. En la configuración de {{provider}}, establece la longitud de contexto en 64k o más. Luego vuelve a intentarlo o elige otro modelo.",
+      "contextOutgrown": "Esta conversación superó la longitud de contexto que {{provider}} usa para {{model}}. En la configuración de {{provider}}, establece la longitud de contexto en 64k o más. Luego vuelve a intentarlo o elige otro modelo."
     },
     "names": {
       "custom": "Servidor compatible con OpenAI"

@@ -66,7 +66,8 @@ nothing to pay per use.
 
 2. In Ollama's settings, set **Context length** to 64k or more. Fabricator's agent sends long
    instructions and parts of your app with every request, and Ollama gives models a short
-   context unless you change it.
+   context unless you change it. Fabricator checks the context length with each request, and
+   stops with a message when it's too short.
 3. In **Model providers**, under **Ollama**, select **Connect**.
 4. Check **Ollama address**. On this computer, it's `http://localhost:11434`. To use Ollama on
    another computer, enter that computer's address.
@@ -175,7 +176,8 @@ of your app. To see how many tokens a chat has used on your models, see
   "Google is limiting how often your key can be used", wait and try again, or turn on
   billing for your key's Google Cloud project.
 - Ollama and other servers you run have no bill, but they're limited by your hardware. Keep
-  Ollama's context length at 64k or more, or requests lose the start of the conversation.
+  Ollama's context length at 64k or more. With less, Fabricator stops a turn on an Ollama
+  model and says so.
 
 For other errors from a provider, see
 [A model on your own API key shows an error](/docs/troubleshooting/chat#a-model-on-your-own-api-key-shows-an-error).
@@ -190,7 +192,8 @@ For other errors from a provider, see
   account. With Ollama on your computer, nothing leaves it.
 - Requests to OpenAI, xAI, Google, OpenRouter, Ollama and OpenAI-compatible servers pass
   through a relay on your computer that adapts them to what each API accepts: for example, it
-  leaves out a reasoning effort a model doesn't take. Nothing leaves your computer through it
+  leaves out a reasoning effort a model doesn't take. With each request to Ollama, it also asks
+  Ollama what context length the model runs with. Nothing leaves your computer through it
   except the request to that provider. While Fabricator runs, the relay keeps the signatures
   Gemini adds to its tool calls in memory, to send them back with the conversation.
 

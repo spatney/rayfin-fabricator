@@ -117,7 +117,9 @@
       "rateLimited": "{{provider}} is limiting how often your key can be used. Wait a minute and try again, or choose another model.",
       "overloaded": "{{provider}} is overloaded right now. Try again in a minute, or choose another model.",
       "modelGone": "{{provider}} doesn't offer {{model}} to your key anymore. Check your models in Accounts, or choose another model.",
-      "unreachable": "Fabricator couldn't reach {{provider}}. If it runs on this computer or your network, start it; otherwise check your connection. Then try again, or choose another model."
+      "unreachable": "Fabricator couldn't reach {{provider}}. If it runs on this computer or your network, start it; otherwise check your connection. Then try again, or choose another model.",
+      "contextTooShort": "{{provider}} runs {{model}} with a context length of {{context}}, which is too short for Fabricator. In {{provider}}'s settings, set Context length to 64k or more, then try again, or choose another model.",
+      "contextOutgrown": "This conversation got longer than the context length {{provider}} gives {{model}}. In {{provider}}'s settings, set Context length to 64k or more, then try again, or choose another model."
     },
     "names": {
       "custom": "OpenAI-compatible server"
