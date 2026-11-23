@@ -112,7 +112,7 @@ describe('GithubRepoFields', () => {
     expect((await screen.findByRole('alert', {}, slow)).textContent).toBe(
       'github.com/octo/trip-logger already exists. Choose another name.'
     )
-    expect(choice()).toBe('octo|octo|private|not ready')
+    await waitFor(() => expect(choice()).toBe('octo|octo|private|not ready'), slow)
 
     const name = screen.getByLabelText('Repository name')
     fireEvent.change(name, { target: { value: 'trip logger' } })
