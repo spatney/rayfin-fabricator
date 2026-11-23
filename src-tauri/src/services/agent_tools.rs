@@ -18,9 +18,10 @@
 //!
 //! Registered on each chat session via
 //! [`SessionConfig::with_tools`](github_copilot_sdk::SessionConfig::with_tools)
-//! (see [`crate::services::copilot`]). Each handler runs inside the Tauri host
-//! process. The agent checks visuals headlessly (`npm run preview`), so there are
-//! no preview-browser tools.
+//! (see [`crate::services::copilot`]), which keeps every one of them in the
+//! agent's tool list rather than behind tool search. Each handler runs inside
+//! the Tauri host process. The agent checks visuals headlessly (`npm run
+//! preview`), so there are no preview-browser tools.
 //!
 //! These tools exist **only** in Fabricator-driven sessions — they are never part
 //! of the project on disk, so a plain `copilot` CLI run sees none of them.
@@ -32,7 +33,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use async_trait::async_trait;
 use github_copilot_sdk::tool::ToolHandler;
-use github_copilot_sdk::types::{DeferMode, ToolInvocation, ToolResultExpanded};
+use github_copilot_sdk::types::{ToolInvocation, ToolResultExpanded};
 use github_copilot_sdk::{Error as SdkError, Tool, ToolResult};
 use once_cell::sync::Lazy;
 use serde::Deserialize;
@@ -124,8 +125,6 @@ fn connect_fabric_iq_tool(app: AppHandle, project_id: String) -> Tool {
       "required": ["reason"]
     }))
     .with_skip_permission(true)
-    // Always in the agent's tool list: a deferred tool is only found by searching for it.
-    .with_defer(DeferMode::Never)
     .with_handler(Arc::new(ConnectFabricIqTool { app, project_id }))
 }
 
@@ -413,8 +412,6 @@ fn followed_instruction_tool() -> Tool {
       "required": ["instruction", "how"]
     }))
     .with_skip_permission(true)
-    // Always in the agent's tool list: a deferred tool is only found by searching for it.
-    .with_defer(DeferMode::Never)
     .with_handler(Arc::new(FollowedInstructionTool))
 }
 

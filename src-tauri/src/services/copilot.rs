@@ -27,7 +27,7 @@ use github_copilot_sdk::rpc::{
   AccountLogoutRequest, AuthInfo, AutoTierMetadata, PermissionDecision, PermissionDecisionDeniedByPermissionRequestHook,
 };
 use github_copilot_sdk::session::Session;
-use github_copilot_sdk::types::{GetAuthStatusResponse, McpServerConfig};
+use github_copilot_sdk::types::{DeferMode, GetAuthStatusResponse, McpServerConfig};
 use github_copilot_sdk::{
   CliProgram, Client, ClientOptions, Error as SdkError, ExitPlanModeData, IndexMap, MemoryConfiguration, Model,
   PermissionRequestData, PermissionRequestKind, RequestId, ResumeSessionConfig, SessionConfig, SessionEvent, SessionId,
@@ -740,6 +740,16 @@ fn feature_flags() -> HashMap<String, bool> {
   FEATURE_FLAGS.iter().map(|flag| (flag.to_string(), true)).collect()
 }
 
+/// A Build chat's own tools, each in the agent's tool list from the start. A
+/// deferred tool is only found by searching for it, and tool search puts it in
+/// a namespace that the runtime can drop when it sends the conversation again
+/// on a later turn; every turn after that fails with "Missing namespace for
+/// function_call" (issue #103, github/copilot-cli#5400). A listed tool has no
+/// namespace, so the calls a chat already made to one go through again too.
+fn always_listed(tools: Vec<Tool>) -> Vec<Tool> {
+  tools.into_iter().map(|tool| tool.with_defer(DeferMode::Never)).collect()
+}
+
 /// Ask the runtime to resume, or create a session bound to `session_id`,
 /// streaming enabled, scoped to `cwd`, with the extras in `opts`.
 async fn open_session(
@@ -1368,13 +1378,15 @@ impl CopilotManager {
   }
 
   /// Get the persistent, cached session for a project turn, creating or
-  /// resuming it as needed and reconciling the current model choice. `byok` is
-  /// the registry of providers on the user's own keys, `guidance` the set of
-  /// Fabricator's guidance that fits the app, `iq` the Fabric IQ and Work IQ
-  /// servers it gets, `mcp` the user's MCP servers that are on, and
-  /// `custom_instructions` the user's own; a cached session opened with a
-  /// different one of these is reopened, since the runtime only takes them
-  /// (with `tools`) when a session is created or resumed.
+  /// resuming it as needed and reconciling the current model choice. `tools`
+  /// are Fabricator's own, each in the agent's tool list from the start
+  /// ([`always_listed`]). `byok` is the registry of providers on the user's
+  /// own keys, `guidance` the set of Fabricator's guidance that fits the app,
+  /// `iq` the Fabric IQ and Work IQ servers it gets, `mcp` the user's MCP
+  /// servers that are on, and `custom_instructions` the user's own; a cached
+  /// session opened with a different one of these is reopened, since the
+  /// runtime only takes them (with `tools`) when a session is created or
+  /// resumed.
   #[allow(clippy::too_many_arguments)]
   pub async fn turn_session(
     &self,
@@ -1452,7 +1464,7 @@ impl CopilotManager {
       exit_plan,
       user_input,
       guidance,
-      tools,
+      tools: always_listed(tools),
       permission,
       byok,
       iq,
@@ -2416,6 +2428,28 @@ pub(crate) mod tests {
     assert_eq!(dirs("instructionDirectories"), [agent_skills::instructions_dir(Guidance::FabricBacked)], "{resume}");
     assert_eq!(dirs("skillDirectories"), [agent_skills::skills_dir(Guidance::FabricBacked)], "{resume}");
     assert_eq!(manager.engine.lock().await.sessions["project"].guidance, Some(Guidance::FabricBacked));
+    client.force_stop();
+  }
+
+  /// A Build chat's own tools never wait behind tool search, whose namespace
+  /// the runtime can drop on a later turn (issue #103).
+  #[tokio::test]
+  async fn a_build_chats_own_tools_are_always_in_its_tool_list() {
+    let (client, server) = fake_client(vec![
+      ("auth.getStatus", json!({ "result": { "isAuthenticated": true } })),
+      ("session.resume", json!({ "result": { "sessionId": "thread" } })),
+      ("session.eventLog.registerInterest", json!({ "result": {} })),
+      ("session.skills.reload", json!({ "result": {} })),
+      ("session.model.switchTo", json!({ "result": {} })),
+    ]);
+    let manager = manager_with(client.clone());
+    let tools = vec![Tool::new("fabricator_local_call"), Tool::new("fabricator_local_status").with_defer(DeferMode::Auto)];
+    manager.turn_session(
+      "project", ".", "thread", ModelChoice::default(), None, None, tools, Some(Guidance::Local), None, IqConfig::default(), McpServers::default(), None,
+    ).await.unwrap();
+    let requests = server.await.unwrap();
+    let sent = requests[1]["params"]["tools"].as_array().expect("tools");
+    assert_eq!(sent.iter().map(|tool| &tool["defer"]).collect::<Vec<_>>(), [&json!("never"), &json!("never")], "{sent:?}");
     client.force_stop();
   }
 
