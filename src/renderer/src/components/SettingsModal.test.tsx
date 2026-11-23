@@ -278,7 +278,7 @@ describe('SettingsModal API keys', () => {
     installApi()
     const onManageKeys = vi.fn()
     await renderModal({ onManageKeys })
-    fireEvent.click(screen.getByRole('button', { name: 'Manage API keys' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Manage model providers' }))
     expect(onManageKeys).toHaveBeenCalledOnce()
   })
 })

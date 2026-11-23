@@ -65,7 +65,11 @@
     "title": "GitHub Copilot の接続",
     "note": "アプリを構築する AI です。残りのセットアップ中も質問に答えます",
     "subtitle": "サインインすると、構築を開始でき、ヘルプも利用できるようになります",
-    "helpReady": "ヘルプを利用できるようになりました。以下で問題が発生した場合は、<strong>ヘルプ</strong> を選択すると、何が起きたかを読み取ります。"
+    "helpReady": "ヘルプを利用できるようになりました。以下で問題が発生した場合は、<strong>ヘルプ</strong> を選択すると、何が起きたかを読み取ります。",
+    "ownModels": "代わりに自分のモデルを使用",
+    "ownModelsHint": "GitHub Copilot がない場合は、OpenRouter、Ollama、または自分の API キーのモデルを追加すると、Fabricator はそのモデルで構築します。",
+    "ownModelsSummary": "自分のモデルを使用中",
+    "ownModelsDone": "完了"
   },
   "tools": {
     "title": "ツールのインストール",
@@ -119,6 +123,7 @@
     "restart": "Fabricator を再起動して、インストールしたツールのセットアップを完了してください。",
     "ready": "ツールがインストールされ、アカウントが接続されました。",
     "readyWithoutAzure": "ツールがインストールされ、GitHub Copilot が接続されました。Azure には必要なときにサインインしてください。",
+    "readyOwnModels": "ツールがインストールされ、自分のモデルが設定されました。Azure には必要なときにサインインしてください。",
     "stepsLeft_other": "続行するには、上の {{count}} 個の手順を完了してください。",
     "enter": "Fabricator を開始"
   },

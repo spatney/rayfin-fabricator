@@ -9,9 +9,9 @@
       "action": "Manage accounts"
     },
     "apiKeys": {
-      "title": "API keys",
-      "desc": "Use models from Anthropic, OpenAI, xAI and Google with your own API keys, next to your Copilot models. The provider bills you for them.",
-      "action": "Manage API keys"
+      "title": "Model providers",
+      "desc": "Use models from Anthropic, OpenAI, xAI, Google and OpenRouter with your own API keys, or from Ollama and other servers you run. You can use them without GitHub Copilot.",
+      "action": "Manage model providers"
     },
     "mcpServers": {
       "title": "MCP servers",

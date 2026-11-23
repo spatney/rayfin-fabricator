@@ -9,9 +9,17 @@ interface Props {
   host?: string
   disabled?: boolean
   onSignedIn: () => Promise<void> | void
+  /** Open Accounts at Model providers, to use models of the user's own instead. */
+  onUseOwnModels?: () => void
 }
 
-export default function CopilotSignInNotice({ detail, host, disabled, onSignedIn }: Props): JSX.Element {
+export default function CopilotSignInNotice({
+  detail,
+  host,
+  disabled,
+  onSignedIn,
+  onUseOwnModels
+}: Props): JSX.Element {
   const { t } = useTranslation('accounts')
   const [copilotHost, setCopilotHost] = useState(() => host ?? getCopilotHost())
   const [busy, setBusy] = useState(false)
@@ -58,6 +66,11 @@ export default function CopilotSignInNotice({ detail, host, disabled, onSignedIn
       <button className="btn btn--primary btn--sm" disabled={busy || disabled} onClick={() => void signIn()}>
         {busy ? t('copilotNotice.signingIn') : t('copilotNotice.signIn')}
       </button>
+      {onUseOwnModels && (
+        <button className="btn btn--sm" disabled={busy} onClick={onUseOwnModels}>
+          {t('copilotNotice.ownModels')}
+        </button>
+      )}
       <button className="btn btn--sm btn--link" onClick={() => openDocs('copilotSignIn')}>
         {t('copilotNotice.help')}
       </button>

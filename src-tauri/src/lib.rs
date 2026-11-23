@@ -334,6 +334,7 @@ pub fn run() {
       // your own API keys
       commands::byok::byok_status,
       commands::byok::byok_set_key,
+      commands::byok::byok_connect,
       commands::byok::byok_refresh,
       commands::byok::byok_remove_key,
       commands::byok::byok_set_models,
@@ -455,6 +456,7 @@ pub fn run() {
       commands::projects::projects_state,
       commands::projects::projects_check_name,
       commands::projects::projects_community_templates,
+      commands::projects::projects_rayfin_lines,
       commands::projects::projects_pick_folder,
       commands::projects::projects_check_location,
       commands::projects::projects_create_location,

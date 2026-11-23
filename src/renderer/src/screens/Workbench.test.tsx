@@ -412,7 +412,8 @@ function installApi(active = false) {
       status: vi.fn<RayfinStudioApi['byok']['status']>().mockResolvedValue({
         supported: true,
         store: 'Windows Credential Manager',
-        providers: []
+        providers: [],
+        ownModels: false
       })
     },
     onProcLog: vi.fn<(callback: (event: ProcLogEvent) => void) => () => void>(() => () => {})
@@ -809,7 +810,7 @@ describe('Workbench app bar', () => {
     expect(screen.queryByRole('button', { name: 'Sign in to Fabric' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Account: checking sign-in' }))
     expect(screen.getByText('Checking your Fabric sign-in…')).toBeTruthy()
-    expect(screen.getByRole('menuitem', { name: 'Manage accounts…' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Settings' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: 'Sign out' })).toBeNull()
   })
 
@@ -834,11 +835,13 @@ describe('Workbench app bar', () => {
     expect(screen.queryByText(/Not signed in to GitHub Copilot/)).toBeNull()
   })
 
-  it('opens Accounts from the account menu', async () => {
+  it('opens Accounts from Settings in the account menu', async () => {
     installApi()
-    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
-    fireEvent.click(accountAction('Manage accounts…'))
+    render(<Workbench {...makeProps({ settings: defaultSettings })} />, { wrapper: Wrapper })
+    fireEvent.click(accountAction('Settings'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage accounts' }))
     const dialog = await screen.findByRole('dialog', { name: 'Accounts' })
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull()
     expect(within(dialog).getByText('dev@example.com')).toBeTruthy()
     expect(within(dialog).getByText('octocat')).toBeTruthy()
   })
@@ -856,9 +859,15 @@ describe('Workbench app bar', () => {
         activeProjectId: null,
         projects
       })
-      render(<Workbench {...makeProps({ auth: { ...auth, rayfin: { signedIn: false } } })} />, {
-        wrapper: Wrapper
-      })
+      render(
+        <Workbench
+          {...makeProps({
+            auth: { ...auth, rayfin: { signedIn: false } },
+            settings: defaultSettings
+          })}
+        />,
+        { wrapper: Wrapper }
+      )
       await waitFor(() =>
         expect(homeProps.mock.lastCall?.[0].projects).toHaveLength(projects.length)
       )
@@ -866,7 +875,8 @@ describe('Workbench app bar', () => {
       const signIn = screen.getByRole('button', { name: 'Sign in to Fabric' }) as HTMLButtonElement
       expect(signIn.disabled).toBe(!ready)
       fireEvent.click(screen.getByRole('button', { name: 'Settings and accounts' }))
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Manage accounts…' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Settings' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Manage accounts' }))
       const dialog = await screen.findByRole('dialog', { name: 'Accounts' })
       const fabric = within(dialog).getByRole('region', { name: 'Microsoft Fabric' })
       const dialogSignIn = within(fabric).getByRole('button', {

@@ -122,6 +122,11 @@ export interface CopilotAuthStatus {
   /** Why authentication could not be verified by the bundled chat engine. */
   error?: string
   /**
+   * The user has models of their own that can run (Accounts → Model providers),
+   * so Fabricator works without a Copilot sign-in.
+   */
+  ownModels?: boolean
+  /**
    * Renderer-only: not verified yet this session (a background check is still
    * running). Treat the account as unknown, not signed out.
    */
@@ -1529,14 +1534,19 @@ export interface ContextTierOption {
 
 /** How a model on the user's own API key shows in the model picker. */
 export interface ByokModelMeta {
-  /** Provider id: "anthropic", "openai", "xai" or "google". */
+  /** Provider id: "anthropic", "openai", "xai", "google", "openrouter", "ollama" or "custom". */
   provider: string
   /** Provider name, e.g. "Anthropic". */
   providerName: string
-  /** Its key is saved, so it can be chosen. */
+  /** Its key is saved (or it needs none), so it can be chosen. */
   ready: boolean
   /** Why it can't be chosen. */
   note?: string
+  /**
+   * While Copilot isn't signed in, a chat meant for Copilot (on Auto or one of
+   * Copilot's models) runs on this model instead.
+   */
+  standIn?: boolean
 }
 
 /** What Auto can optimize for, as Copilot offers it to the account: Copilot
@@ -1766,6 +1776,8 @@ export interface ByokProviderSettings {
   enabled: string[]
   /** When the key was last checked (ISO 8601). */
   checkedAt?: string
+  /** Where a server the user runs is (Ollama, an OpenAI-compatible server). */
+  baseUrl?: string
 }
 
 /** A model a provider offers to the user's key. */
@@ -1797,11 +1809,25 @@ export interface ByokProviderStatus {
   name: string
   /** What its models are, e.g. "Claude models". */
   description: string
-  /** Where to create a key. */
+  /** Where to create a key, or for a provider that takes none, where to get it. */
   keyUrl: string
   /** How keys start, for the input's placeholder (e.g. "sk-ant-"). */
   keyPrefix: string
+  /**
+   * Where its API is: "fixed", "local" (a server the user runs, such as Ollama,
+   * at a default address they can change) or "custom" (any OpenAI-compatible
+   * server, at the address they give).
+   */
+  endpoint: 'fixed' | 'local' | 'custom'
+  /** Whether it takes an API key. */
+  keyNeed: 'required' | 'optional' | 'unused'
   hasKey: boolean
+  /** Set up: its key is saved, or for a server the user runs, Fabricator reached it. */
+  connected: boolean
+  /** The address saved for a server the user runs. */
+  baseUrl?: string
+  /** The address a "local" server has unless the user gives another. */
+  defaultBaseUrl?: string
   models: ByokModelInfo[]
   /** Model ids shown in the model pickers. */
   enabled: string[]
@@ -1817,6 +1843,11 @@ export interface ByokStatus {
   /** Where keys are kept, e.g. "Windows Credential Manager". */
   store: string
   providers: ByokProviderStatus[]
+  /**
+   * One of the user's own models can run, so Fabricator works without a Copilot
+   * sign-in (as `CopilotAuthStatus.ownModels` reports it).
+   */
+  ownModels: boolean
 }
 
 /** Opt-in experimental feature flags (Settings → Experiments). */
@@ -1940,6 +1971,12 @@ export interface CreateProjectInput {
    * exist: New project offers to create it.
    */
   location?: string
+  /**
+   * The line of Rayfin releases it starts on, such as `'1.36'`: one of
+   * `projects.rayfinLines()`. The first of those when absent. When the npm
+   * registry lists none of its releases, it starts on the newest line it lists.
+   */
+  rayfinLine?: string
 }
 
 export interface ProjectActionResult {
@@ -4146,6 +4183,12 @@ export interface RayfinStudioApi {
     /** Fetch a community template gallery (defaults to microsoft/awesome-rayfin). */
     communityTemplates: (repoUrl?: string) => Promise<CommunityGalleryResult>
     /**
+     * The lines of Rayfin releases a new project can start on, newest first,
+     * such as `['2.0', '1.36']`. The first is the one it starts on unless
+     * `CreateProjectInput.rayfinLine` picks another.
+     */
+    rayfinLines: () => Promise<string[]>
+    /**
      * Whether a new project's name is free: in the projects folder (or the
      * folder chosen instead, `location`), or in a team workspace (its apps and
      * its published-apps Fabric workspace).
@@ -4724,9 +4767,14 @@ export interface RayfinStudioApi {
     status: () => Promise<ByokStatus>
     /** Check a key with the provider, then save it and the models it can use. */
     setKey: (provider: string, key: string) => Promise<ByokProviderStatus>
-    /** Check the saved key again and update its models. */
+    /**
+     * Reach a server the user runs (Ollama, an OpenAI-compatible server) at
+     * `url`, with `key` when it wants one, then save it and the models it offers.
+     */
+    connect: (provider: string, url: string, key?: string) => Promise<ByokProviderStatus>
+    /** Check the saved key (or server) again and update its models. */
     refresh: (provider: string) => Promise<ByokProviderStatus>
-    /** Delete the saved key and forget the provider's models. */
+    /** Delete the saved key (or forget the server) and the provider's models. */
     removeKey: (provider: string) => Promise<ByokProviderStatus>
     /** Choose which of a provider's models the model pickers show. */
     setModels: (provider: string, models: string[]) => Promise<ByokProviderStatus>

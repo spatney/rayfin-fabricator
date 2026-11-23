@@ -58,20 +58,21 @@ export interface SetupAttention {
 }
 
 /**
- * Whether Fabricator can be entered: the required tools work and GitHub Copilot
- * is signed in. Azure is optional; the features that need it ask for it.
+ * Whether Fabricator can be entered: the required tools work, and GitHub
+ * Copilot is signed in or the user has models of their own (Accounts → Model
+ * providers). Azure is optional; the features that need it ask for it.
  */
 export function setupReady(
   doctor: DoctorReport | null | undefined,
   auth: Partial<AuthStatus> | null | undefined
 ): boolean {
-  return Boolean(doctor?.ready && auth?.copilot?.signedIn)
+  return Boolean(doctor?.ready && (auth?.copilot?.signedIn || auth?.copilot?.ownModels))
 }
 
 /**
  * Problems to raise in the app after a background check, or null. Accounts that
  * are still being checked are never reported as signed out, and optional ones
- * (Azure, Fabric) never are.
+ * (Azure, Fabric) never are; nor is Copilot while the user has models of their own.
  */
 export function setupAttention(
   doctor: DoctorReport | null,
@@ -80,7 +81,8 @@ export function setupAttention(
 ): SetupAttention | null {
   const tools = (doctor?.tools ?? []).filter((t) => t.required && !t.satisfied).map((t) => t.name)
   const signIns: string[] = []
-  if (auth && !auth.copilot.checking && !auth.copilot.signedIn) signIns.push('GitHub Copilot')
+  if (auth && !auth.copilot.checking && !auth.copilot.signedIn && !auth.copilot.ownModels)
+    signIns.push('GitHub Copilot')
   const error = toolsError ?? undefined
   return tools.length > 0 || signIns.length > 0 || error ? { tools, signIns, error } : null
 }

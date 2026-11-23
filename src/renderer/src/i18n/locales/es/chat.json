@@ -183,6 +183,7 @@
     "providerKey": "Con tu clave de {{provider}}, que factura su proveedor",
     "ownKey": "Con tu propia clave, que factura su proveedor",
     "yourKey": "Tu clave",
+    "yourServer": "Tu servidor",
     "plan": "Plan de Copilot",
     "percentLeft": "Queda {{percent}}",
     "planFailed": "No se pudo comprobar tu plan de Copilot.",
@@ -209,7 +210,9 @@
     "byModel": "Uso por modelo",
     "tokenDetails": "Detalles de los tokens",
     "viewUsage": "Ver el uso",
-    "otherModels": "Otros modelos"
+    "otherModels": "Otros modelos",
+    "providerServer": "En {{provider}}, un servidor que ejecutas",
+    "yourServerTitle": "En tu servidor compatible con OpenAI"
   },
   "imageMarkup": {
     "hint": "Dibuja encima para mostrarle a Copilot lo que quieres decir",

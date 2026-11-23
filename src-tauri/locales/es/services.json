@@ -103,19 +103,35 @@
     "stoppedEarly": "El modelo se detuvo antes de terminar. Selecciona Reintentar o elige otro modelo.",
     "addKeyInAccounts": "Agrega tu clave de {{name}} en Cuentas",
     "thisModel": "este modelo",
+    "ollamaUnreachable": "Ollama no responde en {{url}}. Inicia Ollama y vuelve a intentarlo.",
+    "serverUnreachable": "Nada respondió en {{url}}. Comprueba la dirección y que el servidor esté en ejecución, y vuelve a intentarlo.",
+    "serverNeedsKey": "Este servidor pide una clave de API. Agrega una y vuelve a intentarlo.",
+    "badServerUrl": "Escribe la dirección del servidor, por ejemplo http://localhost:1234/v1.",
+    "noOllamaModels": "Ninguno de los modelos de Ollama puede llamar a herramientas, algo que Fabricator necesita. Descarga uno que pueda, como gpt-oss o qwen3, y vuelve a intentarlo.",
+    "noServerModels": "El servidor no mostró ningún modelo. Comprueba su dirección y vuelve a intentarlo.",
+    "connectFirst": "{{name}} no está configurado. Configúralo en Cuentas o elige otro modelo.",
     "failure": {
       "keyRejected": "{{provider}} no aceptó tu clave de API. Reemplázala en Cuentas o elige otro modelo.",
       "outOfCredit": "Tu cuenta de {{provider}} no tiene crédito o superó su límite de gasto. Revisa tu facturación con {{provider}} o elige otro modelo.",
       "tooLarge": "Esta solicitud supera lo que tu plan de {{provider}} permite por minuto. Las solicitudes de Fabricator son grandes, así que mejora tu plan de {{provider}} o elige otro modelo.",
       "rateLimited": "{{provider}} está limitando la frecuencia con la que se puede usar tu clave. Espera un minuto y vuelve a intentarlo, o elige otro modelo.",
       "overloaded": "{{provider}} está sobrecargado en este momento. Vuelve a intentarlo en un minuto o elige otro modelo.",
-      "modelGone": "{{provider}} ya no ofrece {{model}} para tu clave. Revisa tus modelos en Cuentas o elige otro modelo."
+      "modelGone": "{{provider}} ya no ofrece {{model}} para tu clave. Revisa tus modelos en Cuentas o elige otro modelo.",
+      "unreachable": "Fabricator no pudo conectarse con {{provider}}. Si se ejecuta en este dispositivo o en tu red, inícialo; si no, comprueba tu conexión. Luego vuelve a intentarlo o elige otro modelo.",
+      "contextTooShort": "{{provider}} ejecuta {{model}} con una longitud de contexto de {{context}}, demasiado corta para Fabricator. En la configuración de {{provider}}, establece la longitud de contexto en 64k o más. Luego vuelve a intentarlo o elige otro modelo.",
+      "contextOutgrown": "Esta conversación superó la longitud de contexto que {{provider}} usa para {{model}}. En la configuración de {{provider}}, establece la longitud de contexto en 64k o más. Luego vuelve a intentarlo o elige otro modelo."
+    },
+    "names": {
+      "custom": "Servidor compatible con OpenAI"
     },
     "models": {
       "anthropic": "Modelos de Claude",
       "openai": "Modelos GPT",
       "xai": "Modelos de Grok",
-      "google": "Modelos de Gemini y Gemma"
+      "google": "Modelos de Gemini y Gemma",
+      "openrouter": "Modelos de muchos fabricantes con una sola clave",
+      "ollama": "Modelos abiertos que se ejecutan en este dispositivo",
+      "custom": "Modelos de LM Studio, vLLM, LiteLLM u otro servidor con una API compatible con OpenAI"
     }
   },
   "copilot": {

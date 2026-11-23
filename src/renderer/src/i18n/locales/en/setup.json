@@ -66,7 +66,11 @@
     "title": "Connect GitHub Copilot",
     "note": "The AI that builds your app — and that answers your questions while you set the rest up",
     "subtitle": "Sign in to start building, and to unlock Help",
-    "helpReady": "Help is available now. If anything below goes wrong, select <strong>Help</strong> and it will read what happened."
+    "helpReady": "Help is available now. If anything below goes wrong, select <strong>Help</strong> and it will read what happened.",
+    "ownModels": "Use your own models instead",
+    "ownModelsHint": "No GitHub Copilot? Add models from OpenRouter, Ollama or your own API keys, and Fabricator builds with them.",
+    "ownModelsSummary": "Using your own models",
+    "ownModelsDone": "Done"
   },
   "tools": {
     "title": "Install the tools",
@@ -122,6 +126,7 @@
     "restart": "Restart Fabricator to finish setting up the tools that were just installed.",
     "ready": "Your tools are installed and your accounts are connected.",
     "readyWithoutAzure": "Your tools are installed and GitHub Copilot is connected. Sign in to Azure whenever you need it.",
+    "readyOwnModels": "Your tools are installed and your own models are set up. Sign in to Azure whenever you need it.",
     "stepsLeft_one": "Finish the step above to continue.",
     "stepsLeft_other": "Finish the {{count}} steps above to continue.",
     "enter": "Enter Fabricator"

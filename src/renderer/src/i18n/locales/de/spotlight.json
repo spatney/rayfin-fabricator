@@ -268,8 +268,8 @@
       "subtitle": "Alle Konten anzeigen und ändern, die Fabricator verwendet"
     },
     "apiKeys": {
-      "title": "API-Schlüssel verwalten",
-      "subtitle": "Modelle von Anthropic, OpenAI, xAI und Google mit deinen eigenen Schlüsseln verwenden"
+      "title": "Modellanbieter verwalten",
+      "subtitle": "Modelle von OpenRouter, Ollama oder mit deinen eigenen API-Schlüsseln verwenden"
     },
     "mcpServers": {
       "title": "MCP-Server verwalten",

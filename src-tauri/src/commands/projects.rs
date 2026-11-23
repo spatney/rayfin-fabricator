@@ -62,6 +62,14 @@ pub async fn projects_community_templates(repo_url: Option<String>) -> Community
   crate::commands::projects_impl::list_community_templates(repo_url).await
 }
 
+/// The lines of Rayfin releases a new project can start on, newest first, such
+/// as `["2.0", "1.36"]`: New project's Rayfin version. The first is the one it
+/// starts on unless another is picked.
+#[tauri::command]
+pub fn projects_rayfin_lines() -> Vec<String> {
+  crate::services::rayfin_sdk::new_project_lines()
+}
+
 #[tauri::command]
 pub async fn projects_pick_folder(app: AppHandle) -> Option<String> {
   pick_folder_dialog(&app).await

@@ -286,6 +286,7 @@ export const api: RayfinStudioApi = {
   projects: {
     state: () => invoke('projects_state'),
     communityTemplates: (repoUrl?: string) => invoke('projects_community_templates', { repoUrl }),
+    rayfinLines: () => invoke('projects_rayfin_lines'),
     checkName: (name: string, teamWorkspaceId?: string, location?: string) =>
       invoke('projects_check_name', {
         name,
@@ -507,6 +508,8 @@ export const api: RayfinStudioApi = {
   byok: {
     status: () => invoke('byok_status'),
     setKey: (provider: string, key: string) => invoke('byok_set_key', { provider, key }),
+    connect: (provider: string, url: string, key?: string) =>
+      invoke('byok_connect', { provider, url, key: key ?? null }),
     refresh: (provider: string) => invoke('byok_refresh', { provider }),
     removeKey: (provider: string) => invoke('byok_remove_key', { provider }),
     setModels: (provider: string, models: string[]) => invoke('byok_set_models', { provider, models })

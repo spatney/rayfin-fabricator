@@ -123,6 +123,18 @@ describe('UsageMeter', () => {
     expect(await screen.findByText('Couldn’t check your Copilot plan.')).toBeTruthy()
   })
 
+  it('leaves out the Copilot plan and its link when no one is signed in to Copilot', async () => {
+    render(<UsageMeter projectId="p" sending={false} hidden={false} copilot={false} />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Chat usage: 455 credits · 17.64M tokens' })
+    )
+    const panel = screen.getByRole('dialog', { name: 'Session credits' })
+    expect(within(panel).getByRole('list', { name: 'Usage by model' })).toBeTruthy()
+    expect(chat.quota).not.toHaveBeenCalled()
+    expect(within(panel).queryByText('Copilot plan')).toBeNull()
+    expect(within(panel).queryByRole('button', { name: /View usage/ })).toBeNull()
+  })
+
   it('names the usage no model claims in the user’s language, though it’s saved in English', async () => {
     await setLanguage('de')
     try {

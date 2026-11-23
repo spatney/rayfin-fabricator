@@ -1,10 +1,10 @@
 ---
-title: Use your own API keys
-description: Use Claude, GPT, Grok and Gemini models with your own Anthropic, OpenAI, xAI or Google API key in chat and the Advisor, next to your GitHub Copilot models.
+title: Use your own models
+description: Use models from OpenRouter, Ollama, your own Anthropic, OpenAI, xAI or Google API key, or any OpenAI-compatible server in chat, the Advisor and Help, with or without GitHub Copilot.
 ---
 
-With your own API keys, Fabricator's model pickers also offer models from other providers,
-next to the models in your GitHub Copilot plan:
+Fabricator's model pickers can offer models from other providers, next to the models in your
+GitHub Copilot plan, or instead of them:
 
 | Provider | Models | Billed to |
 | --- | --- | --- |
@@ -12,20 +12,33 @@ next to the models in your GitHub Copilot plan:
 | **OpenAI** | GPT models | Your OpenAI account |
 | **xAI** | Grok models | Your xAI account |
 | **Google** | Gemini and Gemma models | The Google Cloud project your key belongs to |
+| **OpenRouter** | Models from many makers on one key | Your OpenRouter account |
+| **Ollama** | Open models that run on this computer | Nobody: they run on your own hardware |
+| **OpenAI-compatible server** | Models from LM Studio, vLLM, LiteLLM or another server with an OpenAI-compatible API | Whoever runs the server |
 
-You still sign in to GitHub Copilot. Copilot runs the conversation on your computer: it
-reads and edits your project the same way, and it calls the provider with your key whenever
-you choose one of its models.
+Fabricator runs the conversation on your computer either way: it reads and edits your project
+the same way, and it calls the provider whenever you choose one of its models. You don't need
+to be signed in to GitHub Copilot to use them. See
+[Use Fabricator without GitHub Copilot](#use-fabricator-without-github-copilot).
 
-## Add a key
+## Open Model providers
 
-1. Open **Model providers** in **Accounts**: in a model picker, select **Manage API keys…** at
-   the bottom, or **Add models with your API keys…** in its list of models. You can also
-   select **Manage API keys** in **Settings**.
-2. Find the provider and select **Add key**.
-3. Paste your key into the box. To create one, select **Get a key**, which opens the
+Your models are set up in **Model providers**, in **Accounts**. To open it, do one of these:
+
+- In a model picker, select **Manage model providers…** at the bottom, or **Add your own
+  models…** in its list of models.
+- In **Settings**, select **Manage model providers**.
+- On the setup screen, under **Connect GitHub Copilot**, select **Use your own models
+  instead**.
+
+## Add an API key
+
+For Anthropic, OpenAI, xAI, Google and OpenRouter:
+
+1. In **Model providers**, find the provider and select **Add key**.
+2. Paste your key into the box. To create one, select **Get a key**, which opens the
    provider's key page in your browser.
-4. Select **Save key**.
+3. Select **Save key**.
 
 Fabricator checks the key with the provider before it keeps it. If the provider turns it
 down, you see a message such as "OpenAI didn't accept this key. Check that you copied all of
@@ -36,28 +49,77 @@ it." and nothing is saved.
 When the key works, the card shows **API key** and where it's kept, such as "Saved in
 Windows Credential Manager". On macOS, keys are kept in your Keychain.
 
+OpenRouter offers hundreds of models from many makers on one key, so Fabricator lists only
+the ones that can call tools, which its agent needs. Type in the box above the list to find a
+model.
+
+## Connect Ollama
+
+[Ollama](https://ollama.com) runs open models on your own computer, so there's no key and
+nothing to pay per use.
+
+1. Install Ollama, and pull a model that can call tools, such as `gpt-oss:20b` or `qwen3`:
+
+   ```bash
+   ollama pull gpt-oss:20b
+   ```
+
+2. In Ollama's settings, set **Context length** to 64k or more. Fabricator's agent sends long
+   instructions and parts of your app with every request, and Ollama gives models a short
+   context unless you change it. Fabricator checks the context length with each request, and
+   stops with a message when it's too short.
+3. In **Model providers**, under **Ollama**, select **Connect**.
+4. Check **Ollama address**. On this computer, it's `http://localhost:11434`. To use Ollama on
+   another computer, enter that computer's address.
+5. Select **Connect**.
+
+Fabricator lists the models you pulled that can call tools, and turns on the three you pulled
+last. If Ollama isn't running, you see "Ollama isn't answering at http://localhost:11434. Start
+Ollama, then try again." If none of your models can call tools, pull one that can, then select
+**Check again**.
+
+> [!TIP]
+> Local models are slower than cloud models, and smaller ones can struggle with large changes.
+> Pick the biggest model your computer runs well, and keep requests focused.
+
+## Connect an OpenAI-compatible server
+
+Any server with an OpenAI-compatible API works, such as LM Studio, vLLM or a LiteLLM proxy.
+
+1. Start the server, and load a model that can call tools.
+2. In **Model providers**, under **OpenAI-compatible server**, select **Connect**.
+3. In **OpenAI-compatible server address**, enter the address of its API, such as
+   `http://localhost:1234/v1` for LM Studio. If you leave out `/v1`, Fabricator tries it too.
+4. If the server needs a key, enter it in **API key (optional)**.
+5. Select **Connect**.
+
+Fabricator lists every model the server offers. It assumes a 128k-token context window unless
+the server reports one.
+
 ## Choose which models the pickers show
 
-Under **In the model pickers**, each card lists the provider's models that your key can use,
-with each model's context window, and `images` when it can read images. The models marked
-**Recommended** are turned on when you add a key. A model marked **Retiring** is one the
-provider is phasing out.
+Under **In the model pickers**, each card lists the models the provider offers, with each
+model's context window, and `images` when it can read images. The models marked
+**Recommended** are turned on when you add a key or connect a server. A model marked
+**Retiring** is one the provider is phasing out.
 
 - Turn a model on or off with its checkbox. The pickers update right away.
-- Select **Show all** to see every model your key can use.
-- Select **Check again** to check the saved key with the provider and update its list of
-  models.
+- Select **Show all** to see every model the provider offers. In a long list, type in the box
+  above it to find a model.
+- Select **Check again** to check the provider again and update its list of models.
 
 ## Pick one of your models
 
 1. In the chat composer, open the model pill.
 2. Turn off **Copilot Fusion** (or **Auto**), then select **Model**.
-3. Choose a model under **Your API keys**. The provider's name is next to each one.
+3. Choose a model under **Your models**. The provider's name is next to each one, or **Your
+   server** for one on an OpenAI-compatible server.
 
-![The model picker with Auto off, the model list open, Copilot's models with their makers' logos, and the models on the user's own Anthropic and OpenAI keys under Your API keys](/screenshots/model-picker.webp)
+![The model picker with Auto off, the model list open, Copilot's models with their makers' logos, and the models on the user's own Anthropic and OpenAI keys under Your models](/screenshots/model-picker.webp)
 
-The pill shows a key next to a model that runs on your own key. To change keys or models,
-select **Manage API keys…** at the bottom of the picker.
+The pill shows a key next to a model that runs on your own API key, and a server next to one
+that runs on Ollama or an OpenAI-compatible server. To change your models, select **Manage
+model providers…** at the bottom of the picker.
 
 The same picker is in the **Advisor** bar. See
 [Choose a model and reasoning effort](/docs/build/chat#choose-a-model-and-reasoning-effort).
@@ -65,25 +127,45 @@ The same picker is in the **Advisor** bar. See
 You can switch models at any time, also in the middle of a conversation. The next message
 uses the model you chose.
 
+## Use Fabricator without GitHub Copilot
+
+You don't need GitHub Copilot when you have a model of your own. On the setup screen, under
+**Connect GitHub Copilot**, select **Use your own models instead**, set up a provider, then
+select **Done**. The step then says **Using your own models**, and you can enter Fabricator.
+
+While you're not signed in to GitHub Copilot:
+
+- The model pickers offer only your own models, and there's no **Auto**. The picker says
+  "You're not signed in to GitHub Copilot, so chats run on your own models."
+- A chat set to **Auto**, to one of Copilot's models, or to one of your models that you've
+  since removed or turned off runs on your default model instead: the model your
+  [chat defaults](/docs/reference/settings) use when it's one of your own, else the first of
+  your models in the picker. The model pill shows which one.
+- The Advisor, Help and the other features that use a model run on your own models too.
+
+To use Copilot's models again, sign in to GitHub Copilot in **Accounts**.
+
 ## Models that can't read images
 
 Some models can't read images. While one of them is selected, **Image** in the composer's
 **+** menu says that the model can't read images. If you already attached images, Fabricator
 holds the message until you remove them or choose a model that can read images.
 
-## Replace or remove a key
+## Replace or remove a key or server
 
 - To use a different key, select **Replace**, paste the new key, and select **Replace key**.
   Fabricator keeps the old key if the provider doesn't accept the new one.
-- To remove a key, select **Remove**, then select **Remove** again to confirm. Its models
-  leave the pickers. A chat or the Advisor set to one of them asks you to choose another
-  model.
+- To change a server's address, select **Change**, enter the new address, and select
+  **Connect**. For an OpenAI-compatible server, enter its key again if it needs one.
+- To remove a key or a server, select **Remove**, then select **Remove** again to confirm. Its
+  models leave the pickers. A chat or the Advisor set to one of them asks you to choose
+  another model, or, while you're not signed in to GitHub Copilot, runs on your default model.
 
 ## Plans and limits
 
-The provider bills your account for what its models use, and its plan sets your limits.
+A cloud provider bills your account for what its models use, and its plan sets your limits.
 Fabricator's requests are large: each one carries Fabricator's instructions, tools and parts
-of your app. To see how many tokens a chat has used on your key, see
+of your app. To see how many tokens a chat has used on your models, see
 [See what a chat has used](/docs/build/chat#see-what-a-chat-has-used).
 
 - Some plans cap the tokens a key can use a minute, so a smaller plan may turn these
@@ -93,6 +175,9 @@ of your app. To see how many tokens a chat has used on your key, see
 - Google's free tier allows only a few requests a minute and a day. If Fabricator says
   "Google is limiting how often your key can be used", wait and try again, or turn on
   billing for your key's Google Cloud project.
+- Ollama and other servers you run have no bill, but they're limited by your hardware. Keep
+  Ollama's context length at 64k or more. With less, Fabricator stops a turn on an Ollama
+  model and says so.
 
 For other errors from a provider, see
 [A model on your own API key shows an error](/docs/troubleshooting/chat#a-model-on-your-own-api-key-shows-an-error).
@@ -101,14 +186,15 @@ For other errors from a provider, see
 
 - Fabricator keeps your keys in Windows Credential Manager, or in your Keychain on macOS.
   They never go into Fabricator's settings, logs or diagnostics, and Fabricator never shows
-  a saved key.
-- When you use one of your models, Copilot on your computer sends your request and the
+  a saved key. It keeps the address of a server you connect in its settings.
+- When you use one of your models, Fabricator on your computer sends your request and the
   project context it needs straight to the provider, under the provider's terms for your
-  account.
-- Requests to OpenAI, xAI and Google pass through a relay on your computer that adapts them
-  to what each provider's API accepts: for example, it leaves out a reasoning effort a model
-  doesn't take. Nothing leaves your computer through it except the request to that provider.
-  While Fabricator runs, the relay keeps the signatures Gemini adds to its tool calls in
-  memory, to send them back with the conversation.
+  account. With Ollama on your computer, nothing leaves it.
+- Requests to OpenAI, xAI, Google, OpenRouter, Ollama and OpenAI-compatible servers pass
+  through a relay on your computer that adapts them to what each API accepts: for example, it
+  leaves out a reasoning effort a model doesn't take. With each request to Ollama, it also asks
+  Ollama what context length the model runs with. Nothing leaves your computer through it
+  except the request to that provider. While Fabricator runs, the relay keeps the signatures
+  Gemini adds to its tool calls in memory, to send them back with the conversation.
 
-See [Privacy](/docs/reference/privacy#your-own-api-keys).
+See [Privacy](/docs/reference/privacy#your-own-models).

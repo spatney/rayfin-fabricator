@@ -39,9 +39,7 @@ interface Props {
   onSignIn: () => void
   onSignOut: () => void
   onRefresh: () => void
-  /** Open the Accounts dialog: every account Fabricator uses. */
-  onManageAccounts: () => void
-  /** Open Settings. */
+  /** Open Settings, which leads to Accounts: every account Fabricator uses. */
   onOpenSettings: () => void
 }
 
@@ -49,12 +47,12 @@ const ITEM = '[role="menuitem"]'
 
 /**
  * The app bar's account control, which also holds Settings. Signed in to
- * Fabric, it's the user's avatar and opens a menu with the account actions
- * (manage every account, refresh credentials, sign out) and Settings. Signed
- * out, "Sign in to Fabric" stays one click away, with the rest behind its caret;
- * until there's a project, whose Rayfin CLI signs in, it's disabled and says why.
- * While the launch check runs it's a neutral placeholder rather than a premature
- * sign-in prompt.
+ * Fabric, it's the user's avatar and opens a menu with Settings and the Fabric
+ * account's actions (refresh credentials, sign out). Signed out, "Sign in to
+ * Fabric" stays one click away, with the rest behind its caret; until there's a
+ * project, whose Rayfin CLI signs in, it's disabled and says why. While the
+ * launch check runs it's a neutral placeholder rather than a premature sign-in
+ * prompt.
  */
 export default function AccountMenu({
   signedIn,
@@ -71,7 +69,6 @@ export default function AccountMenu({
   onSignIn,
   onSignOut,
   onRefresh,
-  onManageAccounts,
   onOpenSettings
 }: Props): JSX.Element {
   const { t } = useTranslation('accounts')
@@ -239,11 +236,11 @@ export default function AccountMenu({
           >
             <MenuItem
               disabled={false}
-              onClick={() => pick(onManageAccounts)}
-              icon={<Codicon name="account" />}
-              title={t('menu.manageTitle')}
+              onClick={() => pick(onOpenSettings)}
+              icon={<Codicon name="settings-gear" />}
+              title={t('menu.settingsTitle')}
             >
-              {t('menu.manage')}
+              {t('menu.settings')}
             </MenuItem>
             {!pending && refreshItem}
             {signedIn && (
@@ -251,16 +248,6 @@ export default function AccountMenu({
                 {signingOut ? t('signingOut') : t('actions.signOut')}
               </MenuItem>
             )}
-            {/* The rest is about the account; Settings is the app's. */}
-            <div className="account-sep" role="separator" />
-            <MenuItem
-              disabled={false}
-              onClick={() => pick(onOpenSettings)}
-              icon={<Codicon name="settings-gear" />}
-              title={t('menu.settingsTitle')}
-            >
-              {t('menu.settings')}
-            </MenuItem>
           </div>
         </div>
       )}

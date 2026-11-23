@@ -101,6 +101,10 @@ pub struct CopilotAuthStatus {
   pub host: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
+  /// The user has models of their own that can run (Accounts → Model
+  /// providers), so Fabricator works without a Copilot sign-in.
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub own_models: bool,
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -984,7 +988,8 @@ pub struct McpToolInfo {
 }
 
 /// Persisted state of Your own API keys, by provider id
-/// (`"anthropic"`, `"openai"`, `"xai"`, `"google"`). Keys are never stored here.
+/// (`"anthropic"`, `"openai"`, `"xai"`, `"google"`, `"openrouter"`, `"ollama"`,
+/// `"custom"`). Keys are never stored here.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ByokSettings {
@@ -1005,6 +1010,10 @@ pub struct ByokProviderSettings {
   /// When the key was last checked against the provider (RFC 3339).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub checked_at: Option<String>,
+  /// Where a server people run is (Ollama, an OpenAI-compatible server): the
+  /// base URL of its OpenAI-compatible API, e.g. `http://localhost:11434/v1`.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub base_url: Option<String>,
 }
 
 /// A model a provider offers to the user's key, with what a Copilot session
@@ -1059,6 +1068,10 @@ pub struct CreateProjectInput {
   /// must exist (New project offers to create it).
   #[serde(default)]
   pub location: Option<String>,
+  /// The line of Rayfin releases it starts on, such as `1.36`: one of
+  /// `projects_rayfin_lines`. The first of those when absent.
+  #[serde(default)]
+  pub rayfin_line: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -3343,15 +3356,20 @@ pub struct AutoTierOption {
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ByokModelMeta {
-  /// Provider id: `"anthropic"`, `"openai"`, `"xai"` or `"google"`.
+  /// Provider id: `"anthropic"`, `"openai"`, `"xai"`, `"google"`, `"openrouter"`,
+  /// `"ollama"` or `"custom"`.
   pub provider: String,
   /// Provider name, e.g. `"Anthropic"`.
   pub provider_name: String,
-  /// Its key is saved, so it can be selected.
+  /// Its key is saved (or it needs none), so it can be selected.
   pub ready: bool,
   /// Why it can't be selected.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub note: Option<String>,
+  /// While Copilot isn't signed in, a chat meant for Copilot (on Auto or one of
+  /// Copilot's models) runs on this model instead.
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub stand_in: bool,
 }
 
 /// One provider in Accounts → Model providers.
@@ -3362,11 +3380,25 @@ pub struct ByokProviderStatus {
   pub name: String,
   /// What its models are, e.g. "Claude models".
   pub description: String,
-  /// Where to create a key.
+  /// Where to create a key, or for a provider that takes none, where to get it.
   pub key_url: String,
   /// How keys start, for the input's placeholder (e.g. `"sk-ant-"`).
   pub key_prefix: String,
+  /// Where its API is: `"fixed"`, `"local"` (a server people run, such as
+  /// Ollama, at a default address they can change) or `"custom"` (any
+  /// OpenAI-compatible server, at the address they give).
+  pub endpoint: String,
+  /// Whether it takes an API key: `"required"`, `"optional"` or `"unused"`.
+  pub key_need: String,
   pub has_key: bool,
+  /// Set up: its key is saved, or for a server people run, Fabricator reached it.
+  pub connected: bool,
+  /// The address saved for a server people run.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub base_url: Option<String>,
+  /// The address a `"local"` server has unless people give another.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub default_base_url: Option<String>,
   pub models: Vec<ByokModelInfo>,
   /// Model ids shown in the model pickers.
   pub enabled: Vec<String>,
@@ -3386,6 +3418,9 @@ pub struct ByokStatus {
   /// Where keys are kept, e.g. "Windows Credential Manager".
   pub store: String,
   pub providers: Vec<ByokProviderStatus>,
+  /// One of the user's own models can run, so Fabricator works without a
+  /// Copilot sign-in (as [`CopilotAuthStatus::own_models`] reports it).
+  pub own_models: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

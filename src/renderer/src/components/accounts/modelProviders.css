@@ -118,6 +118,10 @@
   align-self: flex-start;
 }
 
+.field-input.byok-filter {
+  max-width: 320px;
+}
+
 .byok-link {
   display: inline-flex;
   align-items: center;

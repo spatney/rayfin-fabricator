@@ -865,7 +865,7 @@ mod tests {
       return;
     }
     let root = scratch("live");
-    let release = rayfin_sdk::new_project_sdk(&root).await.version.to_string();
+    let release = rayfin_sdk::new_project_sdk(&root, None).await.version.to_string();
     let said = Arc::new(Mutex::new(String::new()));
     let on: OnData = {
       let said = said.clone();
@@ -875,7 +875,13 @@ mod tests {
       let (root, on, said) = (root.clone(), on.clone(), said.clone());
       async move {
         said.lock().unwrap().clear();
-        let input = crate::types::CreateProjectInput { name: name.into(), template: String::new(), template_name: None, location: None };
+        let input = crate::types::CreateProjectInput {
+          name: name.into(),
+          template: String::new(),
+          template_name: None,
+          location: None,
+          rayfin_line: None,
+        };
         let request = scaffold_request(&input).unwrap();
         let began = Instant::now();
         let dir = scaffold_project(&root, &request.slug, &request, &on).await.unwrap();

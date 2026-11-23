@@ -154,7 +154,7 @@ in `.md`.
 | `chat-working` | Chat during a turn, with the live work log and the live preview | `/docs/build/chat`, `/docs/start/first-app` |
 | `chat-done` | A finished turn with the "Worked for …" summary and changed-file chips | `/docs/build/chat` |
 | `chat-diff` | The diff for one changed file, opened from its chip | `/docs/build/chat` |
-| `model-picker` | The chat composer's model picker with **Auto** off and the model list open, including **Your API keys** (sample data) | `/docs/build/chat`, `/docs/build/your-own-api-keys` |
+| `model-picker` | The chat composer's model picker with **Auto** off and the model list open, including **Your models** (sample data) | `/docs/build/chat`, `/docs/build/your-own-api-keys` |
 | `model-providers` | **Accounts → Model providers** with an Anthropic key saved and an OpenAI key being added (sample data) | `/docs/build/your-own-api-keys` |
 | `add-menu` | The chat composer's **+** menu with **Fabric data** open beside it, listing the kinds of data (sample data) | `/docs/build/chat` |
 | `plugins` | The chat composer's **Plugins & tools** panel, 1 enabled: **Fabric IQ** on and **Work IQ**, marked **Experiment**, off, under **Plugins**, marked **Read-only**, then **MCP servers** with **Add an MCP server…**; the **Plugins** button names Fabric IQ (sample data) | `/docs/build/fabric-iq-and-work-iq` |
@@ -185,7 +185,7 @@ in `.md`.
 | `advisor` | The Advisor: grade, check strip, summary and issues | `/docs/ship/advisor` |
 | `advisor-finding` | An open Advisor issue with its fix actions | `/docs/ship/advisor` |
 | `rayfin-version` | The Rayfin version control with an update available | `/docs/ship/rayfin-versions` |
-| `settings` | The Settings dialog: General (with **API keys**, **MCP servers**, **Chat defaults** and **Custom instructions**), with Appearance below (sample data) | `/docs/reference/settings` |
+| `settings` | The Settings dialog: General (with **Model providers**, **MCP servers**, **Chat defaults** and **Custom instructions**), with Appearance below (sample data) | `/docs/reference/settings` |
 | `chat-defaults` | **Chat defaults**: Claude Opus 5.5 at High, with Fabric IQ and the Charts MCP server on, and Work IQ, Microsoft Learn and Issue tracker off (sample data) | `/docs/reference/settings` |
 | `custom-instructions` | **Custom instructions** with four instructions about the theme, wording, dates and page layout, and the character count (sample data) | `/docs/reference/settings` |
 | `settings-experiments` | Settings' Experiments section with **Team workspaces**, **Migrate Power BI reports** and **Work IQ**, all off (sample data) | `/docs/team`, `/docs/build/migrate-power-bi`, `/docs/build/fabric-iq-and-work-iq` |

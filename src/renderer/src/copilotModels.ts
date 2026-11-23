@@ -30,12 +30,16 @@ export function invalidateCopilotModels(): void {
   listeners.forEach((listener) => listener())
 }
 
+/** Changes each time the models are forgotten: a sign-in change, or a change to the user's own models. */
+export function useCopilotModelsRevision(): number {
+  return useSyncExternalStore(subscribe, snapshot)
+}
+
 export function loadCopilotModels(): Promise<CopilotModel[]> {
   if (modelsCache) return Promise.resolve(modelsCache)
   if (!modelsPromise) {
     const current = generation
-    modelsPromise = window.api.chat
-      .listModels()
+    modelsPromise = new Promise<CopilotModel[]>((resolve) => resolve(window.api.chat.listModels()))
       .then((list) => {
         if (current === generation) modelsCache = list
         return list
@@ -51,7 +55,7 @@ export function loadCopilotModels(): Promise<CopilotModel[]> {
 /** Fetch the available models once `enabled`, keeping any static fallback until
  * they arrive (or if the engine can't be reached). */
 export function useCopilotModels(enabled: boolean): { models: CopilotModel[]; loading: boolean } {
-  const revision = useSyncExternalStore(subscribe, snapshot)
+  const revision = useCopilotModelsRevision()
   const [models, setModels] = useState<CopilotModel[]>(modelsCache ?? [])
   const [loading, setLoading] = useState(false)
   useEffect(() => {
@@ -144,6 +148,40 @@ export function useAutoTiers(enabled: boolean): AutoTiers | null {
  *  (`anthropic/claude-sonnet-5-5`); Copilot's ids never contain a slash. */
 export function isProviderModelId(id: string | undefined): boolean {
   return Boolean(id?.includes('/'))
+}
+
+/**
+ * Whether a provider runs models on a server the user runs (Ollama, an
+ * OpenAI-compatible server) rather than on an API key. Takes its id, or the
+ * name usage reports it by.
+ */
+export function isServerProvider(idOrName: string | undefined): boolean {
+  return idOrName?.toLowerCase() === 'ollama' || isCustomServer(idOrName)
+}
+
+/**
+ * Whether a provider is the OpenAI-compatible server the user added by its
+ * address: tags name it "Your server", as its full name doesn't fit. Takes its
+ * id, or the name usage reports it by.
+ */
+export function isCustomServer(idOrName: string | undefined): boolean {
+  const key = idOrName?.toLowerCase()
+  return key === 'custom' || key === 'openai-compatible server'
+}
+
+/**
+ * The user's own model a selection runs on while Copilot isn't signed in (the
+ * list then has only their own models): the one standing in for Auto or a
+ * Copilot model. None when Copilot's models are there, or the selection is
+ * already one of the user's own.
+ */
+export function standInFor(
+  models: CopilotModel[],
+  model: string | undefined
+): CopilotModel | undefined {
+  if (models.length === 0 || models.some((m) => !m.byok)) return undefined
+  if (models.find((m) => m.id === model)?.byok) return undefined
+  return models.find((m) => m.byok?.standIn)
 }
 
 /**

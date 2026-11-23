@@ -14,6 +14,7 @@ import npmSvg from '../assets/brands/npm.svg'
 import gitSvg from '../assets/brands/git.svg'
 import azureSvg from '../assets/brands/azure.svg'
 import { CopilotLogo } from '../components/brand-icons'
+import { ModelProviders } from '../components/accounts/ModelProviders'
 import {
   ArrowRightIcon,
   CheckIcon,
@@ -88,6 +89,8 @@ export default function SetupScreen({
   const [online, setOnline] = useState(() => navigator.onLine)
   /** Which finished steps the user has opened to see the detail. */
   const [open, setOpen] = useState({ copilot: false, tools: false, azure: false })
+  /** Model providers are open in the Copilot step, to use models of the user's own instead. */
+  const [ownModelsOpen, setOwnModelsOpen] = useState(false)
   const toggle = (key: keyof typeof open): void =>
     setOpen((prev) => ({ ...prev, [key]: !prev[key] }))
   const logRef = useRef<HTMLPreElement>(null)
@@ -286,8 +289,9 @@ export default function SetupScreen({
     : `${requiredReady}/${required.length}`
 
   /** Copilot is bundled, so it can be connected before anything is installed —
-   *  which is what makes Help available for the rest of setup. */
-  const copilotReady = auth?.copilot.signedIn ?? false
+   *  which is what makes Help available for the rest of setup. Models of the
+   *  user's own (Accounts → Model providers) do instead. */
+  const copilotReady = Boolean(auth?.copilot.signedIn || auth?.copilot.ownModels)
 
   // Progress counts only what entry needs: the required tools (one item while
   // they're still unknown) and Copilot.
@@ -391,11 +395,15 @@ export default function SetupScreen({
                   ? `${auth.copilot.user}${
                       auth.copilot.host ? ` · ${auth.copilot.host.replace(/^https:\/\//, '')}` : ''
                     }`
-                  : t('account.signedIn')
+                  : auth?.copilot.signedIn
+                    ? t('account.signedIn')
+                    : t('copilot.ownModelsSummary')
               }
               count={copilotReady ? '1/1' : '0/1'}
-              open={open.copilot}
-              onToggle={() => toggle('copilot')}
+              // Kept open while models of the user's own are being set up, which
+              // finishes this step as soon as one can run.
+              open={open.copilot || ownModelsOpen}
+              onToggle={() => (ownModelsOpen ? setOwnModelsOpen(false) : toggle('copilot'))}
             >
               <ul className="setup-rows">
                 <AuthRow
@@ -427,6 +435,40 @@ export default function SetupScreen({
                   }
                 />
               </ul>
+
+              {!auth?.copilot.signedIn &&
+                (ownModelsOpen ? (
+                  <div className="setup-own-models">
+                    <ModelProviders />
+                    <div className="setup-own-models-actions">
+                      <button
+                        type="button"
+                        className="btn btn--sm btn--primary"
+                        disabled={refreshing}
+                        onClick={() => {
+                          setOwnModelsOpen(false)
+                          void onRefresh()
+                        }}
+                      >
+                        {t('copilot.ownModelsDone')}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="setup-sec-aside">
+                    <span>
+                      {t('copilot.ownModelsHint')}{' '}
+                      <button
+                        type="button"
+                        className="link-btn"
+                        disabled={busy !== null}
+                        onClick={() => setOwnModelsOpen(true)}
+                      >
+                        {t('copilot.ownModels')}
+                      </button>
+                    </span>
+                  </p>
+                ))}
 
               {copilotReady && (
                 <p className="setup-sec-aside">
@@ -567,7 +609,9 @@ export default function SetupScreen({
                   : allReady
                     ? azSignedIn
                       ? t('finish.ready')
-                      : t('finish.readyWithoutAzure')
+                      : auth?.copilot.signedIn
+                        ? t('finish.readyWithoutAzure')
+                        : t('finish.readyOwnModels')
                     : t('finish.stepsLeft', { count: remaining })}
               </p>
             </div>

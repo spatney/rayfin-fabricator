@@ -77,9 +77,14 @@ The provider runs these models and bills your account, so its key, credit and pl
 | "`<Provider>` is limiting how often your key can be used. Wait a minute and try again, or choose another model." | Wait a minute, then select **Retry**. |
 | "`<Provider>` is overloaded right now. Try again in a minute, or choose another model." | Wait a minute, then select **Retry**. |
 | "`<Provider>` doesn't offer `<model>` to your key anymore. Check your models in Accounts, or choose another model." | In **Accounts → Model providers**, select **Check again** to update the provider's list of models, and choose another model. |
+| "Fabricator couldn't reach `<Provider>`. If it runs on this computer or your network, start it; otherwise check your connection. Then try again, or choose another model." | For Ollama or another server you run, start it, and check its address in **Accounts → Model providers**. Then select **Retry**. |
+| "`<Provider>` runs `<model>` with a context length of `<length>`, which is too short for Fabricator. In `<Provider>`'s settings, set Context length to 64k or more, then try again, or choose another model." | In Ollama's settings, set **Context length** to 64k or more. Then select **Retry**. |
+| "This conversation got longer than the context length `<Provider>` gives `<model>`. In `<Provider>`'s settings, set Context length to 64k or more, then try again, or choose another model." | In Ollama's settings, set **Context length** to 64k or more. Then select **Retry**. |
 
 1. Follow the step for your message in the table.
 2. To keep working meanwhile, open the model picker and choose a Copilot model, or turn on **Copilot Fusion** (or **Auto**).
+
+Unless you change it, Ollama picks a model's context length from your graphics card's memory, and that's often too short for Fabricator's agent. With each request to Ollama, Fabricator checks the context length Ollama runs the model with, and stops the turn with the message above when it's too short. See [Connect Ollama](/docs/build/your-own-api-keys#connect-ollama).
 
 When you add a key, Fabricator checks it first. If the provider turns it down, you see "`<Provider>` didn't accept this key. Check that you copied all of it." and nothing is saved.
 
@@ -99,7 +104,7 @@ The chat or the Advisor is set to a model that the pickers no longer offer: you 
 2. Choose another model, or turn on **Copilot Fusion** (or **Auto**).
 3. To use the model again, turn it back on in **Accounts → Model providers**, or add its key again.
 
-See [Use your own API keys](/docs/build/your-own-api-keys).
+See [Use your own models](/docs/build/your-own-api-keys).
 
 ## The model stopped before finishing
 

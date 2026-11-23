@@ -1,5 +1,5 @@
-//! The registry Copilot sessions get for Your own API keys: each provider with
-//! a saved key, and the models the user chose, as the
+//! The registry Copilot sessions get for Your own API keys: each provider that
+//! can be used (its key saved, or none needed) and the models the user chose, as the
 //! SDK's named `providers` and `models`. They sit alongside Copilot's own
 //! models, so a conversation can switch between them with `set_model`.
 //!
@@ -17,7 +17,7 @@ use github_copilot_sdk::rpc::{
 use github_copilot_sdk::{NamedProviderConfig, ProviderModelConfig};
 use sha2::{Digest, Sha256};
 
-use super::catalog::{self, ProviderSpec};
+use super::catalog::{self, KeyNeed, ProviderSpec};
 use crate::types::{ByokModelInfo, ByokSettings};
 
 /// Output budget per reply: whole files travel in edit tool calls.
@@ -76,14 +76,29 @@ pub fn find_model<'a>(settings: &'a ByokSettings, selection: &str) -> Option<(&'
 }
 
 /// What sessions call a model on the user's own key, e.g. "Claude Opus 5.5
-/// (your Anthropic key)". The runtime reports it back with the model's usage.
-pub fn session_name(model: &str, provider: &str) -> String {
-  format!("{model} (your {provider} key)")
+/// (your Anthropic key)", or one from a server they run, e.g. "gpt-oss:20b
+/// (Ollama)". The runtime reports it back with the model's usage.
+pub fn session_name(model: &str, spec: &ProviderSpec) -> String {
+  if spec.key == KeyNeed::Required {
+    format!("{model} (your {} key)", spec.name)
+  } else {
+    format!("{model} ({})", spec.name)
+  }
 }
 
 /// The model's and the provider's names in a [`session_name`].
 pub fn split_session_name(name: &str) -> Option<(&str, &str)> {
-  let (model, provider) = name.strip_suffix(" key)")?.rsplit_once(" (your ")?;
+  let split = name
+    .strip_suffix(" key)")
+    .and_then(|rest| rest.rsplit_once(" (your "))
+    .or_else(|| {
+      // Only a provider's own name, so a model named "Something (Preview)" stays whole.
+      catalog::PROVIDERS
+        .iter()
+        .filter(|spec| spec.key != KeyNeed::Required)
+        .find_map(|spec| name.strip_suffix(&format!(" ({})", spec.name)).map(|model| (model, spec.name)))
+    })?;
+  let (model, provider) = split;
   (!model.is_empty() && !provider.is_empty()).then_some((model, provider))
 }
 
@@ -121,7 +136,7 @@ fn model_config(spec: &ProviderSpec, m: &ByokModelInfo) -> ProviderModelConfig {
   let (context, prompt, output) = token_limits(m);
   let mut config = ProviderModelConfig::new(registry_model_id(&m.id), spec.id)
     .with_wire_model(m.id.clone())
-    .with_name(session_name(&m.name, spec.name))
+    .with_name(session_name(&m.name, spec))
     .with_max_context_window_tokens(i64::from(context))
     .with_max_prompt_tokens(i64::from(prompt))
     .with_max_output_tokens(i64::from(output))
@@ -132,10 +147,11 @@ fn model_config(spec: &ProviderSpec, m: &ByokModelInfo) -> ProviderModelConfig {
   config
 }
 
-fn provider_config(spec: &ProviderSpec, base_url: String, key: &str) -> NamedProviderConfig {
-  let mut config = NamedProviderConfig::new(spec.id, base_url)
-    .with_provider_type(spec.kind)
-    .with_api_key(key);
+fn provider_config(spec: &ProviderSpec, base_url: String, key: Option<&str>) -> NamedProviderConfig {
+  let mut config = NamedProviderConfig::new(spec.id, base_url).with_provider_type(spec.kind);
+  if let Some(key) = key {
+    config = config.with_api_key(key);
+  }
   if let Some(wire) = spec.wire_api {
     config = config.with_wire_api(wire);
   }
@@ -145,29 +161,36 @@ fn provider_config(spec: &ProviderSpec, base_url: String, key: &str) -> NamedPro
   config
 }
 
-/// The registry for the providers that have a key and at least one chosen model,
-/// each at its own URL.
+/// The registry for the providers that can be used (a key saved, or none
+/// needed) and have at least one chosen model, each at its own URL.
 #[cfg(test)]
 pub fn build(settings: &ByokSettings, keys: &HashMap<String, String>) -> ByokRegistry {
-  build_routed(settings, keys, |spec| Some(spec.base_url.to_string()))
+  build_routed(settings, keys, |_, base| Some(base.to_string()))
 }
 
-/// [`build`], reaching each provider at the URL `route` gives (its own, or the
-/// relay's); a provider it gives none for is left out.
+/// [`build`], reaching each provider at the URL `route` gives for its base URL
+/// (that one, or the relay's); a provider it gives none for is left out.
 pub fn build_routed(
   settings: &ByokSettings,
   keys: &HashMap<String, String>,
-  route: impl Fn(&ProviderSpec) -> Option<String>,
+  route: impl Fn(&ProviderSpec, &str) -> Option<String>,
 ) -> ByokRegistry {
   let mut providers = Vec::new();
   let mut models = Vec::new();
   let mut fallback_efforts = HashMap::new();
   for spec in catalog::PROVIDERS.iter() {
-    let (Some(key), Some(saved)) = (keys.get(spec.id), settings.providers.get(spec.id)) else {
+    let Some(saved) = settings.providers.get(spec.id) else {
       continue;
     };
+    let key = keys.get(spec.id).map(String::as_str).filter(|_| spec.key != KeyNeed::Unused);
+    if !spec.usable(key.is_some()) {
+      continue;
+    }
     let chosen: Vec<&ByokModelInfo> = saved.models.iter().filter(|m| saved.enabled.contains(&m.id)).collect();
-    let Some(base_url) = route(spec).filter(|_| !chosen.is_empty()) else {
+    let Some(base) = spec.base_url_with(saved.base_url.as_deref()).filter(|_| !chosen.is_empty()) else {
+      continue;
+    };
+    let Some(base_url) = route(spec, &base) else {
       continue;
     };
     providers.push(provider_config(spec, base_url, key));
@@ -207,7 +230,7 @@ mod tests {
       ByokProviderSettings {
         models: vec![model("gemini-3.8-flash"), model("gemma-4-31b-it")],
         enabled: vec!["gemini-3.8-flash".into()],
-        checked_at: None,
+        ..Default::default()
       },
     );
     let mut opus = model("claude-opus-5-5");
@@ -218,7 +241,7 @@ mod tests {
     opus.max_output = 128_000;
     s.providers.insert(
       "anthropic".into(),
-      ByokProviderSettings { models: vec![opus], enabled: vec!["claude-opus-5-5".into()], checked_at: None },
+      ByokProviderSettings { models: vec![opus], enabled: vec!["claude-opus-5-5".into()], ..Default::default() },
     );
     s
   }
@@ -286,6 +309,43 @@ mod tests {
     assert_ne!(build(&settings(), &both).revision, build(&more, &both).revision);
     let shown = format!("{a:?}");
     assert!(!shown.contains("sk-ant-one") && shown.contains("anthropic/claude-opus-5-5"), "{shown}");
+  }
+
+  #[test]
+  fn servers_people_run_register_at_their_address_without_a_key() {
+    let mut s = ByokSettings::default();
+    let gpt_oss = ByokModelInfo { name: "gpt-oss:20b".into(), ..model("gpt-oss:20b") };
+    s.providers.insert(
+      "ollama".into(),
+      ByokProviderSettings { models: vec![gpt_oss], enabled: vec!["gpt-oss:20b".into()], ..Default::default() },
+    );
+    // Not given an address yet: left out.
+    s.providers.insert(
+      "custom".into(),
+      ByokProviderSettings { models: vec![model("qwen3")], enabled: vec!["qwen3".into()], ..Default::default() },
+    );
+    let reg = build(&s, &keys(&[("ollama", "stray")]));
+    let json = serde_json::to_value((&reg.providers, &reg.models)).unwrap();
+    assert_eq!(json[0].as_array().unwrap().len(), 1);
+    let ollama = &json[0][0];
+    assert_eq!((ollama["name"].as_str(), ollama["baseUrl"].as_str()), (Some("ollama"), Some("http://localhost:11434/v1")));
+    assert!(ollama.get("apiKey").is_none(), "Ollama takes no key");
+    assert_eq!(json[1][0]["name"], "gpt-oss:20b (Ollama)");
+    assert_eq!(selection_id("ollama", "gpt-oss:20b"), "ollama/gpt-oss:20b");
+
+    s.providers.get_mut("custom").unwrap().base_url = Some("http://localhost:1234/v1".into());
+    let reg = build(&s, &keys(&[("custom", "lm-key")]));
+    let json = serde_json::to_value(&reg.providers).unwrap();
+    let custom = json.as_array().unwrap().iter().find(|p| p["name"] == "custom").unwrap();
+    assert_eq!((custom["baseUrl"].as_str(), custom["apiKey"].as_str()), (Some("http://localhost:1234/v1"), Some("lm-key")));
+  }
+
+  #[test]
+  fn usage_names_a_model_after_the_provider_it_ran_on() {
+    assert_eq!(split_session_name("gpt-oss:20b (Ollama)"), Some(("gpt-oss:20b", "Ollama")));
+    assert_eq!(split_session_name("qwen3 (OpenAI-compatible server)"), Some(("qwen3", "OpenAI-compatible server")));
+    assert_eq!(split_session_name("Qwen: Qwen3 Coder (your OpenRouter key)"), Some(("Qwen: Qwen3 Coder", "OpenRouter")));
+    assert_eq!(split_session_name("GPT-6 (Preview)"), None);
   }
 
   #[test]

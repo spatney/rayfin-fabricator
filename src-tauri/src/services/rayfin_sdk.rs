@@ -4,11 +4,13 @@
 //! Every project, team apps included, runs on the bundled rayfin-local backend,
 //! which runs the lines of Rayfin SDK releases in `sdk.supported` of the repo's
 //! `rayfin-local.json`, such as 1.36.x and 2.0.x. A new project scaffolds with
-//! the newest stable release of one of them, `sdk.newProjects`, and pins its
-//! `@microsoft/rayfin-*` packages to that minor (`~2.0.0`): the templates'
-//! caret ranges would otherwise pull a newer minor. Updates go to the newest
-//! release rayfin-local runs that isn't newer than Rayfin's latest, and a newer
-//! one is offered too, with a warning (see [`update_targets`]).
+//! the newest stable release of one of them, `sdk.newProjects`, unless New
+//! project picks an older one (for npm registries that don't have the newest
+//! Rayfin packages yet), and pins its `@microsoft/rayfin-*` packages to that
+//! minor (`~2.0.0`): the templates' caret ranges would otherwise pull a newer
+//! minor. Updates go to the newest release rayfin-local runs that isn't newer
+//! than Rayfin's latest, and a newer one is offered too, with a warning (see
+//! [`update_targets`]).
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -45,11 +47,14 @@ struct SdkPin {
   new_projects: String,
   /// The release new projects start on when npm can't list them.
   tested: String,
+  /// The release of each line rayfin-local is tested with: the one a new
+  /// project on that line starts on when npm can't list them.
+  tested_versions: Vec<String>,
 }
 
 static PIN: Lazy<SdkPin> = Lazy::new(|| {
   serde_json::from_str::<PinFile>(include_str!("../../../rayfin-local.json"))
-    .expect("rayfin-local.json declares sdk.supported, sdk.newProjects and sdk.tested")
+    .expect("rayfin-local.json declares sdk.supported, sdk.newProjects, sdk.tested and sdk.testedVersions")
     .sdk
 });
 
@@ -58,17 +63,57 @@ pub fn supported_range() -> &'static str {
   &PIN.supported
 }
 
-fn tested_release() -> Version {
-  Version::parse(&PIN.tested).expect("rayfin-local.json's sdk.tested is a version")
+/// The release of `line` a new project starts on when npm can't list them:
+/// the line's release in `sdk.testedVersions`, else `sdk.tested`.
+fn tested_release(line: Line) -> Version {
+  PIN
+    .tested_versions
+    .iter()
+    .filter_map(|v| Version::parse(v.trim()).ok())
+    .find(|v| (v.major, v.minor) == line)
+    .unwrap_or_else(|| Version::parse(&PIN.tested).expect("rayfin-local.json's sdk.tested is a version"))
 }
+
+/// A line of Rayfin releases: their major and minor version, `(1, 36)` for 1.36.x.
+pub type Line = (u64, u64);
 
 /// The lines of releases rayfin-local runs, oldest first: `(1, 36)` and
 /// `(2, 0)` for `>=1.36.0-0 <1.37.0 || >=2.0.0-0 <2.1.0`.
-fn supported_lines() -> Vec<(u64, u64)> {
+fn supported_lines() -> Vec<Line> {
   let mut lines: Vec<_> = PIN.supported.split("||").filter_map(release_line).collect();
   lines.sort();
   lines.dedup();
   lines
+}
+
+/// The line new projects start on unless New project picks another: `sdk.newProjects`'s.
+fn default_line() -> Line {
+  release_line(&PIN.new_projects).expect("sdk.newProjects names a line")
+}
+
+/// The lines a new project can start on, newest first: the one new projects
+/// start on, then the older ones rayfin-local runs, for npm registries that
+/// don't have the newest Rayfin packages yet.
+fn offered_lines() -> Vec<Line> {
+  let default = default_line();
+  supported_lines().into_iter().rev().filter(|line| *line <= default).collect()
+}
+
+/// A line as New project names it: `1.36` for `(1, 36)`.
+pub fn line_name((major, minor): Line) -> String {
+  format!("{major}.{minor}")
+}
+
+/// The lines a new project can start on, newest first, as New project names
+/// them, such as `["2.0", "1.36"]`. The first is the one it starts on unless
+/// another is picked.
+pub fn new_project_lines() -> Vec<String> {
+  offered_lines().into_iter().map(line_name).collect()
+}
+
+/// The line New project's `name` (`1.36`) stands for, when a new project can start on it.
+pub fn new_project_line(name: &str) -> Option<Line> {
+  release_line(name).filter(|line| offered_lines().contains(line))
 }
 
 /// The Rayfin release a new project starts on.
@@ -76,9 +121,12 @@ fn supported_lines() -> Vec<(u64, u64)> {
 pub struct NewProjectSdk {
   /// What it scaffolds with: `npm create @microsoft/rayfin@<version>`.
   pub version: Version,
-  /// The stable releases of the line new projects start on, oldest first.
-  /// Only `version` when npm couldn't list them.
+  /// The stable releases of the line it starts on, oldest first. Only
+  /// `version` when npm couldn't list them.
   pub line: Vec<Version>,
+  /// The line it was to start on, when npm listed none of that line's
+  /// releases and it starts on another.
+  pub instead_of: Option<Line>,
 }
 
 impl NewProjectSdk {
@@ -96,12 +144,17 @@ impl NewProjectSdk {
   }
 }
 
-/// The release a new project starts on: the newest stable one npm lists within
-/// `sdk.newProjects`, or the tested one when npm can't be reached. The other
-/// lines rayfin-local runs are for apps to update to.
-pub async fn new_project_sdk(cwd: &Path) -> NewProjectSdk {
+/// The release a new project starts on: the newest stable one npm lists of
+/// `line`, or of the line new projects start on when that's `None`. When npm
+/// lists none of that line's releases, as an npm registry without the newest
+/// Rayfin packages might, it's the newest npm lists of the other lines a new
+/// project can start on, newest line first, and `instead_of` says so. When npm
+/// can't be reached, it's the line's tested release. The other lines
+/// rayfin-local runs are for apps to update to.
+pub async fn new_project_sdk(cwd: &Path, line: Option<Line>) -> NewProjectSdk {
   let published = published(SCAFFOLDER, Some(cwd)).await;
-  choose(published.as_ref().map(|p| p.versions.as_slice()), &PIN.new_projects, tested_release())
+  let wanted = line.unwrap_or_else(default_line);
+  choose(published.as_ref().map(|p| p.versions.as_slice()), wanted, &offered_lines(), tested_release(wanted))
 }
 
 /// Where Fabricator's Rayfin updates go.
@@ -164,13 +217,23 @@ fn release_line(version: &str) -> Option<(u64, u64)> {
   Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
 }
 
-/// [`new_project_sdk`] over npm's list of versions (`None` when it couldn't be read),
-/// for new projects' npm range `line`.
-fn choose(published: Option<&[String]>, line: &str, tested: Version) -> NewProjectSdk {
-  let releases = published.map(|list| releases_in(list, line)).unwrap_or_default();
-  match releases.last().cloned() {
-    Some(version) => NewProjectSdk { version, line: releases },
-    None => NewProjectSdk { version: tested.clone(), line: vec![tested] },
+/// [`new_project_sdk`] over npm's list of versions (`None` when it couldn't be
+/// read): the newest stable release of `wanted`, else of the first of `lines`
+/// (newest first) that npm lists one of, else `tested`.
+fn choose(published: Option<&[String]>, wanted: Line, lines: &[Line], tested: Version) -> NewProjectSdk {
+  let stable = published.map(stable_releases).unwrap_or_default();
+  let releases_of = |line: Line| -> Vec<Version> { stable.iter().filter(|v| (v.major, v.minor) == line).cloned().collect() };
+  let found = std::iter::once(wanted)
+    .chain(lines.iter().copied().filter(|line| *line != wanted))
+    .map(|line| (line, releases_of(line)))
+    .find(|(_, releases)| !releases.is_empty());
+  match found {
+    Some((line, releases)) => NewProjectSdk {
+      version: releases.last().cloned().unwrap_or(tested),
+      line: releases,
+      instead_of: (line != wanted).then_some(wanted),
+    },
+    None => NewProjectSdk { version: tested.clone(), line: vec![tested], instead_of: None },
   }
 }
 
@@ -181,15 +244,6 @@ fn stable_releases(published: &[String]) -> Vec<Version> {
   releases.sort();
   releases.dedup();
   releases
-}
-
-/// The stable versions in `published` that the npm range `range` allows,
-/// oldest first.
-fn releases_in(published: &[String], range: &str) -> Vec<Version> {
-  let Some(range) = NpmRange::parse(range) else {
-    return vec![];
-  };
-  stable_releases(published).into_iter().filter(|v| range.matches(v)).collect()
 }
 
 /// What npm lists for a package: every version, and the one its `latest`
@@ -557,11 +611,30 @@ mod tests {
   fn new_projects_start_on_a_supported_line_and_fall_back_to_the_tested_release() {
     let supported = NpmRange::parse(supported_range()).expect("sdk.supported is an npm range");
     let new_projects = NpmRange::parse(&PIN.new_projects).expect("sdk.newProjects is an npm range");
-    let tested = tested_release();
+    let tested = tested_release(default_line());
+    assert_eq!(tested.to_string(), PIN.tested, "sdk.testedVersions has sdk.tested");
     assert!(supported.matches(&tested), "{} isn't in {}", PIN.tested, PIN.supported);
     assert!(new_projects.matches(&tested), "{} isn't in {}", PIN.tested, PIN.new_projects);
-    let line = release_line(&PIN.new_projects).expect("sdk.newProjects names a line");
-    assert!(supported_lines().contains(&line), "{} isn't one of {}", PIN.new_projects, PIN.supported);
+    assert!(supported_lines().contains(&default_line()), "{} isn't one of {}", PIN.new_projects, PIN.supported);
+  }
+
+  #[test]
+  fn new_projects_can_start_on_the_default_line_or_an_older_one_rayfin_local_runs() {
+    let lines = offered_lines();
+    assert_eq!(lines.first(), Some(&default_line()), "the default comes first");
+    assert!(lines.windows(2).all(|pair| pair[0] > pair[1]), "newest first: {lines:?}");
+    for line in &lines {
+      assert!(supported_lines().contains(line), "{line:?}");
+      let tested = tested_release(*line);
+      assert_eq!((tested.major, tested.minor), *line, "sdk.testedVersions has a release of {line:?}");
+      assert_eq!(new_project_line(&line_name(*line)), Some(*line));
+    }
+    assert_eq!(new_project_lines(), lines.iter().copied().map(line_name).collect::<Vec<_>>());
+    let (oldest_major, _) = supported_lines()[0];
+    assert_eq!(new_project_line(&format!("{}.99", oldest_major - 1)), None, "older than every line it runs");
+    let (major, minor) = default_line();
+    assert_eq!(new_project_line(&format!("{major}.{}", minor + 1)), None, "newer than the default");
+    assert_eq!(new_project_line("latest"), None);
   }
 
   #[test]
@@ -570,9 +643,10 @@ mod tests {
       "1.35.1", "1.36.0-alpha.1917", "1.36.0-beta.0", "1.36.0", "1.36.2", "1.36.1", "1.36.3-beta.0",
       "1.37.0-alpha.2111", "1.37.0", "2.0.0", "not-a-version",
     ]);
-    let sdk = choose(Some(&published), ">=1.36.0 <1.37.0", v("1.36.0"));
+    let sdk = choose(Some(&published), (1, 36), &[(2, 0), (1, 36)], v("1.36.0"));
     assert_eq!(sdk.version, v("1.36.2"), "not a newer line rayfin-local runs too");
     assert_eq!(sdk.line, vec![v("1.36.0"), v("1.36.1"), v("1.36.2")]);
+    assert_eq!(sdk.instead_of, None);
     assert_eq!(sdk.pin(), "~1.36.0");
     let npm = "{\n  \"versions\": [\"1.36.1\", \"2.0.0\"],\n  \"dist-tags\": {\"latest\": \"1.36.1\", \"preview\": \"2.0.0\"}\n}\n";
     assert_eq!(
@@ -588,12 +662,33 @@ mod tests {
   }
 
   #[test]
+  fn a_registry_without_the_line_starts_the_project_on_the_newest_line_it_has() {
+    let lines = [(2, 0), (1, 36)];
+    // A registry that hasn't got Rayfin 2.0 yet, but a preview of it.
+    let behind = list(&["1.36.0", "1.36.2", "2.0.0-beta.1"]);
+    let sdk = choose(Some(&behind), (2, 0), &lines, v("2.0.0"));
+    assert_eq!((sdk.version.clone(), sdk.instead_of), (v("1.36.2"), Some((2, 0))));
+    assert_eq!(sdk.pin(), "~1.36.0");
+    // An older line that it has is what it gets.
+    let current = list(&["1.36.2", "2.0.0", "2.0.1"]);
+    assert_eq!(choose(Some(&current), (1, 36), &lines, v("1.36.2")).version, v("1.36.2"));
+    assert_eq!(
+      choose(Some(&current), (2, 0), &lines, v("2.0.0")),
+      NewProjectSdk { version: v("2.0.1"), line: vec![v("2.0.0"), v("2.0.1")], instead_of: None }
+    );
+    // An older line that it hasn't got starts on the newest line it has.
+    let sdk = choose(Some(&list(&["2.0.0"])), (1, 36), &lines, v("1.36.2"));
+    assert_eq!((sdk.version, sdk.instead_of), (v("2.0.0"), Some((1, 36))));
+  }
+
+  #[test]
   fn without_npms_list_new_projects_use_the_tested_release() {
     let tested = v("1.36.2");
-    let offline = choose(None, ">=1.36.0 <1.37.0", tested.clone());
-    assert_eq!(offline, NewProjectSdk { version: tested.clone(), line: vec![tested.clone()] });
-    // A registry that lists nothing in range (a stale mirror) doesn't help either.
-    assert_eq!(choose(Some(&list(&["1.35.1", "1.37.0"])), ">=1.36.0 <1.37.0", tested.clone()).version, tested);
+    let lines = [(2, 0), (1, 36)];
+    let offline = choose(None, (1, 36), &lines, tested.clone());
+    assert_eq!(offline, NewProjectSdk { version: tested.clone(), line: vec![tested.clone()], instead_of: None });
+    // A registry that lists none of their releases (a stale mirror) doesn't help either.
+    assert_eq!(choose(Some(&list(&["1.35.1", "1.37.0"])), (1, 36), &lines, tested.clone()).version, tested);
   }
 
   #[test]
@@ -619,10 +714,10 @@ mod tests {
     assert_eq!(targets(&npm(&releases, None), LINES), to(None, None));
     assert_eq!(targets(&npm(&[], Some("1.36.2")), LINES), to(None, None));
     // With the pin file's range.
-    let tested = tested_release().to_string();
+    let tested = tested_release(default_line()).to_string();
     let published = npm(&["0.1.0", tested.as_str()], Some(tested.as_str()));
-    assert_eq!(update_targets(&published).recommended, Some(tested_release()));
-    assert!(runs_locally(&tested_release()) && !runs_locally(&v("999.0.0")));
+    assert_eq!(update_targets(&published).recommended, Some(tested_release(default_line())));
+    assert!(runs_locally(&tested_release(default_line())) && !runs_locally(&v("999.0.0")));
   }
 
   #[test]
@@ -635,7 +730,7 @@ mod tests {
       assert!(!newer_line(not_newer, &lines), "{not_newer}");
     }
     // The pin file's lines.
-    let tested = tested_release();
+    let tested = tested_release(default_line());
     assert!(is_newer_than_supported(&format!("{}.{}.0-alpha.1", tested.major, tested.minor + 1)));
     assert!(!is_newer_than_supported(&tested.to_string()));
     let (oldest_major, _) = supported_lines()[0];
@@ -663,7 +758,11 @@ mod tests {
 
   #[test]
   fn community_templates_must_resolve_within_the_new_project_line() {
-    let sdk = NewProjectSdk { version: v("1.36.2"), line: vec![v("1.36.0"), v("1.36.1"), v("1.36.2")] };
+    let sdk = NewProjectSdk {
+      version: v("1.36.2"),
+      line: vec![v("1.36.0"), v("1.36.1"), v("1.36.2")],
+      instead_of: None,
+    };
     for spec in ["^1.33.0", "^1.36.0-alpha", "~1.36.0", "1.36.0", ">=1.30", "*", "", "latest"] {
       assert!(sdk.admits(spec), "{spec}");
     }
@@ -726,7 +825,7 @@ mod tests {
       [dir.clone(), dir.join("packages").join("frontend"), functions.clone()].map(|d| d.join("package.json"))
     );
 
-    let sdk = NewProjectSdk { version: v("1.36.2"), line: vec![v("1.36.2")] };
+    let sdk = NewProjectSdk { version: v("1.36.2"), line: vec![v("1.36.2")], instead_of: None };
     assert_eq!(pin_project(&dir, &sdk, false), Ok(Pinning::Pinned { range: "~1.36.0".into(), files: 3 }));
     assert!(std::fs::read_to_string(functions.join("package.json")).unwrap().contains("\"~1.36.0\""));
 

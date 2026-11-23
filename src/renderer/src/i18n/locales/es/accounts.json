@@ -25,6 +25,7 @@
     "signInHere": "Inicia sesión en GitHub Copilot aquí y vuelve a enviar tu mensaje.",
     "signingIn": "Iniciando sesión en Copilot…",
     "signIn": "Iniciar sesión en Copilot",
+    "ownModels": "Usar tus propios modelos",
     "help": "Ayuda para iniciar sesión",
     "inBrowser": "Completa el inicio de sesión en el explorador o sigue las instrucciones del código de dispositivo que aparecen abajo."
   },
@@ -45,8 +46,6 @@
     "notSignedIn": "No has iniciado sesión en Fabric",
     "refreshHint": "Al actualizar, se borran las credenciales obsoletas y se vuelve a iniciar sesión.",
     "fabricAccount": "Cuenta de Fabric",
-    "manageTitle": "Ver y cambiar todas las cuentas que usa Fabricator",
-    "manage": "Administrar cuentas…",
     "settingsTitle": "Tema, tamaño del texto, experimentos y más",
     "settings": "Configuración"
   },

@@ -43,8 +43,8 @@
     "missing": "Nicht mehr verfügbar. Wähle ein anderes Modell aus.",
     "runsOnKey": "Läuft mit deinem {{provider}}-API-Schlüssel",
     "fast": "Schnell",
-    "yourKeys": "Deine API-Schlüssel",
-    "addKeyModels": "Modelle mit deinen API-Schlüsseln hinzufügen…",
+    "yourKeys": "Deine Modelle",
+    "addKeyModels": "Eigene Modelle hinzufügen…",
     "more": "Weitere Modelle",
     "loading": "Modelle werden geladen…",
     "loadFailed": "Die Modelle konnten nicht geladen werden. Schließe dieses Menü, und öffne es erneut, um es noch einmal zu versuchen.",
@@ -56,7 +56,11 @@
     "busy": "Das Modell kann nicht geändert werden, während der Assistent arbeitet",
     "pill": "{{label}}: {{choice}}",
     "pillOnKey": "{{label}}: {{choice}} – mit deinem {{provider}}-API-Schlüssel",
-    "manageKeys": "API-Schlüssel verwalten…"
+    "manageKeys": "Modellanbieter verwalten…",
+    "runsOnServer": "Läuft auf {{provider}}",
+    "pillOnServer": "{{label}}: {{choice}} – auf {{provider}}",
+    "yourServer": "Dein Server",
+    "ownOnly": "Du bist nicht bei GitHub Copilot angemeldet, daher laufen Chats mit deinen eigenen Modellen."
   },
   "providers": {
     "state": {
@@ -64,13 +68,17 @@
       "off": "Kein Schlüssel",
       "error": "Aktion erforderlich"
     },
+    "serverState": {
+      "ok": "Verbunden",
+      "off": "Nicht eingerichtet"
+    },
     "errors": {
       "read": "Deine Modellanbieter konnten nicht gelesen werden.",
       "generic": "Das hat nicht funktioniert. Versuche es erneut.",
       "saveModels": "Deine Modellauswahl konnte nicht gespeichert werden."
     },
     "title": "Modellanbieter",
-    "sub": "Verwende Modelle dieser Anbieter mit deinen eigenen API-Schlüsseln im Chat von „Erstellen“, im Berater und in „Design“. Der Anbieter stellt sie dir in Rechnung. Copilot steuert weiterhin die Unterhaltung, bleib also bei GitHub Copilot angemeldet.",
+    "sub": "Verwende weitere Modelle im Chat von „Erstellen“, im Berater und in „Design“: von diesen Anbietern mit deinen eigenen API-Schlüsseln, die sie dir in Rechnung stellen, oder von Ollama und anderen Servern, die du selbst betreibst. GitHub Copilot brauchst du dafür nicht.",
     "unsupported": "Fabricator kann API-Schlüssel auf diesem Betriebssystem noch nicht sicher aufbewahren.",
     "purpose": "{{description}}, abgerechnet über dein {{name}}-Konto.",
     "addKeyLabel": "Deinen {{name}}-API-Schlüssel hinzufügen",
@@ -96,7 +104,27 @@
     "keyHint": "Fabricator prüft ihn bei {{name}} und bewahrt ihn dann in {{store}} auf diesem Computer auf.",
     "getKey": "Schlüssel abrufen",
     "replaceKey": "Schlüssel ersetzen",
-    "saveKey": "Schlüssel speichern"
+    "saveKey": "Schlüssel speichern",
+    "purposeLocal": "{{description}}. Sie laufen auf deiner eigenen Hardware, ohne Kosten pro Nutzung.",
+    "purposeServer": "{{description}}.",
+    "connect": "Verbinden",
+    "connectLabel": "{{name}} verbinden",
+    "addressLabel": "Adresse von {{name}}",
+    "optionalKey": "API-Schlüssel (optional)",
+    "ollamaHint": "Die Adresse von Ollama auf diesem Computer ist http://localhost:11434. Fabricator listet die heruntergeladenen Modelle auf, die Tools aufrufen können.",
+    "ollamaContext": "Der Agent von Fabricator benötigt eine Kontextlänge von mindestens 64k. Stelle in den Einstellungen von Ollama die Kontextlänge auf 64k oder mehr ein.",
+    "serverHint": "Die Adresse der OpenAI-kompatiblen API des Servers, z. B. http://localhost:1234/v1 für LM Studio. Ein hinzugefügter Schlüssel wird in {{store}} aufbewahrt.",
+    "serverHintAgain": "Die Adresse der OpenAI-kompatiblen API des Servers. Gib seinen API-Schlüssel erneut ein, falls er einen benötigt. Er wird in {{store}} aufbewahrt.",
+    "getOllama": "Ollama herunterladen",
+    "change": "Ändern",
+    "removeServerLabel": "{{name}} entfernen",
+    "confirmRemoveServer": "{{name}} und seine Modelle entfernen?",
+    "keySavedIn": "API-Schlüssel gespeichert in {{store}}",
+    "noKeyUsed": "Kein API-Schlüssel",
+    "checkServerTitle": "{{name}} erneut prüfen und seine Modelle aktualisieren",
+    "filterLabel": "Ein Modell von {{name}} suchen",
+    "filterPlaceholder": "Modell suchen",
+    "noMatches": "Keine Modelle gefunden."
   },
   "chatDefaults": {
     "title": "Chat-Standards",

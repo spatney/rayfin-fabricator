@@ -676,13 +676,19 @@ pub(crate) async fn one_shot(
   mut on_event: impl FnMut(&str, &Value) -> bool,
 ) -> Result<DrainEnd, String> {
   // A provider's model must be able to run, and the session needs the registry
-  // to reach it; otherwise the runtime would quietly use a Copilot model.
-  let provider_model = run.choice.model.clone().filter(|m| byok::is_provider_selection(m));
+  // to reach it; otherwise the runtime would quietly use a Copilot model. One
+  // that can't run anymore gives way to the user's default while Copilot is
+  // signed out, as the Advisor's picker shows (see `resolve_choice`).
+  let choice = match run.choice.model.as_deref() {
+    Some(model) if byok::is_provider_selection(model) => run.copilot.resolve_choice(run.choice.clone()).await?,
+    _ => run.choice.clone(),
+  };
+  let provider_model = choice.model.clone().filter(|m| byok::is_provider_selection(m));
   if let Some(model) = &provider_model {
     run.byok.ensure_ready(model)?;
     opts.byok = run.byok.session_registry();
   }
-  let session = run.copilot.transient_session_with(run.root, run.choice.clone(), opts).await?;
+  let session = run.copilot.transient_session_with(run.root, choice, opts).await?;
   let deadline = Instant::now() + Duration::from_millis(timeout_ms);
   // A provider's model can stop with an empty response (no reply, no tool
   // call): ask it to carry on, within the same time budget. Its errors read plainly.

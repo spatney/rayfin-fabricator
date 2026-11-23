@@ -47,7 +47,9 @@ fn cached_identity() -> Option<TelemetryIdentity> {
 }
 
 pub async fn get_copilot_auth(state: &AppState) -> CopilotAuthStatus {
-  state.copilot.auth_status().await
+  let mut status = state.copilot.auth_status().await;
+  status.own_models = state.byok.has_ready_model();
+  status
 }
 
 static NOT_SIGNED_IN_RE: Lazy<Regex> =

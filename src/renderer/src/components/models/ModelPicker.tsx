@@ -12,6 +12,9 @@ import type { ContextTier, ContextTierOption, CopilotModel, ReasoningEffort } fr
 import {
   defaultEffort,
   isFastModel,
+  isCustomServer,
+  isServerProvider,
+  standInFor,
   startingEffort,
   useAutoTiers,
   useCopilotModels
@@ -69,7 +72,7 @@ function missingName(id: string): string {
  * and the rest of Copilot's under More models. Loads the models when it needs them.
  */
 export function ModelPicker({
-  value,
+  value: requested,
   disabled,
   onChange,
   tiers = false,
@@ -115,18 +118,31 @@ export function ModelPicker({
   const flyRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
+  // Loaded up front: without Copilot, the pill names the model a chat on Auto runs on.
+  const { models, loading } = useCopilotModels(true)
+  const copilot = useMemo(() => models.filter((m) => !m.byok), [models])
+  const keyModels = useMemo(() => models.filter((m) => m.byok), [models])
+  /** Copilot isn't signed in: only the user's own models run. */
+  const ownOnly = !loading && keyModels.length > 0 && copilot.length === 0
+  // Then one of them stands in for Auto or a Copilot model (the backend runs it).
+  const standIn = useMemo(
+    () => (loading ? undefined : standInFor(models, requested.model)),
+    [loading, models, requested.model]
+  )
+  /** The selection as it runs. */
+  const value: ModelSelection = standIn
+    ? { model: standIn.id, effort: '', autoTier: '', contextTier: '' }
+    : requested
+
   const isAuto = !value.model
-  const { models, loading } = useCopilotModels(open || !isAuto)
   // The pill names Copilot Fusion and its level, so they're needed before the menu opens.
-  const autoTiers = useAutoTiers(tiers && (open || isAuto))
+  const autoTiers = useAutoTiers(tiers && !ownOnly && (open || isAuto))
   // A flyout reaches past the chat column, over the native preview; a menu
   // opening down from a toolbar covers it too.
   useSuppressPreview(open && (flyout !== null || placement === 'down'))
 
   const selected = useMemo(() => models.find((m) => m.id === value.model), [models, value.model])
   const missing = !isAuto && !loading && models.length > 0 && !selected
-  const copilot = useMemo(() => models.filter((m) => !m.byok), [models])
-  const keyModels = useMemo(() => models.filter((m) => m.byok), [models])
   const featured = copilot.slice(0, FEATURED)
   const more = copilot.slice(FEATURED)
 
@@ -341,6 +357,7 @@ export function ModelPicker({
   const modelRow = (m: CopilotModel): JSX.Element => {
     const on = value.model === m.id
     const blocked = Boolean(m.byok && !m.byok.ready)
+    const server = isServerProvider(m.byok?.provider)
     return (
       <button
         key={m.id}
@@ -353,7 +370,9 @@ export function ModelPicker({
           blocked
             ? m.byok?.note
             : m.byok
-              ? t('picker.runsOnKey', { provider: m.byok.providerName })
+              ? server
+                ? t('picker.runsOnServer', { provider: m.byok.providerName })
+                : t('picker.runsOnKey', { provider: m.byok.providerName })
               : undefined
         }
         onClick={() => pickModel(m)}
@@ -365,8 +384,8 @@ export function ModelPicker({
         </span>
         {m.byok ? (
           <span className="mp-tag">
-            <Codicon name="key" />
-            {m.byok.providerName}
+            <Codicon name={server ? 'server' : 'key'} />
+            {isCustomServer(m.byok.provider) ? t('picker.yourServer') : m.byok.providerName}
           </span>
         ) : (
           isFastModel(m) && <span className="mp-badge">{t('picker.fast')}</span>
@@ -605,11 +624,16 @@ export function ModelPicker({
           disabled
             ? t('picker.busy')
             : selected?.byok
-              ? t('picker.pillOnKey', {
-                  label,
-                  choice: pillText,
-                  provider: selected.byok.providerName
-                })
+              ? t(
+                  isServerProvider(selected.byok.provider)
+                    ? 'picker.pillOnServer'
+                    : 'picker.pillOnKey',
+                  {
+                    label,
+                    choice: pillText,
+                    provider: selected.byok.providerName
+                  }
+                )
               : t('picker.pill', { label, choice: pillText })
         }
         onClick={() => (open ? closeMenu(false) : openMenu())}
@@ -631,7 +655,12 @@ export function ModelPicker({
             pillText
           )}
         </span>
-        {selected?.byok && <Codicon name="key" className="mp-pill-key" />}
+        {selected?.byok && (
+          <Codicon
+            name={isServerProvider(selected.byok.provider) ? 'server' : 'key'}
+            className="mp-pill-key"
+          />
+        )}
         <Codicon name="chevron-down" className="composer-pill-caret" />
       </button>
       {open &&
@@ -648,27 +677,31 @@ export function ModelPicker({
               ref={mainRef}
               onKeyDown={onMainKey}
             >
-              <button
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked={isAuto}
-                className="mp-item mp-auto"
-                disabled={isAuto && models.length === 0 && loading}
-                onClick={toggleAuto}
-              >
-                <span className="mp-item-text">
-                  <span className="mp-item-label">{autoName}</span>
-                  <span className="mp-item-desc">
-                    {autoHint ?? (fusion ? t('picker.autoHintFusion') : t('picker.autoHint'))}
-                  </span>
-                </span>
-                <span
-                  className={`switch switch--sm${isAuto ? ' switch--on' : ''}`}
-                  aria-hidden="true"
+              {ownOnly ? (
+                <p className="mp-note">{t('picker.ownOnly')}</p>
+              ) : (
+                <button
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={isAuto}
+                  className="mp-item mp-auto"
+                  disabled={isAuto && models.length === 0 && loading}
+                  onClick={toggleAuto}
                 >
-                  <span className="switch-knob" />
-                </span>
-              </button>
+                  <span className="mp-item-text">
+                    <span className="mp-item-label">{autoName}</span>
+                    <span className="mp-item-desc">
+                      {autoHint ?? (fusion ? t('picker.autoHintFusion') : t('picker.autoHint'))}
+                    </span>
+                  </span>
+                  <span
+                    className={`switch switch--sm${isAuto ? ' switch--on' : ''}`}
+                    aria-hidden="true"
+                  >
+                    <span className="switch-knob" />
+                  </span>
+                </button>
+              )}
               {isAuto && tiers && autoTiers && (
                 <div className="mp-group">{subRow('tier', tiersLabel, activeTierName)}</div>
               )}

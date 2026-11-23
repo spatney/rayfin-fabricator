@@ -14,6 +14,7 @@ import { applyLanguagePreference, translator } from './i18n'
 import { useUpdates } from './update'
 import { useToast } from './toast'
 import { authErrorMessage } from './authErrors'
+import { useCopilotModelsRevision } from './copilotModels'
 import { reportEvent } from './errorReport'
 import {
   CHECKING_AUTH,
@@ -72,14 +73,25 @@ const SETUP_PROVIDERS: AuthProvider[] = ['copilot', 'az']
  */
 let startupRecorded = false
 
-function recordStartup(ready: boolean, doctor: DoctorReport | null): void {
+/** What runs the agent once setup has passed, for the journal. */
+function engineNote(auth: Partial<AuthStatus> | null | undefined): string {
+  return auth?.copilot?.signedIn
+    ? 'GitHub Copilot is connected'
+    : "the user's own models are set up (not signed in to GitHub Copilot)"
+}
+
+function recordStartup(
+  ready: boolean,
+  doctor: DoctorReport | null,
+  auth?: Partial<AuthStatus> | null
+): void {
   if (startupRecorded) return
   startupRecorded = true
   if (ready) {
     reportEvent(
       'app',
       'app.ready',
-      'Fabricator started. All required tools are ready and GitHub Copilot is connected.'
+      `Fabricator started. All required tools are ready and ${engineNote(auth)}.`
     )
     return
   }
@@ -207,7 +219,11 @@ function App(): JSX.Element {
       } else {
         applyPhase('setup')
       }
-      recordStartup(ready, d.status === 'fulfilled' ? d.value : null)
+      recordStartup(
+        ready,
+        d.status === 'fulfilled' ? d.value : null,
+        a.status === 'fulfilled' ? a.value : null
+      )
       setRefreshing(false)
     },
     [applyPhase, checkAuth]
@@ -239,7 +255,8 @@ function App(): JSX.Element {
     // "everything was fine" marker in the journal.
     recordStartup(
       accounts.status === 'fulfilled' && setupReady(doctorReport, accounts.value),
-      doctorReport
+      doctorReport,
+      accounts.status === 'fulfilled' ? accounts.value : null
     )
   }, [checkAuth])
 
@@ -268,7 +285,7 @@ function App(): JSX.Element {
     reportEvent(
       'setup',
       'setup.completed',
-      `Setup finished: all ${doctor.tools.filter((t) => t.required).length} required tools are ready and GitHub Copilot is connected.`
+      `Setup finished: all ${doctor.tools.filter((t) => t.required).length} required tools are ready and ${engineNote(auth)}.`
     )
     setSetupDone(true)
     setPhase('ready')
@@ -321,6 +338,31 @@ function App(): JSX.Element {
       if (phaseTimerRef.current !== null) clearTimeout(phaseTimerRef.current)
     }
   }, [refresh, verifyInBackground, returning, toast])
+
+  // Adding or removing models of the user's own (Accounts → Model providers)
+  // decides whether Fabricator works without a Copilot sign-in: read that again
+  // whenever the models change, without checking the account itself.
+  const modelsRevision = useCopilotModelsRevision()
+  useEffect(() => {
+    if (modelsRevision === 0) return
+    let alive = true
+    Promise.resolve()
+      .then(() => window.api.byok.status())
+      .then(
+        ({ ownModels }) => {
+          if (!alive) return
+          setAuth((prev) =>
+            prev && Boolean(prev.copilot.ownModels) !== ownModels
+              ? { ...prev, copilot: { ...prev.copilot, ownModels } }
+              : prev
+          )
+        },
+        (reason) => console.warn('Could not read your own models', reason)
+      )
+    return () => {
+      alive = false
+    }
+  }, [modelsRevision])
 
   // Apply the theme app-wide (covers splash + setup, not just the workbench)
   // and follow the OS when set to 'system'.

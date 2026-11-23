@@ -3,7 +3,7 @@ title: "Set up and sign in"
 description: "Use Fabricator setup the first time you open it: connect GitHub Copilot, install the tools, optionally sign in to Azure, and enter the app."
 ---
 
-Setup prepares your computer for Fabricator the first time you open it. It has three steps: connect GitHub Copilot, install the tools, and sign in to Azure. The first two are required. Signing in to Azure is optional, and you can do it later. Work down the page, then choose **Enter Fabricator**. If the required steps are already done, Fabricator skips setup and opens straight to Home. After that, Fabricator opens on your work after a short welcome.
+Setup prepares your computer for Fabricator the first time you open it. It has three steps: connect GitHub Copilot (or use models of your own instead), install the tools, and sign in to Azure. The first two are required. Signing in to Azure is optional, and you can do it later. Work down the page, then choose **Enter Fabricator**. If the required steps are already done, Fabricator skips setup and opens straight to Home. After that, Fabricator opens on your work after a short welcome.
 
 ![The setup screen with all three steps complete: GitHub Copilot connected, the tools installed and the optional Azure sign-in done, above a You're all set block offering Enter Fabricator.](/screenshots/setup.webp)
 
@@ -16,6 +16,16 @@ Connecting Copilot also turns on **Help**, the assistant in the bar at the botto
 For a standard GitHub account, leave **GitHub host** as `github.com`. For GitHub Enterprise Cloud with data residency, enter your Enterprise Cloud host, such as `company.ghe.com` or `https://company.ghe.com`. The field accepts `github.com` or a `.ghe.com` Enterprise Cloud host. GitHub Enterprise Server is not supported by this sign-in flow.
 
 Choose **Sign in**, then finish the browser or device-code instructions shown by Fabricator.
+
+### Use your own models instead
+
+You don't need GitHub Copilot if you have models of your own: models from OpenRouter, Ollama on this computer, your own Anthropic, OpenAI, xAI or Google API key, or another server with an OpenAI-compatible API.
+
+1. In step 1, select **Use your own models instead**.
+2. Under **Model providers**, add a key or connect a server. See [Use your own models](/docs/build/your-own-api-keys).
+3. Select **Done**.
+
+Step 1 then says **Using your own models**. Chat, the Advisor and **Help** run on your own models. You can sign in to GitHub Copilot later from **Accounts**.
 
 ## Step 2: Install the tools
 
@@ -57,7 +67,7 @@ If the sign-in fails, setup says why, but you can still enter Fabricator.
 
 ## What each account is for
 
-- GitHub Copilot writes code, edits files, answers chat prompts, and powers **Help**. It's the only account setup requires.
+- GitHub Copilot writes code, edits files, answers chat prompts, and powers **Help**. It's the only account setup requires, unless you use models of your own instead.
 - The Azure CLI, when you sign in to it, finds people to share with, connects Fabric data, reads the Power BI reports you migrate, and sets up team workspaces. Apps that run on this computer read Fabric data with it too.
 - Fabric sign-in is separate. Fabricator asks you to **Sign in to Fabric** when it needs the project's Rayfin CLI to list workspaces, publish, share, or refresh Fabric credentials. Your apps run on this computer without it, so that's usually when you first publish an app. Until you have a project, **Sign in to Fabric** is unavailable.
 
@@ -73,7 +83,7 @@ After signing out, installing a tool, or changing account state, choose **Re-che
 
 A step you have finished collapses to a single line with a check mark. Select **Details** on any of them to open it again. Step 3 stays open until you sign in to Azure.
 
-When the required tools are installed and GitHub Copilot is connected, a **You're all set** block appears at the end of the page with **Enter Fabricator**. If you skipped Azure, it says "Your tools are installed and GitHub Copilot is connected. Sign in to Azure whenever you need it." Choose **Enter Fabricator** to open Home.
+When the required tools are installed and GitHub Copilot is connected, a **You're all set** block appears at the end of the page with **Enter Fabricator**. If you skipped Azure, it says "Your tools are installed and GitHub Copilot is connected. Sign in to Azure whenever you need it." If you use your own models instead of Copilot, it says "Your tools are installed and your own models are set up." Choose **Enter Fabricator** to open Home.
 
 ## Later launches
 

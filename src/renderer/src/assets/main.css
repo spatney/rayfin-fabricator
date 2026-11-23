@@ -1368,13 +1368,6 @@ code {
   height: 15px;
 }
 
-/* Between the account's actions and the app's (Settings). */
-.account-sep {
-  height: 1px;
-  margin: 4px 2px;
-  background: var(--border);
-}
-
 /* Splash: the startup screen (SplashScreen.tsx). One lockup in every form: Ray,
    the "Fabricator" wordmark building itself, and a plain status line under it.
    Flat like the rest of Ray: a bordered bubble, hairline ripples, solid dots,
@@ -2288,6 +2281,19 @@ code {
   margin-top: 3px;
   color: var(--ok);
   stroke-width: 2.6;
+}
+
+/* Models of the user's own, instead of a Copilot sign-in. */
+.setup-own-models {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 10px 0 0 32px;
+}
+
+.setup-own-models-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 /* ----------------------------- finish ----------------------------- */

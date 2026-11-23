@@ -11,6 +11,7 @@ import type {
   AppSettings,
   AuthStatus,
   ByokModelInfo,
+  ByokProviderStatus,
   ByokStatus,
   ChatPlanArtifact,
   CopilotModel,
@@ -233,18 +234,43 @@ const anthropicModel = (id: string, name: string, recommended: boolean, created:
   created
 })
 
-/** The sample user's providers: an Anthropic key saved, no OpenAI, xAI or Google key yet. */
+/** A provider with nothing set up yet, as Accounts lists it. */
+const keyProvider = (
+  id: string,
+  name: string,
+  description: string,
+  keyUrl: string,
+  keyPrefix: string
+): ByokProviderStatus => ({
+  id,
+  name,
+  description,
+  keyUrl,
+  keyPrefix,
+  endpoint: 'fixed',
+  keyNeed: 'required',
+  hasKey: false,
+  connected: false,
+  models: [],
+  enabled: []
+})
+
+/** The sample user's providers: an Anthropic key saved, nothing else set up yet. */
 const sampleByok: ByokStatus = {
   supported: true,
   store: 'Windows Credential Manager',
+  ownModels: true,
   providers: [
     {
-      id: 'anthropic',
-      name: 'Anthropic',
-      description: 'Claude models',
-      keyUrl: 'https://platform.claude.com/settings/keys',
-      keyPrefix: 'sk-ant-',
+      ...keyProvider(
+        'anthropic',
+        'Anthropic',
+        'Claude models',
+        'https://platform.claude.com/settings/keys',
+        'sk-ant-'
+      ),
       hasKey: true,
+      connected: true,
       models: [
         anthropicModel('claude-opus-5-5', 'Claude Opus 5.5', true, 5),
         anthropicModel('claude-sonnet-5-5', 'Claude Sonnet 5.5', true, 4),
@@ -255,39 +281,53 @@ const sampleByok: ByokStatus = {
       enabled: ['claude-opus-5-5', 'claude-sonnet-5-5'],
       checkedAt: new Date().toISOString()
     },
+    keyProvider(
+      'openai',
+      'OpenAI',
+      'GPT models',
+      'https://platform.openai.com/settings/organization/api-keys',
+      'sk-'
+    ),
+    keyProvider('xai', 'xAI', 'Grok models', 'https://console.x.ai/team/default/api-keys', 'xai-'),
+    keyProvider(
+      'google',
+      'Google',
+      'Gemini and Gemma models',
+      'https://aistudio.google.com/apikey',
+      'AIza'
+    ),
+    keyProvider(
+      'openrouter',
+      'OpenRouter',
+      'Models from many makers on one key',
+      'https://openrouter.ai/settings/keys',
+      'sk-or-'
+    ),
     {
-      id: 'openai',
-      name: 'OpenAI',
-      description: 'GPT models',
-      keyUrl: 'https://platform.openai.com/settings/organization/api-keys',
-      keyPrefix: 'sk-',
-      hasKey: false,
-      models: [],
-      enabled: []
+      ...keyProvider(
+        'ollama',
+        'Ollama',
+        'Open models that run on this computer',
+        'https://ollama.com/download',
+        ''
+      ),
+      endpoint: 'local',
+      keyNeed: 'unused',
+      defaultBaseUrl: 'http://localhost:11434/v1'
     },
     {
-      id: 'xai',
-      name: 'xAI',
-      description: 'Grok models',
-      keyUrl: 'https://console.x.ai/team/default/api-keys',
-      keyPrefix: 'xai-',
-      hasKey: false,
-      models: [],
-      enabled: []
-    },
-    {
-      id: 'google',
-      name: 'Google',
-      description: 'Gemini and Gemma models',
-      keyUrl: 'https://aistudio.google.com/apikey',
-      keyPrefix: 'AIza',
-      hasKey: false,
-      models: [],
-      enabled: []
+      ...keyProvider(
+        'custom',
+        'OpenAI-compatible server',
+        'Models from LM Studio, vLLM, LiteLLM or another server with an OpenAI-compatible API',
+        '',
+        ''
+      ),
+      endpoint: 'custom',
+      keyNeed: 'optional'
     }
   ]
 }
-
 const tool = (id: string, name: string, version: string): ToolStatus => ({
   id: id as ToolStatus['id'],
   name,
@@ -2079,7 +2119,6 @@ function Deployments(): JSX.Element {
               onSignIn={noop}
               onSignOut={noop}
               onRefresh={noop}
-              onManageAccounts={noop}
               onOpenSettings={noop}
             />
           </div>
@@ -2091,8 +2130,8 @@ function Deployments(): JSX.Element {
 
 /**
  * The account menu, open from the avatar beside the sample app's deployment control: the
- * signed-in Fabric account, its actions and Settings. Opening it focuses its first item, which
- * a mouse click wouldn't show, so the shot hides the focus styling.
+ * signed-in Fabric account, Settings and the account's actions. Opening it focuses its first item,
+ * which a mouse click wouldn't show, so the shot hides the focus styling.
  */
 function AccountMenuShot(): JSX.Element {
   const app: StudioProject = { ...expensesApp, deploymentNames: { [APPS_WS]: 'Development' } }
@@ -2127,7 +2166,6 @@ function AccountMenuShot(): JSX.Element {
                 onSignIn={noop}
                 onSignOut={noop}
                 onRefresh={noop}
-                onManageAccounts={noop}
                 onOpenSettings={noop}
               />
             </Open>

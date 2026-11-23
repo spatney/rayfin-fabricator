@@ -384,6 +384,56 @@ describe('SetupScreen sign-in providers', () => {
   })
 })
 
+describe('models of your own instead of Copilot', () => {
+  it('lets models of your own stand in for Copilot, and offers them from the Copilot step', async () => {
+    const byok = {
+      status: vi.fn(async () => ({
+        supported: true,
+        store: 'Windows Credential Manager',
+        providers: [],
+        ownModels: false
+      }))
+    }
+    ;(window.api as unknown as { byok: unknown }).byok = byok
+    const enter = vi.fn()
+    const refresh = vi.fn()
+    const { rerender } = render(
+      <SetupScreen
+        doctor={doctor}
+        auth={auth}
+        refreshing={false}
+        onRefresh={refresh}
+        onEnter={enter}
+      />
+    )
+    expect(
+      (screen.getByRole('button', { name: /Enter Fabricator/ }) as HTMLButtonElement).disabled
+    ).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Use your own models instead' }))
+    expect(await screen.findByRole('heading', { name: 'Model providers' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    expect(refresh).toHaveBeenCalledOnce()
+
+    rerender(
+      <SetupScreen
+        doctor={doctor}
+        auth={{ ...auth, copilot: { signedIn: false, ownModels: true } }}
+        refreshing={false}
+        onRefresh={refresh}
+        onEnter={enter}
+      />
+    )
+    expect(screen.getByText('Using your own models')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'Your tools are installed and your own models are set up. Sign in to Azure whenever you need it.'
+      )
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Enter Fabricator/ }))
+    expect(enter).toHaveBeenCalledOnce()
+  })
+})
+
 describe('the optional Azure step', () => {
   const copilotOnly: AuthStatus = { ...auth, copilot: { signedIn: true, user: 'octocat' } }
 

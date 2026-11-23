@@ -66,7 +66,11 @@
     "title": "GitHub Copilot verbinden",
     "note": "Die KI, die deine App erstellt – und deine Fragen beantwortet, während du den Rest einrichtest",
     "subtitle": "Melde dich an, um mit dem Erstellen zu beginnen und die Hilfe freizuschalten",
-    "helpReady": "Die Hilfe ist jetzt verfügbar. Wenn unten etwas schiefgeht, wähle <strong>Hilfe</strong> aus, und sie liest nach, was passiert ist."
+    "helpReady": "Die Hilfe ist jetzt verfügbar. Wenn unten etwas schiefgeht, wähle <strong>Hilfe</strong> aus, und sie liest nach, was passiert ist.",
+    "ownModels": "Stattdessen eigene Modelle verwenden",
+    "ownModelsHint": "Kein GitHub Copilot? Füge Modelle von OpenRouter, Ollama oder mit deinen eigenen API-Schlüsseln hinzu, und Fabricator erstellt damit.",
+    "ownModelsSummary": "Eigene Modelle werden verwendet",
+    "ownModelsDone": "Fertig"
   },
   "tools": {
     "title": "Tools installieren",
@@ -122,6 +126,7 @@
     "restart": "Starte Fabricator neu, um die Einrichtung der gerade installierten Tools abzuschließen.",
     "ready": "Deine Tools sind installiert und deine Konten verbunden.",
     "readyWithoutAzure": "Deine Tools sind installiert und GitHub Copilot ist verbunden. Melde dich bei Azure an, wenn du es brauchst.",
+    "readyOwnModels": "Deine Tools sind installiert und deine eigenen Modelle eingerichtet. Melde dich bei Azure an, wenn du es brauchst.",
     "stepsLeft_one": "Schließe den Schritt oben ab, um fortzufahren.",
     "stepsLeft_other": "Schließe die {{count}} Schritte oben ab, um fortzufahren.",
     "enter": "Fabricator öffnen"

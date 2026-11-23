@@ -9,6 +9,7 @@ import {
   pickAuth,
   rememberSetupComplete,
   setupAttention,
+  setupReady,
   startupStage
 } from './startup'
 
@@ -71,6 +72,17 @@ describe('setupAttention', () => {
   it('has nothing to raise when only the optional Azure sign-in is missing', () => {
     const auth: AuthStatus = { ...signedIn, az: { signedIn: false, error: 'Sign-in expired' } }
     expect(setupAttention({ ready: true, tools: [tool({})] }, auth, null)).toBeNull()
+  })
+
+  it('lets models of the user’s own stand in for a Copilot sign-in', () => {
+    const doctor: DoctorReport = { ready: true, tools: [tool({})] }
+    const own: AuthStatus = { ...signedIn, copilot: { signedIn: false, ownModels: true } }
+    expect(setupReady(doctor, own)).toBe(true)
+    expect(setupAttention(doctor, own, null)).toBeNull()
+    expect(startupStage(doctor, own, false)).toBe('ready')
+    const neither: AuthStatus = { ...signedIn, copilot: { signedIn: false } }
+    expect(setupReady(doctor, neither)).toBe(false)
+    expect(setupAttention(doctor, neither, null)?.signIns).toEqual(['GitHub Copilot'])
   })
 
   it('reports a tool check that could not run', () => {

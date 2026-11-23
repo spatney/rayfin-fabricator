@@ -1,13 +1,13 @@
 //! A relay on this computer for providers that take less than the Copilot
-//! runtime sends them: OpenAI, xAI and Google (Gemini, through its
-//! OpenAI-compatible endpoint).
+//! runtime sends them: OpenAI, xAI, Google (Gemini, through its
+//! OpenAI-compatible endpoint), OpenRouter, Ollama and OpenAI-compatible servers.
 //!
 //! For each of them it fits the reasoning effort to the model. When none was
 //! chosen, the runtime asks for `medium`, and models without effort levels
-//! (OpenAI's GPT-4.1, xAI's Grok Build, Google's Gemma) fail the request with
-//! any effort at all ("'reasoning.effort' is not supported with this model").
-//! So an effort the chosen model doesn't take is left out, and the provider
-//! uses its default.
+//! (OpenAI's GPT-4.1, xAI's Grok Build, Google's Gemma, most local models)
+//! fail the request with any effort at all ("'reasoning.effort' is not
+//! supported with this model"). So an effort the chosen model doesn't take is
+//! left out, and the provider uses its default.
 //!
 //! Google needs more. Without it, every conversation failed from its second
 //! model call. On the way out the relay adapts the request:
@@ -29,8 +29,26 @@
 //! leaves out the `index` OpenAI clients tell parallel calls apart by) and has a
 //! reply that called tools finish with `tool_calls` rather than `stop`.
 //!
+//! Ollama sets the context a model runs with itself: its Context length
+//! setting, else a default that depends on the GPU's memory (4k, 32k or 256k).
+//! Its OpenAI-compatible API can't change it. A conversation longer than that
+//! fails in ways that don't say why: Ollama drops its start, the user's request
+//! with it ("no user query found in messages" from Qwen's models), and cuts
+//! replies off while the model is still reasoning. So once Ollama answers a
+//! chat request, the relay reads the context the model runs with for it from
+//! `/api/ps`. When that's less than sessions count on for the model, it drops
+//! Ollama's reply, which stops it, and turns the request down
+//! ([`CONTEXT_TOO_SHORT`]).
+//!
+//! For a server people run, it also gives each message that calls no tools its
+//! text, even an empty one: the runtime sends `content: null` for a reply that
+//! had neither text nor a tool call (one cut off while reasoning, which it then
+//! asks the model to go on from), and Ollama turns down a request with one
+//! ("invalid message content type: <nil>").
+//!
 //! It listens on 127.0.0.1 only, under a random path token, and only forwards to
-//! the provider's own host. It keeps nothing but Gemini's thought signatures, in
+//! the provider's own host, or for a server people run, the address saved for
+//! it. It keeps nothing but Gemini's thought signatures, in
 //! memory: the runtime's credentials pass through, and it never logs a request
 //! or a header.
 
@@ -52,7 +70,7 @@ use once_cell::sync::{Lazy, OnceCell};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
-use super::catalog::{self, ProviderSpec};
+use super::catalog::{self, Endpoint, ProviderSpec};
 use crate::services::store;
 
 /// The largest request the relay takes (a long conversation with images).
@@ -64,6 +82,14 @@ const SKIP_SIGNATURE: &str = "skip_thought_signature_validator";
 
 /// How many thought signatures the relay keeps (the newest).
 const SIGNATURES_KEPT: usize = 4096;
+
+/// How the relay starts turning down a request to Ollama that the model's
+/// context can't hold; the context in tokens follows. `byok::classify` knows
+/// the failure by it.
+pub const CONTEXT_TOO_SHORT: &str = "Ollama runs this model with a context length of";
+
+/// How long the relay waits for Ollama to list the models it's running.
+const RUNNING_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// The request fields Gemini's OpenAI-compatible endpoint takes. It fails a
 /// request with any other ("Unknown name \"prompt_cache_key\"").
@@ -143,15 +169,23 @@ fn start() -> Result<Relay, String> {
   Ok(Relay { port, token })
 }
 
-/// The base URL a session reaches `spec` at through the relay, e.g.
-/// `http://127.0.0.1:52811/<token>/google/v1beta/openai`.
-pub fn base_url(spec: &ProviderSpec) -> Result<String, String> {
+/// The base URL a session reaches `spec` at through the relay, for its base
+/// URL `upstream`, e.g. `http://127.0.0.1:52811/<token>/google/v1beta/openai`.
+pub fn base_url(spec: &ProviderSpec, upstream: &str) -> Result<String, String> {
   let relay = relay()?;
-  Ok(format!("http://127.0.0.1:{}/{}/{}{}", relay.port, relay.token, spec.id, path_of(spec.base_url)))
+  Ok(format!("http://127.0.0.1:{}/{}/{}{}", relay.port, relay.token, spec.id, path_of(upstream)))
+}
+
+/// Where the relay forwards `spec`'s requests: its own base URL, or the one
+/// saved for a server people run (read for each request, so a changed address
+/// takes effect at once).
+fn upstream_of(spec: &ProviderSpec) -> Option<String> {
+  let settings = store::byok_settings();
+  spec.base_url_with(settings.providers.get(spec.id).and_then(|p| p.base_url.as_deref()))
 }
 
 /// `https://generativelanguage.googleapis.com/v1beta/openai` → `https://generativelanguage.googleapis.com`.
-fn origin_of(url: &str) -> &str {
+pub(super) fn origin_of(url: &str) -> &str {
   let host_start = url.find("://").map_or(0, |i| i + 3);
   url[host_start..].find('/').map_or(url, |i| &url[..host_start + i])
 }
@@ -202,7 +236,8 @@ async fn forward(
     .ok_or_else(not_found)?;
   let (provider, rest) = rest.split_once('/').ok_or_else(not_found)?;
   let spec = catalog::find(provider).filter(|s| s.relay).ok_or_else(not_found)?;
-  let mut url = format!("{}/{rest}", origin_of(spec.base_url));
+  let upstream = upstream_of(spec).ok_or_else(not_found)?;
+  let mut url = format!("{}/{rest}", origin_of(&upstream));
   if let Some(query) = req.uri().query() {
     url.push('?');
     url.push_str(query);
@@ -219,10 +254,25 @@ async fn forward(
   if body.len() > MAX_BODY {
     return Err((StatusCode::PAYLOAD_TOO_LARGE, "The request is too large.".into()));
   }
+  // For a chat request to Ollama: where Ollama is, the model, and the context
+  // sessions count on for it (see the module docs).
+  let mut context_needed = None;
   let body = match serde_json::from_slice::<Value>(&body) {
     Ok(json) if chat || responses => {
+      if chat && spec.id == "ollama" {
+        context_needed = json
+          .get("model")
+          .and_then(Value::as_str)
+          .and_then(|model| Some((super::ollama_root(&upstream).to_string(), model.to_string(), saved_context(spec.id, model)?)));
+      }
       let efforts = model_efforts(spec.id, &json);
-      let json = if chat && gemini { prepare_chat(json) } else { json };
+      let json = if chat && gemini {
+        prepare_chat(json)
+      } else if chat && spec.endpoint != Endpoint::Fixed {
+        fill_in_content(json)
+      } else {
+        json
+      };
       Bytes::from(serde_json::to_vec(&fit_effort(json, responses, efforts.as_deref())).unwrap_or_default())
     }
     _ => body,
@@ -238,6 +288,11 @@ async fn forward(
     .send()
     .await
     .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Couldn't reach {} ({e}).", spec.name)))?;
+  // Ollama runs the model for the request now. Dropping the reply on the way
+  // out stops it.
+  if let Some((root, model, needed)) = &context_needed {
+    check_context(client, root, model, *needed).await?;
+  }
 
   let mut response = Response::builder().status(reply.status());
   for (name, value) in reply.headers().iter().filter(|(name, _)| passes(name)) {
@@ -329,6 +384,64 @@ fn fit_effort(mut request: Value, responses: bool, efforts: Option<&[String]>) -
   } else if let Some(object) = request.as_object_mut() {
     if !takes(object.get("reasoning_effort")) {
       object.remove("reasoning_effort");
+    }
+  }
+  request
+}
+
+/// Turn down a request whose model Ollama runs with less context than
+/// sessions count on for it (see the module docs). When Ollama doesn't say,
+/// the reply goes on as it is.
+async fn check_context(client: &reqwest::Client, root: &str, model: &str, needed: u32) -> Result<(), (StatusCode, String)> {
+  match running_models(client, root).await.and_then(|running| context_in(&running, model)) {
+    Some(context) if context < needed => Err((StatusCode::BAD_REQUEST, too_short(model, context, needed))),
+    _ => Ok(()),
+  }
+}
+
+/// The relay's reply when Ollama runs `model` with less context than it needs.
+pub(super) fn too_short(model: &str, context: u32, needed: u32) -> String {
+  format!(
+    "{CONTEXT_TOO_SHORT} {context} tokens, and Fabricator counts on {needed} for {model}. Set Context length to 64k or more in Ollama's settings."
+  )
+}
+
+/// The context sessions count on for a model the user saved (see `registry::token_limits`).
+fn saved_context(provider: &str, model: &str) -> Option<u32> {
+  let settings = store::byok_settings();
+  let saved = settings.providers.get(provider)?.models.iter().find(|m| m.id == model)?;
+  Some(super::registry::token_limits(saved).0)
+}
+
+/// The models Ollama is running (`/api/ps`).
+async fn running_models(client: &reqwest::Client, root: &str) -> Option<Value> {
+  let reply = client.get(format!("{root}/api/ps")).timeout(RUNNING_TIMEOUT).send().await.ok()?;
+  reply.error_for_status().ok()?.json().await.ok()
+}
+
+/// The context of `model` in Ollama's list of the models it's running.
+fn context_in(running: &Value, model: &str) -> Option<u32> {
+  running
+    .get("models")?
+    .as_array()?
+    .iter()
+    .find(|m| ["name", "model"].iter().any(|key| m.get(*key).and_then(Value::as_str) == Some(model)))?
+    .get("context_length")?
+    .as_u64()
+    .filter(|tokens| *tokens > 0)
+    .map(|tokens| u32::try_from(tokens).unwrap_or(u32::MAX))
+}
+
+/// Give each message that calls no tools its text, even an empty one (see the
+/// module docs).
+fn fill_in_content(mut request: Value) -> Value {
+  for message in request.get_mut("messages").and_then(Value::as_array_mut).into_iter().flatten() {
+    let Some(message) = message.as_object_mut() else {
+      continue;
+    };
+    let calls_tools = message.get("tool_calls").and_then(Value::as_array).is_some_and(|calls| !calls.is_empty());
+    if !calls_tools && message.get("content").is_none_or(Value::is_null) {
+      message.insert("content".into(), Value::from(""));
     }
   }
   request
@@ -802,18 +915,78 @@ mod tests {
   }
 
   #[test]
+  fn messages_that_call_no_tools_get_their_text() {
+    let request = json!({ "messages": [
+      { "role": "user", "content": "Build a task tracker" },
+      // A reply cut off while reasoning, which the runtime asks the model to go on from.
+      { "role": "assistant", "content": null, "reasoning_text": "The starter Item entity…" },
+      { "role": "assistant" },
+      { "role": "assistant", "content": null, "tool_calls": [call("call_1", "view", "{}")] },
+      { "role": "tool", "tool_call_id": "call_1", "content": [{ "type": "text", "text": "{}" }] },
+      { "role": "assistant", "content": null, "tool_calls": [] },
+      { "role": "user", "content": "Please continue from where you left off." }
+    ]});
+    let filled = fill_in_content(request.clone());
+    let (before, after) = (request["messages"].as_array().unwrap(), filled["messages"].as_array().unwrap());
+    assert_eq!(after[1], json!({ "role": "assistant", "content": "", "reasoning_text": "The starter Item entity…" }));
+    assert_eq!(after[2], json!({ "role": "assistant", "content": "" }));
+    assert_eq!(after[5]["content"], "");
+    for i in [0, 3, 4, 6] {
+      assert_eq!(after[i], before[i], "message {i}");
+    }
+  }
+
+  /// An Ollama running `model` with `context` tokens of context.
+  async fn fake_ollama(model: &'static str, context: u64) -> String {
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+    let root = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+      while let Ok((stream, _)) = listener.accept().await {
+        tokio::spawn(async move {
+          let service = service_fn(move |req: Request<Incoming>| async move {
+            let body = match req.uri().path() {
+              "/api/ps" => json!({ "models": [{ "name": model, "model": model, "context_length": context }] }),
+              _ => json!({}),
+            };
+            Ok::<_, Infallible>(Response::new(Full::new(Bytes::from(body.to_string()))))
+          });
+          let _ = http1::Builder::new().serve_connection(TokioIo::new(stream), service).await;
+        });
+      }
+    });
+    root
+  }
+
+  #[tokio::test]
+  async fn ollama_replies_stop_when_the_models_context_is_too_short() {
+    let client = reqwest::Client::new();
+    // Ollama's default on a 24 GB GPU, for a model sessions count on 64K for.
+    let root = fake_ollama("qwen3.8:latest", 32_768).await;
+    let (status, message) = check_context(&client, &root, "qwen3.8:latest", 64_000).await.unwrap_err();
+    assert_eq!((status, message), (StatusCode::BAD_REQUEST, too_short("qwen3.8:latest", 32_768, 64_000)));
+    assert!(check_context(&client, &root, "qwen3.8:latest", 32_768).await.is_ok());
+    // When Ollama doesn't say, or doesn't answer, the reply goes on as it is.
+    assert!(check_context(&client, &root, "gpt-oss:120b-cloud", 64_000).await.is_ok());
+    let closed = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap().local_addr().unwrap();
+    assert!(check_context(&client, &format!("http://{closed}"), "qwen3.8:latest", 64_000).await.is_ok());
+  }
+
+  #[test]
   fn urls_split_into_the_providers_host_and_path() {
     let google = "https://generativelanguage.googleapis.com/v1beta/openai";
     assert_eq!(origin_of(google), "https://generativelanguage.googleapis.com");
     assert_eq!(path_of(google), "/v1beta/openai");
     assert_eq!(path_of("https://api.example.com"), "");
+    assert_eq!(origin_of("http://192.168.1.20:11434/v1"), "http://192.168.1.20:11434");
   }
 
   #[tokio::test]
   async fn the_relay_answers_only_under_its_token_and_only_for_relayed_providers() {
     let google = catalog::find("google").unwrap();
-    let url = base_url(google).unwrap();
+    let url = base_url(google, google.base_url).unwrap();
     assert!(url.starts_with("http://127.0.0.1:") && url.ends_with("/google/v1beta/openai"), "{url}");
+    let ollama = catalog::find("ollama").unwrap();
+    assert!(base_url(ollama, "http://192.168.1.20:11434/v1").unwrap().ends_with("/ollama/v1"));
     let client = reqwest::Client::new();
     let port = url.trim_start_matches("http://127.0.0.1:").split('/').next().unwrap();
     for path in [

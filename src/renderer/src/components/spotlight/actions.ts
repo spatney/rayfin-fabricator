@@ -407,7 +407,19 @@ function actionsIn(ctx: ActionContext, t: Translate): SearchItem[] {
     id: 'action:api-keys',
     title: t('act.apiKeys.title'),
     subtitle: t('act.apiKeys.subtitle'),
-    keywords: ['model providers', 'models', 'byok', 'anthropic', 'openai', 'google', 'xai'],
+    keywords: [
+      'model providers',
+      'models',
+      'byok',
+      'api keys',
+      'anthropic',
+      'openai',
+      'google',
+      'xai',
+      'openrouter',
+      'ollama',
+      'local models'
+    ],
     icon: { kind: 'codicon', name: 'key' },
     run: run.openApiKeys
   })

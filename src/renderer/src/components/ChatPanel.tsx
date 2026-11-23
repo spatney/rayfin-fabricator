@@ -63,7 +63,7 @@ import { offeredPlugins } from './chat/plugins'
 import { useMcpServers } from '../mcpServers'
 import { ModelPicker } from './models/ModelPicker'
 import { selectionArgs, selectionOf, type ModelSelection } from '../modelSelection'
-import { useCopilotModels } from '../copilotModels'
+import { standInFor, useCopilotModels } from '../copilotModels'
 import { Welcome } from './chat/Welcome'
 import { uid } from './chat/format'
 import { readAsDataUrl, stageImage, toPngAndThumb } from './chat/images'
@@ -310,15 +310,20 @@ export default function ChatPanel({
   const authFailed = Boolean(
     latestAssistant?.turnId && !latestAssistant.authResolved && isCopilotAuthError(latestAssistant.error)
   )
-  // Still being verified at launch is unknown, not signed out.
-  const needsCopilotSignIn = (copilotAuth?.signedIn === false && !copilotAuth.checking) || authFailed
+  // Still being verified at launch is unknown, not signed out; and with models
+  // of their own, the user doesn't need Copilot.
+  const needsCopilotSignIn =
+    (copilotAuth?.signedIn === false && !copilotAuth.checking && !copilotAuth.ownModels) ||
+    authFailed
   useEffect(() => {
     setSending((s) => (s === hasLiveTurn ? s : hasLiveTurn))
   }, [hasLiveTurn])
   const [selection, setSelection] = useState<ModelSelection>(() => selectionOf(project))
-  // A model on the user's own key that can't read images can't take attachments.
-  const { models } = useCopilotModels(Boolean(selection.model))
-  const chosenModel = models.find((m) => m.id === selection.model)
+  // A model on the user's own key that can't read images can't take attachments:
+  // the one chosen, or without Copilot, the one standing in for Auto.
+  const { models } = useCopilotModels(true)
+  const chosenModel =
+    standInFor(models, selection.model) ?? models.find((m) => m.id === selection.model)
   const imageNote =
     chosenModel?.byok && !chosenModel.vision
       ? t('composer.cantReadImages', { model: chosenModel.name })
@@ -1783,6 +1788,7 @@ export default function ChatPanel({
           sending={sending}
           hidden={messages.length === 0}
           host={copilotAuth?.host}
+          copilot={copilotAuth?.signedIn !== false || !!copilotAuth.checking}
         />
         <button
           type="button"
@@ -1801,6 +1807,7 @@ export default function ChatPanel({
             detail={copilotAuth?.error}
             host={copilotAuth?.host}
             disabled={sending}
+            onUseOwnModels={onManageKeys}
             onSignedIn={async () => {
               await onCopilotAuthChanged?.()
               onChange((previous) =>

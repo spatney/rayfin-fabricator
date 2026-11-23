@@ -6,6 +6,9 @@
 //     tauri.conf.json sets `csp: null`, so this tag is the app's only CSP. The app's own
 //     URI schemes aren't remote: the webview hands their requests to the app, which on
 //     Windows registers each as http://<scheme>.localhost.
+//   - The CSP's connect-src allows Tauri's IPC protocol (ipc://localhost on macOS,
+//     http://ipc.localhost on Windows). Blocked, Tauri sends every call through its
+//     slower postMessage fallback, which turns large replies into script to evaluate.
 //   - Every Monaco web worker is bundled, so the editors work offline.
 //   - pdf.js's worker is bundled, so a report migration can draw its pages offline.
 
@@ -15,8 +18,9 @@ import { fileURLToPath } from 'node:url'
 
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist')
 const WORKERS = ['editor', 'json', 'css', 'html', 'ts']
-// The preview's stills (src-tauri/src/services/preview.rs, STILL_SCHEME).
-const OWN_SCHEME_ORIGINS = ['http://preview-still.localhost']
+// Tauri's IPC and the preview's stills (src-tauri/src/services/preview.rs, STILL_SCHEME).
+const OWN_SCHEME_ORIGINS = ['http://ipc.localhost', 'http://preview-still.localhost']
+const IPC_SOURCES = ['ipc:', 'http://ipc.localhost']
 
 const indexHtml = path.join(DIST, 'index.html')
 if (!fs.existsSync(indexHtml)) {
@@ -34,8 +38,13 @@ for (const [, , url] of html.matchAll(/<(?:script|link)\b[^>]*?\b(src|href)="([^
 const csp = html.match(/http-equiv="Content-Security-Policy"\s+content="([^"]*)"/)?.[1]
 const sources = csp?.split(/[\s;]+/).filter((source) => !OWN_SCHEME_ORIGINS.includes(source))
 if (!csp) problems.push('index.html has no Content-Security-Policy meta tag')
-else if (sources.some((source) => /https?:|\*/.test(source)))
-  problems.push(`the Content-Security-Policy allows remote origins: ${csp}`)
+else {
+  if (sources.some((source) => /https?:|\*/.test(source)))
+    problems.push(`the Content-Security-Policy allows remote origins: ${csp}`)
+  const connectSrc = csp.match(/connect-src([^;]*)/)?.[1].split(/\s+/) ?? []
+  if (!IPC_SOURCES.every((source) => connectSrc.includes(source)))
+    problems.push(`the Content-Security-Policy's connect-src must allow ${IPC_SOURCES.join(' ')}`)
+}
 
 const assets = fs.readdirSync(path.join(DIST, 'assets'))
 for (const worker of WORKERS) {
