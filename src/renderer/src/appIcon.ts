@@ -1,5 +1,6 @@
 import type { AppIconImage } from '@shared/ipc'
 import { hueOf } from './components/team/map/parts'
+import { translator } from './i18n'
 
 /** The sizes an app's icon is drawn at (px), as `ICON_SIZES` in `commands/export.rs` takes them. */
 export const APP_ICON_SIZES = [16, 24, 32, 48, 64, 128, 256] as const
@@ -18,7 +19,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image()
     image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error('The icon couldn’t be read.'))
+    image.onerror = () => reject(new Error(translator('projects')('appIcon.unreadable')))
     image.src = src
   })
 }
@@ -66,7 +67,7 @@ function draw(size: number, paint: (ctx: CanvasRenderingContext2D) => void): str
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Fabricator couldn’t draw the app’s icon.')
+  if (!ctx) throw new Error(translator('projects')('appIcon.cantDraw'))
   paint(ctx)
   const url = canvas.toDataURL('image/png')
   return url.slice(url.indexOf(',') + 1)

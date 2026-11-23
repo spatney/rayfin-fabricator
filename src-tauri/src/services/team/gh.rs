@@ -98,15 +98,17 @@ impl GhError {
   /// enterprise), and the GitHub CLI's sign-in for octo isn't authorized for it yet."
   pub fn sso_reason(&self) -> String {
     let org = self.sso_org();
-    let mut who = match &org {
-      Some(o) => format!("The {o} organization requires single sign-on"),
-      None => "Your organization requires single sign-on".to_string(),
-    };
-    if let Some(enterprise) = self.sso_enterprise().filter(|e| org.as_deref().is_none_or(|o| !o.eq_ignore_ascii_case(e))) {
-      who.push_str(&format!(" (through the {enterprise} enterprise)"));
+    let enterprise = self.sso_enterprise().filter(|e| org.as_deref().is_none_or(|o| !o.eq_ignore_ascii_case(e)));
+    match (org, enterprise, current_account()) {
+      (Some(org), Some(enterprise), Some(login)) => t!("team.gh.sso.orgEnterpriseLogin", org = org, enterprise = enterprise, login = login),
+      (Some(org), Some(enterprise), None) => t!("team.gh.sso.orgEnterprise", org = org, enterprise = enterprise),
+      (Some(org), None, Some(login)) => t!("team.gh.sso.orgLogin", org = org, login = login),
+      (Some(org), None, None) => t!("team.gh.sso.org", org = org),
+      (None, Some(enterprise), Some(login)) => t!("team.gh.sso.enterpriseLogin", enterprise = enterprise, login = login),
+      (None, Some(enterprise), None) => t!("team.gh.sso.enterprise", enterprise = enterprise),
+      (None, None, Some(login)) => t!("team.gh.sso.login", login = login),
+      (None, None, None) => t!("team.gh.sso.unknown"),
     }
-    let login = current_account().map(|login| format!(" for {login}")).unwrap_or_default();
-    format!("{who}, and the GitHub CLI's sign-in{login} isn't authorized for it yet.")
   }
 
   /// GitHub withholds the feature on this plan (e.g. branch protection on a
@@ -119,25 +121,22 @@ impl GhError {
   /// Plain-language description, prefixed with what was being attempted.
   pub fn describe(&self, action: &str) -> String {
     if self.missing_cli {
-      return format!("{action}: the GitHub CLI (gh) isn't installed.");
+      return t!("team.gh.describe.missingCli", action = action);
     }
     if self.is_auth() {
       return match current_account() {
-        Some(login) => format!(
-          "{action}: the GitHub CLI's sign-in for {login} has expired or was removed. Sign in to GitHub as {login} again."
-        ),
-        None => format!("{action}: your GitHub sign-in has expired. Sign in to GitHub again."),
+        Some(login) => t!("team.gh.describe.expiredFor", action = action, login = login),
+        None => t!("team.gh.describe.expired", action = action),
       };
     }
     if self.needs_sso() {
       // GitHub authorizes an OAuth app's sign-in for single sign-on when it's
       // signed in during an active single sign-on session; its
       // `authorization_request` link only works for personal access tokens.
-      let session = self
-        .sso_session_url()
-        .map(|url| format!("Open {url} in your browser to start a single sign-on session"))
-        .unwrap_or_else(|| "Start a single sign-on session for the organization on github.com".into());
-      return format!("{action}: {} {session}, then sign in to GitHub again (gh auth refresh) and try again.", self.sso_reason());
+      return match self.sso_session_url() {
+        Some(url) => t!("team.gh.describe.ssoLink", action = action, reason = self.sso_reason(), url = url),
+        None => t!("team.gh.describe.sso", action = action, reason = self.sso_reason()),
+      };
     }
     format!("{action}: {}", self.message)
   }
@@ -160,7 +159,7 @@ fn error_message(body: &Value) -> Option<String> {
 
 fn parse_error(res: &RunResult) -> GhError {
   if res.not_found {
-    return GhError { message: "The GitHub CLI (gh) isn't installed.".into(), missing_cli: true, ..Default::default() };
+    return GhError { message: t!("team.gh.missingCli"), missing_cli: true, ..Default::default() };
   }
   let status = HTTP_RE.captures(&res.stderr).and_then(|c| c[1].parse().ok());
   let message = serde_json::from_str::<Value>(res.stdout.trim())
@@ -169,7 +168,7 @@ fn parse_error(res: &RunResult) -> GhError {
     .unwrap_or_else(|| {
       let text = res.stderr.trim().trim_start_matches("gh:").trim();
       let text = HTTP_RE.replace(text, "").trim().to_string();
-      if text.is_empty() { "GitHub request failed.".to_string() } else { text }
+      if text.is_empty() { t!("team.gh.requestFailed") } else { text }
     });
   let sso_url = SSO_URL_RE
     .find(&message)
@@ -236,15 +235,15 @@ async fn token_for(login: &str) -> Result<String, GhError> {
     }
   }
   if !is_login(login) {
-    return Err(GhError::new(format!("{login} isn't a GitHub account name.")));
+    return Err(GhError::new(t!("team.gh.notALogin", login = login)));
   }
   let res = exec::run("gh", &["auth", "token", "--hostname", "github.com", "--user", login], gh_options(20_000)).await;
   if res.not_found {
-    return Err(GhError { status: None, message: "The GitHub CLI (gh) isn't installed.".into(), missing_cli: true, sso_url: None });
+    return Err(GhError { status: None, message: t!("team.gh.missingCli"), missing_cli: true, sso_url: None });
   }
   let token = res.stdout.trim().to_string();
   if !res.ok || token.is_empty() || token.contains(char::is_whitespace) {
-    return Err(GhError { status: Some(401), message: format!("The GitHub CLI isn't signed in to {login}."), ..Default::default() });
+    return Err(GhError { status: Some(401), message: t!("team.gh.notSignedInTo", login = login), ..Default::default() });
   }
   TOKENS.lock().unwrap().insert(key, (Instant::now(), token.clone()));
   Ok(token)
@@ -301,7 +300,7 @@ fn parse_accounts(stdout: &str) -> Option<Vec<Account>> {
 pub async fn accounts() -> Result<Vec<Account>, GhError> {
   let res = exec::run("gh", &["auth", "status", "--hostname", "github.com", "--json", "hosts"], gh_options(45_000)).await;
   if res.not_found {
-    return Err(GhError { status: None, message: "The GitHub CLI (gh) isn't installed.".into(), missing_cli: true, sso_url: None });
+    return Err(GhError { status: None, message: t!("team.gh.missingCli"), missing_cli: true, sso_url: None });
   }
   if let Some(mut list) = parse_accounts(&res.stdout) {
     list.sort_by_key(|a| !a.active);
@@ -365,7 +364,7 @@ pub async fn api(method: &str, path: &str, body: Option<&Value>) -> Result<Value
     Some(value) => {
       let file = std::env::temp_dir().join(format!("fabricator-gh-{}.json", uuid::Uuid::new_v4()));
       std::fs::write(&file, serde_json::to_vec(value).unwrap_or_default())
-        .map_err(|e| GhError::new(format!("Could not prepare the GitHub request: {e}")))?;
+        .map_err(|e| GhError::new(t!("team.gh.cantPrepareRequest", error = e)))?;
       args.push("--input".into());
       args.push(file.to_string_lossy().to_string());
       Some(file)
@@ -385,7 +384,7 @@ pub async fn api(method: &str, path: &str, body: Option<&Value>) -> Result<Value
   if text.is_empty() {
     return Ok(Value::Null);
   }
-  serde_json::from_str(text).map_err(|e| GhError::new(format!("Unexpected GitHub response: {e}")))
+  serde_json::from_str(text).map_err(|e| GhError::new(t!("team.gh.unexpectedResponse", error = e)))
 }
 
 /// GET every page of a list endpoint (`--paginate` concatenates the pages).
@@ -446,7 +445,7 @@ pub struct Viewer {
 
 pub async fn viewer() -> Result<Viewer, GhError> {
   let v = api("GET", "user", None).await?;
-  let login = str_of(&v, "login").ok_or_else(|| GhError::new("GitHub didn't return your account."))?;
+  let login = str_of(&v, "login").ok_or_else(|| GhError::new(t!("team.gh.noAccount")))?;
   Ok(Viewer { login, id: u64_of(&v, "id"), name: str_of(&v, "name").filter(|n| !n.trim().is_empty()) })
 }
 
@@ -628,7 +627,7 @@ pub fn repo_info(v: &Value) -> Option<RepoInfo> {
 
 pub async fn repo(full_name: &str) -> Result<RepoInfo, GhError> {
   let v = api("GET", &format!("repos/{full_name}"), None).await?;
-  repo_info(&v).ok_or_else(|| GhError::new("GitHub returned an unexpected repository."))
+  repo_info(&v).ok_or_else(|| GhError::new(t!("team.gh.unexpectedRepository")))
 }
 
 /// Merge settings every team repo uses: squash merges, branches deleted after merge.
@@ -657,7 +656,7 @@ pub async fn create_repo(owner: &str, is_org: bool, name: &str, description: &st
   }
   let path = if is_org { format!("orgs/{owner}/repos") } else { "user/repos".to_string() };
   let v = api("POST", &path, Some(&body)).await?;
-  repo_info(&v).ok_or_else(|| GhError::new("GitHub returned an unexpected repository."))
+  repo_info(&v).ok_or_else(|| GhError::new(t!("team.gh.unexpectedRepository")))
 }
 
 /// Re-apply the merge settings (idempotent).
@@ -902,7 +901,7 @@ pub async fn create_pr(full_name: &str, head: &str, title: &str, body: &str) -> 
     }
     Err(e) => return Err(e),
   };
-  pull_request(&created).ok_or_else(|| GhError::new("GitHub returned an unexpected pull request."))
+  pull_request(&created).ok_or_else(|| GhError::new(t!("team.gh.unexpectedPullRequest")))
 }
 
 /// The open pull request whose head is `branch`, if any.
@@ -929,7 +928,7 @@ pub async fn open_prs(full_name: &str) -> Result<Vec<(TeamPullRequest, String)>,
 
 pub async fn get_pr(full_name: &str, number: u64) -> Result<TeamPullRequest, GhError> {
   let v = api("GET", &format!("repos/{full_name}/pulls/{number}"), None).await?;
-  pull_request(&v).ok_or_else(|| GhError::new("GitHub returned an unexpected pull request."))
+  pull_request(&v).ok_or_else(|| GhError::new(t!("team.gh.unexpectedPullRequest")))
 }
 
 /// Mark a draft pull request as ready for review (GraphQL-only, via gh).
@@ -981,7 +980,7 @@ pub async fn merge_pr(full_name: &str, number: u64, title: &str) -> Result<Strin
     Some(&json!({ "merge_method": "squash", "commit_title": format!("{title} (#{number})") })),
   )
   .await?;
-  str_of(&v, "sha").ok_or_else(|| GhError::new("GitHub didn't return the merge commit."))
+  str_of(&v, "sha").ok_or_else(|| GhError::new(t!("team.gh.noMergeCommit")))
 }
 
 pub async fn close_pr(full_name: &str, number: u64) -> Result<(), GhError> {
@@ -1057,7 +1056,7 @@ pub fn run_of(v: &Value) -> Option<Run> {
 /// One workflow run.
 pub async fn run(full_name: &str, run_id: u64) -> Result<Run, GhError> {
   let v = api("GET", &format!("repos/{full_name}/actions/runs/{run_id}"), None).await?;
-  run_of(&v).ok_or_else(|| GhError::new("GitHub returned an unexpected run."))
+  run_of(&v).ok_or_else(|| GhError::new(t!("team.gh.unexpectedRun")))
 }
 
 /// Runs of the Fabricator workflow for a commit, newest first.
@@ -1124,7 +1123,7 @@ pub async fn graphql(query: &str, variables: Value) -> Result<Value, GhError> {
       .filter_map(|e| e.get("message").and_then(Value::as_str))
       .collect::<Vec<_>>()
       .join(" ");
-    return Err(GhError::new(if message.is_empty() { "GitHub couldn't answer the query.".to_string() } else { message }));
+    return Err(GhError::new(if message.is_empty() { t!("team.gh.queryFailed") } else { message }));
   }
   Ok(v.get("data").cloned().unwrap_or(Value::Null))
 }
@@ -1447,7 +1446,7 @@ pub fn pr_summary(node: &Value) -> Option<PrSummary> {
 /// Open pull requests with their changes, newest activity first.
 pub async fn open_pr_summaries(full_name: &str) -> Result<Vec<PrSummary>, GhError> {
   const QUERY: &str = "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { pullRequests(states: OPEN, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { number title url isDraft updatedAt headRefName headRefOid additions deletions changedFiles reviewDecision author { login avatarUrl } commits { totalCount } files(first: 100) { nodes { path additions deletions changeType } } } } } }";
-  let (owner, name) = full_name.split_once('/').ok_or_else(|| GhError::new("Unexpected repository name."))?;
+  let (owner, name) = full_name.split_once('/').ok_or_else(|| GhError::new(t!("team.gh.unexpectedRepositoryName")))?;
   let data = graphql(QUERY, json!({ "owner": owner, "name": name })).await?;
   Ok(
     data
@@ -1475,7 +1474,7 @@ pub fn deployments_query(count: usize) -> String {
 /// The latest deployment of each environment that has one.
 pub async fn latest_deployments(full_name: &str, environments: &[String]) -> Result<HashMap<String, TeamDeployRecord>, GhError> {
   const CHUNK: usize = 40;
-  let (owner, name) = full_name.split_once('/').ok_or_else(|| GhError::new("Unexpected repository name."))?;
+  let (owner, name) = full_name.split_once('/').ok_or_else(|| GhError::new(t!("team.gh.unexpectedRepositoryName")))?;
   let mut out = HashMap::new();
   for chunk in environments.chunks(CHUNK) {
     let mut variables = json!({ "owner": owner, "name": name });

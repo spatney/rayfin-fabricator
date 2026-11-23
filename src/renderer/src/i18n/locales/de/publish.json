@@ -1,0 +1,368 @@
+{
+  "button": {
+    "publish": "Veröffentlichen",
+    "publishing": "Wird veröffentlicht…"
+  },
+  "progress": {
+    "label": "Veröffentlichungsfortschritt",
+    "publishing": "Wird veröffentlicht",
+    "position": "Schritt {{step}} von {{steps}}",
+    "starting": "Veröffentlichung wird gestartet…",
+    "watch": "Verfolgen",
+    "waitingForSignIn": "Warten auf deine Anmeldung bei Fabric im Browser",
+    "retrying": "Fabric ist ausgelastet, neuer Versuch läuft"
+  },
+  "logs": {
+    "show": "Protokolle anzeigen",
+    "hide": "Protokolle ausblenden",
+    "short": "Protokolle"
+  },
+  "findOutWhy": "Ursache herausfinden",
+  "region": {
+    "chooseAnother": "Anderen Arbeitsbereich auswählen",
+    "availability": "Verfügbarkeit nach Region",
+    "availabilityTitle": "Sieh nach, in welchen Regionen Fabric-Apps verfügbar sind (öffnet learn.microsoft.com)"
+  },
+  "signIn": {
+    "fabric": "Bei Fabric anmelden",
+    "busy": "Anmeldung läuft…",
+    "failed": "Anmeldung fehlgeschlagen",
+    "incomplete": "Die Anmeldung bei Fabric wurde nicht abgeschlossen. Versuche es erneut.",
+    "notCompleted": "Die Anmeldung wurde nicht abgeschlossen. Versuche es erneut."
+  },
+  "copy": {
+    "link": "Link kopieren",
+    "itemId": "Element-ID kopieren",
+    "failed": "Kopieren fehlgeschlagen",
+    "linkFailed": "Der Link konnte nicht kopiert werden.",
+    "itemFailed": "Die Element-ID konnte nicht kopiert werden."
+  },
+  "deploySteps": {
+    "packages": "Pakete werden installiert",
+    "connect": "Verbindung mit Fabric wird hergestellt",
+    "capacity": "Fabric-Kapazität wird vorbereitet",
+    "workspace": "Dein Arbeitsbereich wird gesucht",
+    "item": "Deine App wird in Fabric eingerichtet",
+    "settings": "Einstellungen werden angewendet",
+    "data": "Deine Datenbank wird aktualisiert",
+    "storage": "Dateispeicher wird eingerichtet",
+    "connectors": "Deine Datenquellen werden verbunden",
+    "build": "Deine App wird erstellt und hochgeladen",
+    "functions": "Deine Funktionen werden veröffentlicht",
+    "live": "Deine App wird live geschaltet",
+    "prepare": "Veröffentlichung wird vorbereitet",
+    "buildOnly": "Deine App wird erstellt",
+    "package": "Ressourcen werden gepackt",
+    "upload": "Wird in Fabric hochgeladen"
+  },
+  "dataKinds": {
+    "semanticmodel": {
+      "label": "Semantisches Modell",
+      "plural": "Semantische Modelle",
+      "hint": "Power BI-Daten mit DAX abfragen"
+    },
+    "warehouse": {
+      "label": "Warehouse",
+      "plural": "Warehouses",
+      "hint": "Tabellen lesen und schreiben"
+    },
+    "sqldatabase": {
+      "label": "SQL-Datenbank",
+      "plural": "SQL-Datenbanken",
+      "hint": "Tabellen lesen und schreiben"
+    },
+    "lakehouse": {
+      "label": "Lakehouse",
+      "plural": "Lakehouses",
+      "hint": "Tabellen lesen"
+    }
+  },
+  "workspaceStatus": {
+    "title": "Fabric-Arbeitsbereich",
+    "openItem": "Die veröffentlichte App im Fabric-Portal öffnen, im Arbeitsbereich „{{name}}“",
+    "openWorkspace": "Arbeitsbereich „{{name}}“ im Fabric-Portal öffnen"
+  },
+  "strip": {
+    "publishingTo": "Wird in {{target}} veröffentlicht",
+    "starting": "Veröffentlichung wird gestartet",
+    "watchTitle": "Veröffentlichungsbildschirm anzeigen"
+  },
+  "stage": {
+    "unnamed": "Deine App",
+    "unnamedPublishing": "Deine App",
+    "published": "Veröffentlicht",
+    "fabricating": "Wird gefertigt",
+    "live": "<b>{{app}}</b> ist live",
+    "publishing": "<b>{{app}}</b> wird veröffentlicht",
+    "steps": "Veröffentlichungsschritte",
+    "back": "Zurück zu deiner App"
+  },
+  "failedNotice": {
+    "label": "Veröffentlichung fehlgeschlagen",
+    "ray": "Ray, der Stachelrochen von Fabricator. Wähle ihn aus, um herauszufinden, warum die Veröffentlichung fehlgeschlagen ist.",
+    "plain": {
+      "failed": "Diese App konnte nicht veröffentlicht werden. Die Hilfe kann die Ursache herausfinden.",
+      "signin": "Du musst dich erneut bei Fabric anmelden, bevor du diese App veröffentlichen kannst.",
+      "stopped": "Die Veröffentlichung wurde vor dem Abschluss gestoppt.",
+      "unsupported": "Fabric-Apps sind in der Region dieses Arbeitsbereichs nicht verfügbar. Wähle einen Arbeitsbereich in einer anderen Region aus.",
+      "unsupportedRegion": "Die Kapazität dieses Arbeitsbereichs befindet sich in {{region}}, wo Fabric-Apps noch nicht verfügbar sind. Wähle einen Arbeitsbereich in einer anderen Region aus."
+    },
+    "refreshAuth": "Fabric-Authentifizierung aktualisieren",
+    "diagnoseTitle": "Hilfe öffnen – sie liest, was passiert ist, und erklärt es",
+    "showDetails": "Details anzeigen",
+    "hideDetails": "Details ausblenden",
+    "dismissTitle": "Ausblenden – der Hinweis erscheint wieder, wenn die Veröffentlichung erneut fehlschlägt"
+  },
+  "rayfinVersion": {
+    "updateTitle": "Rayfin {{version}} – Update auf {{latest}} verfügbar",
+    "newerTitle": "Rayfin {{version}} – Rayfin {{newer}} ist verfügbar",
+    "updateAvailable": "Update verfügbar",
+    "newerReady": "Eine neuere Version von Rayfin steht bereit.",
+    "updateWithCopilot": "Mit Copilot aktualisieren",
+    "newerAvailable": "Rayfin {{version}} ist verfügbar",
+    "newerAvailableToo": "Rayfin {{version}} ist ebenfalls verfügbar",
+    "current": "Diese App verwendet Rayfin {{version}}.",
+    "updateToNewer": "Mit Copilot auf {{version}} aktualisieren",
+    "notePublishes": "Copilot aktualisiert die Pakete und passt alles an, was sich geändert hat. Die Änderungen gelangen nach Fabric, wenn Fabricator die App nach dem Durchgang veröffentlicht.",
+    "note": "Copilot aktualisiert die Pakete und passt alles an, was sich geändert hat. Die Änderungen gelangen bei der nächsten Veröffentlichung nach Fabric."
+  },
+  "create": {
+    "unknownSku": "Kapazität",
+    "unknownSkuTitle": "Auf einer dedizierten Kapazität, deren SKU du aber nicht sehen kannst (du verwaltest sie nicht) – wird beim Veröffentlichen geprüft",
+    "otherCapacitySku": "Die Kapazität ({{sku}}) ist weder Fabric (F-SKU) noch Premium (P-SKU)",
+    "otherCapacity": "Die Kapazität ist weder Fabric (F-SKU) noch Premium (P-SKU)",
+    "noCapacity": "Keine Fabric- oder Premium-Kapazität zugewiesen",
+    "refusal": {
+      "workspace": "Fabric-Apps waren in {{workspace}} nicht verfügbar, als du zuvor dort veröffentlicht hast. Eine Veröffentlichung hier schlägt daher wahrscheinlich fehl.",
+      "capacity": "Fabric-Apps waren auf der Kapazität dieses Arbeitsbereichs nicht verfügbar, als du zuvor veröffentlicht hast. Eine Veröffentlichung hier schlägt daher wahrscheinlich fehl.",
+      "region": "Fabric-Apps waren in {{region}} nicht verfügbar, als du zuvor veröffentlicht hast. Eine Veröffentlichung hier schlägt daher wahrscheinlich fehl."
+    },
+    "refusedNote": {
+      "regions": "Fabric-Apps waren in {{regions}} nicht verfügbar, daher sind die Arbeitsbereiche dort markiert. Wenn keine Region funktioniert, muss dein Fabric-Administrator eventuell Fabric Apps aktivieren.",
+      "region": "Fabric-Apps waren in {{region}} nicht verfügbar, daher sind die Arbeitsbereiche dort markiert. Wähle einen Arbeitsbereich auf einer Kapazität in einer anderen Region aus.",
+      "capacity": "Fabric-Apps waren in einem Arbeitsbereich, in dem du veröffentlicht hast, nicht verfügbar, daher sind die Arbeitsbereiche auf seiner Kapazität markiert. Wähle einen Arbeitsbereich auf einer Kapazität in einer anderen Region aus."
+    },
+    "errors": {
+      "capacities": "Die Kapazitäten konnten nicht geladen werden. Versuche es erneut.",
+      "createWorkspace": "Der Arbeitsbereich konnte nicht erstellt werden.",
+      "createWorkspaceRetry": "Der Arbeitsbereich konnte nicht erstellt werden. Versuche es erneut."
+    },
+    "unavailableIn": "{{region}} · Fabric-Apps nicht verfügbar",
+    "unavailable": "Fabric-Apps nicht verfügbar",
+    "name": "Name",
+    "optional": "optional",
+    "namePlaceholder": "z. B. Produktion",
+    "workspace": "In Arbeitsbereich veröffentlichen",
+    "newWorkspace": "+ Neuer Arbeitsbereich",
+    "newWorkspaceTitle": "Einen neuen Fabric-Arbeitsbereich auf einer Kapazität erstellen, auf die du Zugriff hast",
+    "refresh": "Arbeitsbereiche aktualisieren",
+    "newWorkspaceName": "Name des neuen Arbeitsbereichs",
+    "loadingCapacities": "Kapazitäten werden geladen…",
+    "noCapacities": "Keine geeigneten Kapazitäten verfügbar.",
+    "creating": "Wird erstellt…",
+    "createWorkspace": "Arbeitsbereich erstellen",
+    "reauthenticating": "Erneute Authentifizierung…",
+    "loading": "Deine Arbeitsbereiche werden geladen…",
+    "search": "{{total}} Arbeitsbereiche durchsuchen…",
+    "clearSearch": "Suche löschen",
+    "noEligible": {
+      "title": "Keine geeigneten Arbeitsbereiche",
+      "body_one": "Rayfin-Apps benötigen einen Arbeitsbereich auf einer Kapazität vom Typ Fabric (<strong>F-SKU</strong>) oder Power BI Premium (<strong>P-SKU</strong>). Dein einziger Arbeitsbereich erfüllt diese Voraussetzung nicht – er ist unten aufgeführt, damit du siehst, warum. Starte eine kostenlose Fabric-Testversion oder füge eine Kapazität hinzu, und aktualisiere dann.",
+      "body_other": "Rayfin-Apps benötigen einen Arbeitsbereich auf einer Kapazität vom Typ Fabric (<strong>F-SKU</strong>) oder Power BI Premium (<strong>P-SKU</strong>). Keiner deiner {{count}} Arbeitsbereiche erfüllt diese Voraussetzung – sie sind unten aufgeführt, damit du siehst, warum. Starte eine kostenlose Fabric-Testversion oder füge eine Kapazität hinzu, und aktualisiere dann."
+    },
+    "trial": "Kostenlose Testversion starten",
+    "buy": "Kapazität kaufen",
+    "recent": "Zuletzt verwendet",
+    "others": "Weitere Arbeitsbereiche",
+    "checking": "{{workspace}} wird auf eine App mit demselben Namen geprüft…",
+    "willReplace": "Beim Veröffentlichen wird die App „{{app}}“ in {{workspace}} ersetzt.",
+    "conflict": "{{workspace}} enthält bereits eine App namens „{{app}}“. Eine Veröffentlichung hier würde sie ersetzen, wähle daher einen anderen Arbeitsbereich aus.",
+    "replaceAnyway": "Trotzdem ersetzen",
+    "app": "App",
+    "sameName": "{{app}} (gleicher Name wie diese App)",
+    "newAppNamed": "Eine neue App namens „{{name}}“",
+    "newApp": "Eine neue App",
+    "replaces": "Beim Veröffentlichen wird die App „{{app}}“ in {{workspace}} durch diese ersetzt.",
+    "publishAnyway": "Trotzdem hier veröffentlichen",
+    "notEligible": "Nicht geeignet",
+    "ineligibleHint": "Diese benötigen eine Kapazität vom Typ Fabric (<strong>F-SKU</strong>) oder Power BI Premium (<strong>P-SKU</strong>).",
+    "noMatch": "Keine Arbeitsbereiche entsprechen „{{query}}“.",
+    "noWorkspaces": {
+      "title": "Keine Arbeitsbereiche gefunden",
+      "body": "Für dein Konto wurden keine Fabric-Arbeitsbereiche gefunden. Starte eine kostenlose Fabric-Testversion oder füge eine Kapazität hinzu, und aktualisiere dann."
+    },
+    "signInPrompt": "Melde dich bei Microsoft Fabric an, um deine Arbeitsbereiche aufzulisten.",
+    "loadFailedWith": "Arbeitsbereiche konnten nicht geladen werden: {{error}}",
+    "loadFailed": "Arbeitsbereiche konnten nicht geladen werden."
+  },
+  "share": {
+    "title": "App teilen",
+    "intro": "Gewähre Personen in deinem Mandanten Zugriff auf <strong>{{app}}</strong>. Alle Empfänger erhalten die Rolle <strong>Mitwirkender</strong> im Arbeitsbereich der App.",
+    "introBuild_one": "Gewähre Personen in deinem Mandanten Zugriff auf <strong>{{app}}</strong>. Alle Empfänger erhalten die Rolle <strong>Mitwirkender</strong> im Arbeitsbereich der App und <strong>Build</strong>-Zugriff auf das semantische Modell, das sie verwendet.",
+    "introBuild_other": "Gewähre Personen in deinem Mandanten Zugriff auf <strong>{{app}}</strong>. Alle Empfänger erhalten die Rolle <strong>Mitwirkender</strong> im Arbeitsbereich der App und <strong>Build</strong>-Zugriff auf die semantischen Modelle, die sie verwendet.",
+    "people": "Personen oder Gruppen",
+    "placeholder": "Nach Name oder E-Mail-Adresse suchen",
+    "remove": "{{name}} entfernen",
+    "searching": "Wird gesucht…",
+    "add": "„{{email}}“ hinzufügen",
+    "noMatches": "Keine Treffer",
+    "invalid": "Keine gültige E-Mail-Adresse: {{emails}}",
+    "searchSignIn": {
+      "azure": "Melde dich zum Suchen bei Azure an",
+      "fabric": "Melde dich zum Suchen bei Fabric an"
+    },
+    "directory": {
+      "signInAzure": "Melde dich bei Azure an, um das Verzeichnis zu durchsuchen.",
+      "signInFabric": "Melde dich bei Fabric an, um das Verzeichnis zu durchsuchen.",
+      "failed": "Das Verzeichnis konnte nicht durchsucht werden. Du kannst trotzdem eine E-Mail-Adresse eingeben."
+    },
+    "contributor": "Mitwirkender",
+    "build": "Build",
+    "covered": "Durch Arbeitsbereich abgedeckt",
+    "checkingModels": "Semantische Modelle werden geprüft…",
+    "modelCheck": {
+      "failed": "Die semantischen Modelle der App konnten nicht geprüft werden.",
+      "title": "Modellprüfung fehlgeschlagen"
+    },
+    "expired": "Deine Fabric-Sitzung ist abgelaufen. Melde dich an, um das Teilen abzuschließen.",
+    "signInRetry": "Anmelden und wiederholen",
+    "azRequired": "Um Empfänger in deinem Verzeichnis zu suchen, musst du dich bei der Azure CLI anmelden.",
+    "azRetry": "Bei Azure anmelden und wiederholen",
+    "app": "App",
+    "model": "Modell",
+    "status": {
+      "failed": "Fehlgeschlagen",
+      "skipped": "Hatte bereits Zugriff",
+      "shared": "Geteilt"
+    },
+    "share": "Teilen",
+    "sharing": "Wird geteilt…",
+    "again": "Erneut teilen",
+    "shared_one": "Mit {{count}} Empfänger geteilt.",
+    "shared_other": "Mit {{count}} Empfängern geteilt.",
+    "sharedTitle": "App geteilt",
+    "failed": "Die App konnte nicht geteilt werden. Versuche es erneut.",
+    "linkCopied": "App-Link in die Zwischenablage kopiert."
+  },
+  "control": {
+    "panel": "Veröffentlichte Apps",
+    "yourApp": "deine App",
+    "notPublished": "Nicht veröffentlicht",
+    "notPublishedYet": "Noch nicht veröffentlicht",
+    "checkingForApp": "Nach einer veröffentlichten App wird gesucht…",
+    "errors": {
+      "loadApps": "Deine veröffentlichten Apps konnten nicht geladen werden. Versuche es erneut.",
+      "appCheck": "Prüfung der veröffentlichten App fehlgeschlagen",
+      "loadWorkspaces": "Die Arbeitsbereiche konnten nicht geladen werden. Versuche es erneut.",
+      "workspaceCheck": "Prüfung der Arbeitsbereiche fehlgeschlagen"
+    },
+    "held": {
+      "publish": "Copilot arbeitet an dieser App. Die Veröffentlichung wartet, bis der Durchgang abgeschlossen ist.",
+      "deleting": "Eine veröffentlichte App wird gelöscht. Die Veröffentlichung wartet, bis das abgeschlossen ist.",
+      "deleteWhilePublishing": "Veröffentlichung läuft. Das Löschen wartet, bis sie abgeschlossen ist.",
+      "delete": "Copilot arbeitet an dieser App. Das Löschen wartet, bis der Durchgang abgeschlossen ist."
+    },
+    "next": {
+      "publishingPercent": "Wird veröffentlicht… {{percent}} %",
+      "publishingTitle": "Fortschritt der Veröffentlichung ansehen",
+      "publishTitle": "Diese App in einem Fabric-Arbeitsbereich veröffentlichen",
+      "chooseWorkspace": "Arbeitsbereich auswählen",
+      "chooseWorkspaceTitle": "Fabric-Apps sind in diesem Arbeitsbereich nicht verfügbar. Wähle einen anderen Arbeitsbereich für die Veröffentlichung aus.",
+      "again": "{{name}} erneut veröffentlichen",
+      "publishChanges_one": "{{count}} Änderung veröffentlichen",
+      "publishChanges_other": "{{count}} Änderungen veröffentlichen",
+      "publishSomeChanges": "Änderungen veröffentlichen",
+      "filesChanged_one": "{{count}} Datei wurde seit der Veröffentlichung von {{name}} geändert",
+      "filesChanged_other": "{{count}} Dateien wurden seit der Veröffentlichung von {{name}} geändert",
+      "changesWaiting": "Deine neuesten Änderungen sind noch nicht in {{name}}",
+      "upToDate": "{{name}} ist auf dem neuesten Stand. Trotzdem erneut veröffentlichen."
+    },
+    "chip": {
+      "label": "Veröffentlichte App:",
+      "failedNote": "Fehlgeschlagen",
+      "auto": "Automatisch",
+      "publishing": "Wird in {{name}} veröffentlicht…",
+      "none": "Noch nicht veröffentlicht. Klicke, um einen Arbeitsbereich auszuwählen.",
+      "failed": "Veröffentlichung in {{name}} fehlgeschlagen. Klicke für Details.",
+      "liveIn": "{{name}} ist in {{workspace}} live. Klicke für Details oder um eine veröffentlichte App zu wechseln oder hinzuzufügen.",
+      "live": "{{name}} ist live. Klicke für Details oder um eine veröffentlichte App zu wechseln oder hinzuzufügen.",
+      "autoOn": "„Nach jedem Chat-Durchgang veröffentlichen“ ist aktiviert: Änderungen aus dem Chat werden am Ende jedes Durchgangs veröffentlicht.",
+      "autoOff": "„Nach jedem Chat-Durchgang veröffentlichen“ ist deaktiviert: Änderungen aus dem Chat warten, bis du sie veröffentlichst."
+    },
+    "status": {
+      "failed": "Veröffentlichung fehlgeschlagen",
+      "published": "Veröffentlicht",
+      "publishedWhen": "Veröffentlicht {{when}}"
+    },
+    "switchError": {
+      "signIn": "Melde dich bei Fabric an, bevor du die veröffentlichte App wechselst.",
+      "failed": "Die veröffentlichte App konnte nicht gewechselt werden. Versuche es erneut.",
+      "title": "Wechsel fehlgeschlagen"
+    },
+    "delete": {
+      "title": "Diese veröffentlichte App löschen",
+      "named": "{{name}} löschen",
+      "confirm": "<strong>{{name}}</strong> und alle zugehörigen Daten in {{workspace}} löschen?",
+      "detail": "Sie verschwindet für alle, die sie verwenden, und das kann nicht rückgängig gemacht werden. {{after}}",
+      "keep": "Deine App auf diesem Computer bleibt unverändert.",
+      "keepThen": "Deine App auf diesem Computer bleibt erhalten und wird ab dann in {{name}} veröffentlicht.",
+      "keepUnpublished": "Deine App auf diesem Computer bleibt erhalten, aber unveröffentlicht.",
+      "done": "{{name}} und die zugehörigen Daten in Fabric wurden gelöscht.",
+      "failed": "{{name}} konnte nicht gelöscht werden. Versuche es erneut.",
+      "failedTitle": "Löschen fehlgeschlagen"
+    },
+    "share": {
+      "title": "Diese App mit Personen in deinem Mandanten teilen",
+      "opening": "Dialogfeld zum Teilen wird geöffnet…",
+      "nothing": "Veröffentliche diese App in einem Arbeitsbereich, bevor du sie teilst.",
+      "nothingTitle": "Noch nichts zum Teilen",
+      "loadFailed": "Die veröffentlichte App konnte zum Teilen nicht geladen werden. Versuche es erneut."
+    },
+    "rename": "Diese veröffentlichte App umbenennen",
+    "renameNamed": "{{name}} umbenennen",
+    "renameLabel": "Name der veröffentlichten App",
+    "create": {
+      "first": "In einem Fabric-Arbeitsbereich veröffentlichen",
+      "another": "In einem anderen Arbeitsbereich veröffentlichen",
+      "firstButton": "In einem Fabric-Arbeitsbereich veröffentlichen…",
+      "anotherButton": "In einem anderen Arbeitsbereich veröffentlichen…"
+    },
+    "publishesAs": "Veröffentlicht mit <strong>{{user}}</strong>",
+    "yourAccountInSentence": "deinem Fabric-Konto",
+    "change": "Ändern",
+    "turnedDown": {
+      "named": "In „{{name}}“ konnte nicht veröffentlicht werden.",
+      "unnamed": "In diesem Arbeitsbereich konnte nicht veröffentlicht werden.",
+      "region": "Fabric-Apps sind in {{region}}, wo sich seine Kapazität befindet, nicht verfügbar. Wähle einen Arbeitsbereich auf einer Kapazität in einer anderen Region aus.",
+      "noRegion": "Fabric-Apps sind in seiner Region nicht verfügbar. Wähle einen Arbeitsbereich auf einer Kapazität in einer anderen Region aus."
+    },
+    "failedCallout": "Die Veröffentlichung wurde nicht abgeschlossen.",
+    "waiting": {
+      "files_one": "<strong>{{count}} Datei</strong> wurde seit der Veröffentlichung von {{name}} geändert.",
+      "files_other": "<strong>{{count}} Dateien</strong> wurden seit der Veröffentlichung von {{name}} geändert.",
+      "changes": "Deine neuesten Änderungen sind noch nicht in {{name}}."
+    },
+    "seeChanges": "Änderungen ansehen",
+    "facts": {
+      "app": "App",
+      "item": "Element",
+      "workspace": "Arbeitsbereich",
+      "account": "Konto"
+    },
+    "openInBrowser": "Im Browser öffnen",
+    "openInFabric": "In Fabric öffnen",
+    "openWorkspace": "Arbeitsbereich in Fabric öffnen",
+    "yourAccount": "Dein Fabric-Konto",
+    "notSignedIn": "Nicht bei Fabric angemeldet",
+    "others": "Weitere veröffentlichte Apps",
+    "publishedAgo": "veröffentlicht {{when}}",
+    "switchTitle": "Vorschau und Veröffentlichung auf {{name}} umstellen",
+    "switch": "Wechseln",
+    "switching": "Wird gewechselt…",
+    "auto": {
+      "title": "Nach jedem Chat-Durchgang veröffentlichen",
+      "on": "Wenn ein Durchgang deine App ändert, wird sie am Ende des Durchgangs veröffentlicht.",
+      "off": "Änderungen bleiben auf diesem Computer und erscheinen in der Vorschau, bis du sie veröffentlichst."
+    }
+  }
+}

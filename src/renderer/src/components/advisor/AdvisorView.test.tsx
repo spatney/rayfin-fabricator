@@ -384,4 +384,22 @@ describe('AdvisorView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
     expect(screen.getByRole('button', { name: /Per-user data isn't restricted/ })).toBeTruthy()
   })
+
+  it('shows and searches a quick check’s detail in the interface’s language', async () => {
+    const quick = await quickFor(BROKEN)
+    const findings = quick.findings.map((f) =>
+      f.ruleId === 'data-model/text-without-max'
+        ? { ...f, detailText: '`Todo.title` hat keine maximale Länge.' }
+        : f
+    )
+    renderView(controller({ ...quick, findings }))
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search issues' }), {
+      target: { value: 'Länge' }
+    })
+    expect(screen.queryByRole('button', { name: /Per-user data isn't restricted/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Text field has no maximum length/ }))
+    const detail = screen.getByRole('article', { name: 'Text field has no maximum length' })
+    expect(detail.textContent).toContain('Todo.title hat keine maximale Länge.')
+    expect(detail.textContent).not.toContain('is declared')
+  })
 })

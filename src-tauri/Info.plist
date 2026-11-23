@@ -2,7 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   Merged over the Info.plist Tauri writes for the macOS app (tauri build reads this file from
-  src-tauri). Tauri writes these two keys from bundle > fileAssociations in tauri.conf.json, but
+  src-tauri). Tauri writes CFBundleDocumentTypes and UTExportedTypeDeclarations from bundle >
+  fileAssociations in tauri.conf.json, but
   without document icons, so a .fabricator or .rayfin file would look like the app. These replace
   them, with the icons bundle > macOS > files puts in Contents/Resources (icons/project-file.icns,
   icons/app-file.icns). Keep the extensions and types in step with tauri.conf.json and EXTENSION
@@ -10,6 +11,17 @@
 -->
 <plist version="1.0">
 <dict>
+  <!--
+    The languages Fabricator comes in, so macOS shows its own parts of the app (the file dialogs,
+    the standard menu items) in the user's language. Keep in step with LANGUAGES in src/i18n.rs.
+  -->
+  <key>CFBundleLocalizations</key>
+  <array>
+    <string>en</string>
+    <string>es</string>
+    <string>de</string>
+    <string>ja</string>
+  </array>
   <key>CFBundleDocumentTypes</key>
   <array>
     <dict>

@@ -1,0 +1,339 @@
+{
+  "format": {
+    "quoted": "「{{text}}」",
+    "more": "ほか {{count}} 件",
+    "dateTime": "{{date}} {{time}}"
+  },
+  "duration": {
+    "underSecond": "1 秒未満",
+    "seconds": "{{s}} 秒",
+    "minutes": "{{m}} 分",
+    "minutesSeconds": "{{m}} 分 {{s}} 秒"
+  },
+  "steps": {
+    "count_other": "{{count}} ステップ",
+    "showEarlier_other": "前の {{count}} ステップを表示",
+    "failed": "失敗",
+    "exit": "終了コード {{code}}",
+    "copyCommand": "コマンドをコピー",
+    "open": "{{name}} を開く"
+  },
+  "code": {
+    "text": "テキスト",
+    "wrap": "折り返し",
+    "wrapLines": "長い行を折り返す",
+    "noWrapLines": "長い行を折り返さない",
+    "copyCode": "コードをコピー",
+    "showAll_other": "{{count}} 行をすべて表示"
+  },
+  "files": {
+    "openInCode": "{{path}} を [コード] タブで開く"
+  },
+  "agentRow": {
+    "agent": "エージェント",
+    "hideSteps": "このエージェントのステップを非表示",
+    "showSteps": "このエージェントのステップを表示"
+  },
+  "agentStatus": {
+    "waitingFor": "{{agent}} を待機中",
+    "agentsWorking_other": "{{agents}} が作業中",
+    "thinking": "考え中",
+    "writing": "回答を作成中",
+    "working": "作業中",
+    "waitingDecision": "あなたの判断を待機中",
+    "waitingAnswer": "あなたの回答を待機中"
+  },
+  "assistant": {
+    "needsInput": "Fabricator があなたの入力を必要としています",
+    "youAdded": "あなたが追加"
+  },
+  "copyButton": {
+    "copyMessage": "メッセージをコピー"
+  },
+  "tray": {
+    "removeItem": "{{name}} を削除"
+  },
+  "dataTray": {
+    "toConnect": "接続する Fabric データ",
+    "data": "データ",
+    "chipTitle": "{{workspace}} の {{kind}}。送信時に Copilot が接続します。クリックするとデータを変更できます。",
+    "sent": "Fabric データ",
+    "sentTitle": "{{workspace}} の {{kind}}",
+    "setup": "セットアップ",
+    "wrapUp": "仕上げ",
+    "page": "ページ {{index}}/{{total}}: {{name}}",
+    "setupAndPage": "セットアップとページ {{index}}/{{total}}: {{name}}",
+    "migration": "Power BI の移行",
+    "migrating": "Power BI から「{{report}}」を移行中"
+  },
+  "fileTray": {
+    "toSend": "送信するファイルとフォルダー",
+    "sent": "ファイルとフォルダー"
+  },
+  "diffView": {
+    "added": "新しいファイル",
+    "deleted": "削除済み",
+    "renamed": "名前変更",
+    "line": "⋯ {{line}} 行目",
+    "shortened": "差分は省略されています。すべてを表示するにはファイルを開いてください。"
+  },
+  "imageViewer": {
+    "picture": "画像",
+    "pictureOf": "画像 {{index}}/{{total}}",
+    "closeTitle": "閉じる (Esc)",
+    "previous": "前の画像",
+    "previousTitle": "前へ (←)",
+    "next": "次の画像",
+    "nextTitle": "次へ (→)",
+    "showLarger": "拡大表示",
+    "attachment": "添付のスクリーンショット"
+  },
+  "messageRow": {
+    "screenshots_other": "スクリーンショット {{count}} 枚",
+    "resend": "このメッセージを再送信",
+    "interrupted": "アプリが閉じられたため、この応答は中断されました。",
+    "resumeTitle": "このプロンプトを再実行して続行",
+    "resume": "再開",
+    "resumeApprovedPlan": "承認済みのプランを再開してください",
+    "reviseRecoveredPlan": "復元したプランを修正してください",
+    "resumePlanning": "プランの作成を再開してください"
+  },
+  "thinking": {
+    "live": "考え中…",
+    "thoughtItThrough": "じっくり考えました",
+    "thoughtFor": "{{duration}} 考えました"
+  },
+  "workLog": {
+    "working": "作業中",
+    "worked": "作業しました",
+    "workedFor": "{{duration}} 作業しました",
+    "hideSteps": "ステップを非表示",
+    "showSteps": "ステップを表示",
+    "showEarlierNotes": "前のメモを表示"
+  },
+  "welcome": {
+    "title": "{{name}} を作りましょう",
+    "sub": "作りたいものを普段の言葉で説明してください。コードを書いて、プレビューで動く様子をお見せします。コーディングは不要です。",
+    "tailoring": "アプリに合わせたアイデアを考えています…",
+    "ideas": "始めるためのアイデア",
+    "refreshTitle": "アプリのコードから新しいアイデアを生成",
+    "tips": "ヒント",
+    "tipScreenshot": "スクリーンショットを貼り付けるかドロップします",
+    "tipMention": "<kbd>@</kbd> を入力してファイルを参照します",
+    "tipData": "<kbd>+</kbd> でデータを接続します"
+  },
+  "paths": {
+    "projectFolder": "プロジェクト フォルダー"
+  },
+  "fusion": {
+    "modelDid": "{{model}} ({{did}})",
+    "did": {
+      "primary": "回答",
+      "draft": "下書き",
+      "critic": "レビュー",
+      "revision": "修正",
+      "judge": "確認",
+      "repair": "修復",
+      "followUp": "続行"
+    }
+  },
+  "plugins": {
+    "fabricIq": "開くことができる Power BI レポートとセマンティック モデルを探索します。",
+    "workIq": "Microsoft 365 のメール、会議、ファイル、Teams メッセージ、ユーザーを検索します。"
+  },
+  "markup": {
+    "pen": "ペン",
+    "highlighter": "蛍光ペン",
+    "arrow": "矢印",
+    "box": "四角形",
+    "red": "赤",
+    "yellow": "黄",
+    "green": "緑",
+    "blue": "青",
+    "white": "白"
+  },
+  "usage": {
+    "unit": {
+      "aiCredits_other": "AI クレジット",
+      "credits_other": "クレジット",
+      "premiumRequests_other": "プレミアム リクエスト"
+    },
+    "unlimited": {
+      "aiCredits": "AI クレジット無制限",
+      "premiumRequests": "プレミアム リクエスト無制限"
+    },
+    "amount": "{{amount}} {{unit}}",
+    "tokens": "{{tokens}} トークン",
+    "tokenLine": "入力 {{input}} · 出力 {{output}}",
+    "tokenDetail": "入力トークン {{input}}、出力トークン {{output}}",
+    "tokenDetailCached": "入力トークン {{input}} (うちプロンプト キャッシュから {{cached}})、出力トークン {{output}}",
+    "left": "{{unit}}: 残り {{left}}/{{total}}",
+    "resets": "{{day}} にリセットされます",
+    "overage": "追加使用量 {{amount}} {{unit}}"
+  },
+  "usageMeter": {
+    "providerKey": "自分の {{provider}} キーを使用 (料金はプロバイダーが請求)",
+    "ownKey": "自分のキーを使用 (料金はプロバイダーが請求)",
+    "yourKey": "自分のキー",
+    "plan": "Copilot プラン",
+    "percentLeft": "残り {{percent}}",
+    "planFailed": "Copilot プランを確認できませんでした。",
+    "planChecking": "プランを確認しています…",
+    "remaining": "{{unit}}: 残り <strong>{{left}}</strong>/{{total}}",
+    "planLeft": "Copilot プランの残り",
+    "tokens": "トークン",
+    "sessionCredits": "セッションのクレジット",
+    "sessionUsage": "セッションの使用量",
+    "columnTokens": "トークン",
+    "columnCredits": "クレジット",
+    "columnRequests": "リクエスト",
+    "chipLabel": "チャットの使用量: {{summary}}",
+    "chipTitle": "このチャットの使用量: {{summary}}",
+    "howCounted": "使用量のカウント方法",
+    "usedTokens": "トークンを使用",
+    "usedCredits_other": "クレジットを使用",
+    "usedRequests_other": "プレミアム リクエストを使用",
+    "costTitle": "1 AI クレジットあたり US$0.01 で換算",
+    "approx": "≈ {{cost}}",
+    "partial": "一部の応答でクレジットが報告されなかったため、これは最小値です。",
+    "byModel": "モデル別の使用量",
+    "tokenDetails": "トークンの詳細",
+    "viewUsage": "使用量を表示",
+    "otherModels": "その他のモデル"
+  },
+  "imageMarkup": {
+    "hint": "描き込んで、伝えたいことを Copilot に示しましょう",
+    "cancelTitle": "キャンセル (Esc)",
+    "failed": "この画像を開けませんでした。",
+    "area": {
+      "pen": "描画領域: ペンで描画",
+      "highlighter": "描画領域: 蛍光ペンで描画",
+      "arrow": "描画領域: 矢印で描画",
+      "box": "描画領域: 四角形で描画"
+    },
+    "opening": "画像を開いています…",
+    "discard": "もう一度 Esc キーを押すと描画を破棄します",
+    "tools": "描画ツール",
+    "tool": "ツール",
+    "color": "色",
+    "withKey": "{{label}} ({{key}})",
+    "undoTitle": "元に戻す ({{mod}}+Z)",
+    "redo": "やり直し",
+    "redoTitle": "やり直し ({{mod}}+Shift+Z)",
+    "clear": "描画をクリア",
+    "keepTitle": "描画を保持 (Enter)",
+    "closeTitle": "閉じる (Enter)"
+  },
+  "access": {
+    "readOnly": "読み取り専用",
+    "readWrite": "読み取り/書き込み"
+  },
+  "addMenu": {
+    "title": "画像、ファイル、データを追加",
+    "image": "画像",
+    "orPaste": "または貼り付け",
+    "files": "ファイルとフォルダー…",
+    "fabricData": "Fabric データ",
+    "dax": "DAX",
+    "browseAll": "すべての Fabric データを参照…"
+  },
+  "pluginsMenu": {
+    "plugins": "プラグイン",
+    "pluginsOn": "プラグイン: {{names}}",
+    "disabled": "アシスタントの作業中はプラグインを変更できません",
+    "title": "プラグインとツール",
+    "sub": "このチャットで使用できるものを選択します。",
+    "enabled_other": "{{count}} 個が有効",
+    "experiment": "試験的機能",
+    "mcpServers": "MCP サーバー",
+    "mcpNote": "MCP サーバーは、そのツールができることを何でも実行できます。",
+    "manage": "MCP サーバーを管理…",
+    "addServer": "MCP サーバーを追加…",
+    "note": "チャットは、リクエストで必要な場合にのみこれらを使用します。",
+    "learn": "プラグインの詳細"
+  },
+  "turnFooter": {
+    "changedFiles_other": "{{count}} 個のファイルを変更",
+    "changed": "変更",
+    "created": "{{path}} を作成",
+    "edited": "{{path}} を編集",
+    "deleted": "{{path}} を削除",
+    "hideChanges": "{{what}} — 変更を非表示",
+    "showChanges": "{{what}} — 変更を表示",
+    "openInCode": "{{what}} — [コード] タブで開く",
+    "partial": "このファイルへの一部の編集は記録されていません。すべて確認するにはファイルを開いてください。",
+    "stepwise": "編集ごとに表示しています。これらの編集は 1 つの差分にまとめられませんでした。",
+    "changesTo": "{{path}} の変更",
+    "noNetChange": "最終的な変更はありません。後の編集で前の編集が元に戻されました。",
+    "followed_other": "指示<list/>に従いました",
+    "copyAnswer": "回答をコピー",
+    "tryAgainTitle": "最後のメッセージをもう一度実行して、やり直します",
+    "durationTitle": "所要時間"
+  },
+  "markdown": {
+    "note": "メモ",
+    "tip": "ヒント",
+    "important": "重要",
+    "warning": "警告",
+    "caution": "注意"
+  },
+  "suggestions": {
+    "list": "すべての {{things}} をすっきりしたページに表示してください",
+    "create": "{{thing}} を作成・編集するフォームを追加してください",
+    "search": "{{things}} に検索とフィルターを追加してください",
+    "chart": "{{things}} をグラフにするダッシュボードを追加してください",
+    "auth": "サインインを必須にして、各ユーザーが自分専用の {{things}} を持てるようにしてください",
+    "photo": "各 {{thing}} に写真を添付できるようにしてください",
+    "design": "アプリ全体を新鮮でモダンな見た目にしてください"
+  },
+  "panel": {
+    "exitFocusTitle": "フォーカスを終了 — プレビューを再表示",
+    "focusTitle": "チャットにフォーカス — プレビューを非表示",
+    "exitFocus": "フォーカスを終了",
+    "focus": "チャットにフォーカス",
+    "newChatTitle": "この会話をクリアして新しく始める",
+    "newChat": "新しいチャット",
+    "jumpTitle": "最新のメッセージに移動",
+    "newMessages": "新しいメッセージ",
+    "jump": "最新に移動",
+    "newChatConfirm": "新しいチャットを開始しますか?",
+    "newChatMessage": "会話がクリアされ、Fabricator が新しく開始されます。アプリとそのファイルはそのまま残ります。"
+  },
+  "mention": {
+    "filesAndFolders": "ファイルとフォルダー",
+    "projectFiles": "プロジェクト ファイル",
+    "referenceFileOrFolder": "ファイルまたはフォルダーを参照",
+    "referenceFile": "ファイルを参照",
+    "loading": "ファイルを読み込んでいます…",
+    "nothingHere": "ここには「{{query}}」に一致するものがありません",
+    "noFiles": "「{{query}}」に一致するファイルはありません",
+    "outsideHint": "プロジェクト外のものを参照するには、../ または完全なパスを入力してください。"
+  },
+  "composer": {
+    "cantReadImages": "{{model}} は画像を読み取れません",
+    "imagesBlocked": "{{note}}。画像を削除するか、画像を読み取れるモデルを選択してください。",
+    "screenshot": "スクリーンショット",
+    "chooseAnswerToPlan": "プランの作成を続けるには、選択肢から回答を 1 つ選んでください。",
+    "chooseAnswer": "続行するには、選択肢から回答を 1 つ選んでください。",
+    "thisFolder": "このフォルダー",
+    "dropToAttach": "ドロップして添付",
+    "showLargerDraw": "拡大表示して描き込む",
+    "screenshotToSend": "送信するスクリーンショット",
+    "removeScreenshot": "スクリーンショットを削除",
+    "addingImage": "画像を追加しています",
+    "placeholderPick": "{{label}} の変更内容を入力するか、Enter キーで仕上げます",
+    "placeholderPicks": "これら {{count}} 個の要素の変更内容を入力するか、Enter キーで仕上げます",
+    "placeholderData": "このデータで作るものを入力するか、Enter キーで接続します",
+    "placeholderFiles": "これらをどうするか入力するか、Enter キーで送信します",
+    "placeholder": "{{name}} について Fabricator にメッセージを送信…",
+    "enterToSend": "<kbd>Enter</kbd> で送信",
+    "interjectTitle": "割り込み — 待たずに今すぐ送信",
+    "interject": "このメッセージで割り込む",
+    "stop": "生成を停止",
+    "publishing": "公開中 — 公開が完了すると送信を再開します",
+    "sendPicks_other": "選択した {{count}} 個の要素と一緒に送信 (Enter)",
+    "sendData_other": "送信して {{count}} 個のデータ ソースを接続 (Enter)",
+    "sendTitle": "送信 (Enter)",
+    "send": "送信"
+  }
+}

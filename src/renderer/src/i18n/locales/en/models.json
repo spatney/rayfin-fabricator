@@ -1,0 +1,126 @@
+{
+  "effort": {
+    "none": {
+      "label": "None",
+      "hint": "Answers without extra thinking."
+    },
+    "low": {
+      "label": "Low",
+      "hint": "Quick — fine for small, clear changes."
+    },
+    "medium": {
+      "label": "Medium",
+      "hint": "Balanced speed and care."
+    },
+    "high": {
+      "label": "High",
+      "hint": "Thinks longer — good for tricky changes."
+    },
+    "xhigh": {
+      "label": "Extra high",
+      "hint": "Thinks much longer on hard problems."
+    },
+    "max": {
+      "label": "Max",
+      "hint": "The most thinking — slowest, for the hardest work."
+    }
+  },
+  "context": {
+    "standard": "Standard",
+    "long": "Long"
+  },
+  "picker": {
+    "model": "Model",
+    "auto": "Auto",
+    "autoHint": "Copilot picks the model for each request.",
+    "autoHintFusion": "Copilot picks the models for each request.",
+    "effort": "Effort",
+    "optimizedFor": "Optimized for",
+    "contextWindow": "Context window",
+    "default": "Default",
+    "models": "Models",
+    "search": "Search models",
+    "missing": "Not available anymore. Choose another model.",
+    "runsOnKey": "Runs on your {{provider}} API key",
+    "fast": "Fast",
+    "yourKeys": "Your API keys",
+    "addKeyModels": "Add models with your API keys…",
+    "more": "More models",
+    "loading": "Loading models…",
+    "loadFailed": "Couldn’t load the models. Close this and open it again to retry.",
+    "noMatch": "No models match “{{query}}”",
+    "tokens": "{{tokens}} tokens",
+    "longWindow": "A long window keeps more of your app and the conversation in view.",
+    "fusionNote": "High and Max can use more than one model, such as one to review another’s work, so a request can take longer and cost more.",
+    "fusionDocs": "Learn more about Copilot Fusion",
+    "busy": "The model can’t be changed while the assistant is working",
+    "pill": "{{label}}: {{choice}}",
+    "pillOnKey": "{{label}}: {{choice}} — on your {{provider}} API key",
+    "manageKeys": "Manage API keys…"
+  },
+  "providers": {
+    "state": {
+      "ok": "Key saved",
+      "off": "No key",
+      "error": "Needs attention"
+    },
+    "errors": {
+      "read": "Couldn’t read your model providers.",
+      "generic": "That didn’t work. Please try again.",
+      "saveModels": "Couldn’t save your choice of models."
+    },
+    "title": "Model providers",
+    "sub": "Use models from these providers with your own API keys in Build chat, the Advisor and Design. The provider bills you for them. Copilot still runs the conversation, so stay signed in to GitHub Copilot.",
+    "unsupported": "Fabricator can’t keep API keys safely on this operating system yet.",
+    "purpose": "{{description}}, billed to your {{name}} account.",
+    "addKeyLabel": "Add your {{name}} API key",
+    "addKey": "Add key",
+    "apiKey": "API key",
+    "savedIn": "Saved in {{store}}",
+    "confirmRemove": "Remove your {{name}} key?",
+    "checkTitle": "Check the key with {{name}} again and update its models",
+    "checkAgain": "Check again",
+    "replace": "Replace",
+    "removeLabel": "Remove your {{name}} API key",
+    "removing": "Removing…",
+    "inPickers": "In the model pickers",
+    "enabledCount": "{{enabled}} of {{total}}",
+    "pickerList": "{{name}} models in the model pickers",
+    "images": "images",
+    "recommended": "Recommended",
+    "retiringTitle": "{{name}} is retiring this model",
+    "retiring": "Retiring",
+    "showAll": "Show all {{total}} models",
+    "keyLabel": "{{name}} API key",
+    "newKeyLabel": "New {{name}} API key",
+    "keyHint": "Fabricator checks it with {{name}}, then keeps it in {{store}} on this computer.",
+    "getKey": "Get a key",
+    "replaceKey": "Replace key",
+    "saveKey": "Save key"
+  },
+  "chatDefaults": {
+    "title": "Chat defaults",
+    "close": "Close chat defaults",
+    "sub": "A new project’s chat starts with these. After that, each project’s chat keeps its own, which you change in the chat.",
+    "model": "Model",
+    "modelHint": "With Auto, Copilot chooses a model for each request.",
+    "defaultModel": "Default model",
+    "plugins": "Plugins",
+    "mcpServers": "MCP servers",
+    "noServers": "No MCP servers yet",
+    "noServersHint": "Add the MCP servers chat can use, then choose the ones new chats start with.",
+    "manageServers": "Manage MCP servers"
+  },
+  "instructions": {
+    "title": "Custom instructions",
+    "close": "Close custom instructions",
+    "sub": "Tell Copilot what you want in every app you build, such as a theme, wording or layout. Each app’s chat follows these from its next message, and what you ask in the chat comes first. They stay in Fabricator: they aren’t saved in your apps.",
+    "label": "Instructions",
+    "hint": "Keep them short: Copilot reads them with every message.",
+    "examples": {
+      "theme": "Use the system’s light or dark theme by default.",
+      "case": "Use sentence case for headings, labels and buttons.",
+      "dates": "Show dates like 5 Mar 2026."
+    }
+  }
+}

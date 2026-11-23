@@ -1,25 +1,30 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
+import { translator, useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { isHiddenTool, phaseLabel } from './toolPresentation'
 import type { UIChatMessage } from './types'
 
 /** What the turn is doing right now, in a few plain words. */
 export function livePhase(m: UIChatMessage): string {
+  const t = translator('chat')
   // Subagents still working, such as an explore agent, by name.
-  const agents = m.tools.flatMap((t) => (t.agent?.state === 'running' ? [t.agent.name] : []))
-  const running = m.tools.find((t) => t.state === 'running' && !isHiddenTool(t.name))
+  const agents = m.tools.flatMap((tool) =>
+    tool.agent?.state === 'running' ? [tool.agent.name] : []
+  )
+  const running = m.tools.find((tool) => tool.state === 'running' && !isHiddenTool(tool.name))
   if (running) {
     if (agents.length === 1 && running.name.toLowerCase() === 'read_agent') {
-      return `Waiting for ${agents[0]}`
+      return t('agentStatus.waitingFor', { agent: agents[0] })
     }
     return phaseLabel(running.name, running.server)
   }
-  if (agents.length > 0) return `${agents.join(', ')} ${agents.length === 1 ? 'is' : 'are'} working`
+  if (agents.length > 0)
+    return t('agentStatus.agentsWorking', { count: agents.length, agents: agents.join(', ') })
   const last = m.segments?.[m.segments.length - 1]
-  if (last?.kind === 'reasoning') return 'Thinking'
-  if (last?.kind === 'text' && last.text.trim()) return 'Writing the answer'
-  if (m.tools.length > 0) return 'Working'
-  return 'Thinking'
+  if (last?.kind === 'reasoning') return t('agentStatus.thinking')
+  if (last?.kind === 'text' && last.text.trim()) return t('agentStatus.writing')
+  if (m.tools.length > 0) return t('agentStatus.working')
+  return t('agentStatus.thinking')
 }
 
 /**
@@ -39,6 +44,7 @@ export function AgentStatus({
   awaitingDecision?: boolean
   startedAt?: number
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   // Anchor the timer to the turn's real start time (persisted on the message),
   // not this component's mount time — otherwise remounting (e.g. switching away
   // from and back to the chat tab) would reset the elapsed counter to 0.
@@ -61,7 +67,7 @@ export function AgentStatus({
       <div className="agent-status agent-status--await" role="status" aria-live="polite">
         <span className="agent-status-await-dot" aria-hidden="true" />
         <span className="agent-status-await-label">
-          {awaitingDecision ? 'Waiting for your decision' : 'Waiting for your answer'}
+          {awaitingDecision ? t('agentStatus.waitingDecision') : t('agentStatus.waitingAnswer')}
         </span>
       </div>
     )

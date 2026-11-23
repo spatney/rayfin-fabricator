@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX } from 'react'
 import { getCopilotHost, signInToCopilot } from '../copilotAuth'
 import CopilotHostInput from './CopilotHostInput'
 import { openDocs } from '../docsLinks'
+import { useTranslation } from '../i18n'
 
 interface Props {
   detail?: string
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function CopilotSignInNotice({ detail, host, disabled, onSignedIn }: Props): JSX.Element {
+  const { t } = useTranslation('accounts')
   const [copilotHost, setCopilotHost] = useState(() => host ?? getCopilotHost())
   const [busy, setBusy] = useState(false)
   const [log, setLog] = useState('')
@@ -34,7 +36,7 @@ export default function CopilotSignInNotice({ detail, host, disabled, onSignedIn
       })
       const result = await signInToCopilot(copilotHost)
       if (!result.ok) {
-        setError(result.error ?? 'Copilot sign-in did not complete. Please try again.')
+        setError(result.error ?? t('copilotSignInFailed'))
         return
       }
       await onSignedIn()
@@ -50,16 +52,16 @@ export default function CopilotSignInNotice({ detail, host, disabled, onSignedIn
 
   return (
     <div className="alert alert--error copilot-auth-notice" role="alert">
-      <strong>Copilot needs your attention</strong>
-      <div>{error ?? detail ?? 'Sign in to GitHub Copilot here, then retry your message.'}</div>
+      <strong>{t('copilotNotice.title')}</strong>
+      <div>{error ?? detail ?? t('copilotNotice.signInHere')}</div>
       <CopilotHostInput value={copilotHost} disabled={busy || disabled} onChange={setCopilotHost} />
       <button className="btn btn--primary btn--sm" disabled={busy || disabled} onClick={() => void signIn()}>
-        {busy ? 'Signing in to Copilot...' : 'Sign in to Copilot'}
+        {busy ? t('copilotNotice.signingIn') : t('copilotNotice.signIn')}
       </button>
       <button className="btn btn--sm btn--link" onClick={() => openDocs('copilotSignIn')}>
-        Sign-in help
+        {t('copilotNotice.help')}
       </button>
-      {busy && <div>Complete sign-in in your browser, or follow the device-code instructions below.</div>}
+      {busy && <div>{t('copilotNotice.inBrowser')}</div>}
       {log && <pre className="log-console log-console--sm">{log}</pre>}
     </div>
   )

@@ -10,6 +10,7 @@ import {
 } from 'react'
 import type { StudioProject } from '@shared/ipc'
 import {
+  accessText,
   emptyDataModel,
   parseProjectDataModel,
   type AccessLevel,
@@ -26,6 +27,7 @@ import {
   type EdgeRender,
   type RectLike
 } from '../model/relationships'
+import { Trans, translator, useTranslation } from '../i18n'
 import { Codicon } from './icons'
 import { ViewHead } from './blueprint/ViewHead'
 import { NO_DEPLOY } from './blueprint/prompts'
@@ -70,7 +72,12 @@ function typeChip(field: ModelField): { label: string; cls: string } {
     case 'enum':
       return { label: 'enum', cls: 'model-chip--enum' }
     case 'relation':
-      return { label: field.relationKind === 'many' ? '↦ many' : '↦ one', cls: 'model-chip--rel' }
+      return {
+        label: translator('dataModel')(
+          field.relationKind === 'many' ? 'model.card.toMany' : 'model.card.toOne'
+        ),
+        cls: 'model-chip--rel'
+      }
     default:
       return { label: field.tsType ?? '—', cls: 'model-chip--unknown' }
   }
@@ -138,6 +145,7 @@ export default function ModelView({
   providedModel,
   focusRequest
 }: Props): JSX.Element {
+  const { t } = useTranslation('dataModel')
   const [model, setModel] = useState<DataModel | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -614,15 +622,15 @@ export default function ModelView({
         'owner (typically by matching a `*_id` field against `claims.sub`), or keep `@anonymous` ' +
         'only if the data is genuinely public. Explain the change you make. ' +
         NO_DEPLOY
-      onSendToChat(`Harden access on ${entity.name}`, prompt)
+      onSendToChat(t('model.hardenChat', { name: entity.name }), prompt)
     },
-    [onSendToChat]
+    [onSendToChat, t]
   )
 
   const addModel = useCallback((): void => {
     const { dataDir, schemaFile } = model ?? emptyDataModel()
     onSendToChat(
-      'Add a data model',
+      t('model.empty.addChat'),
       'This Rayfin app has no data model yet. Please add one or more entities under ' +
         `\`${dataDir}/\` using the \`@microsoft/rayfin-core\` decorators (\`@entity\`, field ` +
         'decorators like `@uuid`/`@text`/`@boolean`/`@date`, and `@role`/`@authenticated` with ' +
@@ -631,12 +639,12 @@ export default function ModelView({
         'If the project has a `data-modeling` skill, follow it. ',
       true
     )
-  }, [onSendToChat, model])
+  }, [onSendToChat, model, t])
 
   if (loading && !model) {
     return (
       <div className="model-view">
-        <div className="model-empty">Reading your data model…</div>
+        <div className="model-empty">{t('model.loading')}</div>
       </div>
     )
   }
@@ -646,14 +654,17 @@ export default function ModelView({
     return (
       <div className="model-view">
         <div className="model-empty model-empty--cta">
-          <div className="model-empty-title">No data model yet</div>
+          <div className="model-empty-title">{t('model.empty.title')}</div>
           <p className="model-empty-sub">
-            Rayfin entities live under <code>{dataDir}/</code> and are listed in{' '}
-            <code>{schemaFile.slice(schemaFile.lastIndexOf('/') + 1)}</code>. Once you add some, this tab
-            draws them as an entity‑relationship diagram with per‑entity access badges.
+            <Trans
+              t={t}
+              i18nKey="model.empty.desc"
+              values={{ dataDir, schemaFile: schemaFile.slice(schemaFile.lastIndexOf('/') + 1) }}
+              components={{ code: <code /> }}
+            />
           </p>
           <button className="btn btn--primary" onClick={addModel}>
-            Add a data model with Copilot
+            {t('model.empty.add')}
           </button>
         </div>
       </div>
@@ -664,12 +675,17 @@ export default function ModelView({
     return (
       <div className="model-view">
         <div className="model-empty model-empty--cta">
-          <div className="model-empty-title">Your schema has no entities</div>
+          <div className="model-empty-title">{t('model.noEntities.title')}</div>
           <p className="model-empty-sub">
-            <code>{model.schemaFile}</code> exists but its <code>schema</code> array is empty.
+            <Trans
+              t={t}
+              i18nKey="model.noEntities.desc"
+              values={{ file: model.schemaFile }}
+              components={{ code: <code /> }}
+            />
           </p>
           <button className="btn btn--primary" onClick={addModel}>
-            Add an entity with Copilot
+            {t('model.noEntities.add')}
           </button>
         </div>
       </div>
@@ -695,24 +711,26 @@ export default function ModelView({
   return (
     <div className="model-view">
       <ViewHead
-        title="Data model"
+        title={t('model.title')}
         subtitle={
           <>
-            {entityCount} {entityCount === 1 ? 'entity' : 'entities'}
-            {relCount > 0 && ` · ${relCount} ${relCount === 1 ? 'relationship' : 'relationships'}`}
+            {t('model.entities', { count: entityCount })}
+            {relCount > 0 && ` · ${t('diagram.relationships', { count: relCount })}`}
           </>
         }
         legend={
           <div className="model-legend" aria-hidden="true">
-            <span className="model-legend-label">Access</span>
+            <span className="model-legend-label">{t('model.legend.access')}</span>
             <span className="model-legend-item">
-              <span className="model-legend-dot model-legend-dot--ok" /> Row‑scoped
+              <span className="model-legend-dot model-legend-dot--ok" /> {t('model.legend.scoped')}
             </span>
             <span className="model-legend-item">
-              <span className="model-legend-dot model-legend-dot--warn" /> Any signed‑in
+              <span className="model-legend-dot model-legend-dot--warn" />{' '}
+              {t('model.legend.signedIn')}
             </span>
             <span className="model-legend-item">
-              <span className="model-legend-dot model-legend-dot--danger" /> Public
+              <span className="model-legend-dot model-legend-dot--danger" />{' '}
+              {t('model.legend.public')}
             </span>
           </div>
         }
@@ -724,14 +742,14 @@ export default function ModelView({
           <input
             className="model-search-input"
             value={query}
-            placeholder="Search entities & fields"
-            aria-label="Search entities and fields"
+            placeholder={t('model.search.placeholder')}
+            aria-label={t('model.search.label')}
             onChange={(e) => setQuery(e.target.value)}
           />
           {query && (
             <button
               className="model-search-clear"
-              aria-label="Clear search"
+              aria-label={t('diagram.clearSearch')}
               onClick={() => setQuery('')}
             >
               <Codicon name="close" />
@@ -741,7 +759,7 @@ export default function ModelView({
 
         {focus && (
           <button className="model-focus-chip" onClick={() => focusOn(null)}>
-            <Codicon name="eye" /> Focusing {focus}
+            <Codicon name="eye" /> {t('diagram.focusing', { name: focus })}
             <Codicon name="close" className="model-focus-chip-x" />
           </button>
         )}
@@ -749,29 +767,45 @@ export default function ModelView({
         <button
           className="model-tool-btn"
           onClick={toggleCollapseAll}
-          title={collapsedAll ? 'Expand all entities' : 'Collapse all entities'}
+          title={collapsedAll ? t('model.expandAll') : t('model.collapseAll')}
         >
           <Codicon name={collapsedAll ? 'expand-all' : 'collapse-all'} />
-          {collapsedAll ? 'Expand' : 'Collapse'}
+          {collapsedAll ? t('diagram.expand') : t('diagram.collapse')}
         </button>
 
         <div className="model-toolbar-spacer" />
 
-        <div className="model-zoom" role="group" aria-label="Zoom">
-          <button className="model-zoom-btn" onClick={() => zoomBy(0.8)} aria-label="Zoom out">
+        <div className="model-zoom" role="group" aria-label={t('diagram.zoom')}>
+          <button
+            className="model-zoom-btn"
+            onClick={() => zoomBy(0.8)}
+            aria-label={t('diagram.zoomOut')}
+          >
             <Codicon name="zoom-out" />
           </button>
-          <button className="model-zoom-label" onClick={() => fitTo(fitTarget)} title="Fit to view">
+          <button
+            className="model-zoom-label"
+            onClick={() => fitTo(fitTarget)}
+            title={t('diagram.fit')}
+          >
             {Math.round(view.scale * 100)}%
           </button>
-          <button className="model-zoom-btn" onClick={() => zoomBy(1.25)} aria-label="Zoom in">
+          <button
+            className="model-zoom-btn"
+            onClick={() => zoomBy(1.25)}
+            aria-label={t('diagram.zoomIn')}
+          >
             <Codicon name="zoom-in" />
           </button>
         </div>
-        <button className="model-tool-btn" onClick={() => fitTo(fitTarget)} title="Fit to view">
+        <button
+          className="model-tool-btn"
+          onClick={() => fitTo(fitTarget)}
+          title={t('diagram.fit')}
+        >
           <Codicon name="screen-full" />
         </button>
-        <button className="model-tool-btn" onClick={resetLayout} title="Reset layout">
+        <button className="model-tool-btn" onClick={resetLayout} title={t('model.resetLayout')}>
           <Codicon name="refresh" />
         </button>
       </div>
@@ -825,6 +859,7 @@ export default function ModelView({
             .filter((e) => isRendered(e.name))
             .map((entity) => {
               const tone = ACCESS_META[entity.access.level].tone
+              const access = accessText(entity)
               const pos = positions.get(entity.name) ?? { x: 0, y: 0 }
               const dim = cardDimmed(entity.name)
               const collapsedCard = isCollapsed(entity.name)
@@ -846,30 +881,33 @@ export default function ModelView({
                   <div className="model-card-head">
                     <button
                       className="model-card-collapse"
-                      aria-label={collapsedCard ? 'Expand entity' : 'Collapse entity'}
-                      title={collapsedCard ? 'Expand' : 'Collapse'}
+                      aria-label={collapsedCard ? t('model.card.expand') : t('model.card.collapse')}
+                      title={collapsedCard ? t('diagram.expand') : t('diagram.collapse')}
                       onClick={() => toggleCard(entity.name)}
                     >
                       <Codicon name={collapsedCard ? 'chevron-right' : 'chevron-down'} />
                     </button>
                     <button
                       className="model-card-name"
-                      title={`${entity.access.detail} · Open ${entity.file}`}
+                      title={t('model.card.nameTitle', {
+                        detail: access.detail,
+                        file: entity.file
+                      })}
                       onClick={() => onOpenFile(entity.file)}
                     >
                       {entity.customName || entity.name}
                     </button>
                     <span
                       className={`model-card-access model-card-access--${tone}`}
-                      title={entity.access.detail}
-                      aria-label={entity.access.label}
+                      title={access.detail}
+                      aria-label={access.label}
                     />
                   </div>
 
                   {collapsedCard ? (
                     <button className="model-card-summary" onClick={() => toggleCard(entity.name)}>
-                      {entity.fields.length} {entity.fields.length === 1 ? 'field' : 'fields'}
-                      {linked > 0 && ` · ${linked} linked`}
+                      {t('model.card.fields', { count: entity.fields.length })}
+                      {linked > 0 && ` · ${t('model.card.linked', { count: linked })}`}
                     </button>
                   ) : (
                     <>
@@ -890,7 +928,11 @@ export default function ModelView({
                               key={field.name}
                               data-field={field.name}
                               className={`model-field${relTarget ? ' model-field--link' : ''}`}
-                              title={relTarget ? `References ${relTarget}` : undefined}
+                              title={
+                                relTarget
+                                  ? t('model.card.references', { target: relTarget })
+                                  : undefined
+                              }
                               onClick={relTarget ? () => setHighlight(relTarget) : undefined}
                             >
                               <span className="model-field-gutter" aria-hidden="true">
@@ -898,13 +940,13 @@ export default function ModelView({
                                   <Codicon
                                     name="key"
                                     className="model-field-icon model-field-icon--pk"
-                                    title="Primary key"
+                                    title={t('model.card.primaryKey')}
                                   />
                                 ) : relTarget ? (
                                   <Codicon
                                     name="link"
                                     className="model-field-icon model-field-icon--fk"
-                                    title={`References ${relTarget}`}
+                                    title={t('model.card.references', { target: relTarget })}
                                   />
                                 ) : (
                                   <span className="model-field-icon" />
@@ -913,8 +955,8 @@ export default function ModelView({
                                   className={`model-field-req${
                                     required ? '' : ' model-field-req--opt'
                                   }${field.unique ? ' model-field-req--uniq' : ''}`}
-                                  title={`${required ? 'Required' : 'Optional'}${
-                                    field.unique ? ' · Unique' : ''
+                                  title={`${required ? t('model.card.required') : t('model.card.optional')}${
+                                    field.unique ? ` · ${t('model.card.unique')}` : ''
                                   }`}
                                 />
                               </span>
@@ -924,25 +966,35 @@ export default function ModelView({
                           )
                         })}
                         {entity.fields.length === 0 && (
-                          <li className="model-field model-field--empty">No fields parsed.</li>
+                          <li className="model-field model-field--empty">
+                            {t('model.card.noFields')}
+                          </li>
                         )}
                       </ul>
 
-                      <div className="model-card-perms" title="Access grants">
+                      <div className="model-card-perms" title={t('model.card.grants')}>
                         {entity.permissions.length === 0 ? (
-                          <span className="model-perm model-perm--none">no explicit roles</span>
+                          <span className="model-perm model-perm--none">
+                            {t('model.card.noRoles')}
+                          </span>
                         ) : (
                           entity.permissions.map((p, i) => (
                             <span
                               key={`${p.role}-${i}`}
                               className={`model-perm${p.hasPolicy ? ' model-perm--scoped' : ''}`}
-                              title={`${p.decorator}: ${p.actions.join(', ')}${
-                                p.hasPolicy ? ' (row-level policy)' : ''
-                              }`}
+                              title={
+                                p.hasPolicy
+                                  ? t('model.card.rowPolicy', {
+                                      grant: `${p.decorator}: ${p.actions.join(', ')}`
+                                    })
+                                  : `${p.decorator}: ${p.actions.join(', ')}`
+                              }
                             >
                               {p.role}
                               <span className="model-perm-actions">{p.actions.join('/')}</span>
-                              {p.hasPolicy && <span className="model-perm-policy">policy</span>}
+                              {p.hasPolicy && (
+                                <span className="model-perm-policy">{t('model.card.policy')}</span>
+                              )}
                             </span>
                           ))
                         )}
@@ -955,21 +1007,21 @@ export default function ModelView({
                       className="btn btn--xs btn--ghost"
                       onClick={() => onOpenFile(entity.file)}
                     >
-                      Open
+                      {t('actions.open')}
                     </button>
                     {needsHardening(entity.access.level) && (
                       <button
                         className="btn btn--xs btn--ghost"
                         onClick={() => hardenEntity(entity)}
                       >
-                        Harden
+                        {t('model.card.harden')}
                       </button>
                     )}
                     <button
                       className="btn btn--xs btn--ghost model-card-focus"
                       onClick={() => focusOn(focus === entity.name ? null : entity.name)}
                     >
-                      {focus === entity.name ? 'Unfocus' : 'Focus'}
+                      {focus === entity.name ? t('model.card.unfocus') : t('model.card.focus')}
                     </button>
                   </div>
                 </div>

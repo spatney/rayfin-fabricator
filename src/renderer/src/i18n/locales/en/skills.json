@@ -1,0 +1,150 @@
+{
+  "filters": {
+    "all": "All",
+    "on": "On",
+    "off": "Off"
+  },
+  "groups": {
+    "alwaysOn": "Always on",
+    "alwaysOnHint": "Core guidance managed by Rayfin.",
+    "library": "Your skill library",
+    "libraryHint": "Your reusable skills. Turning one on copies it into this app.",
+    "app": "Added in this app",
+    "appHint": "Skills that live only in this app, such as the ones its template came with.",
+    "more": "More"
+  },
+  "skill": {
+    "alwaysOn": "Always on",
+    "updateAvailable": "Update available",
+    "on": "On",
+    "off": "Off",
+    "managed": "Managed by Rayfin. Always on.",
+    "use": "Use {{title}} in this app",
+    "updating": "Updating…"
+  },
+  "kicker": {
+    "rayfin": "Managed by Rayfin",
+    "library": "Your library",
+    "app": "This app",
+    "builtIn": "Built in",
+    "builtInCategory": "Built in · {{category}}"
+  },
+  "toasts": {
+    "turnedOn": "Turned on “{{title}}”. Saved to this app.",
+    "turnedOff": "Turned off “{{title}}”. Saved to this app.",
+    "updated": "Updated “{{title}}”.",
+    "updateFailed": "Couldn’t update “{{title}}”.",
+    "updatedCount_one": "Updated {{count}} skill.",
+    "updatedCount_other": "Updated {{count}} skills.",
+    "saved": "Saved to your skills.",
+    "savedToLibrary": "Saved “{{title}}” to your skill library.",
+    "deleted": "Deleted “{{title}}” from your skill library.",
+    "removed": "Removed “{{title}}” from this app."
+  },
+  "view": {
+    "title": "Skills",
+    "subtitle": "Guidance Copilot follows while it builds this app",
+    "search": "Search skills",
+    "clearSearch": "Clear search",
+    "show": "Show",
+    "newSkillTitle": "Write or upload your own skill",
+    "newSkill": "New skill"
+  },
+  "empty": {
+    "noMatch": "No skills match “{{query}}”",
+    "noneOn": "No skills are on",
+    "allOn": "Every skill is on",
+    "showAll": "Show all skills"
+  },
+  "deleteDialog": {
+    "title": "Delete custom skill?",
+    "message": "Delete “{{title}}” from your skill library? Apps that already use it keep their copy. This only removes it from your reusable library."
+  },
+  "removeDialog": {
+    "title": "Remove skill from this app?",
+    "message": "Copilot stops using “{{title}}” in this app. It isn’t in your skill library, so to get it back you’d restore it from History.",
+    "messageSaveFirst": "Copilot stops using “{{title}}” in this app. It isn’t in your skill library, so to get it back you’d restore it from History. Save it to your library first if you want to reuse it.",
+    "removing": "Removing…"
+  },
+  "inspector": {
+    "readError": "Couldn’t read this skill.",
+    "label": "{{title}} details",
+    "close": "Close details",
+    "closeTitle": "Close (Esc)",
+    "managedNote": "Rayfin manages this skill. It’s always on and updates with the Rayfin CLI.",
+    "appNote": "This skill lives only in this app. Save it to your library to use it in other apps.",
+    "appNoteLocked": "This skill lives only in this app. It can’t be saved to your library under its current name.",
+    "use": "Use in this app",
+    "useOn": "Copilot follows it from your next message.",
+    "useOff": "Adds it to this app. Every change is saved in History.",
+    "newer": "A newer version of this skill is available.",
+    "whenHeading": "When Copilot uses it",
+    "triggers": "Trigger words",
+    "fewer": "Fewer",
+    "more_one": "+{{count}} more",
+    "more_other": "+{{count}} more",
+    "noTriggers": "Copilot decides from the skill’s instructions.",
+    "teachesHeading": "What it teaches",
+    "showAll": "Show all",
+    "fileHeading": "File",
+    "notInstalled": "Added to this app when you turn the skill on.",
+    "viewSource": "View SKILL.md",
+    "saveToLibrary": "Save to library"
+  },
+  "overview": {
+    "label": "About skills",
+    "howTitle": "How skills work",
+    "how1": "Turn a skill on. Fabricator adds its instructions to this app and saves the change in History.",
+    "how2": "When a request matches the skill, Copilot reads it and follows its guidance.",
+    "how3": "Turn it off at any time. Select a skill to see what it teaches.",
+    "inThisApp": "In this app",
+    "alwaysOn": "Always on",
+    "builtIn": "Built-in skills",
+    "onOf": "{{on}} of {{total}} on",
+    "library": "Your library",
+    "appOnly": "Added in this app",
+    "updates": "Updates",
+    "updatesText_one": "A built-in skill in this app has a newer version.",
+    "updatesText_other": "{{count}} built-in skills in this app have a newer version.",
+    "updateAll_one": "Update it",
+    "updateAll_other": "Update all {{count}}",
+    "ownTitle": "Your own skills",
+    "ownText": "Select <strong>New skill</strong> to write one for your brand, your data’s vocabulary or your team’s review checklist, or to upload a skill you already have.",
+    "learnMore": "Learn more about skills"
+  },
+  "custom": {
+    "titleEdit": "Edit custom skill",
+    "titleAdd": "Add a custom skill",
+    "tabs": "How to add a skill",
+    "write": "Write",
+    "upload": "Upload",
+    "libraryTitle": "Save to my skill library",
+    "libraryHint": "Also keep it in your library so you can reuse it in other apps.",
+    "titleLabel": "Title",
+    "titlePlaceholder": "e.g. Our brand style",
+    "iconLabel": "Icon",
+    "iconAria": "Emoji icon",
+    "descriptionLabel": "Short description",
+    "descriptionPlaceholder": "One line shown on the skill card",
+    "instructions": "Skill instructions (SKILL.md)",
+    "hint": "The frontmatter <code>description</code> tells the agent when to use this skill; the body is the guidance it follows.",
+    "references_one": "Includes {{count}} reference file",
+    "references_other": "Includes {{count}} reference files",
+    "chooseDifferent": "Choose different",
+    "previewLabel": "SKILL.md (preview)",
+    "reviewHint": "Review the skill, then add it to this app.",
+    "uploadLead": "Upload a skill you already have to preview it, then add it to this app. It needs a <code>SKILL.md</code> with <code>name</code> and <code>description</code> frontmatter; any <code>references/</code> files come along too.",
+    "chooseFolder": "Choose a folder…",
+    "chooseFile": "Choose a file (.md or .zip)…",
+    "reading": "Reading…",
+    "saveChanges": "Save changes",
+    "addSkill": "Add skill"
+  },
+  "editor": {
+    "loading": "Loading editor…"
+  },
+  "preview": {
+    "notInstalled": "not in this app yet",
+    "close": "Close preview"
+  }
+}

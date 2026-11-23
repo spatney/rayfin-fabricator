@@ -1,3 +1,5 @@
+import { translator } from './i18n'
+
 /** The app is running on macOS, where shortcuts use ⌘ rather than Ctrl. */
 export function isMac(): boolean {
   if (typeof navigator === 'undefined') return false
@@ -8,12 +10,12 @@ export function isMac(): boolean {
   return /mac|iphone|ipad/i.test(platform) || /Macintosh/.test(navigator.userAgent)
 }
 
-/** The modifier for app shortcuts as it is printed on keycaps: `⌘` or `Ctrl`. */
+/** The modifier for app shortcuts as it is printed on keycaps: `⌘`, or `Ctrl` (`Strg` in German). */
 export function modKey(): string {
-  return isMac() ? '⌘' : 'Ctrl'
+  return isMac() ? '⌘' : translator('common')('keys.ctrl')
 }
 
 /** A shortcut as the app writes it in tooltips: `Ctrl+K`, or `⌘K` on macOS. */
 export function shortcut(key: string): string {
-  return isMac() ? `⌘${key}` : `Ctrl+${key}`
+  return isMac() ? `⌘${key}` : `${modKey()}+${key}`
 }

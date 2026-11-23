@@ -1,11 +1,17 @@
 import { useUpdates } from '../update'
+import { formatLocale, useTranslation } from '../i18n'
 
 import type { JSX } from 'react'
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+  const mb = new Intl.NumberFormat(formatLocale(), {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+    useGrouping: false
+  }).format(n / (1024 * 1024))
+  return `${mb} MB`
 }
 
 /**
@@ -16,6 +22,7 @@ function formatBytes(n: number): string {
  */
 export default function ForcedUpdateScreen(): JSX.Element {
   const { status, info, progress } = useUpdates()
+  const { t } = useTranslation('app')
 
   const pct =
     progress && progress.total
@@ -24,15 +31,19 @@ export default function ForcedUpdateScreen(): JSX.Element {
   const installing = status === 'ready' || status === 'installing'
 
   const title = installing
-    ? `Installing update${info ? ` ${info.version}` : ''}…`
-    : `Downloading update${info ? ` ${info.version}` : ''}…`
+    ? info
+      ? t('update.installingVersion', { version: info.version })
+      : t('update.installing')
+    : info
+      ? t('update.downloadingVersion', { version: info.version })
+      : t('update.downloading')
   const meta = installing
-    ? 'Fabricator will restart automatically.'
+    ? t('update.restartsAutomatically')
     : pct !== null
       ? `${pct}%`
       : progress
         ? formatBytes(progress.downloaded)
-        : 'Starting…'
+        : t('update.starting')
 
   return (
     <div className="forced-update" role="alertdialog" aria-modal="true" aria-live="polite">
@@ -48,7 +59,7 @@ export default function ForcedUpdateScreen(): JSX.Element {
             style={!installing && pct !== null ? { width: `${pct}%` } : undefined}
           />
         </div>
-        <span className="forced-update__note">A required update must be installed to continue.</span>
+        <span className="forced-update__note">{t('update.required')}</span>
       </div>
     </div>
   )

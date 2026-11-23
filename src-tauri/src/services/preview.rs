@@ -704,7 +704,7 @@ pub async fn preview_reset_site_data(app: AppHandle) -> AppResult<bool> {
     }
     // It went to another page in the meantime, which isn't this one's to clear.
     Some(false) => Ok(false),
-    None => Err(AppError::Msg("The preview didn’t answer, so it wasn’t reloaded.".into())),
+    None => Err(AppError::Msg(t!("services.preview.noAnswer"))),
   }
 }
 

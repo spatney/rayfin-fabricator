@@ -1,7 +1,9 @@
 import { createContext, useContext, useState, type JSX } from 'react'
 import type { ChatAdvisorFix, ChatAdvisorSummary } from '@shared/ipc'
-import { categoryById, normalizeSeverity, severityLabel } from '@shared/advisor/catalog'
+import { normalizeSeverity } from '@shared/advisor/catalog'
 import type { FixOutcome } from '../../advisor/lifecycle'
+import { categoryTitle, findingTitle } from '../../advisor/ruleText'
+import { useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { CategoryIcon, CodeText } from './format'
 import './advisor.css'
@@ -18,11 +20,23 @@ export interface AdvisorFixLinks {
 export const AdvisorFixContext = createContext<AdvisorFixLinks | null>(null)
 
 /** Where an issue stands once it isn't fixed (a fixed one gets a check instead of its dot). */
-const CHIPS: Partial<Record<FixOutcome, { label: string; tone: string; tip: string; icon?: string }>> = {
-  applied: { label: 'Fix applied', tone: 'applied', tip: 'Copilot applied a fix — verify it in the Advisor' },
-  still: { label: 'Still detected', tone: 'still', tip: 'The Advisor still detects this issue' },
-  dismissed: { label: 'Dismissed', tone: 'muted', tip: 'Dismissed in the Advisor' },
-  muted: { label: 'Rule muted', tone: 'muted', tip: 'This rule is muted in the Advisor' }
+function chipFor(outcome: FixOutcome) {
+  switch (outcome) {
+    case 'applied':
+      return { label: 'fixSummary.applied', tone: 'applied', tip: 'fixSummary.appliedTip' } as const
+    case 'still':
+      return { label: 'fixSummary.still', tone: 'still', tip: 'fixSummary.stillTip' } as const
+    case 'dismissed':
+      return {
+        label: 'fixSummary.dismissed',
+        tone: 'muted',
+        tip: 'fixSummary.dismissedTip'
+      } as const
+    case 'muted':
+      return { label: 'fixSummary.muted', tone: 'muted', tip: 'fixSummary.mutedTip' } as const
+    default:
+      return undefined
+  }
 }
 
 /** Rows shown before the rest fold behind "Show more". */
@@ -43,11 +57,12 @@ function FixRow({
   outcome?: FixOutcome
   onShow?: () => void
 }): JSX.Element {
+  const { t } = useTranslation('advisor')
   const sev = normalizeSeverity(fix.severity)
-  const category = categoryById(fix.category)?.title ?? fix.category
+  const category = categoryTitle(fix.category)
   const where = fix.file ? (fix.line ? `${fix.file}:${fix.line}` : fix.file) : undefined
   const fixed = outcome === 'fixed'
-  const chip = outcome && !fixed ? CHIPS[outcome] : undefined
+  const chip = outcome && !fixed ? chipFor(outcome) : undefined
   const body = (
     <>
       <span className="adv-fix-mark">
@@ -55,21 +70,21 @@ function FixRow({
           <i
             className="codicon codicon-pass-filled adv-fix-done"
             role="img"
-            aria-label="Fixed"
-            title="Fixed: the Advisor no longer detects this issue"
+            aria-label={t('fixSummary.fixed')}
+            title={t('fixSummary.fixedTitle')}
           />
         ) : (
           <i
             className={`adv-sev-dot adv-sev-dot--${sev}`}
             role="img"
-            aria-label={`${severityLabel(sev)} severity`}
-            title={`${severityLabel(sev)} severity`}
+            aria-label={t(`severity.${sev}Aria`)}
+            title={t(`severity.${sev}Aria`)}
           />
         )}
       </span>
       <span className="adv-fix-main">
         <span className="adv-fix-name">
-          <CodeText text={fix.title} />
+          <CodeText text={findingTitle(fix)} />
           {fix.places && fix.places > 1 ? <span className="adv-fix-count">×{fix.places}</span> : null}
         </span>
         <span className="adv-fix-meta">
@@ -87,9 +102,8 @@ function FixRow({
       </span>
       {chip && (
         // Keyed so a changed outcome pops in.
-        <span key={outcome} className={`adv-status adv-status--${chip.tone}`} title={chip.tip}>
-          {chip.icon && <Codicon name={chip.icon} />}
-          {chip.label}
+        <span key={outcome} className={`adv-status adv-status--${chip.tone}`} title={t(chip.tip)}>
+          {t(chip.label)}
         </span>
       )}
     </>
@@ -97,7 +111,12 @@ function FixRow({
   return (
     <li>
       {onShow ? (
-        <button type="button" className="adv-fix-row" onClick={onShow} title="Show in the Advisor">
+        <button
+          type="button"
+          className="adv-fix-row"
+          onClick={onShow}
+          title={t('fixSummary.showInAdvisor')}
+        >
           {body}
         </button>
       ) : (
@@ -125,6 +144,7 @@ export function AdvisorFixSummary({
   working?: boolean
 }): JSX.Element {
   const links = useContext(AdvisorFixContext)
+  const { t } = useTranslation('advisor')
   const [expanded, setExpanded] = useState(false)
   const fixes = summary.fixes
   const n = fixes.length
@@ -139,7 +159,7 @@ export function AdvisorFixSummary({
     progress = (
       <span className="adv-fix-progress is-busy">
         <span className="step-spin" aria-hidden="true" />
-        {working ? 'Fixing…' : 'Checking…'}
+        {working ? t('fixSummary.fixing') : t('status.checking')}
       </span>
     )
   } else if (n > 1 && fixed > 0) {
@@ -147,16 +167,18 @@ export function AdvisorFixSummary({
     progress = (
       <span key={all ? 'all' : 'some'} className={`adv-fix-progress${all ? ' is-done' : ''}`}>
         <Codicon name={all ? 'pass-filled' : 'check'} />
-        {all ? `All ${n} fixed` : `${fixed} of ${n} fixed`}
+        {all
+          ? t('fixSummary.allFixed', { total: n })
+          : t('fixSummary.someFixed', { fixed, total: n })}
       </span>
     )
   }
 
   return (
-    <div className="adv-fix" role="group" aria-label={`Advisor issues to fix (${n})`}>
+    <div className="adv-fix" role="group" aria-label={t('fixSummary.label', { total: n })}>
       <div className="adv-fix-head">
         <Codicon name="shield" className="adv-fix-ico" />
-        <span className="adv-fix-title">{n === 1 ? 'Fix an Advisor issue' : `Fix ${n} Advisor issues`}</span>
+        <span className="adv-fix-title">{t('fixSummary.title', { count: n })}</span>
         {progress}
       </div>
       <ol className="adv-fix-list">
@@ -171,12 +193,12 @@ export function AdvisorFixSummary({
       </ol>
       {collapsible && (
         <button type="button" className="adv-fix-more" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
-          {expanded ? 'Show fewer' : `Show ${n - LIMIT} more`}
+          {expanded ? t('fixSummary.showFewer') : t('fixSummary.showMore', { more: n - LIMIT })}
         </button>
       )}
       {prompt && (
         <details className="adv-fix-details">
-          <summary>Details sent to Copilot</summary>
+          <summary>{t('fixSummary.details')}</summary>
           <pre>{prompt}</pre>
         </details>
       )}

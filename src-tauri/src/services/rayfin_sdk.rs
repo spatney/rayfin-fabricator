@@ -5,7 +5,7 @@
 //! which runs the lines of Rayfin SDK releases in `sdk.supported` of the repo's
 //! `rayfin-local.json`, such as 1.36.x and 2.0.x. A new project scaffolds with
 //! the newest stable release of one of them, `sdk.newProjects`, and pins its
-//! `@microsoft/rayfin-*` packages to that minor (`~1.36.0`): the templates'
+//! `@microsoft/rayfin-*` packages to that minor (`~2.0.0`): the templates'
 //! caret ranges would otherwise pull a newer minor. Updates go to the newest
 //! release rayfin-local runs that isn't newer than Rayfin's latest, and a newer
 //! one is offered too, with a warning (see [`update_targets`]).
@@ -372,7 +372,8 @@ pub enum Pinning {
 pub fn pin_project(project: &Path, sdk: &NewProjectSdk, only_if_admitted: bool) -> Result<Pinning, String> {
   let mut manifests = Vec::new();
   for path in manifest_paths(project) {
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("Couldn't read {}: {e}", path.display()))?;
+    let text = std::fs::read_to_string(&path)
+      .map_err(|e| t!("services.rayfinSdk.readFailed", path = path.display(), error = e))?;
     manifests.push((path, text));
   }
   if only_if_admitted {
@@ -385,7 +386,8 @@ pub fn pin_project(project: &Path, sdk: &NewProjectSdk, only_if_admitted: bool) 
   let mut files = 0;
   for (path, text) in manifests {
     if let Some(pinned) = pin_rayfin_specs(&text, &range) {
-      std::fs::write(&path, pinned).map_err(|e| format!("Couldn't update {}: {e}", path.display()))?;
+      std::fs::write(&path, pinned)
+        .map_err(|e| t!("services.rayfinSdk.updateFailed", path = path.display(), error = e))?;
       files += 1;
     }
   }
@@ -636,7 +638,8 @@ mod tests {
     let tested = tested_release();
     assert!(is_newer_than_supported(&format!("{}.{}.0-alpha.1", tested.major, tested.minor + 1)));
     assert!(!is_newer_than_supported(&tested.to_string()));
-    assert!(!is_newer_than_supported(&format!("{}.{}.9", tested.major, tested.minor - 1)));
+    let (oldest_major, _) = supported_lines()[0];
+    assert!(!is_newer_than_supported(&format!("{}.99.0", oldest_major - 1)), "older than every line it runs");
   }
 
   #[test]

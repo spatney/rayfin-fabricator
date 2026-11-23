@@ -20,6 +20,8 @@
  * decorators degrade gracefully (the field keeps its TypeScript type).
  */
 
+import type { TFunction } from 'i18next'
+import { i18n, translator } from '../i18n'
 import { projectLayout, SINGLE_PACKAGE_LAYOUT, type ProjectLayout } from './projectLayout'
 
 /** A reader that returns a project file's UTF-8 text, or null if missing/unreadable. */
@@ -692,25 +694,33 @@ function parseActions(arg: string | undefined): string[] {
   return [unquote(trimmed)]
 }
 
-/** Classify an entity's overall exposure from its role grants. */
+/**
+ * Classify an entity's overall exposure from its role grants, in English: prompts quote
+ * `entity.access`. {@link accessText} says it in the interface's language, for showing.
+ */
 function classifyAccess(permissions: EntityPermission[]): EntityAccess {
+  return describeAccess(permissions, i18n.getFixedT('en', 'data'))
+}
+
+/** An entity's access badge and its explanation, in the interface's language. */
+export function accessText(entity: Pick<ModelEntity, 'permissions'>): EntityAccess {
+  return describeAccess(entity.permissions, translator('data'))
+}
+
+function describeAccess(permissions: EntityPermission[], t: TFunction<'data'>): EntityAccess {
   if (permissions.length === 0) {
     return {
       level: 'default',
-      label: 'Any signed-in user',
-      detail:
-        'No access decorator, so this entity falls back to the Rayfin default of ' +
-        '`authenticated: *` — every signed-in user can read and write every row.'
+      label: t('access.anySignedIn'),
+      detail: t('access.defaultDetail')
     }
   }
   const anon = permissions.find((p) => p.role === 'anonymous')
   if (anon) {
     return {
       level: 'public',
-      label: 'Public',
-      detail:
-        'An `@anonymous` grant exposes rows to unauthenticated callers ' +
-        `(actions: ${anon.actions.join(', ')}).`
+      label: t('access.public'),
+      detail: t('access.publicDetail', { actions: anon.actions.join(', ') })
     }
   }
   const authed = permissions.filter((p) => p.role === 'authenticated')
@@ -719,30 +729,30 @@ function classifyAccess(permissions: EntityPermission[]): EntityAccess {
     if (withPolicy.length === authed.length) {
       return {
         level: 'scoped',
-        label: 'Row-scoped policy',
-        detail: 'Access is narrowed by a row-level `policy` callback for signed-in users.'
+        label: t('access.scoped'),
+        detail: t('access.scopedDetail')
       }
     }
     if (withPolicy.length > 0) {
       return {
         level: 'mixed',
-        label: 'Mixed policy',
-        detail: 'Some signed-in grants are row-scoped by a policy and some are not.'
+        label: t('access.mixed'),
+        detail: t('access.mixedDetail')
       }
     }
     return {
       level: 'authenticated',
-      label: 'Any signed-in user',
-      detail: 'Any signed-in user can access every row (no row-level `policy`).'
+      label: t('access.anySignedIn'),
+      detail: t('access.authenticatedDetail')
     }
   }
   // Custom / other roles.
   return {
     level: 'authenticated',
     label: permissions.map((p) => p.role).join(', '),
-    detail: `Custom role grants: ${permissions
-      .map((p) => `${p.role} (${p.actions.join(', ')})`)
-      .join('; ')}.`
+    detail: t('access.customDetail', {
+      grants: permissions.map((p) => `${p.role} (${p.actions.join(', ')})`).join('; ')
+    })
   }
 }
 
@@ -888,6 +898,7 @@ export async function parseDataModel(read: FileReader): Promise<DataModel> {
   const layout = projectLayout(yml)
   const { schemaFile } = layout
   const schemaName = schemaFile.slice(schemaFile.lastIndexOf('/') + 1)
+  const t = translator('data')
   const warnings: string[] = []
   const schemaSrc = await read(schemaFile)
   if (schemaSrc == null) return emptyDataModel(layout)
@@ -930,17 +941,17 @@ export async function parseDataModel(read: FileReader): Promise<DataModel> {
     }
     const mod = imports.get(name)
     if (!mod) {
-      warnings.push(`Entity "${name}" is listed in ${schemaName} but has no import.`)
+      warnings.push(t('schema.noImport', { name, schema: schemaName }))
       continue
     }
     const file = resolveEntityFile(schemaFile.slice(0, schemaFile.lastIndexOf('/')), mod)
     if (!file) {
-      warnings.push(`Entity "${name}" is imported from "${mod}", which isn't a file in this app.`)
+      warnings.push(t('schema.notAFile', { name, module: mod }))
       continue
     }
     const src = await read(file)
     if (src == null) {
-      warnings.push(`Could not read entity file ${file} for "${name}".`)
+      warnings.push(t('schema.unreadable', { file, name }))
       continue
     }
     const classes = parseClasses(maskComments(src))
@@ -948,11 +959,11 @@ export async function parseDataModel(read: FileReader): Promise<DataModel> {
       classes.find((c) => c.name === name) ??
       classes.find((c) => c.decorators.some((d) => d.name === 'entity'))
     if (match) addClass(match, file, new LineIndex(src))
-    else warnings.push(`No @entity class found in ${file} for "${name}".`)
+    else warnings.push(t('schema.noEntityClass', { file, name }))
   }
 
   if (entities.length === 0 && names.length === 0) {
-    warnings.push(`${schemaName} declares no entities yet.`)
+    warnings.push(t('schema.noEntities', { schema: schemaName }))
   }
 
   const relations = inferRelations(entities, explicitRelations)

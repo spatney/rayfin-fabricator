@@ -1,0 +1,204 @@
+{
+  "health": {
+    "failed": "公開に失敗しました",
+    "changes": "未公開の変更があります",
+    "outdated": "Rayfin の更新があります",
+    "outdatedVersion": "Rayfin {{version}} を利用できます",
+    "unpublished": "まだ公開されていません"
+  },
+  "time": {
+    "justNow": "たった今"
+  },
+  "published": {
+    "when": "公開: {{when}}",
+    "never": "まだ公開されていません",
+    "notYet": "未公開"
+  },
+  "app": {
+    "label": "{{name}} ({{workspace}})",
+    "onThisComputer": "このコンピューター上",
+    "teamWorkspace": "チーム ワークスペース: {{name}}",
+    "teamPreview": "チームのプレビュー",
+    "pin": "{{name}} をピン留め",
+    "unpin": "ピン留めを外す",
+    "pinToTop": "先頭にピン留め",
+    "openApp": "アプリを開く",
+    "openInFabric": "Fabric で開く",
+    "openInFabricator": "Fabricator で開く"
+  },
+  "details": {
+    "label": "{{name}} の詳細",
+    "close": "詳細を閉じる",
+    "closeTitle": "閉じる (Esc)",
+    "copyLink": "リンクをコピー",
+    "quickLook": "クイック ルック",
+    "quickLookTitle": "クイック ルック (Space)",
+    "lookingUp": "アプリのアドレスを確認しています…",
+    "noAddress": "Fabric からこのアプリのアドレスが提供されませんでした。代わりに Fabric で開いてください。",
+    "notPublished": "このアプリはまだページを公開していません。",
+    "teammatePreview": "{{name}} · チーム メンバーのプレビュー",
+    "canChange": "変更できます",
+    "canOpen": "開くことができます",
+    "facts": {
+      "published": "公開",
+      "address": "アドレス",
+      "workspace": "ワークスペース",
+      "access": "アクセス権",
+      "project": "プロジェクト",
+      "team": "チーム"
+    }
+  },
+  "describe": {
+    "text": "説明はまだありません。Copilot がアプリをもとに説明を作成できます。このアプリを開けるすべてのユーザーが、ここと Fabric でその説明を見られます。",
+    "write": "説明を作成",
+    "writing": "説明を作成しています…",
+    "failed": "Copilot は説明を作成できませんでした。"
+  },
+  "table": {
+    "name": "名前",
+    "workspace": "ワークスペース",
+    "published": "公開",
+    "status": "状態",
+    "where": "場所",
+    "pin": "ピン留め"
+  },
+  "view": {
+    "listFailed": "Fabric アプリの一覧を取得できませんでした。もう一度お試しください。",
+    "notLocal": "このアプリはこのコンピューター上にありません。"
+  },
+  "sort": {
+    "menu": "並べ替え",
+    "name": {
+      "label": "名前",
+      "desc": "A から Z の順"
+    },
+    "recent": {
+      "label": "最近の公開",
+      "desc": "公開が新しい順"
+    },
+    "opened": {
+      "label": "最近開いた順",
+      "desc": "最後に開いたアプリから表示"
+    },
+    "workspace": {
+      "label": "ワークスペース",
+      "desc": "グループ化し、最近のワークスペースから表示"
+    }
+  },
+  "count": {
+    "apps_other": "{{count, number}} 個のアプリ",
+    "workspaces_other": "{{count, number}} 個のワークスペース"
+  },
+  "summary": {
+    "filtered_other": "{{count, number}} 個中 {{shown, number}} 個のアプリを表示",
+    "total": "{{apps}} · {{workspaces}}"
+  },
+  "announce": {
+    "filtered_other": "{{count, number}} 個中 {{shown, number}} 個のアプリを表示しています",
+    "all_other": "{{count, number}} 個のアプリを表示しています",
+    "loading": "Fabric アプリを読み込んでいます"
+  },
+  "head": {
+    "eyebrow": "Microsoft Fabric",
+    "title": "アプリ ギャラリー",
+    "sub": "Fabric で開くことができるすべての Rayfin アプリです。",
+    "subAs": "<b>{{user}}</b> として Fabric で開くことができるすべての Rayfin アプリです。",
+    "checking": "Fabric を確認しています…"
+  },
+  "layout": {
+    "label": "レイアウト",
+    "grid": "カード",
+    "table": "テーブル"
+  },
+  "tabs": {
+    "label": "表示",
+    "apps": "アプリ",
+    "examples": "サンプル"
+  },
+  "search": {
+    "placeholder": "アプリ、ワークスペース、説明を検索",
+    "label": "アプリを検索"
+  },
+  "where": {
+    "label": "アプリの場所",
+    "all": "すべて",
+    "local": "このコンピューター上",
+    "remote": "Fabric のみ"
+  },
+  "filters": {
+    "attention": "要対応",
+    "attentionTitle": "前回の公開に失敗したアプリ、公開後に変更されたアプリ、Rayfin を更新できるアプリ、または一度も公開されていないアプリ",
+    "editable": "編集できるアプリ",
+    "editableTitle": "管理者、メンバー、または共同作成者であるワークスペースのアプリ"
+  },
+  "notes": {
+    "truncated": "Fabric には Fabricator が一度に読み込める数を超えるアプリがあるため、開くことができるアプリの一部は表示されていません。"
+  },
+  "loadingLabel": "アプリを読み込んでいます",
+  "empty": {
+    "title": "Rayfin アプリはまだありません",
+    "desc": "Fabric に公開したアプリや、他のユーザーが共有したアプリがここに表示されます。",
+    "newProject": "新しいプロジェクト"
+  },
+  "noMatch": {
+    "text": "「{{text}}」に一致するアプリはありません",
+    "filters": "これらのフィルターに一致するアプリはありません",
+    "desc": "別の言葉を試すか、すべてのワークスペースを探してください。",
+    "showAll": "すべてのアプリを表示"
+  },
+  "groups": {
+    "pinned": "ピン留め",
+    "pinnedApps": "ピン留めしたアプリ",
+    "appsIn": "{{name}} のアプリ",
+    "used": "最終使用: {{when}}"
+  },
+  "list": {
+    "label": "アプリ"
+  },
+  "more_other": "さらに表示 (残り {{count, number}} 件)",
+  "azure": {
+    "signIn": "Azure にサインイン",
+    "signingIn": "サインインしています…",
+    "finish": "ブラウザーで Azure へのサインインを完了してください。"
+  },
+  "error": {
+    "title": "アプリの一覧を取得できませんでした"
+  },
+  "banner": {
+    "signIn": "最新のアプリを表示するには、Azure にサインインしてください。表示されているのは以前の情報です。",
+    "failed": "Fabric の変更を確認できませんでした: {{error}}"
+  },
+  "examples": {
+    "loadFailed": "サンプルを読み込めませんでした。",
+    "loading": "サンプルを読み込んでいます…",
+    "failedTitle": "サンプルを読み込めませんでした",
+    "empty": "サンプルはまだありません",
+    "intro": "<b>{{source}}</b> の、出発点にできるアプリです。1 つ選ぶと、Copilot がそこからあなたのアプリに作り変えます。",
+    "label": "サンプル",
+    "useLabel": "{{name}} を使用",
+    "use": "このサンプルを使用"
+  },
+  "menu": {
+    "current": "{{name}}: {{value}}"
+  },
+  "quickLook": {
+    "failed": "クイック ルックを開けませんでした。",
+    "label": "{{name}} のクイック ルック",
+    "close": "クイック ルックを閉じる",
+    "closeTitle": "閉じる (Space または Esc)",
+    "loading": "{{name}} を読み込んでいます…"
+  },
+  "workspaces": {
+    "menu": "ワークスペース",
+    "title": "ワークスペース",
+    "searchPlaceholder": "ワークスペースを検索…",
+    "search": "ワークスペースを検索",
+    "all": "すべてのワークスペース",
+    "recent": "最近使用したもの",
+    "others": "その他のワークスペース",
+    "noMatch": "「{{query}}」に一致するワークスペースはありません。",
+    "found_other": "{{count, number}} 個中 {{found, number}} 個のワークスペース",
+    "navigate": "移動",
+    "select": "選択"
+  }
+}

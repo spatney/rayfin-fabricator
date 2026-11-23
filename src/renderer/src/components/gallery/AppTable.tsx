@@ -1,5 +1,6 @@
 import type { JSX } from 'react'
 import type { GalleryApp } from '@shared/ipc'
+import { translator, useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { ProjectTile } from '../ProjectTile'
 import { AppTags, HealthTag, quickLookKeys } from './AppCard'
@@ -12,7 +13,7 @@ function publishedCell(entry: GalleryEntry): string {
   if (!status) return '…'
   if (status.unknown) return '—'
   const when = ago(status.publishedAt)
-  return when ? when[0].toUpperCase() + when.slice(1) : 'Not yet'
+  return when ? when[0].toUpperCase() + when.slice(1) : translator('gallery')('published.notYet')
 }
 
 /**
@@ -47,17 +48,18 @@ export default function AppTable({
   onPin: (app: GalleryApp, keyboard: boolean) => void
   onQuickLook: (app: GalleryApp) => void
 }): JSX.Element {
+  const { t } = useTranslation('gallery')
   return (
     <table className="gtable" aria-label={label}>
       <thead>
         <tr>
-          <th scope="col">Name</th>
-          {showWorkspace && <th scope="col">Workspace</th>}
-          <th scope="col">Published</th>
-          <th scope="col">Status</th>
-          <th scope="col">Where</th>
+          <th scope="col">{t('table.name')}</th>
+          {showWorkspace && <th scope="col">{t('table.workspace')}</th>}
+          <th scope="col">{t('table.published')}</th>
+          <th scope="col">{t('table.status')}</th>
+          <th scope="col">{t('table.where')}</th>
           <th scope="col">
-            <span className="sr-only">Pin</span>
+            <span className="sr-only">{t('table.pin')}</span>
           </th>
         </tr>
       </thead>
@@ -76,7 +78,7 @@ export default function AppTable({
                       type="button"
                       className="gtable-open"
                       data-app-id={app.id}
-                      aria-label={`${app.name}, in ${app.workspaceName}`}
+                      aria-label={t('app.label', { name: app.name, workspace: app.workspaceName })}
                       aria-pressed={selected}
                       aria-keyshortcuts={canLook(entry) ? 'Space' : undefined}
                       onClick={() => onSelect(app)}
@@ -113,9 +115,9 @@ export default function AppTable({
                   type="button"
                   className="icon-btn gtable-pin"
                   data-pin-for={app.id}
-                  aria-label={`Pin ${app.name}`}
+                  aria-label={t('app.pin', { name: app.name })}
                   aria-pressed={pinned}
-                  title={pinned ? 'Unpin' : 'Pin to the top'}
+                  title={pinned ? t('app.unpin') : t('app.pinToTop')}
                   onClick={(event) => onPin(app, event.detail === 0)}
                 >
                   <Codicon name={pinned ? 'pinned' : 'pin'} />

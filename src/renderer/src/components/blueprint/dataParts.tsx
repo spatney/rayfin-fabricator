@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import { useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { PAGE_SIZE } from './localData'
 
@@ -35,6 +36,7 @@ export function Problem({
   /** Another way out, beside Retry. */
   extra?: { label: string; onClick: () => void }
 }): JSX.Element {
+  const { t } = useTranslation('data')
   return (
     <div className="model-empty model-empty--cta" role="alert">
       <div className="model-empty-title">{title}</div>
@@ -45,7 +47,7 @@ export function Problem({
           {onRetry && (
             <button type="button" className="btn btn--sm" onClick={onRetry}>
               <Codicon name="refresh" />
-              Retry
+              {t('actions.retry')}
             </button>
           )}
           {extra && (
@@ -71,12 +73,10 @@ export function Pager({
   total: number
   onOffset: (offset: number) => void
 }): JSX.Element {
-  const n = (value: number): string => value.toLocaleString('en-US')
+  const { t } = useTranslation('data')
   return (
     <div className="bp-data-pager">
-      <span>
-        {n(offset + 1)}–{n(offset + shown)} of {n(total)}
-      </span>
+      <span>{t('pager.range', { first: offset + 1, last: offset + shown, total })}</span>
       {total > PAGE_SIZE && (
         <>
           <div className="model-toolbar-spacer" />
@@ -85,19 +85,19 @@ export function Pager({
             className="model-tool-btn"
             onClick={() => onOffset(Math.max(0, offset - PAGE_SIZE))}
             disabled={offset === 0}
-            aria-label="Previous page"
+            aria-label={t('pager.previousPage')}
           >
             <Codicon name="chevron-left" />
-            Previous
+            {t('pager.previous')}
           </button>
           <button
             type="button"
             className="model-tool-btn"
             onClick={() => onOffset(offset + PAGE_SIZE)}
             disabled={offset + PAGE_SIZE >= total}
-            aria-label="Next page"
+            aria-label={t('pager.nextPage')}
           >
-            Next
+            {t('actions.next')}
             <Codicon name="chevron-right" />
           </button>
         </>

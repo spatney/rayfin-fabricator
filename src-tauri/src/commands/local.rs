@@ -24,8 +24,8 @@ fn checked(options: Option<LocalStartOptions>) -> LocalResult<LocalStartOptions>
   match options.sign_in_as.as_deref() {
     Some(who) if !valid_sign_in(who) => Err(error(
       "invalid",
-      format!("{who:?} isn't a sign-in identity."),
-      Some("Use developer, none or user:<username>."),
+      t!("commands.local.notIdentity", who = format!("{who:?}")),
+      Some(&t!("commands.local.useIdentities")),
     )),
     _ => Ok(options),
   }
@@ -89,7 +89,7 @@ pub async fn local_users(app: AppHandle, project_id: String) -> LocalResult<Vec<
 pub async fn local_add_user(app: AppHandle, project_id: String, username: String, password: Option<String>) -> LocalResult<LocalUser> {
   let username = username.trim();
   if username.is_empty() {
-    return Err(error("invalid", "Enter a username, such as an email address.", None));
+    return Err(error("invalid", t!("commands.local.enterUsername"), None));
   }
   let password = password.as_deref().filter(|p| !p.is_empty());
   local_backend::control(&app, &project_id)?.add_user(username, password).await
@@ -114,8 +114,10 @@ pub async fn local_set_identity(app: AppHandle, project_id: String, identity: Lo
   match identity.kind.as_str() {
     "developer" | "none" => {}
     "user" if user.is_some() => {}
-    "user" => return Err(error("invalid", "Choose the user to sign in as.", None)),
-    other => return Err(error("invalid", format!("{other:?} isn't a sign-in identity."), Some("Use developer, user or none."))),
+    "user" => return Err(error("invalid", t!("commands.local.chooseUser"), None)),
+    other => {
+      return Err(error("invalid", t!("commands.local.notIdentity", who = format!("{other:?}")), Some(&t!("commands.local.useKinds"))))
+    }
   }
   let backends = local_backend::state(&app);
   let result = backends.control(&project_id)?.set_identity(&identity).await?;
@@ -197,7 +199,7 @@ pub async fn local_save_file(app: AppHandle, project_id: String, folder: String,
   let bytes = control.file(&folder, &path).await?;
   tokio::fs::write(&target, bytes)
     .await
-    .map_err(|e| error("save-failed", format!("Couldn't save the file: {e}"), Some("Choose another folder.")))?;
+    .map_err(|e| error("save-failed", t!("commands.local.cantSave", error = e), Some(&t!("commands.local.chooseFolder"))))?;
   Ok(Some(target.display().to_string()))
 }
 
@@ -273,7 +275,7 @@ pub async fn local_secrets(app: AppHandle, project_id: String) -> LocalResult<Ve
 pub async fn local_set_secret(app: AppHandle, project_id: String, name: String, value: String) -> LocalResult<()> {
   crate::commands::secrets::validate_name(&name).map_err(|message| error("invalid", message, None))?;
   if value.is_empty() {
-    return Err(error("invalid", "Enter a value for the secret.", None));
+    return Err(error("invalid", t!("commands.local.enterValue"), None));
   }
   let dir = project_dir(&project_id)?;
   local_backend::state(&app).set_secret(&dir, &name, &value).await
@@ -319,7 +321,7 @@ pub async fn local_reinstall_packages(app: AppHandle, project_id: String) -> Loc
 #[tauri::command]
 pub fn local_report_fallback(project_id: String, code: String, reason: String) -> LocalResult<()> {
   if !matches!(code.as_str(), "sdk-unsupported" | "connector-unsupported") {
-    return Err(error("invalid", format!("{code:?} isn't a reason to use the published backend."), None));
+    return Err(error("invalid", t!("commands.local.badReason", code = format!("{code:?}")), None));
   }
   journal::entry(Level::Warn, Area::Preview, "local.fallback", reason.trim())
     .operation("local_backend")

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 import type { StudioProject, TeamActionResult, TeamProgressEvent, TeamSessionStatus } from '@shared/ipc'
+import { translator, useTranslation } from '../../i18n'
 import ConfirmModal from '../ConfirmModal'
 import { StepList, teamError, type StepRow } from './common'
 import TeamDiagnosis from './diagnosis/TeamDiagnosis'
@@ -11,12 +12,12 @@ import './team.css'
 
 /** Mirrors PUBLISH_STEPS in src-tauri/src/commands/team/publish.rs. */
 export const PUBLISH_STEPS = [
-  { id: 'save', label: 'Save your latest changes' },
-  { id: 'update', label: "Bring in your teammates' changes" },
-  { id: 'checks', label: 'Check that your preview deploys' },
-  { id: 'review', label: "Get a teammate's approval" },
-  { id: 'merge', label: 'Publish your changes' },
-  { id: 'deploy', label: 'Deploy the published app' }
+  { id: 'save', labelKey: 'work.step.save' },
+  { id: 'update', labelKey: 'work.step.update' },
+  { id: 'checks', labelKey: 'work.step.checks' },
+  { id: 'review', labelKey: 'work.step.review' },
+  { id: 'merge', labelKey: 'work.step.merge' },
+  { id: 'deploy', labelKey: 'work.step.deploy' }
 ] as const
 
 /** The prompt that asks Copilot to finish combining teammates' changes. */
@@ -82,6 +83,7 @@ function recordKey(status: TeamSessionStatus | undefined): string {
  * pipeline, Update, Publish, Discard, and the dialogs they need.
  */
 export function useTeamWork(activeProject: StudioProject | null, options: Options): TeamWork {
+  const { t } = useTranslation('team')
   const [statuses, setStatuses] = useState<Record<string, TeamSessionStatus>>({})
   const [syncingIds, setSyncingIds] = useState<string[]>([])
   const [publishing, setPublishing] = useState<PublishRun | null>(null)
@@ -156,17 +158,18 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
 
   const afterTurn = useCallback(
     async (projectId: string, message: string): Promise<void> => {
+      const t = translator('team')
       setSyncingIds((ids) => [...ids, projectId])
       try {
         const result = await window.api.team.sync(projectId, message)
         if (!result.ok) {
-          optionsRef.current.toast.error(result.error ?? 'Your changes were not saved to GitHub.', {
-            title: 'Couldn’t save to GitHub'
+          optionsRef.current.toast.error(result.error ?? t('work.notSaved'), {
+            title: t('work.notSavedTitle')
           })
         }
       } catch (reason) {
-        optionsRef.current.toast.error(teamError(reason, 'Your changes were not saved to GitHub.'), {
-          title: 'Couldn’t save to GitHub'
+        optionsRef.current.toast.error(teamError(reason, t('work.notSaved')), {
+          title: t('work.notSavedTitle')
         })
       } finally {
         setSyncingIds((ids) => ids.filter((id) => id !== projectId))
@@ -180,13 +183,14 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
   const publish = useCallback(
     (projectId: string, confirmDataLoss = false): void => {
       if (publishingRef.current?.running) return
+      const t = translator('team')
       const run: PublishRun = {
         projectId,
         running: true,
         // A confirmed data-loss deploy only re-runs the last step.
         rows: PUBLISH_STEPS.map((s) => ({
           id: s.id,
-          label: s.label,
+          label: t(s.labelKey),
           state: confirmDataLoss && s.id !== 'deploy' ? 'done' : 'pending'
         }))
       }
@@ -197,7 +201,7 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
         try {
           result = await window.api.team.publish(projectId, confirmDataLoss)
         } catch (reason) {
-          result = { ok: false, error: teamError(reason, 'Publishing stopped unexpectedly.') }
+          result = { ok: false, error: teamError(reason, t('work.publishStoppedUnexpectedly')) }
         }
         setPublishing((p) => (p && p.projectId === projectId ? { ...p, running: false, result } : p))
         if (result.conflicts?.length) setConflicts({ projectId, files: result.conflicts })
@@ -211,21 +215,22 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
 
   const update = useCallback(
     (projectId: string): void => {
+      const t = translator('team')
       void (async () => {
         try {
           const result = await window.api.team.update(projectId, false)
           if (result.conflicts?.length) {
             setConflicts({ projectId, files: result.conflicts })
           } else if (!result.ok) {
-            optionsRef.current.toast.error(result.error ?? 'Could not bring in the changes.', {
-              title: 'Update failed'
+            optionsRef.current.toast.error(result.error ?? t('work.updateFailed'), {
+              title: t('work.updateFailedTitle')
             })
           } else {
-            optionsRef.current.toast.success("You have your teammates' latest changes.", { title: 'Updated' })
+            optionsRef.current.toast.success(t('work.updated'), { title: t('work.updatedTitle') })
           }
           if (result.packagesChanged) optionsRef.current.onPackagesChanged?.(projectId)
         } catch (reason) {
-          optionsRef.current.toast.error(teamError(reason, 'Could not bring in the changes.'), { title: 'Update failed' })
+          optionsRef.current.toast.error(teamError(reason, t('work.updateFailed')), { title: t('work.updateFailedTitle') })
         }
         await optionsRef.current.refreshProjects()
         await refresh(projectId, true)
@@ -235,6 +240,7 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
   )
 
   const combineWithCopilot = useCallback((projectId: string, files: string[]): void => {
+    const t = translator('team')
     setConflicts(null)
     setPublishing(null)
     void (async () => {
@@ -242,19 +248,15 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
         const result = await window.api.team.update(projectId, true)
         const conflicted = result.conflicts?.length ? result.conflicts : files
         if (!result.ok && !result.conflicts?.length) {
-          optionsRef.current.toast.error(result.error ?? 'Could not start combining the changes.', {
-            title: 'Update failed'
+          optionsRef.current.toast.error(result.error ?? t('work.combineFailed'), {
+            title: t('work.updateFailedTitle')
           })
           return
         }
-        optionsRef.current.sendToChat(
-          projectId,
-          "Combine my changes with my teammates' published changes",
-          conflictPrompt(conflicted)
-        )
+        optionsRef.current.sendToChat(projectId, t('work.combineMessage'), conflictPrompt(conflicted))
       } catch (reason) {
-        optionsRef.current.toast.error(teamError(reason, 'Could not start combining the changes.'), {
-          title: 'Update failed'
+        optionsRef.current.toast.error(teamError(reason, t('work.combineFailed')), {
+          title: t('work.updateFailedTitle')
         })
       }
     })()
@@ -265,7 +267,9 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
     void window.api.team
       .runLog(projectId, runId)
       .then((text) => setLogs({ projectId, runId, text }))
-      .catch((reason) => setLogs({ projectId, runId, text: '', error: teamError(reason, 'Could not read the log.') }))
+      .catch((reason) =>
+        setLogs({ projectId, runId, text: '', error: teamError(reason, translator('team')('work.logFailed')) })
+      )
   }, [])
 
   const diagnose = useCallback(
@@ -277,7 +281,7 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
 
   /** Hand a diagnosed failure in the app's code to its Build chat. */
   const fixInChat = useCallback((projectId: string, answer: string): void => {
-    optionsRef.current.sendToChat(projectId, 'Fix what broke the pipeline', fixInChatPrompt(answer))
+    optionsRef.current.sendToChat(projectId, translator('team')('work.fixMessage'), fixInChatPrompt(answer))
   }, [])
 
   async function runDiscard(): Promise<void> {
@@ -287,7 +291,7 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
     try {
       const result = await window.api.team.discard(projectId)
       if (!result.ok) {
-        optionsRef.current.toast.error(result.error ?? 'Could not discard your changes.', { title: 'Discard failed' })
+        optionsRef.current.toast.error(result.error ?? t('work.discardFailed'), { title: t('work.discardFailedTitle') })
       }
       if (result.packagesChanged) optionsRef.current.onPackagesChanged?.(projectId)
     } finally {
@@ -316,13 +320,10 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
       )}
       {conflicts && !publishing && (
         <ConfirmModal
-          title="Your teammates changed the same files"
+          title={t('work.conflicts.title')}
           message={
             <>
-              <p>
-                Your teammates published changes to some of the files you changed. Copilot can
-                combine the two versions for you.
-              </p>
+              <p>{t('work.conflicts.message')}</p>
               <ul className="team-muted">
                 {conflicts.files.map((f) => (
                   <li key={f}>
@@ -332,24 +333,19 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
               </ul>
             </>
           }
-          confirmLabel="Let Copilot combine them"
-          cancelLabel="Not now"
+          confirmLabel={t('shared.letCopilotCombine')}
+          cancelLabel={t('actions.notNow')}
           onConfirm={() => combineWithCopilot(conflicts.projectId, conflicts.files)}
           onCancel={() => setConflicts(null)}
         />
       )}
       {confirmDiscard && (
         <ConfirmModal
-          title="Discard your unpublished changes?"
-          message={
-            <p>
-              Your changes since the last publish are thrown away and the app goes back to its
-              published version. This can&apos;t be undone.
-            </p>
-          }
+          title={t('work.discard.title')}
+          message={<p>{t('work.discard.message')}</p>}
           danger
           busy={discarding}
-          confirmLabel="Discard changes"
+          confirmLabel={t('shared.discardChanges')}
           onConfirm={() => void runDiscard()}
           onCancel={() => setConfirmDiscard(null)}
         />
@@ -372,7 +368,7 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
       {diagnosis && (
         <TeamDiagnosisModal
           input={diagnosis.input}
-          title="Diagnose the failed run"
+          title={t('work.diagnoseRun')}
           onFixInChat={(answer) => fixInChat(diagnosis.projectId, answer)}
           onClose={() => setDiagnosis(null)}
         />
@@ -412,6 +408,7 @@ function PublishModal({
   onCombine: (files: string[]) => void
   onFixInChat: (answer: string) => void
 }): JSX.Element {
+  const { t } = useTranslation('team')
   useSuppressPreview()
   const dialogRef = useModalFocus<HTMLDivElement>()
   const result = run.result
@@ -422,29 +419,27 @@ function PublishModal({
   const diagnosable = !run.running && Boolean(result) && !result?.ok && !result?.conflicts?.length && !dataLoss
   return (
     <div className="modal-backdrop">
-      <div className="modal team-modal" role="dialog" aria-modal="true" aria-label="Publish" ref={dialogRef}>
+      <div className="modal team-modal" role="dialog" aria-modal="true" aria-label={t('shared.publish')} ref={dialogRef}>
         <div className="modal-header">
-          <h2>{run.running ? 'Publishing…' : result?.ok && !reviewWaiting ? 'Published' : 'Publish'}</h2>
+          <h2>
+            {run.running
+              ? t('shared.publishing')
+              : result?.ok && !reviewWaiting
+                ? t('work.publish.published')
+                : t('shared.publish')}
+          </h2>
         </div>
         <div className="modal-body team-form">
           <StepList rows={run.rows} />
-          {run.running && (
-            <p className="team-muted">
-              Your changes are safe on GitHub the whole time. You can keep working once the merge
-              step is done.
-            </p>
-          )}
+          {run.running && <p className="team-muted">{t('work.publish.safe')}</p>}
           {reviewWaiting && (
             <div className="team-notice">
-              <span className="team-notice-text">
-                Waiting for a teammate to approve your changes. They see your request on Fabricator&apos;s
-                Home. Publish again once they&apos;ve approved.
-              </span>
+              <span className="team-notice-text">{t('work.publish.review')}</span>
             </div>
           )}
           {result && !result.ok && (
             <div className="alert alert--error" role="alert">
-              {result.error ?? 'Publishing stopped.'}
+              {result.error ?? t('work.publish.stopped')}
             </div>
           )}
           {diagnosable && (
@@ -463,26 +458,26 @@ function PublishModal({
         <div className="modal-footer">
           {run.running ? (
             <button type="button" className="btn btn--ghost" onClick={onStop}>
-              Stop waiting
+              {t('shared.stopWaiting')}
             </button>
           ) : (
             <button type="button" className="btn btn--ghost" onClick={onClose}>
-              Close
+              {t('actions.close')}
             </button>
           )}
           {!run.running && publish?.runUrl && !result?.ok && (
             <button type="button" className="btn" onClick={() => onViewLogs(publish.runUrl ?? '')}>
-              View logs on GitHub
+              {t('work.publish.viewLogs')}
             </button>
           )}
           {!run.running && result?.conflicts?.length ? (
             <button type="button" className="btn btn--primary" onClick={() => onCombine(result.conflicts ?? [])}>
-              Let Copilot combine them
+              {t('shared.letCopilotCombine')}
             </button>
           ) : null}
           {!run.running && dataLoss && (
             <button type="button" className="btn btn--danger" onClick={onConfirmDataLoss}>
-              Deploy anyway (deletes data)
+              {t('work.publish.deployAnyway')}
             </button>
           )}
         </div>
@@ -501,6 +496,7 @@ function LogModal({
   /** Diagnose this run with Copilot (replaces the log dialog). */
   onDiagnose?: () => void
 }): JSX.Element {
+  const { t } = useTranslation('team')
   useSuppressPreview()
   const dialogRef = useModalFocus<HTMLDivElement>()
   useEffect(() => {
@@ -516,31 +512,31 @@ function LogModal({
         className="modal team-modal team-modal--wide"
         role="dialog"
         aria-modal="true"
-        aria-label="Pipeline log"
+        aria-label={t('work.log.title')}
         ref={dialogRef}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <h2>Pipeline log</h2>
+          <h2>{t('work.log.title')}</h2>
         </div>
         <div className="modal-body">
           {logs.error ? (
             <div className="alert alert--error">{logs.error}</div>
           ) : logs.text === null ? (
             <span className="team-muted">
-              <span className="ws-spinner" /> Loading the log…
+              <span className="ws-spinner" /> {t('work.log.loading')}
             </span>
           ) : (
-            <pre className="team-log">{logs.text || 'The log is empty.'}</pre>
+            <pre className="team-log">{logs.text || t('work.log.empty')}</pre>
           )}
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn--ghost" onClick={onClose}>
-            Close
+            {t('actions.close')}
           </button>
           {onDiagnose && (
             <button type="button" className="btn" onClick={onDiagnose}>
-              <span className="codicon codicon-sparkle" aria-hidden="true" /> Diagnose with Copilot
+              <span className="codicon codicon-sparkle" aria-hidden="true" /> {t('shared.diagnoseWithCopilot')}
             </button>
           )}
         </div>

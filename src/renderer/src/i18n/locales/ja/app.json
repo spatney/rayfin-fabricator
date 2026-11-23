@@ -1,0 +1,99 @@
+{
+  "startup": {
+    "verifySignIn": "サインインを確認できませんでした。もう一度お試しください。",
+    "checkTools": "インストールされているツールを確認できませんでした。もう一度お試しください。",
+    "loadSettings": "アプリの設定を読み込めませんでした。もう一度お試しください。",
+    "settingsUnavailable": "設定を利用できません"
+  },
+  "appBar": {
+    "tabs": {
+      "build": "作成",
+      "code": "コード",
+      "blueprint": "Blueprint",
+      "advisor": "アドバイザー"
+    },
+    "views": "プロジェクトのビュー",
+    "advisorIssues_other": "アドバイザー — 重要度が高または中の未解決の問題: {{count}} 件",
+    "openIssues_other": "未解決の問題: {{count}} 件",
+    "allProjects": "すべてのプロジェクト",
+    "allProjectsLabel": "{{name}} — すべてのプロジェクト",
+    "allProjectsTitle": "{{path}}\nすべてのプロジェクト",
+    "switchProjects": "プロジェクトの切り替え",
+    "switchProjectsLabel": "{{name}} — プロジェクトの切り替え",
+    "recentProjects": "最近のプロジェクト",
+    "noRecentProjects": "最近使ったほかのプロジェクトはありません",
+    "team": "チーム",
+    "back": "{{name}} に戻る",
+    "backToProjects": "プロジェクト一覧に戻る",
+    "backTitle": "{{name}} に戻る (プロジェクトを見ている間も実行されていました)"
+  },
+  "splash": {
+    "stages": {
+      "tools": "ツールを確認しています",
+      "accounts": "サインインの状態を確認しています",
+      "ready": "準備ができました",
+      "setup": "最初にいくつか設定が必要です",
+      "error": "確認が必要な項目があります"
+    },
+    "opening": "<b>{{name}}</b> を開いています",
+    "openingProjects": "プロジェクトを開いています",
+    "firstLaunch": "こんにちは、Ray です！おかえりなさい。"
+  },
+  "crash": {
+    "title": "問題が発生しました",
+    "body": "Fabricator で予期しないエラーが発生しました。通常は再読み込みで解決します。プロジェクトとチャット履歴は保存されています。",
+    "details": "技術的な詳細",
+    "reload": "再読み込み",
+    "openLogs": "ログを開く"
+  },
+  "update": {
+    "title": "更新プログラムを利用できます",
+    "lead": "新しい更新プログラムをインストールする準備ができました。",
+    "leadVersion": "Fabricator {{version}} をインストールする準備ができました。",
+    "hint": "今すぐインストールできます。[後で] を選ぶと、このバージョンを使い続け、いつでも更新できます。",
+    "updateNow": "今すぐ更新",
+    "later": "後で",
+    "installingShort": "インストールしています…",
+    "downloading": "更新プログラムをダウンロードしています…",
+    "downloadingVersion": "更新プログラム {{version}} をダウンロードしています…",
+    "ready": "更新プログラムをインストールする準備ができました",
+    "readyVersion": "更新プログラム {{version}} をインストールする準備ができました",
+    "installing": "更新プログラムをインストールしています…",
+    "installingVersion": "更新プログラム {{version}} をインストールしています…",
+    "starting": "開始しています…",
+    "restartToApply": "適用するために Fabricator が再起動します。",
+    "restartsAutomatically": "Fabricator は自動的に再起動します。",
+    "restartAndUpdate": "再起動して更新",
+    "required": "続行するには、必須の更新プログラムをインストールする必要があります。"
+  },
+  "attention": {
+    "notSignedIn": "{{names}} にサインインしていません。",
+    "toolsMissing_other": "{{tools}} が見つからないか、古いバージョンです。",
+    "manageAccounts": "アカウントの管理",
+    "reviewSetup": "セットアップを確認"
+  },
+  "toast": {
+    "region": "通知",
+    "dismiss": "通知を閉じる"
+  },
+  "touchUp": {
+    "label": "ポイントして編集",
+    "labelPicked_other": "{{label}}、{{count}} 個を選択済み",
+    "turnOff": "オフにする",
+    "turnOn": "オンにする",
+    "clip": "スクリーンショットを切り取る",
+    "shiftKey": "Shift",
+    "drag": "ドラッグ"
+  },
+  "pick": {
+    "display_other": "選択した {{count}} 個の要素を手直ししてください",
+    "toSend": "送信する選択済みの要素",
+    "sent": "選択した要素",
+    "number": "選択 {{n}}",
+    "draw": "{{label}} の画像に描き込む",
+    "drawTitle": "拡大して描き込む",
+    "remove": "{{label}} を削除",
+    "show": "{{label}} の画像を表示",
+    "showTitle": "拡大表示"
+  }
+}

@@ -1,0 +1,235 @@
+{
+  "view": {
+    "title": "データ エクスプローラー",
+    "localData": "ローカル データ",
+    "summary": "{{entities}} · {{rows}}",
+    "backend": "ローカル バックエンド",
+    "reading": "ローカル データを読み取っています…",
+    "readError": "ローカル データを読み取れませんでした",
+    "oldBackend": "このバージョンのローカル バックエンドは、データを Fabricator と共有しません。",
+    "oldBackendHint": "Fabricator を更新してから、もう一度お試しください。",
+    "noEntitiesTitle": "エンティティはまだありません",
+    "noEntitiesSub": "アプリのデータ モデルにエンティティができると、その行がここに表示されます。"
+  },
+  "backend": {
+    "unreachable": "ローカル バックエンドに接続できませんでした",
+    "unsupported": "このバージョンの Fabricator では、ローカル データを読み取れません。",
+    "checking": "ローカル バックエンドを確認しています…",
+    "stoppedTitle": "ローカル バックエンドが実行されていません",
+    "stoppedMessage": "開始すると、アプリのローカル データが表示されます。",
+    "starting": "ローカル バックエンドを開始しています",
+    "restarting": "ローカル バックエンドを再起動しています",
+    "startingMessage": "実行が始まると、アプリのローカル データがここに表示されます。",
+    "start": "開始",
+    "startBusy": "開始しています…"
+  },
+  "side": {
+    "entities": "エンティティ",
+    "noEntities": "エンティティなし",
+    "entityItem_other": "{{name}}、{{count, number}} 行",
+    "storage": "ストレージ",
+    "storageError": "ストレージのファイルを読み取れませんでした",
+    "noFolders": "ストレージ フォルダーなし",
+    "folderItem_other": "{{name}}、{{count, number}} 個のファイル"
+  },
+  "toolbar": {
+    "note": "このコンピューター上のローカル データです。公開しても Fabric にはコピーされません。",
+    "notePublished": "このコンピューター上のローカル データです。公開済みアプリのデータとは別のものです。",
+    "refreshTitle": "ローカル データを再度読み取る",
+    "loadSeedTitle": "ローカル データを rayfin/seed のシード データに置き換える",
+    "noSeedTitle": "このアプリには、rayfin/seed にシード データがまだありません。ローカル データをシード データとして保存するか、Copilot に追加を依頼してください。",
+    "saveSeedTitle": "ローカル データを rayfin/seed に保存し、プロジェクトを開くすべてのユーザーが読み込めるようにする",
+    "reset": "ローカル データをリセット"
+  },
+  "seed": {
+    "load": "シード データを読み込む",
+    "save": "シード データとして保存",
+    "loaded": "シード データを読み込みました: {{amount}}。",
+    "saved": "rayfin/seed に保存しました: {{amount}}。",
+    "savedSkipped_other": "rayfin/seed に保存しました: {{amount}}。ストレージのファイル {{count, number}} 個を保存できませんでした: {{files}}",
+    "rowsIn_other": "{{entities}}の {{count, number}} 行",
+    "nothing": "行もファイルもありません"
+  },
+  "notices": {
+    "fallback": "{{reason}} データ エクスプローラーには、ローカル データのみが表示されます。",
+    "unreadLabel": "データ モデルの変更を読み取れませんでした",
+    "unread": "アプリのデータ モデルの最新の変更を読み取れなかったため、ローカル バックエンドでは引き続き以前のデータ モデルが使用されています。",
+    "unreadNoEntities": "アプリのデータ モデルの最新の変更を読み取れなかったため、エンティティは表示されません。ローカル バックエンドでは引き続き以前のデータ モデルが使用されていますが、このデータ モデルにはエンティティがありません。"
+  },
+  "seedProblems": {
+    "title_other": "シード データに {{count, number}} 件の問題があります",
+    "intro": "何も読み込まれなかったため、ローカル データは変更されていません。次の問題を修正してから、もう一度読み込んでください:",
+    "fix": "Copilot で修正",
+    "fixRequest": "シード データの問題を修正"
+  },
+  "rows": {
+    "reading": "行を読み取っています…",
+    "readError": "行を読み取れませんでした",
+    "clearSorting": "並べ替えを解除",
+    "emptyTitle": "行はまだありません",
+    "emptySub": "データはアプリ自体のページで追加されます。プレビューでアプリを使用してから、最新の情報に更新してください。",
+    "sortBy": "{{column}} で並べ替え",
+    "keyType": "{{type}} · キー",
+    "clear": "行をクリア"
+  },
+  "users": {
+    "title": "ローカル ユーザー",
+    "readError": "ローカル ユーザーを読み取れませんでした",
+    "notListed": "ローカル バックエンドから一覧が返されませんでした。",
+    "emptyTitle": "ローカル ユーザーはまだいません",
+    "emptySub": "このコンピューターでだれかがアプリにサインインすると、ローカル ユーザーがここに表示されます。",
+    "username": "ユーザー名",
+    "email": "メール",
+    "signsInWith": "サインイン方法",
+    "created": "作成日時",
+    "developer": "開発者",
+    "password": "パスワード",
+    "fabricatorOnly": "Fabricator のみ",
+    "deleteLabel": "{{username}} を削除"
+  },
+  "files": {
+    "reading": "ファイルを読み取っています…",
+    "readError": "ファイルを読み取れませんでした",
+    "emptyTitle": "ファイルはまだありません",
+    "emptySub": "アプリがこのフォルダーに保存したファイルがここに表示されます。プレビューでアプリを使用してから、最新の情報に更新してください。",
+    "regionLabel": "{{folder}} のファイル",
+    "folderNameTitle": "アプリのコードでのフォルダー名",
+    "orphan": "アプリにありません",
+    "orphanTitle": "アプリにはこのストレージ フォルダーがなくなりました。フォルダー内のファイルは、クリアするまでここに残ります。",
+    "meta_other": "{{count, number}} 個のファイル · {{size}}",
+    "clear": "ファイルをクリア",
+    "previewLabel": "{{path}} をプレビュー",
+    "deleteLabel": "{{path}} を削除",
+    "signedOutUpload": "サインインせずにアップロード",
+    "anonymous": "匿名"
+  },
+  "fields": {
+    "name": "名前",
+    "path": "パス",
+    "type": "種類",
+    "size": "サイズ",
+    "owner": "所有者",
+    "uploaded": "アップロード日時",
+    "updated": "更新日時",
+    "actions": "アクション"
+  },
+  "preview": {
+    "label": "{{path}} のプレビュー",
+    "save": "コピーを保存",
+    "saveTitle": "このコンピューターにファイルのコピーを保存する",
+    "saved": "{{name}} のコピーを {{where}} に保存しました。",
+    "saveError": "コピーを保存できませんでした",
+    "close": "プレビューを閉じる",
+    "error": "ファイルをプレビューできませんでした",
+    "pdfError": "この PDF を描画できませんでした: {{reason}}",
+    "noneTitle": "プレビューなし",
+    "noneSub": "Fabricator では {{type}} ファイルを表示できません。コピーを保存して、別のアプリで開いてください。",
+    "drawingPdf": "PDF を描画しています…",
+    "reading": "ファイルを読み取っています…",
+    "textClipped": "最初の {{size}} を表示しています。すべて表示するには、コピーを保存してください。",
+    "pdfClipped": "全 {{total}} ページのうち最初の {{shown}} ページを表示しています。すべて表示するには、コピーを保存してください。",
+    "page": "{{name}} の {{page}} ページ",
+    "fieldTitle": "アプリがファイルと一緒に保存するフィールド"
+  },
+  "confirm": {
+    "cantUndo": "この操作は元に戻せません。",
+    "cantUndoPublished": "公開済みアプリのデータには影響しません。この操作は元に戻せません。",
+    "clearing": "クリアしています…",
+    "resetting": "リセットしています…",
+    "refused": "他の行がまだこれらの行を参照しているため、これらの行だけをクリアすることはできません。先に参照元の行をクリアするか、すべてのローカル データをリセットしてください。",
+    "refusedNamed": "{{names}} の行がまだこれらの行を参照しているため、これらの行だけをクリアすることはできません。先に {{names}} をクリアするか、すべてのローカル データをリセットしてください。",
+    "clear": {
+      "title": "{{entity}} のすべての行をクリアしますか?",
+      "message_other": "このコンピューター上のアプリのローカル データから、{{entity}} のすべての行 ({{count, number}} 行) が削除されます。他のエンティティ、ローカル ユーザー、ストレージのファイルはそのまま残ります。"
+    },
+    "reset": {
+      "title": "ローカル データをリセットしますか?",
+      "intro": "このコンピューター上のアプリのローカル データが削除されます:",
+      "allRows_other": "{{entities}}のすべての行 ({{count, number}} 行)",
+      "itsEntities_other": "{{count, number}} 個のエンティティ",
+      "everyRowOf": "{{entities}}のすべての行",
+      "everyRow": "すべてのエンティティのすべての行",
+      "users_other": "{{count, number}} 人のローカル ユーザーとそのセッション",
+      "usersAny": "ローカル ユーザーとそのセッション",
+      "files_other": "ストレージの {{count, number}} 個のファイル",
+      "filesAny": "アプリが保存したファイル",
+      "schemaWaiting": "その後、判断を待っているデータ モデルの変更が適用されます。"
+    },
+    "clearFiles": {
+      "title": "{{folder}} のすべてのファイルを削除しますか?",
+      "message_other": "このコンピューター上のアプリのローカル データから、ストレージ フォルダー {{folder}} 内のすべてのファイル ({{count, number}} 個) が削除されます。エンティティの行、ローカル ユーザー、他のフォルダーのファイルはそのまま残ります。"
+    },
+    "deleteFile": {
+      "title": "{{name}} を削除しますか?",
+      "message": "このコンピューター上のアプリのローカル データにあるストレージ フォルダー {{folder}} から、{{path}} が削除されます。",
+      "action": "ファイルを削除"
+    },
+    "loadSeed": {
+      "title": "シード データを読み込みますか?",
+      "intro": "このコンピューター上のアプリのローカル データが、rayfin/seed のシード データに置き換えられます:",
+      "noRows": "行なし",
+      "deletesAll": "アプリの現在の行とストレージのファイルは削除されます。ローカル ユーザーはそのまま残り、シード データで指定されたユーザーが追加されます。",
+      "deletesRows": "アプリの現在の行は削除されます。ローカル ユーザーはそのまま残り、シード データで指定されたユーザーが追加されます。"
+    },
+    "saveSeed": {
+      "title": "ローカル データをシード データとして保存しますか?",
+      "intro": "アプリのローカル データがプロジェクトの rayfin/seed に保存され、そこにあるシード データが置き換えられます:",
+      "rows_other": "{{entities}}の {{count, number}} 行 (rayfin/seed/data 内)",
+      "files_other": "ストレージの {{count, number}} 個のファイル (rayfin/seed/storage 内)",
+      "ids": "プロジェクトを開くすべてのユーザーが読み込めます。ユーザー ID は <code>{{developer}}</code> (自分) と <code>{{user}}</code> (ローカル ユーザー) になります。Fabricator は、この変更を [履歴] にバージョンとして保存します。"
+    },
+    "deleteUser": {
+      "title": "{{username}} を削除しますか?",
+      "message": "{{username}} がアプリのローカル ユーザーから削除され、このコンピューター上のアプリからサインアウトされます。",
+      "action": "ユーザーを削除"
+    }
+  },
+  "pager": {
+    "range": "{{total, number}} 件中 {{first, number}}–{{last, number}} 件",
+    "previous": "前へ",
+    "previousPage": "前のページ",
+    "nextPage": "次のページ"
+  },
+  "cell": {
+    "emptyText": "空のテキスト"
+  },
+  "size": {
+    "bytes_other": "{{count, number}} バイト",
+    "kilobytes": "{{size}} KB",
+    "megabytes": "{{size}} MB",
+    "gigabytes": "{{size}} GB"
+  },
+  "counts": {
+    "rows_other": "{{count, number}} 行",
+    "entities_other": "{{count, number}} 個のエンティティ",
+    "files_other": "{{count, number}} 個のファイル",
+    "storedFiles_other": "ストレージの {{count, number}} 個のファイル",
+    "users_other": "{{count, number}} 人のユーザー"
+  },
+  "access": {
+    "anySignedIn": "サインインしているすべてのユーザー",
+    "public": "パブリック",
+    "scoped": "行スコープのポリシー",
+    "mixed": "混在ポリシー",
+    "defaultDetail": "アクセス デコレーターがないため、このエンティティには Rayfin の既定値 `authenticated: *` が適用されます。サインインしているすべてのユーザーが、すべての行を読み書きできます。",
+    "publicDetail": "`@anonymous` の付与により、認証されていない呼び出し元に行が公開されます (アクション: {{actions}})。",
+    "scopedDetail": "サインインしているユーザーのアクセスは、行レベルの `policy` コールバックで絞り込まれます。",
+    "mixedDetail": "サインインしているユーザーへの付与には、ポリシーで行スコープが設定されているものと、そうでないものがあります。",
+    "authenticatedDetail": "サインインしているすべてのユーザーが、すべての行にアクセスできます (行レベルの `policy` なし)。",
+    "customDetail": "カスタム ロールの付与: {{grants}}。"
+  },
+  "schema": {
+    "noImport": "エンティティ「{{name}}」は {{schema}} に記載されていますが、インポートがありません。",
+    "notAFile": "エンティティ「{{name}}」は「{{module}}」からインポートされていますが、これはこのアプリ内のファイルではありません。",
+    "unreadable": "「{{name}}」のエンティティ ファイル {{file}} を読み取れませんでした。",
+    "noEntityClass": "{{file}} に「{{name}}」の @entity クラスが見つかりませんでした。",
+    "noEntities": "{{schema}} では、まだエンティティが宣言されていません。"
+  },
+  "sqlSource": {
+    "notDiscovered": "{{file}} はテーブル {{table}} を読み取りますが、このテーブルは検出されたテーブルに含まれていません。",
+    "notDiscoveredAny": "{{file}} は、検出されたテーブルに含まれていないテーブルを読み取ります。",
+    "unreadable": "{{name}} を読み取れませんでした。",
+    "wrongShape": "{{name}} は Rayfin が書き込む形式ではないため、スキップされました。",
+    "grantWithPolicy": "{{role}}: {{actions}} (行ポリシー)"
+  }
+}

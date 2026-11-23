@@ -1,5 +1,6 @@
 import type { GalleryApp, GalleryStatus } from '@shared/ipc'
 import type { WorkspaceUse } from '../../fabric'
+import { formatLocale, translator } from '../../i18n'
 
 /** Where the apps shown live: everywhere, on this computer, or only in Fabric. */
 export type GalleryWhere = 'all' | 'local' | 'remote'
@@ -198,14 +199,13 @@ export function applyQuery(
   return scored.map((s) => s.entry)
 }
 
-/** How each {@link HealthIssue} reads: a dot of its tone and a word. */
-export const HEALTH: Record<HealthIssue, { label: string; tone: 'danger' | 'pending' | 'faint' }> =
-  {
-    failed: { label: 'Publish failed', tone: 'danger' },
-    changes: { label: 'Changes not published', tone: 'pending' },
-    outdated: { label: 'Rayfin update available', tone: 'pending' },
-    unpublished: { label: 'Not published yet', tone: 'faint' }
-  }
+/** How each {@link HealthIssue} reads: a dot of its tone and a word (its key in `gallery`). */
+export const HEALTH = {
+  failed: { label: 'health.failed', tone: 'danger' },
+  changes: { label: 'health.changes', tone: 'pending' },
+  outdated: { label: 'health.outdated', tone: 'pending' },
+  unpublished: { label: 'health.unpublished', tone: 'faint' }
+} as const satisfies Record<HealthIssue, { label: string; tone: 'danger' | 'pending' | 'faint' }>
 
 /**
  * What an app's maker may want to look at, most pressing first, from what
@@ -316,7 +316,8 @@ export function workspaceTitle(name: string): { title: string; detail?: string }
 
 /**
  * Entries in workspace groups, keeping their order within each group. Pinned
- * apps are a group of their own, first, whatever their workspace.
+ * apps are a group of their own, first, whatever their workspace (its name is
+ * English: the gallery shows it translated).
  */
 export function groupByWorkspace(entries: readonly GalleryEntry[]): GalleryGroup[] {
   const groups = new Map<string, GalleryGroup>()
@@ -367,7 +368,18 @@ const UNITS: ReadonlyArray<[Intl.RelativeTimeFormatUnit, number]> = [
   ['hour', 3_600],
   ['minute', 60]
 ]
-const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+const relatives = new Map<string, Intl.RelativeTimeFormat>()
+
+/** Relative times in the interface's language, made once per locale. */
+function relative(): Intl.RelativeTimeFormat {
+  const locale = formatLocale()
+  let format = relatives.get(locale)
+  if (!format) {
+    format = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
+    relatives.set(locale, format)
+  }
+  return format
+}
 
 /** "3 days ago", "yesterday", "just now": when something happened, in words. */
 export function ago(iso: string | undefined, now = Date.now()): string | undefined {
@@ -375,16 +387,16 @@ export function ago(iso: string | undefined, now = Date.now()): string | undefin
   if (!Number.isFinite(then)) return undefined
   const seconds = Math.round((then - now) / 1000)
   for (const [unit, size] of UNITS) {
-    if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit)
+    if (Math.abs(seconds) >= size) return relative().format(Math.round(seconds / size), unit)
   }
-  return 'just now'
+  return translator('gallery')('time.justNow')
 }
 
 /** "Oct 24, 2026, 3:34 AM": an exact time, for details. */
 export function fullDate(iso: string | undefined): string | undefined {
   const then = iso ? Date.parse(iso) : NaN
   if (!Number.isFinite(then)) return undefined
-  return new Date(then).toLocaleString('en', { dateStyle: 'medium', timeStyle: 'short' })
+  return new Date(then).toLocaleString(formatLocale(), { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 /** `https://flat-oak-1a2b-westus.webapp.fabricapps.net` → `flat-oak-1a2b-westus.webapp.fabricapps.net`. */
@@ -412,9 +424,4 @@ export function appAddress(app: GalleryApp, status?: GalleryStatus): string | un
 export function publishedThumbnail(app: GalleryApp, status?: GalleryStatus): string | undefined {
   const address = appAddress(app, status)
   return address ? `${address.replace(/\/+$/, '')}/${PUBLISHED_THUMBNAIL}` : undefined
-}
-
-/** "26 apps", "1 app". */
-export function count(n: number, one: string, many = `${one}s`): string {
-  return `${n.toLocaleString('en')} ${n === 1 ? one : many}`
 }

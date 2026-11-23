@@ -124,19 +124,19 @@ struct Frontmatter {
 /// and `description`. Returns `(name, description)` on success.
 fn parse_and_validate(content: &str) -> Result<(String, String), String> {
   let fm = extract_frontmatter(content)
-    .ok_or("A skill must start with a YAML frontmatter block (--- … ---).")?;
+    .ok_or_else(|| t!("commands.customSkills.noFrontmatter"))?;
   let parsed: Frontmatter =
-    serde_yaml::from_str(&fm).map_err(|e| format!("Invalid skill frontmatter: {e}"))?;
+    serde_yaml::from_str(&fm).map_err(|e| t!("commands.customSkills.badFrontmatter", error = e))?;
   let name = parsed
     .name
     .map(|s| s.trim().to_string())
     .filter(|s| !s.is_empty())
-    .ok_or("The skill's frontmatter needs a non-empty `name`.")?;
+    .ok_or_else(|| t!("commands.customSkills.needsName"))?;
   let description = parsed
     .description
     .map(|s| s.trim().to_string())
     .filter(|s| !s.is_empty())
-    .ok_or("The skill's frontmatter needs a non-empty `description`.")?;
+    .ok_or_else(|| t!("commands.customSkills.needsDescription"))?;
   Ok((name, description))
 }
 
@@ -187,7 +187,7 @@ fn truncate(s: &str, max: usize) -> String {
 }
 
 fn ioerr(e: std::io::Error) -> String {
-  format!("File error: {e}")
+  t!("commands.customSkills.fileError", error = e)
 }
 
 // ── Filesystem: meta + listing ───────────────────────────────────────────────
@@ -274,7 +274,7 @@ fn read_entry(root: &Path, id: &str) -> Option<CustomSkillInfo> {
     None => {
       let raw = std::fs::read_to_string(dir.join("SKILL.md")).unwrap_or_default();
       let (title, summary) = crate::commands::skills::derived_presentation(&raw, id);
-      (title, summary.unwrap_or_else(|| "A custom skill.".to_string()), "🧩".to_string())
+      (title, summary.unwrap_or_else(|| t!("commands.customSkills.fallbackDescription")), "🧩".to_string())
     }
   };
   Some(CustomSkillInfo {
@@ -337,25 +337,23 @@ fn compose_new(
   let (_name, fm_desc) = parse_and_validate(&input.content)?;
   let title = input.title.trim().to_string();
   if title.is_empty() {
-    return Err("Give the skill a title.".into());
+    return Err(t!("commands.customSkills.needsTitle"));
   }
   let id = slugify(&title);
   if id.is_empty() {
-    return Err("Couldn't make an id from that title — use letters or numbers.".into());
+    return Err(t!("commands.customSkills.noIdFromTitle"));
   }
   if crate::commands::skills::is_reserved_id(&id) {
-    return Err(format!(
-      "“{id}” is a built-in skill id — pick a different title."
-    ));
+    return Err(t!("commands.customSkills.reservedTitle", id = id));
   }
   if project_skill_folder(project_dir, &id)
     .join("SKILL.md")
     .is_file()
   {
-    return Err(format!("A skill “{id}” already exists in this app."));
+    return Err(t!("commands.customSkills.existsInApp", id = id));
   }
   if to_library && library_skill_exists_at(root, &id) {
-    return Err(format!("A custom skill “{id}” is already in your library."));
+    return Err(t!("commands.customSkills.inLibrary", id = id));
   }
   let meta = build_meta(&title, &input.description, input.icon.as_deref(), &fm_desc);
   Ok(Composed {
@@ -371,11 +369,11 @@ fn save_library_edit(root: &Path, input: &CustomSkillSaveInput) -> Result<String
   let (_name, fm_desc) = parse_and_validate(&input.content)?;
   let id = input.id.as_deref().unwrap_or_default().trim().to_string();
   if !is_safe_id(&id) || !library_skill_exists_at(root, &id) {
-    return Err("That custom skill no longer exists.".into());
+    return Err(t!("commands.customSkills.gone"));
   }
   let title = input.title.trim().to_string();
   if title.is_empty() {
-    return Err("Give the skill a title.".into());
+    return Err(t!("commands.customSkills.needsTitle"));
   }
   let meta = build_meta(&title, &input.description, input.icon.as_deref(), &fm_desc);
   write_skill_folder(&skill_dir(root, &id), &id, &input.content, &meta, None).map_err(ioerr)?;
@@ -415,21 +413,19 @@ fn install_import(
   let (name, fm_desc) = parse_and_validate(content)?;
   let id = slugify(&name);
   if id.is_empty() {
-    return Err("Couldn't derive an id from the skill name — it needs letters or numbers.".into());
+    return Err(t!("commands.customSkills.noIdFromName"));
   }
   if crate::commands::skills::is_reserved_id(&id) {
-    return Err(format!(
-      "“{id}” is a built-in skill id — rename the skill before adding it."
-    ));
+    return Err(t!("commands.customSkills.reservedName", id = id));
   }
   if project_skill_folder(project_dir, &id)
     .join("SKILL.md")
     .is_file()
   {
-    return Err(format!("A skill “{id}” already exists in this app."));
+    return Err(t!("commands.customSkills.existsInApp", id = id));
   }
   if to_library && library_skill_exists_at(root, &id) {
-    return Err(format!("A custom skill “{id}” is already in your library."));
+    return Err(t!("commands.customSkills.inLibrary", id = id));
   }
   let meta = Meta {
     title: derive_title(&name, &id),
@@ -513,9 +509,9 @@ fn import_picked(
   if is_zip {
     let temp = paths::temp_dir().join(format!("rayfin-skill-import-{}", uuid::Uuid::new_v4()));
     let result = (|| {
-      extract_zip(picked, &temp).map_err(|e| format!("Couldn't read that .zip: {e}"))?;
+      extract_zip(picked, &temp).map_err(|e| t!("commands.customSkills.cantReadZip", error = e))?;
       let skill_root = locate_skill_root(&temp)
-        .ok_or_else(|| "The .zip doesn't contain a SKILL.md.".to_string())?;
+        .ok_or_else(|| t!("commands.customSkills.zipNoSkill"))?;
       let content = std::fs::read_to_string(skill_root.join("SKILL.md")).map_err(ioerr)?;
       install_import(
         root,
@@ -529,7 +525,7 @@ fn import_picked(
     result
   } else if picked.is_dir() {
     let content = std::fs::read_to_string(picked.join("SKILL.md"))
-      .map_err(|_| "That folder has no SKILL.md at its top level.".to_string())?;
+      .map_err(|_| t!("commands.customSkills.folderNoSkill"))?;
     install_import(
       root,
       project_dir,
@@ -575,9 +571,9 @@ fn read_picked(picked: &Path) -> Result<(String, u32), String> {
   if is_zip {
     let temp = paths::temp_dir().join(format!("rayfin-skill-preview-{}", uuid::Uuid::new_v4()));
     let result = (|| {
-      extract_zip(picked, &temp).map_err(|e| format!("Couldn't read that .zip: {e}"))?;
+      extract_zip(picked, &temp).map_err(|e| t!("commands.customSkills.cantReadZip", error = e))?;
       let skill_root = locate_skill_root(&temp)
-        .ok_or_else(|| "The .zip doesn't contain a SKILL.md.".to_string())?;
+        .ok_or_else(|| t!("commands.customSkills.zipNoSkill"))?;
       let content = std::fs::read_to_string(skill_root.join("SKILL.md")).map_err(ioerr)?;
       parse_and_validate(&content)?;
       Ok((content, count_references(&skill_root.join("references"))))
@@ -586,7 +582,7 @@ fn read_picked(picked: &Path) -> Result<(String, u32), String> {
     result
   } else if picked.is_dir() {
     let content = std::fs::read_to_string(picked.join("SKILL.md"))
-      .map_err(|_| "That folder has no SKILL.md at its top level.".to_string())?;
+      .map_err(|_| t!("commands.customSkills.folderNoSkill"))?;
     parse_and_validate(&content)?;
     Ok((content, count_references(&picked.join("references"))))
   } else {
@@ -617,11 +613,11 @@ fn build_preview(picked: &Path) -> Result<CustomSkillPreview, String> {
 
 fn remove_at(root: &Path, id: &str) -> Result<(), String> {
   if !is_safe_id(id) {
-    return Err("Unknown custom skill.".into());
+    return Err(t!("commands.customSkills.unknown"));
   }
   let dir = skill_dir(root, id);
   if dir.exists() {
-    std::fs::remove_dir_all(&dir).map_err(|e| format!("Couldn't remove the skill: {e}"))?;
+    std::fs::remove_dir_all(&dir).map_err(|e| t!("commands.customSkills.cantRemove", error = e))?;
   }
   Ok(())
 }
@@ -647,17 +643,17 @@ fn install_from(root: &Path, id: &str, project_dir: &str) -> std::io::Result<()>
 /// meta + references from the project into the library).
 fn promote_at(root: &Path, project_dir: &str, id: &str) -> Result<String, String> {
   if !is_safe_id(id) {
-    return Err("Unknown skill.".into());
+    return Err(t!("commands.skills.unknown"));
   }
   if crate::commands::skills::is_reserved_id(id) {
-    return Err("That is a built-in skill id.".into());
+    return Err(t!("commands.customSkills.builtInId"));
   }
   if library_skill_exists_at(root, id) {
-    return Err("That skill is already in your library.".into());
+    return Err(t!("commands.customSkills.alreadyInLibrary"));
   }
   let src = project_skill_folder(project_dir, id);
   let content = std::fs::read_to_string(src.join("SKILL.md"))
-    .map_err(|_| "That skill isn't in this app.".to_string())?;
+    .map_err(|_| t!("commands.customSkills.notInApp"))?;
   let meta = read_meta_file(&src).unwrap_or_else(|| {
     let (title, summary) = crate::commands::skills::derived_presentation(&content, id);
     Meta {
@@ -726,7 +722,7 @@ async fn pick_skill_file(app: &AppHandle) -> Option<PathBuf> {
   app
     .dialog()
     .file()
-    .add_filter("Skill (SKILL.md or .zip)", &["md", "zip"])
+    .add_filter(t!("commands.customSkills.filter"), &["md", "zip"])
     .pick_file(move |picked| {
       let _ = tx.send(picked);
     });
@@ -780,7 +776,7 @@ pub fn custom_skills_source(id: String) -> SkillSource {
       ok: false,
       installed: false,
       content: None,
-      error: Some("That custom skill has no SKILL.md.".to_string()),
+      error: Some(t!("commands.customSkills.noSource")),
     },
   }
 }
@@ -802,7 +798,7 @@ pub async fn custom_skills_save(
   // Create: install into the project, optionally saving to the library too.
   let dir = match store::find_project(&project_id) {
     Some(p) => p.path,
-    None => return err_result("Project not found.".into()),
+    None => return err_result(t!("commands.shared.projectNotFound")),
   };
   let composed = match compose_new(&root, &dir, &input, to_library) {
     Ok(c) => c,
@@ -849,7 +845,7 @@ async fn import_and_commit(
 ) -> CustomSkillActionResult {
   let dir = match store::find_project(project_id) {
     Some(p) => p.path,
-    None => return err_result("Project not found.".into()),
+    None => return err_result(t!("commands.shared.projectNotFound")),
   };
   match import_picked(&library_root(), &dir, picked, to_library) {
     Ok((id, title)) => {
@@ -929,7 +925,7 @@ pub async fn custom_skills_add_from_path(
 pub fn custom_skills_promote(project_id: String, id: String) -> CustomSkillActionResult {
   let dir = match store::find_project(&project_id) {
     Some(p) => p.path,
-    None => return err_result("Project not found.".into()),
+    None => return err_result(t!("commands.shared.projectNotFound")),
   };
   finish(promote_at(&library_root(), &dir, &id))
 }

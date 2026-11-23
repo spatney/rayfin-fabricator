@@ -1,6 +1,20 @@
 import { Fragment, useEffect, useId, useRef, useState, type ReactNode, type JSX } from 'react'
-import type { AppSettings, AppVersions, ThemePreference } from '@shared/ipc'
+import type {
+  AppSettings,
+  AppVersions,
+  Language,
+  LanguagePreference,
+  ThemePreference
+} from '@shared/ipc'
 import { applyTheme, applyUiScale, UI_SCALES } from '../theme'
+import {
+  applyLanguagePreference,
+  isLanguagePreference,
+  LANGUAGE_NAMES,
+  LANGUAGES,
+  systemLanguage,
+  useTranslation
+} from '../i18n'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { formatCopilotCli } from '../copilotVersion'
@@ -28,11 +42,11 @@ interface Props {
   onReviewSetup?: () => void
 }
 
-const THEMES: Array<{ value: ThemePreference; label: string }> = [
-  { value: 'system', label: 'System' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'light', label: 'Light' }
-]
+const THEMES = [
+  { value: 'system', label: 'appearance.theme.system' },
+  { value: 'dark', label: 'appearance.theme.dark' },
+  { value: 'light', label: 'appearance.theme.light' }
+] as const satisfies ReadonlyArray<{ value: ThemePreference; label: string }>
 
 /** A group of settings: a quiet heading over a card of rows. */
 export function Section({ title, children }: { title: string; children: ReactNode }): JSX.Element {
@@ -99,6 +113,7 @@ export function ToggleRow({
 
 /** Fabricator's version and the parts it runs on, with a copy for bug reports. */
 function VersionInfo({ versions }: { versions: AppVersions }): JSX.Element {
+  const { t } = useTranslation('settings')
   const [copied, setCopied] = useState(false)
   const timer = useRef<number | null>(null)
   useEffect(
@@ -108,15 +123,34 @@ function VersionInfo({ versions }: { versions: AppVersions }): JSX.Element {
     []
   )
 
-  const parts: Array<[name: string, version: string]> = [
-    ['Tauri', versions.tauri],
-    ['WebView2', versions.webview2],
-    ['Copilot CLI', formatCopilotCli(versions)],
-    ['rayfin-local', versions.rayfinLocal || 'unknown']
+  // Each part as shown, and as copied: in English whatever the interface's
+  // language, since the copy goes in a bug report.
+  const running = versions.copilot
+  const bundled = versions.copilotBundled
+  const parts: Array<[name: string, shown: string, copied: string]> = [
+    ['Tauri', versions.tauri, versions.tauri],
+    ['WebView2', versions.webview2, versions.webview2],
+    [
+      'Copilot CLI',
+      !running
+        ? t('about.unknownVersion')
+        : bundled && bundled !== running
+          ? t('about.copilotBundled', { version: running, bundled })
+          : running,
+      formatCopilotCli(versions)
+    ],
+    [
+      'rayfin-local',
+      versions.rayfinLocal || t('about.unknownVersion'),
+      versions.rayfinLocal || 'unknown'
+    ]
   ]
 
   async function copy(): Promise<void> {
-    const text = [`Fabricator ${versions.app}`, ...parts.map(([name, v]) => `${name} ${v}`)]
+    const text = [
+      `Fabricator ${versions.app}`,
+      ...parts.map(([name, , version]) => `${name} ${version}`)
+    ]
     try {
       await navigator.clipboard.writeText(text.join('\n'))
       setCopied(true)
@@ -133,18 +167,18 @@ function VersionInfo({ versions }: { versions: AppVersions }): JSX.Element {
         <FabricatorMark className="set-about-mark" />
         <div className="set-item-text">
           <span className="set-item-title">Fabricator</span>
-          <span className="set-item-desc">Version {versions.app}</span>
+          <span className="set-item-desc">{t('about.version', { version: versions.app })}</span>
         </div>
         <div className="set-item-control">
           <button
             type="button"
             className="btn btn--sm"
-            title="Copy version info"
-            aria-label="Copy version info"
+            title={t('about.copyVersion')}
+            aria-label={t('about.copyVersion')}
             onClick={() => void copy()}
           >
             <Codicon name={copied ? 'check' : 'copy'} />
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? t('actions.copied') : t('actions.copy')}
           </button>
         </div>
       </div>
@@ -157,6 +191,49 @@ function VersionInfo({ versions }: { versions: AppVersions }): JSX.Element {
         ))}
       </dl>
     </>
+  )
+}
+
+/** The interface's language: the computer's (named, once the core says which) or one chosen. */
+function LanguagePicker({
+  value,
+  onPick
+}: {
+  value: LanguagePreference
+  onPick: (language: LanguagePreference) => void
+}): JSX.Element {
+  const { t } = useTranslation('settings')
+  const [system, setSystem] = useState<Language | null>(null)
+  useEffect(() => {
+    let alive = true
+    void systemLanguage().then((language) => {
+      if (alive) setSystem(language)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  return (
+    <select
+      className="field-input set-select"
+      aria-label={t('appearance.language.title')}
+      value={value}
+      onChange={(e) => {
+        if (isLanguagePreference(e.target.value)) onPick(e.target.value)
+      }}
+    >
+      <option value="system">
+        {system
+          ? t('appearance.language.systemNamed', { language: LANGUAGE_NAMES[system] })
+          : t('appearance.language.system')}
+      </option>
+      {LANGUAGES.map((language) => (
+        <option key={language} value={language} lang={language}>
+          {LANGUAGE_NAMES[language]}
+        </option>
+      ))}
+    </select>
   )
 }
 
@@ -173,6 +250,7 @@ export default function SettingsModal({
   onReviewSetup
 }: Props): JSX.Element {
   useSuppressPreview()
+  const { t } = useTranslation('settings')
   const [showExperiments, setShowExperiments] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null)
@@ -206,6 +284,12 @@ export default function SettingsModal({
     onChange({ uiScale })
   }
 
+  // Switch the interface's language right away, as with the theme.
+  function pickLanguage(language: LanguagePreference): void {
+    void applyLanguagePreference(language)
+    onChange({ language })
+  }
+
   async function changeRoot(): Promise<void> {
     const next = await window.api.projects.pickWorkspaceRoot()
     setWorkspaceRoot(next.workspaceRoot)
@@ -237,85 +321,66 @@ export default function SettingsModal({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="modal-header">
-            <h2 id={titleId}>Settings</h2>
-            <button
-              className="btn btn--sm btn--ghost"
-              onClick={onClose}
-              aria-label="Close settings"
-            >
+            <h2 id={titleId}>{t('title')}</h2>
+            <button className="btn btn--sm btn--ghost" onClick={onClose} aria-label={t('close')}>
               ✕
             </button>
           </div>
 
           <div className="modal-body settings-body">
-            <Section title="General">
+            <Section title={t('general.title')}>
               {onManageAccounts && (
-                <Item
-                  title="Accounts"
-                  desc="See who you’re signed in as for GitHub Copilot, Microsoft Fabric, the Azure CLI, and GitHub, and sign in or out."
-                >
+                <Item title={t('general.accounts.title')} desc={t('general.accounts.desc')}>
                   <button type="button" className="btn btn--sm" onClick={onManageAccounts}>
-                    Manage accounts
+                    {t('general.accounts.action')}
                   </button>
                 </Item>
               )}
               {onManageKeys && (
-                <Item
-                  title="API keys"
-                  desc="Use models from Anthropic, OpenAI, xAI and Google with your own API keys, next to your Copilot models. The provider bills you for them."
-                >
+                <Item title={t('general.apiKeys.title')} desc={t('general.apiKeys.desc')}>
                   <button type="button" className="btn btn--sm" onClick={onManageKeys}>
-                    Manage API keys
+                    {t('general.apiKeys.action')}
                   </button>
                 </Item>
               )}
               {onManageMcpServers && (
-                <Item
-                  title="MCP servers"
-                  desc="Add the MCP servers chat can turn on in its Plugins, such as a command that runs on this computer or a server’s URL."
-                >
+                <Item title={t('general.mcpServers.title')} desc={t('general.mcpServers.desc')}>
                   <button type="button" className="btn btn--sm" onClick={onManageMcpServers}>
-                    Manage MCP servers
+                    {t('general.mcpServers.action')}
                   </button>
                 </Item>
               )}
               {onManageChatDefaults && (
-                <Item
-                  title="Chat defaults"
-                  desc="The model and plugins a new project’s chat starts with."
-                >
+                <Item title={t('general.chatDefaults.title')} desc={t('general.chatDefaults.desc')}>
                   <button type="button" className="btn btn--sm" onClick={onManageChatDefaults}>
-                    Manage chat defaults
+                    {t('general.chatDefaults.action')}
                   </button>
                 </Item>
               )}
               {onManageCustomInstructions && (
                 <Item
-                  title="Custom instructions"
-                  desc="What Copilot follows in every app you build, such as “Use the system theme by default.”"
+                  title={t('general.customInstructions.title')}
+                  desc={t('general.customInstructions.desc')}
                 >
                   <button
                     type="button"
                     className="btn btn--sm"
                     onClick={onManageCustomInstructions}
                   >
-                    Edit instructions
+                    {t('general.customInstructions.action')}
                   </button>
                 </Item>
               )}
               {onReviewSetup && (
-                <Item
-                  title="Setup"
-                  desc="Check the tools Fabricator needs and install missing ones, such as the GitHub CLI."
-                >
+                <Item title={t('general.setup.title')} desc={t('general.setup.desc')}>
                   <button type="button" className="btn btn--sm" onClick={onReviewSetup}>
-                    Open setup
+                    {t('general.setup.action')}
                   </button>
                 </Item>
               )}
               <Item
-                title="Workspace folder"
-                desc="New projects are created here."
+                title={t('general.workspaceFolder.title')}
+                desc={t('general.workspaceFolder.desc')}
                 extra={
                   <code className="set-path" title={workspaceRoot ?? ''}>
                     {workspaceRoot ?? '…'}
@@ -323,29 +388,32 @@ export default function SettingsModal({
                 }
               >
                 <button type="button" className="btn btn--sm" onClick={() => void changeRoot()}>
-                  Change…
+                  {t('actions.change')}
                 </button>
               </Item>
             </Section>
 
-            <Section title="Appearance">
-              <Item title="Theme" desc="System follows your computer’s light or dark setting.">
-                <div className="seg" role="group" aria-label="Theme">
-                  {THEMES.map((t) => (
+            <Section title={t('appearance.title')}>
+              <Item title={t('appearance.theme.title')} desc={t('appearance.theme.desc')}>
+                <div className="seg" role="group" aria-label={t('appearance.theme.title')}>
+                  {THEMES.map((theme) => (
                     <button
-                      key={t.value}
+                      key={theme.value}
                       type="button"
-                      className={`seg-btn${settings.theme === t.value ? ' seg-btn--active' : ''}`}
-                      aria-pressed={settings.theme === t.value}
-                      onClick={() => pickTheme(t.value)}
+                      className={`seg-btn${settings.theme === theme.value ? ' seg-btn--active' : ''}`}
+                      aria-pressed={settings.theme === theme.value}
+                      onClick={() => pickTheme(theme.value)}
                     >
-                      {t.label}
+                      {t(theme.label)}
                     </button>
                   ))}
                 </div>
               </Item>
-              <Item title="Text size" desc="Scale the whole interface — handy on large monitors.">
-                <div className="seg" role="group" aria-label="Text size">
+              <Item title={t('appearance.language.title')} desc={t('appearance.language.desc')}>
+                <LanguagePicker value={settings.language ?? 'system'} onPick={pickLanguage} />
+              </Item>
+              <Item title={t('appearance.textSize.title')} desc={t('appearance.textSize.desc')}>
+                <div className="seg" role="group" aria-label={t('appearance.textSize.title')}>
                   {UI_SCALES.map((s) => (
                     <button
                       key={s}
@@ -361,35 +429,29 @@ export default function SettingsModal({
               </Item>
             </Section>
 
-            <Section title="Diagnostics">
-              <Item
-                title="Usage stats"
-                desc="We send your sign-in domain and a hashed email so we can see how the product is used. Your email, code, and apps stay on this device."
-              />
+            <Section title={t('diagnostics.title')}>
+              <Item title={t('diagnostics.usage.title')} desc={t('diagnostics.usage.desc')} />
               <ToggleRow
-                label="Full diagnostics"
-                hint="Also capture prompts, responses, and tool output for each chat turn. Off by default — only lightweight metadata (timing, tools used, errors) is recorded. Turn on to include more detail in a bug report."
+                label={t('diagnostics.full.title')}
+                hint={t('diagnostics.full.desc')}
                 checked={Boolean(settings.fullDiagnostics)}
                 onChange={(v) => onChange({ fullDiagnostics: v })}
               />
-              <Item
-                title="Logs"
-                desc="Diagnostics for your chat sessions are saved on this device. Export them to attach to a bug report."
-              >
+              <Item title={t('diagnostics.logs.title')} desc={t('diagnostics.logs.desc')}>
                 <button
                   type="button"
                   className="btn btn--sm"
                   disabled={exporting}
                   onClick={() => void exportDiagnostics()}
                 >
-                  {exporting ? 'Exporting…' : 'Export diagnostics'}
+                  {exporting ? t('diagnostics.logs.exporting') : t('diagnostics.logs.export')}
                 </button>
                 <button
                   type="button"
                   className="btn btn--sm"
                   onClick={() => void window.api.openLogs()}
                 >
-                  Open logs folder
+                  {t('diagnostics.logs.openFolder')}
                 </button>
               </Item>
             </Section>
@@ -409,11 +471,10 @@ export default function SettingsModal({
                 >
                   <span className="set-item-text">
                     <span className="set-item-title" id={experimentsTitleId}>
-                      Experiments
+                      {t('experiments.title')}
                     </span>
                     <span className="set-item-desc" id={experimentsDescId}>
-                      These features are experimental and off by default. They may be unstable,
-                      change, or be removed in a future update.
+                      {t('experiments.desc')}
                     </span>
                   </span>
                   <Codicon name="chevron-down" className="set-expander-caret" />
@@ -421,20 +482,20 @@ export default function SettingsModal({
                 {showExperiments && (
                   <div className="set-expander-body" id={experimentsId}>
                     <ToggleRow
-                      label="Team workspaces"
-                      hint="Build apps with your team in a private GitHub repository. Everyone works on their own copy, and a pipeline publishes to Fabric with a deploy identity that Fabricator sets up. Team apps never deploy from this computer. Needs the GitHub CLI."
+                      label={t('experiments.teamWorkspaces.title')}
+                      hint={t('experiments.teamWorkspaces.desc')}
                       checked={Boolean(settings.experiments?.teamWorkspaces)}
                       onChange={(v) => onChange({ experiments: { teamWorkspaces: v } })}
                     />
                     <ToggleRow
-                      label="Migrate Power BI reports"
-                      hint="Turn a Power BI report into a new app from Home. The app reads the report's semantic model live, and Copilot rebuilds the report's pages, visuals and filters one page at a time. Needs the Azure CLI."
+                      label={t('experiments.reportMigration.title')}
+                      hint={t('experiments.reportMigration.desc')}
                       checked={Boolean(settings.experiments?.reportMigration)}
                       onChange={(v) => onChange({ experiments: { reportMigration: v } })}
                     />
                     <ToggleRow
-                      label="Work IQ"
-                      hint="Add Work IQ to chat's plugins. Turned on in a chat, it lets chat look up your Microsoft 365 email, meetings, files, Teams messages and people, with Microsoft's Work IQ, and use what it finds while it builds. Read-only. You sign in with your work account in your browser. Needs a Microsoft 365 Copilot license and your organization's approval."
+                      label={t('experiments.workIq.title')}
+                      hint={t('experiments.workIq.desc')}
                       checked={Boolean(settings.experiments?.workIq)}
                       onChange={(v) => onChange({ experiments: { workIq: v } })}
                     />
@@ -443,14 +504,11 @@ export default function SettingsModal({
               </div>
             </section>
 
-            <Section title="About">
+            <Section title={t('about.title')}>
               {versions && <VersionInfo versions={versions} />}
-              <Item
-                title="Help"
-                desc="Guides for every part of Fabricator, and fixes for common problems."
-              >
+              <Item title={t('about.help.title')} desc={t('about.help.desc')}>
                 <button type="button" className="btn btn--sm" onClick={() => openDocs('home')}>
-                  Documentation
+                  {t('about.help.docs')}
                   <Codicon name="link-external" className="set-ext" />
                 </button>
                 <button
@@ -458,7 +516,7 @@ export default function SettingsModal({
                   className="btn btn--sm"
                   onClick={() => openDocs('troubleshooting')}
                 >
-                  Troubleshooting
+                  {t('about.help.troubleshooting')}
                   <Codicon name="link-external" className="set-ext" />
                 </button>
               </Item>
@@ -467,12 +525,11 @@ export default function SettingsModal({
 
           <div className="modal-footer">
             <button className="btn btn--primary" onClick={onClose}>
-              Done
+              {t('actions.done')}
             </button>
           </div>
         </div>
       </div>
-
     </>
   )
 }

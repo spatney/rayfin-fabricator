@@ -50,9 +50,9 @@ mood.
   minimizer ("just run this"). "Just one class." as a punchline is fine.
 - **At most two ocean puns a lesson.** His catchphrases count: "Let's dive in!", "You didn't lift
   a fin.", "Fins crossed.", "See you in the water!"
-- **The Ray fact at the end must be true.** Take one from `RAY_FACTS` in
-  `src/renderer/src/components/mascot/lines.ts`, or check a new one against marine-biology
-  sources. Don't repeat one an earlier lesson used.
+- **The Ray fact at the end must be true.** Take one from `facts.ray` in
+  `src/renderer/src/i18n/locales/en/mascot.json` (the app's `RAY_FACTS`), or check a new one
+  against marine-biology sources. Don't repeat one an earlier lesson used.
 
 ## Saying code out loud
 

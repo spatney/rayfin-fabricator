@@ -10,6 +10,7 @@ import LaunchCurtain from './components/LaunchCurtain'
 import { MascotProvider } from './components/mascot/stage'
 import { HelpConversationProvider } from './components/help/HelpConversation'
 import { applyUiScale, watchTheme } from './theme'
+import { applyLanguagePreference, translator } from './i18n'
 import { useUpdates } from './update'
 import { useToast } from './toast'
 import { authErrorMessage } from './authErrors'
@@ -154,7 +155,7 @@ function App(): JSX.Element {
             ? await window.api.auth.status()
             : await window.api.auth.check(providers)
       } catch (reason) {
-        const error = authErrorMessage(reason, 'Could not verify sign-in. Please retry.')
+        const error = authErrorMessage(reason, translator('app')('startup.verifySignIn'))
         const failed = mountedRef.current ? current() : []
         // Superseded by a newer check: that one reports.
         if (failed.length === 0) return {}
@@ -191,10 +192,10 @@ function App(): JSX.Element {
         setDoctor(d.value)
       } else {
         setDoctor(null)
-        setCheckError(authErrorMessage(d.reason, 'Could not check the installed tools. Please retry.'))
+        setCheckError(authErrorMessage(d.reason, translator('app')('startup.checkTools')))
       }
       if (a.status === 'rejected') {
-        setAuthError(authErrorMessage(a.reason, 'Could not verify sign-in. Please retry.'))
+        setAuthError(authErrorMessage(a.reason, translator('app')('startup.verifySignIn')))
       }
       const ready =
         d.status === 'fulfilled' && a.status === 'fulfilled' && setupReady(d.value, a.value)
@@ -225,7 +226,7 @@ function App(): JSX.Element {
       })
     tools.catch((reason) => {
       if (mountedRef.current && seq === refreshSeqRef.current) {
-        setCheckError(authErrorMessage(reason, 'Could not check the installed tools. Please retry.'))
+        setCheckError(authErrorMessage(reason, translator('app')('startup.checkTools')))
       }
     })
     const [report, accounts] = await Promise.allSettled([
@@ -248,7 +249,7 @@ function App(): JSX.Element {
       await checkAuth(ALL_PROVIDERS)
       if (mountedRef.current) setAuthError(null)
     } catch (reason) {
-      const error = authErrorMessage(reason, 'Could not verify sign-in. Please retry.')
+      const error = authErrorMessage(reason, translator('app')('startup.verifySignIn'))
       if (mountedRef.current) setAuthError(error)
       throw new Error(error, { cause: reason })
     }
@@ -305,8 +306,9 @@ function App(): JSX.Element {
       },
       (reason) => {
         if (alive) {
-          toast.error(authErrorMessage(reason, 'Could not load app settings. Please retry.'), {
-            title: 'Settings unavailable'
+          const t = translator('app')
+          toast.error(authErrorMessage(reason, t('startup.loadSettings')), {
+            title: t('startup.settingsUnavailable')
           })
         }
       }
@@ -327,6 +329,14 @@ function App(): JSX.Element {
     applyUiScale(settings.uiScale)
     return watchTheme(settings.theme)
   }, [settings])
+
+  // Show the interface in the language Settings asks for: the computer's
+  // unless one is chosen.
+  const settingsLoaded = settings !== null
+  const languagePreference = settings?.language
+  useEffect(() => {
+    if (settingsLoaded) void applyLanguagePreference(languagePreference)
+  }, [settingsLoaded, languagePreference])
 
   const updateSettings = useCallback(async (patch: Partial<AppSettings>): Promise<void> => {
     setSettings(await window.api.settings.set(patch))

@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type JSX } from 'react'
 import type { TeamJoinOptions, TeamProblem, TeamWorkspace } from '@shared/ipc'
+import { useTranslation } from '../../i18n'
 import { useSuppressPreview } from '../../overlay'
 import { useModalFocus } from '../../modalFocus'
 import { GithubAccountField, ProblemView, teamError } from './common'
@@ -16,6 +17,7 @@ interface Props {
 /** Join a team workspace as one of your GitHub accounts: accept an invitation, or pick one it can access. */
 export default function JoinTeamWorkspaceModal({ initialAccount, onClose, onJoined }: Props): JSX.Element {
   useSuppressPreview()
+  const { t } = useTranslation('team')
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
   const [account, setAccount] = useState(initialAccount ?? '')
@@ -41,7 +43,7 @@ export default function JoinTeamWorkspaceModal({ initialAccount, onClose, onJoin
       })
       .catch((reason) => {
         if (current) {
-          setOptions({ ok: false, error: teamError(reason, 'Could not load invitations.'), invitations: [], discovered: [] })
+          setOptions({ ok: false, error: teamError(reason, t('join.loadFailed')), invitations: [], discovered: [] })
         }
       })
     return () => {
@@ -72,10 +74,10 @@ export default function JoinTeamWorkspaceModal({ initialAccount, onClose, onJoin
         onJoined(result.workspace)
         return
       }
-      setError(result.error ?? 'Could not join the workspace.')
+      setError(result.error ?? t('join.failed'))
       if (result.problem?.link || result.problem?.kind === 'sso') setProblem(result.problem)
     } catch (reason) {
-      setError(teamError(reason, 'Could not join the workspace.'))
+      setError(teamError(reason, t('join.failed')))
     } finally {
       setBusy(null)
     }
@@ -94,35 +96,34 @@ export default function JoinTeamWorkspaceModal({ initialAccount, onClose, onJoin
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>Join a team workspace</h2>
+          <h2 id={titleId}>{t('join.title')}</h2>
         </div>
         <div className="modal-body team-form">
           <GithubAccountField
             value={account}
             onChange={setAccount}
             onReady={setAccountReady}
-            hint="Fabricator joins and always works on the workspace as this account."
+            hint={t('join.accountHint')}
           />
           {!accountReady ? null : !options ? (
             <span className="team-muted">
-              <span className="ws-spinner" /> Looking for {account}&apos;s invitations…
+              <span className="ws-spinner" /> {t('join.looking', { account })}
             </span>
           ) : (
             <>
               {options.error && <div className="alert alert--error">{options.error}</div>}
               <section className="team-menu-section">
-                <span className="team-menu-title">Invitations</span>
+                <span className="team-menu-title">{t('join.invitations')}</span>
                 {options.invitations.length === 0 ? (
-                  <span className="team-muted">
-                    No pending invitations for {account}. Ask the workspace&apos;s owner to invite this GitHub
-                    username.
-                  </span>
+                  <span className="team-muted">{t('join.noInvitations', { account })}</span>
                 ) : (
                   options.invitations.map((invite) => (
                     <div key={invite.id} className="team-app">
                       <span className="team-app-name" title={invite.description}>
                         <strong>{invite.repo}</strong>
-                        {invite.inviter && <span className="team-muted"> from {invite.inviter}</span>}
+                        {invite.inviter && (
+                          <span className="team-muted"> {t('join.from', { inviter: invite.inviter })}</span>
+                        )}
                       </span>
                       <button
                         type="button"
@@ -134,7 +135,7 @@ export default function JoinTeamWorkspaceModal({ initialAccount, onClose, onJoin
                           )
                         }
                       >
-                        {busy === `i${invite.id}` ? 'Joining…' : 'Accept and join'}
+                        {busy === `i${invite.id}` ? t('join.joining') : t('join.accept')}
                       </button>
                     </div>
                   ))
@@ -142,7 +143,7 @@ export default function JoinTeamWorkspaceModal({ initialAccount, onClose, onJoin
               </section>
               {options.discovered.length > 0 && (
                 <section className="team-menu-section">
-                  <span className="team-menu-title">Workspaces you can join</span>
+                  <span className="team-menu-title">{t('join.discovered')}</span>
                   {options.discovered.map((d) => (
                     <div key={d.repo} className="team-app">
                       <span className="team-app-name" title={d.description}>
@@ -154,19 +155,19 @@ export default function JoinTeamWorkspaceModal({ initialAccount, onClose, onJoin
                         disabled={Boolean(busy)}
                         onClick={() => void join(d.repo, d.repo, () => window.api.team.join(d.repo, account))}
                       >
-                        {busy === d.repo ? 'Joining…' : 'Join'}
+                        {busy === d.repo ? t('join.joining') : t('shared.join')}
                       </button>
                     </div>
                   ))}
                 </section>
               )}
               <section className="team-menu-section">
-                <span className="team-menu-title">Or enter its GitHub repository</span>
+                <span className="team-menu-title">{t('join.manual')}</span>
                 <div className="team-row">
                   <input
                     className="field-input"
                     value={repo}
-                    placeholder="owner/repository"
+                    placeholder={t('shared.repoPlaceholder')}
                     spellCheck={false}
                     onChange={(event) => setRepo(event.target.value)}
                   />
@@ -176,7 +177,7 @@ export default function JoinTeamWorkspaceModal({ initialAccount, onClose, onJoin
                     disabled={!manualValid || Boolean(busy)}
                     onClick={() => void join('manual', repo.trim(), () => window.api.team.join(repo.trim(), account))}
                   >
-                    {busy === 'manual' ? 'Joining…' : 'Join'}
+                    {busy === 'manual' ? t('join.joining') : t('shared.join')}
                   </button>
                 </div>
               </section>
@@ -203,7 +204,7 @@ export default function JoinTeamWorkspaceModal({ initialAccount, onClose, onJoin
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn--ghost" disabled={Boolean(busy)} onClick={onClose}>
-            Close
+            {t('actions.close')}
           </button>
         </div>
       </div>

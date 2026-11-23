@@ -178,7 +178,7 @@ pub async fn chat_suggest(
   project_id: String,
 ) -> Result<SuggestionSet, String> {
   let Some(project) = store::find_project(&project_id) else {
-    return Err("Project not found.".into());
+    return Err(t!("commands.shared.projectNotFound"));
   };
 
   let current_fp = fingerprint(&project.path);
@@ -191,7 +191,7 @@ pub async fn chat_suggest(
   }
 
   let Some(token) = state.try_begin_suggest(&project_id) else {
-    return Err("Suggestions are already being generated for this project.".into());
+    return Err(t!("commands.suggest.busy"));
   };
 
   // A transient, uncached session keeps this out of the project's chat history.

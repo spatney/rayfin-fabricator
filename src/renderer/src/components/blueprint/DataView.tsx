@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type JSX, type ReactNode } from 'react'
+import type { TFunction } from 'i18next'
 import type {
   LocalBackendState,
   LocalEntity,
@@ -12,6 +13,7 @@ import type {
 } from '@shared/ipc'
 import type { DataModel } from '../../model/parseSchema'
 import { reportEvent } from '../../errorReport'
+import { formatList, formatLocale, Trans, translator, useTranslation } from '../../i18n'
 import {
   backendStamp,
   hasFabricBackend,
@@ -78,6 +80,11 @@ type Confirm =
   | { kind: 'load-seed'; seed: LocalSeed }
   | { kind: 'save-seed'; rows: number; entities: number; files: number }
 
+/** What loading or saving the seed data did: how much, and the stored files a save skipped. */
+type SeedNote =
+  | { kind: 'loaded'; rows: number; entities: number; files: number }
+  | { kind: 'saved'; rows: number; entities: number; files: number; skipped: string[] }
+
 const STATE_DOT: Record<LocalBackendState, string> = {
   running: 'ok',
   starting: 'warn',
@@ -86,10 +93,15 @@ const STATE_DOT: Record<LocalBackendState, string> = {
   stopped: 'off'
 }
 
-const SIGN_IN_LABEL: Record<string, string> = {
-  password: 'Password',
-  entra: 'Microsoft Entra ID'
+/** A way a local user signs in, in words: a password, Microsoft Entra ID, else its own name. */
+function signInLabel(way: string, t: TFunction<'data'>): string {
+  if (way === 'password') return t('users.password')
+  if (way === 'entra') return 'Microsoft Entra ID'
+  return way
 }
+
+/** The local users table's columns, by their `users` keys. */
+const USER_COLUMNS = ['username', 'email', 'signsInWith', 'created'] as const
 
 /**
  * Blueprint's Data explorer: the app's local data, as its local backend
@@ -106,6 +118,7 @@ export default function DataView({
   dataModel,
   onSendToChat
 }: Props): JSX.Element {
+  const { t } = useTranslation('data')
   useEffect(() => {
     reportEvent(
       'preview',
@@ -120,11 +133,8 @@ export default function DataView({
   if (!window.api?.local) {
     return (
       <div className="bp-data">
-        <ViewHead title="Data explorer" subtitle="Local data" />
-        <Problem
-          title="Couldn’t reach the local backend"
-          error={{ message: 'This version of Fabricator can’t read local data.' }}
-        />
+        <ViewHead title={t('view.title')} subtitle={t('view.localData')} />
+        <Problem title={t('backend.unreachable')} error={{ message: t('backend.unsupported') }} />
       </div>
     )
   }
@@ -139,6 +149,7 @@ export default function DataView({
 }
 
 function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX.Element {
+  const { t } = useTranslation('data')
   const projectId = project.id
   const backend = useLocalBackend(projectId)
   const { status, state } = backend
@@ -154,9 +165,7 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
   // keeps the previous model, entities and all.
   const problems = runningProblems(status)
   const unread = problems.find((problem) => problem.kind === 'analysis')
-  const note = published
-    ? 'Local data on this computer, separate from the published app’s data.'
-    : 'Local data on this computer. Publishing doesn’t copy it to Fabric.'
+  const note = published ? t('toolbar.notePublished') : t('toolbar.note')
 
   // The hook reads the status too, but keeps a failure to itself.
   const [statusError, setStatusError] = useState<LocalBackendError | null>(null)
@@ -270,7 +279,7 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
     setConfirmError(null)
   }, [])
   // What loading or saving the seed data did, until the next one, and why a load was refused.
-  const [seedNote, setSeedNote] = useState<string | null>(null)
+  const [seedNote, setSeedNote] = useState<SeedNote | null>(null)
   const [seedProblems, setSeedProblems] = useState<LocalSeedProblem[] | null>(null)
   useEffect(() => {
     setSeedNote(null)
@@ -348,7 +357,7 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
         }
         const rows = loaded.entities.reduce((sum, e) => sum + e.rows, 0)
         const files = loaded.storage.reduce((sum, f) => sum + f.files, 0)
-        setSeedNote(`Loaded the seed data: ${seedAmount(rows, loaded.entities.length, files)}.`)
+        setSeedNote({ kind: 'loaded', rows, entities: loaded.entities.length, files })
         // The app's page shows the new data once it loads again.
         void window.api.preview.reload().catch(() => undefined)
         reportEvent(
@@ -362,13 +371,13 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
       void perform(async () => {
         setSeedNote(null)
         const saved = await window.api.local.saveSeed(projectId)
-        const left =
-          saved.skipped.length > 0
-            ? ` ${plural(saved.skipped.length, 'stored file')} couldn’t be saved: ${saved.skipped.join('; ')}`
-            : ''
-        setSeedNote(
-          `Saved ${seedAmount(saved.rows, saved.entities, saved.files)} to rayfin/seed.${left}`
-        )
+        setSeedNote({
+          kind: 'saved',
+          rows: saved.rows,
+          entities: saved.entities,
+          files: saved.files,
+          skipped: saved.skipped
+        })
         reportEvent(
           'preview',
           'local.seed_saved',
@@ -385,20 +394,27 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
   const totalFiles = folders.reduce((sum, folder) => sum + folder.files, 0)
   const head = (
     <ViewHead
-      title="Data explorer"
+      title={t('view.title')}
       subtitle={
         overview
-          ? `${plural(entities.length, 'entity', 'entities')} · ${plural(totalRows, 'row')}`
-          : 'Local data'
+          ? t('view.summary', {
+              entities: t('counts.entities', { count: entities.length }),
+              rows: t('counts.rows', { count: totalRows })
+            })
+          : t('view.localData')
       }
       legend={
         <div className="model-legend">
-          <span className="model-legend-label">Local backend</span>
+          <span className="model-legend-label">{t('view.backend')}</span>
           <span className="model-legend-item">
             <span
               className={`bp-dot bp-dot--${status ? (problems.length > 0 ? 'warn' : STATE_DOT[state]) : 'off'}`}
             />
-            {status ? localStateLabel(status) : statusError ? 'Unknown' : 'Checking…'}
+            {status
+              ? localStateLabel(status)
+              : statusError
+                ? t('status.unknown')
+                : t('status.checking')}
           </span>
         </div>
       }
@@ -409,25 +425,19 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
   if (!status) {
     body = statusError ? (
       <Problem
-        title="Couldn’t reach the local backend"
+        title={t('backend.unreachable')}
         error={statusError}
         onRetry={() => setStatusTry((n) => n + 1)}
       />
     ) : (
-      <div className="model-empty">Checking the local backend…</div>
+      <div className="model-empty">{t('backend.checking')}</div>
     )
   } else if (!running) {
     body = <BackendState backend={backend} />
   } else if (overviewError) {
-    body = (
-      <Problem
-        title="Couldn’t read the local data"
-        error={readable(overviewError)}
-        onRetry={reload}
-      />
-    )
+    body = <Problem title={t('view.readError')} error={readable(overviewError)} onRetry={reload} />
   } else if (!overview) {
-    body = <div className="model-empty">Reading local data…</div>
+    body = <div className="model-empty">{t('view.reading')}</div>
   } else {
     const entity =
       current?.kind === 'entity' ? entities.find((e) => e.name === current.name) : undefined
@@ -435,9 +445,11 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
       current?.kind === 'folder' ? folders.find((f) => f.name === current.name) : undefined
     body = (
       <div className="bp-data-body">
-        <nav className="bp-data-side" aria-label="Local data">
-          <div className="bp-data-side-h">Entities</div>
-          {entities.length === 0 && <div className="bp-data-side-empty">No entities</div>}
+        <nav className="bp-data-side" aria-label={t('view.localData')}>
+          <div className="bp-data-side-h">{t('side.entities')}</div>
+          {entities.length === 0 && (
+            <div className="bp-data-side-empty">{t('side.noEntities')}</div>
+          )}
           {entities.map((e) => {
             const on = current?.kind === 'entity' && current.name === e.name
             return (
@@ -446,25 +458,25 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
                 type="button"
                 className={`bp-data-item${on ? ' bp-data-item--on' : ''}`}
                 aria-current={on ? 'true' : undefined}
-                aria-label={`${e.name}, ${plural(e.rows, 'row')}`}
+                aria-label={t('side.entityItem', { name: e.name, count: e.rows })}
                 onClick={() => setSelected({ kind: 'entity', name: e.name })}
               >
                 <Codicon name="table" />
                 <span className="bp-data-item-name">{e.name}</span>
-                <span className="bp-data-item-count">{e.rows.toLocaleString('en-US')}</span>
+                <span className="bp-data-item-count">{e.rows.toLocaleString(formatLocale())}</span>
               </button>
             )
           })}
           {showStorage && (
             <>
-              <div className="bp-data-side-h bp-data-side-h--next">Storage</div>
+              <div className="bp-data-side-h bp-data-side-h--next">{t('side.storage')}</div>
               {storageError && (
                 <div className="bp-data-side-empty" title={storageError.message}>
-                  Couldn’t read the stored files
+                  {t('side.storageError')}
                 </div>
               )}
               {!storageError && folders.length === 0 && (
-                <div className="bp-data-side-empty">No storage folders</div>
+                <div className="bp-data-side-empty">{t('side.noFolders')}</div>
               )}
               {folders.map((f) => {
                 const on = current?.kind === 'folder' && current.name === f.name
@@ -475,13 +487,15 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
                     type="button"
                     className={`bp-data-item${on ? ' bp-data-item--on' : ''}`}
                     aria-current={on ? 'true' : undefined}
-                    aria-label={`${label}, ${plural(f.files, 'file')}`}
+                    aria-label={t('side.folderItem', { name: label, count: f.files })}
                     title={f.displayName ? `${f.displayName} (${f.name})` : f.name}
                     onClick={() => setSelected({ kind: 'folder', name: f.name })}
                   >
                     <Codicon name={on ? 'folder-opened' : 'folder'} />
                     <span className="bp-data-item-name">{label}</span>
-                    <span className="bp-data-item-count">{f.files.toLocaleString('en-US')}</span>
+                    <span className="bp-data-item-count">
+                      {f.files.toLocaleString(formatLocale())}
+                    </span>
                   </button>
                 )
               })}
@@ -497,9 +511,11 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
                 onClick={() => setSelected({ kind: 'users' })}
               >
                 <Codicon name="person" />
-                <span className="bp-data-item-name">Local users</span>
+                <span className="bp-data-item-name">{t('users.title')}</span>
                 {users && (
-                  <span className="bp-data-item-count">{users.length.toLocaleString('en-US')}</span>
+                  <span className="bp-data-item-count">
+                    {users.length.toLocaleString(formatLocale())}
+                  </span>
                 )}
               </button>
             </>
@@ -531,11 +547,7 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
             onClear={(rows) => setConfirm({ kind: 'clear', entity: entity.name, rows })}
           />
         ) : (
-          <Empty
-            icon="table"
-            title="No entities yet"
-            sub="Once the app’s data model has entities, their rows show up here."
-          />
+          <Empty icon="table" title={t('view.noEntitiesTitle')} sub={t('view.noEntitiesSub')} />
         )}
       </div>
     )
@@ -555,10 +567,10 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
           className="model-tool-btn"
           onClick={reload}
           disabled={!running}
-          title="Read the local data again"
+          title={t('toolbar.refreshTitle')}
         >
           <Codicon name="refresh" className={loading ? 'icon-spin' : undefined} />
-          Refresh
+          {t('actions.refresh')}
         </button>
         <button
           type="button"
@@ -571,14 +583,10 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
             else setConfirm({ kind: 'load-seed', seed })
           }}
           disabled={!running || !overview?.seed?.exists}
-          title={
-            overview?.seed?.exists
-              ? 'Replace the local data with the seed data in rayfin/seed'
-              : 'This app has no seed data in rayfin/seed yet. Save the local data as seed data, or ask Copilot to add some.'
-          }
+          title={overview?.seed?.exists ? t('toolbar.loadSeedTitle') : t('toolbar.noSeedTitle')}
         >
           <Codicon name="database" />
-          Load seed data
+          {t('seed.load')}
         </button>
         <button
           type="button"
@@ -592,10 +600,10 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
             })
           }
           disabled={!running || !overview || (totalRows === 0 && totalFiles === 0)}
-          title="Save the local data to rayfin/seed, for anyone who opens the project to load"
+          title={t('toolbar.saveSeedTitle')}
         >
           <Codicon name="save" />
-          Save as seed data
+          {t('seed.save')}
         </button>
         <button
           type="button"
@@ -604,17 +612,17 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
           disabled={!running || !overview}
         >
           <Codicon name="discard" />
-          Reset local data
+          {t('toolbar.reset')}
         </button>
       </div>
       {seedNote && (
         <div className="bp-data-notice" role="status">
           <Codicon name="check" />
-          <span className="bp-data-notice-text">{seedNote}</span>
+          <span className="bp-data-notice-text">{seedNoteText(seedNote, t)}</span>
           <button
             type="button"
             className="bp-data-notice-close"
-            aria-label="Dismiss"
+            aria-label={t('actions.dismiss')}
             onClick={() => setSeedNote(null)}
           >
             <Codicon name="close" />
@@ -624,16 +632,16 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
       {fallback && (
         <div className="bp-data-notice" role="note">
           <Codicon name="info" />
-          <span>{fallback} The Data explorer shows local data only.</span>
+          <span>{t('notices.fallback', { reason: fallback })}</span>
         </div>
       )}
       {unread && (
-        <div className="bp-data-notice" role="note" aria-label="Data model change not read">
+        <div className="bp-data-notice" role="note" aria-label={t('notices.unreadLabel')}>
           <span className="bp-dot bp-dot--warn bp-data-notice-dot" aria-hidden="true" />
           <span className="bp-data-notice-text">
             {overview && entities.length === 0
-              ? 'No entities show because the app’s latest data model change couldn’t be read. Its local backend still uses the previous data model, which has none.'
-              : 'The app’s latest data model change couldn’t be read, so its local backend still uses the previous data model.'}
+              ? t('notices.unreadNoEntities')
+              : t('notices.unread')}
             {unread.detail && (
               <code className="bp-data-notice-detail" title={unread.detail}>
                 {unread.detail}
@@ -663,7 +671,7 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
           onFix={
             onSendToChat
               ? () => {
-                  onSendToChat('Fix the seed data’s problems', seedFixPrompt(seedProblems))
+                  onSendToChat(t('seedProblems.fixRequest'), seedFixPrompt(seedProblems))
                   setSeedProblems(null)
                 }
               : undefined
@@ -675,7 +683,7 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
   )
 }
 
-/** `12 rows in 3 entities and 2 files`, leaving out what there's none of. */
+/** `12 rows in 3 entities and 2 files`, leaving out what there's none of: in English, for telemetry. */
 function seedAmount(rows: number, entities: number, files: number): string {
   const parts: string[] = []
   if (rows > 0 || entities > 0) {
@@ -683,6 +691,35 @@ function seedAmount(rows: number, entities: number, files: number): string {
   }
   if (files > 0) parts.push(plural(files, 'file'))
   return parts.length > 0 ? parts.join(' and ') : 'no rows or files'
+}
+
+/** {@link seedAmount} in the interface's language. */
+function seedAmountText(
+  t: TFunction<'data'>,
+  rows: number,
+  entities: number,
+  files: number
+): string {
+  const parts: string[] = []
+  if (rows > 0 || entities > 0) {
+    parts.push(
+      t('seed.rowsIn', { count: rows, entities: t('counts.entities', { count: entities }) })
+    )
+  }
+  if (files > 0) parts.push(t('counts.files', { count: files }))
+  return parts.length > 0 ? formatList(parts) : t('seed.nothing')
+}
+
+/** What loading or saving the seed data did, in words. */
+function seedNoteText(note: SeedNote, t: TFunction<'data'>): string {
+  const amount = seedAmountText(t, note.rows, note.entities, note.files)
+  if (note.kind === 'loaded') return t('seed.loaded', { amount })
+  if (note.skipped.length === 0) return t('seed.saved', { amount })
+  return t('seed.savedSkipped', {
+    amount,
+    count: note.skipped.length,
+    files: note.skipped.join('; ')
+  })
 }
 
 /** Why the seed data wasn't loaded, problem by problem. */
@@ -695,16 +732,17 @@ function SeedProblemsDialog({
   onFix?: () => void
   onClose: () => void
 }): JSX.Element {
+  const { t } = useTranslation('data')
   return (
     <ConfirmModal
-      title={`The seed data has ${plural(problems.length, 'problem')}`}
-      confirmLabel={onFix ? 'Fix with Copilot' : 'OK'}
-      cancelLabel="Close"
+      title={t('seedProblems.title', { count: problems.length })}
+      confirmLabel={onFix ? t('seedProblems.fix') : t('actions.ok')}
+      cancelLabel={t('actions.close')}
       onConfirm={onFix ?? onClose}
       onCancel={onClose}
       message={
         <>
-          <p>Nothing was loaded, so the local data is as it was. Fix these, then load it again:</p>
+          <p>{t('seedProblems.intro')}</p>
           <ul className="bp-data-confirm-list bp-data-seed-problems">
             {problems.map((problem, i) => (
               <li key={i}>
@@ -722,10 +760,8 @@ function SeedProblemsDialog({
 function readable(error: LocalBackendError): { message: string; hint?: string | null } {
   // Without the control API (an older rayfin-local), its routes answer 404.
   if (error.status === 404 || error.code === 'not-found') {
-    return {
-      message: 'This version of the local backend doesn’t share its data with Fabricator.',
-      hint: 'Update Fabricator, then try again.'
-    }
+    const t = translator('data')
+    return { message: t('view.oldBackend'), hint: t('view.oldBackendHint') }
   }
   return error
 }
@@ -736,17 +772,15 @@ function readable(error: LocalBackendError): { message: string; hint?: string | 
  * a failed Start's.
  */
 function BackendState({ backend }: { backend: LocalBackend }): JSX.Element {
+  const { t } = useTranslation('data')
   const { state, status, error, actionError, busy } = backend
   const starting = state === 'starting' || state === 'restarting'
-  let title = 'The local backend isn’t running'
-  let message = 'Start it to see the app’s local data.'
+  let title = t('backend.stoppedTitle')
+  let message = t('backend.stoppedMessage')
   let hint: string | null = null
   if (starting) {
-    title =
-      state === 'restarting'
-        ? 'The local backend is starting again'
-        : 'The local backend is starting'
-    message = 'The app’s local data shows here once it’s running.'
+    title = state === 'restarting' ? t('backend.restarting') : t('backend.starting')
+    message = t('backend.startingMessage')
   } else if (actionError) {
     message = actionError.message
     hint = actionError.hint ?? null
@@ -772,7 +806,7 @@ function BackendState({ backend }: { backend: LocalBackend }): JSX.Element {
           disabled={busy}
         >
           <Codicon name="play" />
-          {busy ? 'Starting…' : 'Start'}
+          {busy ? t('backend.startBusy') : t('backend.start')}
         </button>
       )}
     </div>
@@ -790,6 +824,7 @@ function RowsPane({
   reloadKey: string
   onClear: (rows: number) => void
 }): JSX.Element {
+  const { t } = useTranslation('data')
   const [offset, setOffset] = useState(0)
   const [sort, setSort] = useState<{ by: string; desc: boolean } | null>(null)
   const [page, setPage] = useState<LocalRows | null>(null)
@@ -828,14 +863,14 @@ function RowsPane({
   if (error) {
     content = (
       <Problem
-        title="Couldn’t read the rows"
+        title={t('rows.readError')}
         error={error}
         onRetry={() => setRetry((n) => n + 1)}
         // A sort the backend refuses would fail every retry, and hides the headers that undo it.
         extra={
           sort
             ? {
-                label: 'Clear sorting',
+                label: t('rows.clearSorting'),
                 onClick: () => {
                   setSort(null)
                   setOffset(0)
@@ -846,15 +881,9 @@ function RowsPane({
       />
     )
   } else if (!page) {
-    content = <div className="model-empty">Reading rows…</div>
+    content = <div className="model-empty">{t('rows.reading')}</div>
   } else if (page.rows.length === 0) {
-    content = (
-      <Empty
-        icon="table"
-        title="No rows yet"
-        sub="The app’s own pages add data. Use the app in the preview, then refresh."
-      />
-    )
+    content = <Empty icon="table" title={t('rows.emptyTitle')} sub={t('rows.emptySub')} />
   } else {
     content = (
       <>
@@ -874,7 +903,7 @@ function RowsPane({
                       <button
                         type="button"
                         className="bp-data-sort"
-                        title={`Sort by ${column.name}`}
+                        title={t('rows.sortBy', { column: column.name })}
                         onClick={() => sortBy(column.name)}
                       >
                         <span className="bp-data-col">
@@ -883,7 +912,7 @@ function RowsPane({
                           {sorted && <Codicon name={sorted.desc ? 'arrow-down' : 'arrow-up'} />}
                         </span>
                         <span className="bp-data-col-type">
-                          {column.key ? `${column.type} · key` : column.type}
+                          {column.key ? t('rows.keyType', { type: column.type }) : column.type}
                         </span>
                       </button>
                     </th>
@@ -921,7 +950,7 @@ function RowsPane({
     <section className="bp-data-main" aria-label={entity.name}>
       <div className="bp-data-main-head">
         <h3 className="bp-data-title">{entity.name}</h3>
-        <span className="bp-data-meta">{plural(total, 'row')}</span>
+        <span className="bp-data-meta">{t('counts.rows', { count: total })}</span>
         <div className="model-toolbar-spacer" />
         <button
           type="button"
@@ -930,7 +959,7 @@ function RowsPane({
           disabled={total === 0}
         >
           <Codicon name="trash" />
-          Clear rows
+          {t('rows.clear')}
         </button>
       </div>
       {content}
@@ -949,36 +978,31 @@ function UsersPane({
   onRetry: () => void
   onDelete: (user: LocalUser) => void
 }): JSX.Element {
+  const { t } = useTranslation('data')
   let content: ReactNode
   if (error || !users) {
     content = (
       <Problem
-        title="Couldn’t read the local users"
-        error={error ?? { message: 'The local backend didn’t list them.' }}
+        title={t('users.readError')}
+        error={error ?? { message: t('users.notListed') }}
         onRetry={onRetry}
       />
     )
   } else if (users.length === 0) {
-    content = (
-      <Empty
-        icon="person"
-        title="No local users yet"
-        sub="Local users show up here once someone signs in to the app on this computer."
-      />
-    )
+    content = <Empty icon="person" title={t('users.emptyTitle')} sub={t('users.emptySub')} />
   } else {
     content = (
       <div className="bp-data-scroll">
         <table className="bp-data-table">
           <thead>
             <tr>
-              {['Username', 'Email', 'Signs in with', 'Created'].map((label) => (
-                <th key={label} scope="col">
-                  <span className="bp-data-th">{label}</span>
+              {USER_COLUMNS.map((column) => (
+                <th key={column} scope="col">
+                  <span className="bp-data-th">{t(`users.${column}`)}</span>
                 </th>
               ))}
               <th scope="col">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t('fields.actions')}</span>
               </th>
             </tr>
           </thead>
@@ -992,7 +1016,7 @@ function UsersPane({
                       <span className="bp-data-cell" title={user.username}>
                         {user.username}
                       </span>
-                      {user.developer && <span className="bp-chip">Developer</span>}
+                      {user.developer && <span className="bp-chip">{t('users.developer')}</span>}
                     </span>
                   </td>
                   <td className={user.email ? undefined : 'bp-data-td--null'}>
@@ -1003,8 +1027,8 @@ function UsersPane({
                   <td>
                     <span className="bp-data-cell">
                       {user.signIn.length > 0
-                        ? user.signIn.map((way) => SIGN_IN_LABEL[way] ?? way).join(', ')
-                        : 'Fabricator only'}
+                        ? user.signIn.map((way) => signInLabel(way, t)).join(', ')
+                        : t('users.fabricatorOnly')}
                     </span>
                   </td>
                   <td className={created ? 'bp-data-td--date' : 'bp-data-td--null'}>
@@ -1016,11 +1040,11 @@ function UsersPane({
                     <button
                       type="button"
                       className="bp-data-row-btn"
-                      aria-label={`Delete ${user.username}`}
+                      aria-label={t('users.deleteLabel', { username: user.username })}
                       onClick={() => onDelete(user)}
                     >
                       <Codicon name="trash" />
-                      Delete
+                      {t('actions.delete')}
                     </button>
                   </td>
                 </tr>
@@ -1032,10 +1056,12 @@ function UsersPane({
     )
   }
   return (
-    <section className="bp-data-main" aria-label="Local users">
+    <section className="bp-data-main" aria-label={t('users.title')}>
       <div className="bp-data-main-head">
-        <h3 className="bp-data-title">Local users</h3>
-        {users && <span className="bp-data-meta">{plural(users.length, 'user')}</span>}
+        <h3 className="bp-data-title">{t('users.title')}</h3>
+        {users && (
+          <span className="bp-data-meta">{t('counts.users', { count: users.length })}</span>
+        )}
       </div>
       {content}
     </section>
@@ -1067,24 +1093,19 @@ function ConfirmDialog({
   onConfirm: () => void
   onCancel: () => void
 }): JSX.Element {
-  const unaffected = published
-    ? 'The published app’s data isn’t affected. This can’t be undone.'
-    : 'This can’t be undone.'
+  const { t } = useTranslation('data')
+  const unaffected = published ? t('confirm.cantUndoPublished') : t('confirm.cantUndo')
   let title: string
   let message: ReactNode
   let label: string
   let busyLabel: string
   if (confirm.kind === 'clear') {
-    title = `Clear all ${confirm.entity} rows?`
-    label = 'Clear rows'
-    busyLabel = 'Clearing…'
+    title = t('confirm.clear.title', { entity: confirm.entity })
+    label = t('rows.clear')
+    busyLabel = t('confirm.clearing')
     message = (
       <>
-        <p>
-          This deletes {confirm.rows === 1 ? 'the only row' : `all ${plural(confirm.rows, 'row')}`}{' '}
-          of {confirm.entity} from the app’s local data on this computer. Other entities, the local
-          users and stored files stay.
-        </p>
+        <p>{t('confirm.clear.message', { count: confirm.rows, entity: confirm.entity })}</p>
         <p>{unaffected}</p>
       </>
     )
@@ -1093,61 +1114,58 @@ function ConfirmDialog({
     const rows = entities.reduce((sum, e) => sum + e.rows, 0)
     const users = overview?.users
     const files = (overview?.storage ?? []).reduce((sum, folder) => sum + folder.files, 0)
-    const entityCount = plural(entities.length, 'entity', 'entities')
-    title = 'Reset local data?'
-    label = 'Reset local data'
-    busyLabel = 'Resetting…'
+    const itsEntities = t('confirm.reset.itsEntities', { count: entities.length })
+    title = t('confirm.reset.title')
+    label = t('toolbar.reset')
+    busyLabel = t('confirm.resetting')
     message = (
       <>
-        <p>This deletes the app’s local data on this computer:</p>
+        <p>{t('confirm.reset.intro')}</p>
         <ul className="bp-data-confirm-list">
           <li>
             {rows > 0
-              ? `All ${plural(rows, 'row')} of its ${entityCount}`
+              ? t('confirm.reset.allRows', { count: rows, entities: itsEntities })
               : entities.length > 0
-                ? `Every row of its ${entityCount}`
-                : 'Every row of every entity'}
+                ? t('confirm.reset.everyRowOf', { entities: itsEntities })
+                : t('confirm.reset.everyRow')}
           </li>
           <li>
             {users && users.length > 0
-              ? `Its ${plural(users.length, 'local user')} and their sessions`
-              : 'Its local users and their sessions'}
+              ? t('confirm.reset.users', { count: users.length })
+              : t('confirm.reset.usersAny')}
           </li>
           {files > 0 ? (
-            <li>{`Its ${plural(files, 'stored file')}`}</li>
+            <li>{t('confirm.reset.files', { count: files })}</li>
           ) : (
-            storage && <li>The files it stored</li>
+            storage && <li>{t('confirm.reset.filesAny')}</li>
           )}
         </ul>
-        {schemaWaiting && <p>Then the data model change waiting for your decision applies.</p>}
+        {schemaWaiting && <p>{t('confirm.reset.schemaWaiting')}</p>}
         <p>{unaffected}</p>
       </>
     )
   } else if (confirm.kind === 'clear-files') {
     const name = folderLabel(confirm.folder)
-    title = `Delete all ${name} files?`
-    label = 'Clear files'
-    busyLabel = 'Clearing…'
+    title = t('confirm.clearFiles.title', { folder: name })
+    label = t('files.clear')
+    busyLabel = t('confirm.clearing')
     message = (
       <>
-        <p>
-          This deletes{' '}
-          {confirm.files === 1 ? 'the only file' : `all ${plural(confirm.files, 'file')}`} in the{' '}
-          {name} storage folder from the app’s local data on this computer. The entities’ rows, the
-          local users and other folders’ files stay.
-        </p>
+        <p>{t('confirm.clearFiles.message', { count: confirm.files, folder: name })}</p>
         <p>{unaffected}</p>
       </>
     )
   } else if (confirm.kind === 'delete-file') {
-    title = `Delete ${confirm.file.name}?`
-    label = 'Delete file'
-    busyLabel = 'Deleting…'
+    title = t('confirm.deleteFile.title', { name: confirm.file.name })
+    label = t('confirm.deleteFile.action')
+    busyLabel = t('status.deleting')
     message = (
       <>
         <p>
-          This deletes {confirm.file.path} from the {folderLabel(confirm.folder)} storage folder of
-          the app’s local data on this computer.
+          {t('confirm.deleteFile.message', {
+            path: confirm.file.path,
+            folder: folderLabel(confirm.folder)
+          })}
         </p>
         <p>{unaffected}</p>
       </>
@@ -1155,59 +1173,60 @@ function ConfirmDialog({
   } else if (confirm.kind === 'load-seed') {
     const rows = confirm.seed.entities.reduce((sum, e) => sum + e.rows, 0)
     const files = confirm.seed.storage.reduce((sum, f) => sum + f.files, 0)
-    title = 'Load seed data?'
-    label = 'Load seed data'
-    busyLabel = 'Loading…'
+    title = t('confirm.loadSeed.title')
+    label = t('seed.load')
+    busyLabel = t('status.loading')
     message = (
       <>
-        <p>This replaces the app’s local data on this computer with the seed data in rayfin/seed:</p>
+        <p>{t('confirm.loadSeed.intro')}</p>
         <ul className="bp-data-confirm-list">
           <li>
             {confirm.seed.entities.length > 0
-              ? `${plural(rows, 'row')} in ${plural(confirm.seed.entities.length, 'entity', 'entities')}`
-              : 'No rows'}
+              ? t('seed.rowsIn', {
+                  count: rows,
+                  entities: t('counts.entities', { count: confirm.seed.entities.length })
+                })
+              : t('confirm.loadSeed.noRows')}
           </li>
-          {files > 0 && <li>{plural(files, 'stored file')}</li>}
+          {files > 0 && <li>{t('counts.storedFiles', { count: files })}</li>}
         </ul>
-        <p>
-          {storage
-            ? 'The app’s current rows and stored files are deleted.'
-            : 'The app’s current rows are deleted.'}{' '}
-          The local users stay, and the users the seed data names are added.
-        </p>
+        <p>{storage ? t('confirm.loadSeed.deletesAll') : t('confirm.loadSeed.deletesRows')}</p>
         <p>{unaffected}</p>
       </>
     )
   } else if (confirm.kind === 'save-seed') {
-    title = 'Save local data as seed data?'
-    label = 'Save as seed data'
-    busyLabel = 'Saving…'
+    title = t('confirm.saveSeed.title')
+    label = t('seed.save')
+    busyLabel = t('status.saving')
     message = (
       <>
-        <p>This saves the app’s local data to rayfin/seed in the project, in place of the seed data there:</p>
+        <p>{t('confirm.saveSeed.intro')}</p>
         <ul className="bp-data-confirm-list">
           {confirm.rows > 0 && (
-            <li>{`${plural(confirm.rows, 'row')} of ${plural(confirm.entities, 'entity', 'entities')}, in rayfin/seed/data`}</li>
+            <li>
+              {t('confirm.saveSeed.rows', {
+                count: confirm.rows,
+                entities: t('counts.entities', { count: confirm.entities })
+              })}
+            </li>
           )}
-          {confirm.files > 0 && <li>{`${plural(confirm.files, 'stored file')}, in rayfin/seed/storage`}</li>}
+          {confirm.files > 0 && <li>{t('confirm.saveSeed.files', { count: confirm.files })}</li>}
         </ul>
         <p>
-          Anyone who opens the project can load it. User ids become <code>$developer</code> (you)
-          and <code>$user:&lt;username&gt;</code> (the local users). Fabricator saves the change as a
-          version in History.
+          <Trans
+            t={t}
+            i18nKey="confirm.saveSeed.ids"
+            values={{ developer: '$developer', user: '$user:<username>' }}
+            components={{ code: <code /> }}
+          />
         </p>
       </>
     )
   } else {
-    title = `Delete ${confirm.user.username}?`
-    label = 'Delete user'
-    busyLabel = 'Deleting…'
-    message = (
-      <p>
-        This deletes {confirm.user.username} from the app’s local users and signs them out of the
-        app on this computer.
-      </p>
-    )
+    title = t('confirm.deleteUser.title', { username: confirm.user.username })
+    label = t('confirm.deleteUser.action')
+    busyLabel = t('status.deleting')
+    message = <p>{t('confirm.deleteUser.message', { username: confirm.user.username })}</p>
   }
 
   let problem: ReactNode = null
@@ -1223,8 +1242,8 @@ function ConfirmDialog({
             <>
               <p>
                 {blocking.length > 0
-                  ? `Rows of ${listNames(blocking)} still refer to these rows, so they can’t be cleared on their own. Clear ${listNames(blocking)} first, or reset all local data.`
-                  : 'Other rows still refer to these rows, so they can’t be cleared on their own. Clear those first, or reset all local data.'}
+                  ? t('confirm.refusedNamed', { names: listNames(blocking) })
+                  : t('confirm.refused')}
               </p>
               <p className="bp-data-alert-detail">{error.message}</p>
             </>

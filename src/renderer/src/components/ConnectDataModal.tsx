@@ -4,6 +4,7 @@ import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { authErrorMessage } from '../authErrors'
 import { useAzureSignIn } from '../azureAuth'
+import { translator, useTranslation } from '../i18n'
 import type { WorkspaceUse } from '../fabric'
 import {
   DATA_KINDS,
@@ -57,6 +58,7 @@ export default function ConnectDataModal({
   onAdd,
   onSignedIn
 }: Props): JSX.Element {
+  const { t } = useTranslation('dataModel')
   useSuppressPreview()
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
@@ -123,13 +125,19 @@ export default function ConnectDataModal({
         } else if (res.needsLogin) {
           setWorkspaces({ status: 'needs-login' })
         } else {
-          setWorkspaces({ status: 'error', error: res.error || 'Could not list your workspaces.' })
+          setWorkspaces({
+            status: 'error',
+            error: res.error || translator('dataModel')('connect.errors.workspaces')
+          })
         }
       } catch (reason) {
         if (alive) {
           setWorkspaces({
             status: 'error',
-            error: authErrorMessage(reason, 'Could not list your workspaces. Please retry.')
+            error: authErrorMessage(
+              reason,
+              translator('dataModel')('connect.errors.workspacesRetry')
+            )
           })
         }
       }
@@ -166,11 +174,14 @@ export default function ConnectDataModal({
           ? { status: 'ready', value: res.items }
           : res.needsLogin
             ? { status: 'needs-login' }
-            : { status: 'error', error: res.error || 'Could not list the data in this workspace.' }
+            : {
+                status: 'error',
+                error: res.error || translator('dataModel')('connect.errors.data')
+              }
         setItems((m) => (requested.current.has(ws) ? { ...m, [ws]: next } : m))
       },
       (reason) => {
-        const error = authErrorMessage(reason, 'Could not list the data in this workspace. Please retry.')
+        const error = authErrorMessage(reason, translator('dataModel')('connect.errors.dataRetry'))
         setItems((m) => (requested.current.has(ws) ? { ...m, [ws]: { status: 'error', error } } : m))
       }
     )
@@ -252,7 +263,9 @@ export default function ConnectDataModal({
       const login = await window.api.auth.loginRayfin()
       if (seq !== loginSeqRef.current) return
       if (!login.ok) {
-        throw new Error(authErrorMessage(login.error, 'Fabric sign-in did not complete. Please try again.'))
+        throw new Error(
+          authErrorMessage(login.error, translator('dataModel')('connect.errors.signIn'))
+        )
       }
       await onSignedIn?.()
       if (seq === loginSeqRef.current) setReloadTick((n) => n + 1)
@@ -260,7 +273,7 @@ export default function ConnectDataModal({
       if (seq === loginSeqRef.current) {
         setWorkspaces({
           status: 'error',
-          error: authErrorMessage(reason, 'Fabric sign-in did not complete. Please try again.')
+          error: authErrorMessage(reason, translator('dataModel')('connect.errors.signIn'))
         })
       }
     } finally {
@@ -294,9 +307,9 @@ export default function ConnectDataModal({
       >
         <Codicon name="folder" className="cd-ws-icon" />
         <span className="cd-ws-name">{w.displayName}</span>
-        {isApp(w) && <span className="cd-tag">This app</span>}
+        {isApp(w) && <span className="cd-tag">{t('connect.workspaces.thisApp')}</span>}
         {count > 0 && (
-          <span className="cd-count" aria-label={`${count} picked`}>
+          <span className="cd-count" aria-label={t('connect.picked', { count })}>
             {count}
           </span>
         )}
@@ -317,23 +330,20 @@ export default function ConnectDataModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>Add Fabric data</h2>
+          <h2 id={titleId}>{t('connect.title')}</h2>
         </div>
 
-        <p className="cd-sub">
-          Pick data from any workspace you can open. It goes into your message, and when you send it,
-          Copilot connects each one to this app as a Rayfin connector.
-        </p>
+        <p className="cd-sub">{t('connect.subtitle')}</p>
 
         {needsLogin && (
           <div className="share-banner cd-banner">
-            <span>Sign in to Fabric to see your workspaces and their data.</span>
+            <span>{t('connect.signInBanner')}</span>
             <button
               className="btn btn--sm btn--primary"
               disabled={reauthing}
               onClick={() => void reauthAndReload()}
             >
-              {reauthing ? 'Signing in…' : 'Sign in & retry'}
+              {reauthing ? t('signIn.signingIn') : t('connect.signInRetry')}
             </button>
           </div>
         )}
@@ -344,17 +354,14 @@ export default function ConnectDataModal({
             role={azure.error ? 'alert' : 'status'}
           >
             <span>
-              {azure.signingIn
-                ? 'Finish signing in to Azure in your browser.'
-                : (azure.error ??
-                  'Your app reads Fabric data with your Azure sign-in while you build it.')}
+              {azure.signingIn ? t('connect.azureFinish') : (azure.error ?? t('connect.azureWhy'))}
             </span>
             <button
               className="btn btn--sm"
               disabled={azure.signingIn}
               onClick={() => void azure.signIn()}
             >
-              {azure.signingIn ? 'Signing in…' : 'Sign in to Azure'}
+              {azure.signingIn ? t('signIn.signingIn') : t('signIn.azure')}
             </button>
           </div>
         )}
@@ -365,8 +372,8 @@ export default function ConnectDataModal({
               <label className="cd-search">
                 <Codicon name="search" className="cd-search-icon" />
                 <input
-                  aria-label="Search workspaces"
-                  placeholder="Search workspaces"
+                  aria-label={t('connect.workspaces.search')}
+                  placeholder={t('connect.workspaces.search')}
                   spellCheck={false}
                   value={wsQuery}
                   onChange={(e) => setWsQuery(e.target.value)}
@@ -375,26 +382,26 @@ export default function ConnectDataModal({
             )}
             {workspaces.status === 'loading' && (
               <div className="cd-state">
-                <span className="btn-spin" aria-hidden="true" /> Loading your workspaces…
+                <span className="btn-spin" aria-hidden="true" /> {t('connect.workspaces.loading')}
               </div>
             )}
             {workspaces.status === 'error' && (
               <div className="cd-state cd-state--bad" role="alert">
                 <span>{workspaces.error}</span>
                 <button className="btn btn--sm" onClick={() => setReloadTick((n) => n + 1)}>
-                  Retry
+                  {t('actions.retry')}
                 </button>
               </div>
             )}
             {workspaces.status === 'ready' && all.length === 0 && (
-              <div className="cd-state">You don’t have any Fabric workspaces yet.</div>
+              <div className="cd-state">{t('connect.workspaces.none')}</div>
             )}
             {workspaces.status === 'ready' && all.length > 0 && (
-              <div className="cd-ws-list" role="listbox" aria-label="Workspaces">
+              <div className="cd-ws-list" role="listbox" aria-label={t('connect.workspaces.label')}>
                 {shownRecent.length > 0 && (
                   <>
                     <div className="cd-heading" aria-hidden="true">
-                      Recent
+                      {t('connect.workspaces.recent')}
                     </div>
                     {shownRecent.map(wsRow)}
                   </>
@@ -403,14 +410,16 @@ export default function ConnectDataModal({
                   <>
                     {shownRecent.length > 0 && (
                       <div className="cd-heading" aria-hidden="true">
-                        All workspaces
+                        {t('connect.workspaces.all')}
                       </div>
                     )}
                     {shownOthers.map(wsRow)}
                   </>
                 )}
                 {shownRecent.length === 0 && shownOthers.length === 0 && (
-                  <div className="cd-state">No workspace matches “{wsQuery.trim()}”.</div>
+                  <div className="cd-state">
+                    {t('connect.workspaces.noMatch', { query: wsQuery.trim() })}
+                  </div>
                 )}
               </div>
             )}
@@ -418,18 +427,19 @@ export default function ConnectDataModal({
 
           <div className="cd-pane cd-pane--data">
             {!current && workspaces.status === 'ready' && all.length > 0 && (
-              <div className="cd-state cd-state--center">Choose a workspace to see its data.</div>
+              <div className="cd-state cd-state--center">{t('connect.data.choose')}</div>
             )}
             {current && (
               <>
-                <div className="cd-kinds" role="group" aria-label="Kind of data">
+                <div className="cd-kinds" role="group" aria-label={t('connect.data.kinds')}>
                   <button
                     type="button"
                     className="cd-kind"
                     aria-pressed={filter === 'all'}
                     onClick={() => setFilter('all')}
                   >
-                    All{load?.status === 'ready' ? ` ${list.length}` : ''}
+                    {t('connect.data.all')}
+                    {load?.status === 'ready' ? ` ${list.length}` : ''}
                   </button>
                   {DATA_KINDS.map((k) => (
                     <button
@@ -448,8 +458,8 @@ export default function ConnectDataModal({
                   <label className="cd-search">
                     <Codicon name="search" className="cd-search-icon" />
                     <input
-                      aria-label={`Search ${current.displayName}`}
-                      placeholder={`Search ${current.displayName}`}
+                      aria-label={t('connect.data.search', { workspace: current.displayName })}
+                      placeholder={t('connect.data.search', { workspace: current.displayName })}
                       spellCheck={false}
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
@@ -458,31 +468,39 @@ export default function ConnectDataModal({
                 )}
                 {(!load || load.status === 'loading') && (
                   <div className="cd-state">
-                    <span className="btn-spin" aria-hidden="true" /> Loading {current.displayName}…
+                    <span className="btn-spin" aria-hidden="true" />{' '}
+                    {t('connect.data.loading', { workspace: current.displayName })}
                   </div>
                 )}
                 {load?.status === 'error' && (
                   <div className="cd-state cd-state--bad" role="alert">
                     <span>{load.error}</span>
                     <button className="btn btn--sm" onClick={retryWorkspace}>
-                      Retry
+                      {t('actions.retry')}
                     </button>
                   </div>
                 )}
                 {load?.status === 'ready' && list.length === 0 && (
                   <div className="cd-state">
-                    {current.displayName} has no semantic models, warehouses, SQL databases or lakehouses.
+                    {t('connect.data.empty', { workspace: current.displayName })}
                   </div>
                 )}
                 {load?.status === 'ready' && list.length > 0 && shown.length === 0 && (
                   <div className="cd-state">
                     {q
-                      ? `Nothing matches “${query.trim()}”.`
-                      : `${current.displayName} has no ${filterKind?.nouns ?? 'data'}.`}
+                      ? t('connect.data.noMatch', { query: query.trim() })
+                      : filterKind
+                        ? t(`connect.data.noneOf.${filterKind.kind}`, {
+                            workspace: current.displayName
+                          })
+                        : t('connect.data.none', { workspace: current.displayName })}
                   </div>
                 )}
                 {shown.length > 0 && (
-                  <ul className="cd-items" aria-label={`Data in ${current.displayName}`}>
+                  <ul
+                    className="cd-items"
+                    aria-label={t('connect.data.label', { workspace: current.displayName })}
+                  >
                     {shown.map((item) => {
                       const k = kindOfItem(item.type)
                       const done = connected.has(item.id.toLowerCase())
@@ -498,7 +516,7 @@ export default function ConnectDataModal({
                             <Codicon name={k?.icon ?? 'database'} className="cd-item-icon" />
                             <span className="cd-item-name">{item.name}</span>
                             {done ? (
-                              <span className="cd-done">Connected</span>
+                              <span className="cd-done">{t('connect.data.connected')}</span>
                             ) : (
                               <span className="cd-item-kind">{k?.label}</span>
                             )}
@@ -516,23 +534,28 @@ export default function ConnectDataModal({
         <div className="modal-footer cd-footer">
           <span className="cd-picked" aria-live="polite">
             {picked.size === 0
-              ? 'Pick data from one or more workspaces.'
-              : `${picked.size} picked${new Set([...picked.values()].map((s) => s.workspaceId)).size > 1 ? ' across workspaces' : ''}`}
+              ? t('connect.pickHint')
+              : t(
+                  new Set([...picked.values()].map((s) => s.workspaceId)).size > 1
+                    ? 'connect.pickedAcross'
+                    : 'connect.picked',
+                  { count: picked.size }
+                )}
           </span>
           {picked.size > 0 && (
             <button className="btn btn--ghost btn--sm" onClick={() => setPicked(new Map())}>
-              Clear
+              {t('actions.clear')}
             </button>
           )}
           <button className="btn btn--ghost" onClick={onClose}>
-            Close
+            {t('actions.close')}
           </button>
           <button
             className="btn btn--primary"
             onClick={addToChat}
             disabled={(picked.size === 0 && !initialPicked?.length) || reauthing}
           >
-            {initialPicked?.length ? 'Update' : 'Add to chat'}
+            {initialPicked?.length ? t('actions.update') : t('connect.add')}
           </button>
         </div>
       </div>

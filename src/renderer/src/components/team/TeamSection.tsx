@@ -1,5 +1,6 @@
 import { useEffect, useState, type JSX } from 'react'
 import type { StudioProject, TeamInvitation, TeamReviewRequest, TeamWorkspace } from '@shared/ipc'
+import { Trans, useTranslation } from '../../i18n'
 import AbandonSetupModal from './AbandonSetupModal'
 import CreateTeamWorkspaceModal from './CreateTeamWorkspaceModal'
 import JoinTeamWorkspaceModal from './JoinTeamWorkspaceModal'
@@ -9,9 +10,9 @@ import './team.css'
 
 /** What a team workspace gives you, on Home before you have one. */
 const EMPTY_POINTS = [
-  { icon: 'github', title: 'Shared on GitHub', text: 'Every app lives in one private repository.' },
-  { icon: 'git-branch', title: 'Your own copy', text: 'Change an app with a personal live preview.' },
-  { icon: 'rocket', title: 'Published to Fabric', text: 'A pipeline deploys the changes you publish.' }
+  { icon: 'github', title: 'section.points.shared.title', text: 'section.points.shared.text' },
+  { icon: 'git-branch', title: 'section.points.copy.title', text: 'section.points.copy.text' },
+  { icon: 'rocket', title: 'section.points.published.title', text: 'section.points.published.text' }
 ] as const
 
 interface Props {
@@ -28,6 +29,7 @@ interface Props {
 
 /** Home's Team workspaces section (behind the team workspaces experiment). */
 export default function TeamSection({ workspaces, onOpened, onNewApp, onOpenMap, onChanged }: Props): JSX.Element {
+  const { t } = useTranslation('team')
   const [opening, setOpening] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [invitations, setInvitations] = useState<TeamInvitation[]>([])
@@ -59,10 +61,10 @@ export default function TeamSection({ workspaces, onOpened, onNewApp, onOpenMap,
       if (result.ok && result.project) {
         onOpened(result.project)
       } else {
-        setError(result.error ?? 'Could not open the app.')
+        setError(result.error ?? t('section.openFailed'))
       }
     } catch (reason) {
-      setError(teamError(reason, 'Could not open the app.'))
+      setError(teamError(reason, t('section.openFailed')))
     } finally {
       setOpening(null)
     }
@@ -73,7 +75,7 @@ export default function TeamSection({ workspaces, onOpened, onNewApp, onOpenMap,
     setError(null)
     try {
       const result = await window.api.team.approve(review.workspaceId, review.pr.number)
-      if (!result.ok) setError(result.error ?? 'Could not approve the changes.')
+      if (!result.ok) setError(result.error ?? t('section.approveFailed'))
       await loadInbox()
     } finally {
       setApproving(null)
@@ -83,35 +85,48 @@ export default function TeamSection({ workspaces, onOpened, onNewApp, onOpenMap,
   return (
     <section className="home-recents team-section" aria-labelledby="team-workspaces-title">
       <div className="home-section-heading">
-        <h2 id="team-workspaces-title">Team workspaces</h2>
+        <h2 id="team-workspaces-title">{t('section.title')}</h2>
         {workspaces.length > 0 && (
           <div className="team-section-actions">
             <button type="button" className="btn btn--sm btn--ghost" onClick={() => setJoining({ account: invitations[0]?.account })}>
-              Join
+              {t('shared.join')}
               {invitations.length > 0 && <span className="team-count">{invitations.length}</span>}
             </button>
             <button type="button" className="btn btn--sm" onClick={() => setCreating('new')}>
-              <span className="codicon codicon-add" aria-hidden="true" /> New team workspace
+              <span className="codicon codicon-add" aria-hidden="true" /> {t('section.newWorkspace')}
             </button>
           </div>
         )}
       </div>
 
       {(invitations.length > 0 || reviews.length > 0) && (
-        <div className="team-inbox" aria-label="Waiting for you">
+        <div className="team-inbox" aria-label={t('section.inbox')}>
           {invitations.length > 0 && (
             <div className="team-notice">
               <span className="team-notice-icon codicon codicon-mail" aria-hidden="true" />
               <span className="team-notice-text">
-                You&apos;ve been invited to{' '}
-                <strong>{invitations.length === 1 ? invitations[0].repo : `${invitations.length} team workspaces`}</strong>.
+                {invitations.length === 1 ? (
+                  <Trans
+                    t={t}
+                    i18nKey="section.invited"
+                    values={{ repo: invitations[0].repo }}
+                    components={{ b: <strong /> }}
+                  />
+                ) : (
+                  <Trans
+                    t={t}
+                    i18nKey="section.invitedMany"
+                    values={{ count: invitations.length }}
+                    components={{ b: <strong /> }}
+                  />
+                )}
               </span>
               <button
                 type="button"
                 className="btn btn--sm btn--primary"
                 onClick={() => setJoining({ account: invitations[0]?.account })}
               >
-                Review invitations
+                {t('section.reviewInvitations')}
               </button>
             </div>
           )}
@@ -119,10 +134,15 @@ export default function TeamSection({ workspaces, onOpened, onNewApp, onOpenMap,
             <div key={`${review.repo}#${review.pr.number}`} className="team-notice">
               <span className="team-notice-icon codicon codicon-git-pull-request" aria-hidden="true" />
               <span className="team-notice-text">
-                <strong>{review.pr.author}</strong> wants to publish “{review.pr.title}”.
+                <Trans
+                  t={t}
+                  i18nKey="section.wantsToPublish"
+                  values={{ author: review.pr.author, title: review.pr.title }}
+                  components={{ b: <strong /> }}
+                />
               </span>
               <button type="button" className="btn btn--sm" onClick={() => void window.api.openExternal(review.pr.url)}>
-                View changes
+                {t('section.viewChanges')}
               </button>
               <button
                 type="button"
@@ -130,7 +150,7 @@ export default function TeamSection({ workspaces, onOpened, onNewApp, onOpenMap,
                 disabled={approving === review.pr.number}
                 onClick={() => void approve(review)}
               >
-                {approving === review.pr.number ? 'Approving…' : 'Approve'}
+                {approving === review.pr.number ? t('section.approving') : t('section.approve')}
               </button>
             </div>
           ))}
@@ -144,16 +164,16 @@ export default function TeamSection({ workspaces, onOpened, onNewApp, onOpenMap,
               <span className="codicon codicon-organization" />
             </span>
             <div className="team-empty-text">
-              <p className="team-empty-title">Build apps together</p>
-              <p className="team-muted">Your team&apos;s Rayfin apps in one place. Fabricator sets it all up.</p>
+              <p className="team-empty-title">{t('section.emptyTitle')}</p>
+              <p className="team-muted">{t('section.emptyText')}</p>
             </div>
             <div className="team-empty-actions">
               <button type="button" className="btn btn--sm" onClick={() => setJoining({ account: invitations[0]?.account })}>
-                Join
+                {t('shared.join')}
                 {invitations.length > 0 && <span className="team-count">{invitations.length}</span>}
               </button>
               <button type="button" className="btn btn--sm btn--primary" onClick={() => setCreating('new')}>
-                Create a team workspace
+                {t('shared.createTeamWorkspace')}
               </button>
             </div>
           </div>
@@ -162,8 +182,8 @@ export default function TeamSection({ workspaces, onOpened, onNewApp, onOpenMap,
               <li key={point.icon} className="team-empty-point">
                 <span className={`codicon codicon-${point.icon}`} aria-hidden="true" />
                 <span className="team-empty-point-text">
-                  <span className="team-empty-point-title">{point.title}</span>
-                  <span className="team-muted">{point.text}</span>
+                  <span className="team-empty-point-title">{t(point.title)}</span>
+                  <span className="team-muted">{t(point.text)}</span>
                 </span>
               </li>
             ))}

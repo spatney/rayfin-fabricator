@@ -1,0 +1,231 @@
+{
+  "diagram": {
+    "clearSearch": "Suche löschen",
+    "clearFocus": "Fokus aufheben",
+    "focusing": "Fokus auf {{name}}",
+    "zoom": "Zoom",
+    "zoomOut": "Verkleinern",
+    "zoomIn": "Vergrößern",
+    "fit": "An Ansicht anpassen",
+    "expand": "Erweitern",
+    "collapse": "Reduzieren",
+    "relationships_one": "{{count}} Beziehung",
+    "relationships_other": "{{count}} Beziehungen",
+    "cardinality": {
+      "one": "eins",
+      "many": "viele"
+    }
+  },
+  "signIn": {
+    "signingIn": "Anmeldung läuft…",
+    "fabric": "Bei Fabric anmelden",
+    "azure": "Bei Azure anmelden",
+    "failed": "Anmeldung fehlgeschlagen",
+    "incomplete": "Die Anmeldung wurde nicht abgeschlossen. Versuche es erneut."
+  },
+  "semantic": {
+    "title": "Fabric-Verbindungen",
+    "types": {
+      "semanticModel": "Semantisches Modell",
+      "warehouse": "Warehouse",
+      "sqlDatabase": "SQL-Datenbank",
+      "sqlEndpoint": "Lakehouse-SQL-Endpunkt"
+    },
+    "tables_one": "{{count}} Tabelle",
+    "tables_other": "{{count}} Tabellen",
+    "discovered": "erkannt am {{date}}",
+    "empty": {
+      "noSources": "Es gibt keine Fabric-Verbindungen zum Darstellen.",
+      "noTablesTitle": "Noch keine Tabellen zum Darstellen",
+      "noneFound": "Rayfin hat bei der letzten Suche keine Tabellen in {{source}} gefunden.",
+      "noneFoundOn": "Rayfin hat bei der letzten Suche ({{date}}) keine Tabellen in {{source}} gefunden.",
+      "noMetadata": "Fabricator stellt die Tabellen einer Quelle anhand der Datei <code>metadata.json</code> dar, die Rayfin beim Hinzufügen des Connectors schreibt, sowie anhand der Entitätsdateien der App. <code>{{dir}}/</code> enthält noch keines von beiden.",
+      "noModelTitle": "Dieses semantische Modell hat keine Tabellen",
+      "noModelDesc": "Das verbundene Modell hat keine Tabellen zurückgegeben. Möglicherweise werden in Fabric noch Daten geladen."
+    },
+    "discover": "Tabellen mit Copilot erkennen",
+    "discoverChat": "Tabellen in {{source}} erkennen",
+    "useChat": "Tabellen in {{source}} verwenden",
+    "useWithCopilot": "Mit Copilot verwenden",
+    "loading": "Dein semantisches Modell wird gelesen…",
+    "signInFabric": {
+      "title": "Melde dich an, um das semantische Modell anzuzeigen",
+      "desc": "Das semantische Modell wird live aus Fabric gelesen. Dafür brauchst du eine aktive Fabric-Sitzung."
+    },
+    "signInAzure": {
+      "title": "Melde dich bei Azure an, um das semantische Modell anzuzeigen",
+      "desc": "Fabricator liest die Tabellen, Measures und Beziehungen des Modells mit deiner Azure-Anmeldung aus Fabric."
+    },
+    "error": {
+      "title": "Das semantische Modell konnte nicht gelesen werden",
+      "read": "Das semantische Modell konnte nicht gelesen werden."
+    },
+    "legend": {
+      "primaryKey": "Primärschlüssel",
+      "foreignKey": "Fremdschlüssel",
+      "inactive": "inaktiv"
+    },
+    "notice": {
+      "unused": "Die App verwendet diese Tabellen noch nicht.",
+      "entitiesOnly": "Die von Rayfin erkannten Tabellen (metadata.json) sind nicht im Projekt. Daher werden hier nur die Tabellen angezeigt, die die Entitätsdateien der App beschreiben."
+    },
+    "search": {
+      "sqlPlaceholder": "Tabellen & Spalten durchsuchen",
+      "sqlLabel": "Tabellen und Spalten durchsuchen",
+      "placeholder": "Tabellen, Spalten & Measures durchsuchen",
+      "label": "Tabellen, Spalten und Measures durchsuchen"
+    },
+    "filter": {
+      "label": "Tabellen",
+      "used": "Von der App verwendet",
+      "all": "Alle Tabellen"
+    },
+    "expandAll": "Alle Tabellen erweitern",
+    "collapseAll": "Alle Tabellen reduzieren",
+    "openMetadata": "metadata.json öffnen",
+    "refresh": "Aus Fabric aktualisieren",
+    "card": {
+      "expand": "Tabelle erweitern",
+      "collapse": "Tabelle reduzieren",
+      "hidden": "ausgeblendet",
+      "focus": "Auf diese Tabelle fokussieren",
+      "focusTitle": "Auf verbundene Tabellen fokussieren",
+      "columns_one": "{{count}} Spalte",
+      "columns_other": "{{count}} Spalten",
+      "measures_one": "{{count}} Measure",
+      "measures_other": "{{count}} Measures",
+      "noColumns": "Keine Spalten.",
+      "measuresHead": "Measures",
+      "showDax": "DAX anzeigen",
+      "showFewer": "Weniger anzeigen",
+      "showAll": "Alle {{total}} anzeigen",
+      "storageMode": "Speichermodus: {{mode}}",
+      "openFile": "{{file}} öffnen",
+      "unused": "Nicht von der App verwendet"
+    },
+    "column": {
+      "typeNullable": "{{type}}, kann leer sein",
+      "typeRequired": "{{type}}, erforderlich",
+      "primaryKey": "Primärschlüssel",
+      "references": "verweist auf {{target}}",
+      "generated": "von der Datenbank ausgefüllt",
+      "generatedBy": "von der Datenbank ausgefüllt ({{how}})",
+      "unmapped": "nicht in der Entität der App",
+      "calculated": "Berechnet: {{expression}}"
+    },
+    "measure": {
+      "label": "DAX für {{name}}",
+      "formatTitle": "Formatzeichenfolge – wie der Wert dieses Measures angezeigt wird",
+      "format": "Format",
+      "folderTitle": "Anzeigeordner im Modell",
+      "folder": "Ordner",
+      "description": "Beschreibung",
+      "copy": "DAX kopieren",
+      "noDax": "Kein DAX-Ausdruck verfügbar."
+    }
+  },
+  "model": {
+    "loading": "Dein Datenmodell wird gelesen…",
+    "title": "Datenmodell",
+    "empty": {
+      "title": "Noch kein Datenmodell",
+      "desc": "Rayfin-Entitäten liegen unter <code>{{dataDir}}/</code> und sind in <code>{{schemaFile}}</code> aufgeführt. Sobald du welche hinzufügst, stellt diese Registerkarte sie als Entity-Relationship-Diagramm mit Zugriffskennzeichen für jede Entität dar.",
+      "add": "Datenmodell mit Copilot hinzufügen",
+      "addChat": "Datenmodell hinzufügen"
+    },
+    "noEntities": {
+      "title": "Dein Schema hat keine Entitäten",
+      "desc": "<code>{{file}}</code> ist vorhanden, aber das Array <code>schema</code> ist leer.",
+      "add": "Entität mit Copilot hinzufügen"
+    },
+    "entities_one": "{{count}} Entität",
+    "entities_other": "{{count}} Entitäten",
+    "legend": {
+      "access": "Zugriff",
+      "scoped": "Zeilenbezogen",
+      "signedIn": "Alle Angemeldeten",
+      "public": "Öffentlich"
+    },
+    "search": {
+      "placeholder": "Entitäten & Felder durchsuchen",
+      "label": "Entitäten und Felder durchsuchen"
+    },
+    "expandAll": "Alle Entitäten erweitern",
+    "collapseAll": "Alle Entitäten reduzieren",
+    "resetLayout": "Layout zurücksetzen",
+    "card": {
+      "expand": "Entität erweitern",
+      "collapse": "Entität reduzieren",
+      "nameTitle": "{{detail}} · {{file}} öffnen",
+      "fields_one": "{{count}} Feld",
+      "fields_other": "{{count}} Felder",
+      "linked_one": "{{count}} verknüpft",
+      "linked_other": "{{count}} verknüpft",
+      "references": "Verweist auf {{target}}",
+      "primaryKey": "Primärschlüssel",
+      "required": "Erforderlich",
+      "optional": "Optional",
+      "unique": "Eindeutig",
+      "toOne": "↦ eins",
+      "toMany": "↦ viele",
+      "noFields": "Keine Felder erkannt.",
+      "grants": "Zugriffsberechtigungen",
+      "noRoles": "keine expliziten Rollen",
+      "rowPolicy": "{{grant}} (Richtlinie auf Zeilenebene)",
+      "policy": "Richtlinie",
+      "harden": "Absichern",
+      "focus": "Fokus",
+      "unfocus": "Fokus aufheben"
+    },
+    "hardenChat": "Zugriff auf {{name}} absichern"
+  },
+  "connect": {
+    "title": "Fabric-Daten hinzufügen",
+    "subtitle": "Wähle Daten aus jedem Arbeitsbereich aus, den du öffnen kannst. Sie werden in deine Nachricht übernommen, und wenn du sie sendest, verbindet Copilot jedes Element als Rayfin-Connector mit dieser App.",
+    "signInBanner": "Melde dich bei Fabric an, um deine Arbeitsbereiche und deren Daten zu sehen.",
+    "signInRetry": "Anmelden & wiederholen",
+    "azureFinish": "Schließe die Anmeldung bei Azure in deinem Browser ab.",
+    "azureWhy": "Während du deine App erstellst, liest sie Fabric-Daten mit deiner Azure-Anmeldung.",
+    "workspaces": {
+      "search": "Arbeitsbereiche durchsuchen",
+      "loading": "Deine Arbeitsbereiche werden geladen…",
+      "none": "Du hast noch keine Fabric-Arbeitsbereiche.",
+      "label": "Arbeitsbereiche",
+      "recent": "Zuletzt verwendet",
+      "all": "Alle Arbeitsbereiche",
+      "noMatch": "Kein Arbeitsbereich entspricht „{{query}}“.",
+      "thisApp": "Diese App"
+    },
+    "picked_one": "{{count}} ausgewählt",
+    "picked_other": "{{count}} ausgewählt",
+    "pickedAcross_one": "{{count}} arbeitsbereichsübergreifend ausgewählt",
+    "pickedAcross_other": "{{count}} arbeitsbereichsübergreifend ausgewählt",
+    "data": {
+      "choose": "Wähle einen Arbeitsbereich aus, um seine Daten zu sehen.",
+      "kinds": "Datenart",
+      "all": "Alle",
+      "search": "{{workspace}} durchsuchen",
+      "loading": "{{workspace}} wird geladen…",
+      "empty": "{{workspace}} enthält keine semantischen Modelle, Warehouses, SQL-Datenbanken oder Lakehouses.",
+      "noMatch": "Keine Treffer für „{{query}}“.",
+      "none": "{{workspace}} enthält keine Daten.",
+      "label": "Daten in {{workspace}}",
+      "connected": "Verbunden",
+      "noneOf": {
+        "semanticmodel": "{{workspace}} enthält keine semantischen Modelle.",
+        "warehouse": "{{workspace}} enthält keine Warehouses.",
+        "sqldatabase": "{{workspace}} enthält keine SQL-Datenbanken.",
+        "lakehouse": "{{workspace}} enthält keine Lakehouses."
+      }
+    },
+    "pickHint": "Wähle Daten aus einem oder mehreren Arbeitsbereichen aus.",
+    "add": "Zum Chat hinzufügen",
+    "errors": {
+      "workspaces": "Deine Arbeitsbereiche konnten nicht aufgelistet werden.",
+      "workspacesRetry": "Deine Arbeitsbereiche konnten nicht aufgelistet werden. Versuche es erneut.",
+      "data": "Die Daten in diesem Arbeitsbereich konnten nicht aufgelistet werden.",
+      "dataRetry": "Die Daten in diesem Arbeitsbereich konnten nicht aufgelistet werden. Versuche es erneut.",
+      "signIn": "Die Fabric-Anmeldung wurde nicht abgeschlossen. Versuche es erneut."
+    }
+  }
+}

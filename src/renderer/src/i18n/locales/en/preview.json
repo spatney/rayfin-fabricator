@@ -1,0 +1,321 @@
+{
+  "localState": {
+    "starting": "Starting…",
+    "restarting": "Restarting…",
+    "running": "Running",
+    "stopped": "Stopped",
+    "runningProblems_one": "Running · problem",
+    "runningProblems_other": "Running · {{count}} problems"
+  },
+  "runningProblem": {
+    "analysis": "Your app’s latest data model change couldn’t be read, so it still uses the previous data model.",
+    "schema": "Your app’s latest data model change couldn’t be applied to its local database, so it still uses the previous one.",
+    "functions": "Your app’s functions didn’t build, so calling them fails or runs their previous build.",
+    "vite": "Your app’s Vite dev server stopped and couldn’t start again, so the preview can’t show it."
+  },
+  "fallback": {
+    "published": {
+      "newerVersion": "This app uses Rayfin {{version}}, which is newer than the Rayfin versions Fabricator runs on this computer and couldn’t start here, so the preview uses your published app’s backend.",
+      "newer": "This app’s newer Rayfin version couldn’t start on this computer, so the preview uses your published app’s backend.",
+      "oldVersion": "This app uses Rayfin {{version}}, which Fabricator can’t run on this computer, so the preview uses your published app’s backend.",
+      "old": "This app’s Rayfin version can’t run on this computer, so the preview uses your published app’s backend.",
+      "connector": "The {{name}} connector runs only on Fabric, so the preview uses your published app’s backend.",
+      "connectors": "The {{names}} connectors run only on Fabric, so the preview uses your published app’s backend."
+    },
+    "team": {
+      "newerVersion": "This app uses Rayfin {{version}}, which is newer than the Rayfin versions Fabricator runs on this computer and couldn’t start here, so the preview uses the team’s deployment of it in Fabric.",
+      "newer": "This app’s newer Rayfin version couldn’t start on this computer, so the preview uses the team’s deployment of it in Fabric.",
+      "oldVersion": "This app uses Rayfin {{version}}, which Fabricator can’t run on this computer, so the preview uses the team’s deployment of it in Fabric.",
+      "old": "This app’s Rayfin version can’t run on this computer, so the preview uses the team’s deployment of it in Fabric.",
+      "connector": "The {{name}} connector runs only on Fabric, so the preview uses the team’s deployment of it in Fabric.",
+      "connectors": "The {{names}} connectors run only on Fabric, so the preview uses the team’s deployment of it in Fabric."
+    }
+  },
+  "sdkWarning": {
+    "newerVersion": "This app uses Rayfin {{version}}, which is newer than the Rayfin versions Fabricator runs on this computer, so some things might not work as expected.",
+    "newer": "This app uses a newer Rayfin version than Fabricator runs on this computer, so some things might not work as expected.",
+    "olderVersion": "This app uses Rayfin {{version}}, which isn’t one of the Rayfin versions Fabricator runs on this computer, so some things might not work as expected.",
+    "older": "This app’s Rayfin version isn’t one Fabricator runs on this computer, so some things might not work as expected."
+  },
+  "problem": {
+    "couldntStart": "Your app couldn’t start on this computer",
+    "stopped": "Its local backend stopped.",
+    "schemaRefused": {
+      "title": "This change would delete local data",
+      "message": "The data model changed in a way that deletes data stored on this computer, so your app waits for you to decide."
+    },
+    "packagesMissing": {
+      "title": "Your app’s packages aren’t installed",
+      "hint": "Install them, and Fabricator starts your app again."
+    },
+    "nodeMissing": {
+      "title": "Node.js isn’t installed",
+      "message": "Your app runs on Node.js, and Fabricator couldn’t find it on this computer.",
+      "hint": "Set it up, then try again."
+    },
+    "nodeTooOld": {
+      "title": "Node.js needs an update",
+      "messageVersion": "Your app needs Node.js 20 or later, and this computer has {{version}}.",
+      "message": "Your app needs Node.js 20 or later.",
+      "hint": "Update it, then try again."
+    },
+    "alreadyServing": {
+      "title": "This app is already running",
+      "messagePid": "Another program runs this app on this computer (process {{pid}}), such as rayfin-local in a terminal.",
+      "message": "Another program runs this app on this computer, such as rayfin-local in a terminal.",
+      "hint": "Stop it, and Fabricator runs your app here."
+    },
+    "crashed": "Your app keeps stopping"
+  },
+  "starting": {
+    "restarted": "It stopped unexpectedly, so Fabricator is starting it again.",
+    "analysis": "Reading your app’s data model",
+    "schema": "Updating its database",
+    "functions": "Building its functions",
+    "vite": "Starting its dev server",
+    "restarting": "Starting it again on this computer",
+    "starting": "Getting it ready on this computer"
+  },
+  "seed": {
+    "row": "row {{row}}",
+    "label": "Seed data",
+    "problems_one": "The seed data has {{count, number}} problem, so it wasn’t loaded.",
+    "problems_other": "The seed data has {{count, number}} problems, so it wasn’t loaded.",
+    "fixRequest": "Fix the seed data’s problems",
+    "fix": "Fix with Copilot",
+    "offer": "<b>This app comes with seed data</b> ({{amount}}). Its local data is empty: load the seed data to start with it.",
+    "offerEmpty": "<b>This app comes with seed data</b>. Its local data is empty: load the seed data to start with it.",
+    "rows_one": "{{count, number}} row",
+    "rows_other": "{{count, number}} rows",
+    "files_one": "{{count, number}} file",
+    "files_other": "{{count, number}} files",
+    "rowsAndFiles": "{{rows}} and {{files}}",
+    "load": "Load seed data"
+  },
+  "notes": {
+    "backend": "Preview backend",
+    "rayfinVersion": "Rayfin version",
+    "schemaWaiting": "Data model change waiting",
+    "schemaWaitingText": "<b>A data model change is waiting.</b> It would delete data stored on this computer, so your app still uses the previous data model."
+  },
+  "output": {
+    "running": "Your app runs on this computer, with its own backend and data.",
+    "starting": "Your app is starting on this computer.",
+    "couldntStart": "Your app couldn’t start on this computer.",
+    "notRunning": "Your app isn’t running on this computer.",
+    "problems_one": "1 problem",
+    "problems_other": "{{count}} problems",
+    "label": "Output: {{state}}",
+    "show": "{{explanation}} Select to view its output.",
+    "hide": "{{explanation}} Select to hide its output."
+  },
+  "info": {
+    "label": "About Local and Published",
+    "freshTitle": "{{name}} now runs on this computer, with its own data. Select to learn more.",
+    "title": "{{name}} runs in two places",
+    "local": "<b>Local</b> is your app on this computer, with its own data, apart from the published app’s. Copilot’s changes show here first.",
+    "localEmpty": "<b>Local</b> is your app on this computer, with its own data, apart from the published app’s. That data starts empty. Copilot’s changes show here first.",
+    "publishedTeam": "<b>Published</b> is the app your team uses on Microsoft Fabric, with its data. Your changes reach it when you publish them.",
+    "published": "<b>Published</b> is your app on Microsoft Fabric, with its data. Your changes reach it when you publish them."
+  },
+  "statePanel": {
+    "viewOutput": "View output",
+    "noPages": "{{name}} has no pages to show. Its backend runs at {{url}}.",
+    "notRunning": "{{name}} isn’t running on this computer.",
+    "start": "Start",
+    "starting": "Starting…",
+    "installing": "Installing…",
+    "install": "Install dependencies",
+    "stopping": "Stopping…",
+    "stopOther": "Stop the other one",
+    "setUpNode": "Set up Node.js",
+    "allowHelp": "Learn how to allow it",
+    "whyTitle": "Open Help, which reads what happened and explains it",
+    "why": "Find out why"
+  },
+  "schema": {
+    "title": "This change would delete local data",
+    "lead": "The data model of <b>{{name}}</b> changed. Applying the change deletes this data, stored on this computer:",
+    "deletes": "Data the change deletes",
+    "unknown": "Which data it deletes isn’t known.",
+    "choices": {
+      "default": "<b>Delete this data and apply</b> deletes only what’s listed. <b>Reset local data</b> deletes all of the app’s local data, its test users and files, then applies the change. <b>Keep the current version</b> keeps your data and the data model you have now.",
+      "atStart": "<b>Delete this data and apply</b> deletes only what’s listed. <b>Reset local data</b> deletes all of the app’s local data, its test users and files, then applies the change. <b>Keep the current version</b> keeps your data and the data model you have now, and the app doesn’t start until you choose.",
+      "published": "<b>Delete this data and apply</b> deletes only what’s listed. <b>Reset local data</b> deletes all of the app’s local data, its test users and files, then applies the change. <b>Keep the current version</b> keeps your data and the data model you have now. Your published app and its data aren’t affected.",
+      "atStartPublished": "<b>Delete this data and apply</b> deletes only what’s listed. <b>Reset local data</b> deletes all of the app’s local data, its test users and files, then applies the change. <b>Keep the current version</b> keeps your data and the data model you have now, and the app doesn’t start until you choose. Your published app and its data aren’t affected."
+    },
+    "keep": "Keep the current version",
+    "resetting": "Resetting…",
+    "reset": "Reset local data",
+    "applying": "Applying…",
+    "apply": "Delete this data and apply",
+    "review": "Review the change"
+  },
+  "rayfinWarning": {
+    "prerelease": "It isn’t Rayfin’s latest release yet, so it might be unstable.",
+    "unsupported": "Fabricator doesn’t run it on this computer yet, so some things might not work as expected here."
+  },
+  "devices": {
+    "desktop": "Desktop",
+    "tablet": "Tablet",
+    "phone": "Phone"
+  },
+  "port": {
+    "anApp": "an app",
+    "holder": {
+      "backend": "<b>{{name}}</b>, another app running on this computer, is using it.",
+      "preview": "The live preview of <b>{{name}}</b> is using it while Copilot works on that app.",
+      "earlierPreview": "An earlier preview of <b>{{name}}</b> is still running and using it.",
+      "appPreview": "A preview of <b>{{name}}</b> is using it.",
+      "devServerFor": "A dev server for <b>{{name}}</b> is using it.",
+      "devServer": "A dev server is using it.",
+      "program": "<b>{{name}}</b>, another program on this computer, is using it.",
+      "unknown": "Another program on this computer is using it, and Fabricator can’t tell which."
+    },
+    "stop": {
+      "named": "Stop {{name}}",
+      "appWorking": "Copilot is working on {{name}} right now. It starts again when you open it.",
+      "appIdle": "It starts again when you open it.",
+      "earlierPreview": "Stop the earlier preview",
+      "preview": "Stop that preview",
+      "previewDetail": "Nothing is lost: it’s only a preview.",
+      "devServer": "Stop the dev server",
+      "devServerDetail": "Nothing is lost: you can start it again later.",
+      "programDetail": "Anything unsaved in {{name}} is lost.",
+      "unknown": "Stop that program",
+      "unknownDetail": "Anything unsaved in it is lost."
+    },
+    "recommended": "Recommended",
+    "stopping": "Stopping…",
+    "use": "Use localhost:{{port}} instead",
+    "useDetailPush": "Adds it to your app’s sign-in settings and updates them in Fabric. Takes a moment.",
+    "useDetail": "Adds it to your app’s sign-in settings. Sign-in accepts it once you publish.",
+    "updatingSignIn": "Updating your sign-in settings…",
+    "updatingYml": "Updating rayfin.yml…",
+    "title": "Your live preview needs localhost:{{port}}",
+    "sub": "It’s the address your app’s sign-in accepts.",
+    "useLater": "Using localhost:{{port}} instead updates your app’s sign-in settings in Fabric, which can’t happen while Copilot is working. Skip for now to choose it with your next message.",
+    "log": "Port registration log",
+    "technical": "Technical details",
+    "program": "Program",
+    "command": "Command",
+    "process": "{{name}} (PID {{pid}})",
+    "skip": "Skip live preview",
+    "skipTitle": "Copilot keeps working, and the preview shows your published app."
+  },
+  "previewAs": {
+    "title": "Preview as",
+    "label": "Preview as: {{label}}",
+    "sub": "Who the app signs in as on this computer",
+    "you": "You",
+    "youTip": "Your Microsoft Entra account when you’re signed in to Azure, else a local developer account",
+    "signedOut": "Signed out",
+    "noOne": "No one is signed in",
+    "testUser": "Test user",
+    "testUsers": "Test users",
+    "whoTitle": {
+      "you": "The preview is signed in as you. Choose who it signs in as.",
+      "signedOut": "The preview isn’t signed in. Choose who it signs in as.",
+      "user": "The preview is signed in as {{name}}. Choose who it signs in as."
+    },
+    "chooseTitle": "Choose who the app in the preview signs in as.",
+    "couldntSwitch": "Couldn’t switch who the preview signs in as: {{message}}",
+    "reload": {
+      "you": "Reload the preview to see the app as you.",
+      "signedOut": "Reload the preview to see the app signed out.",
+      "user": "Reload the preview to see the app as {{name}}."
+    },
+    "progress": {
+      "reloading": "Reloading the preview…",
+      "signingOut": "Signing out…",
+      "adding": "Adding {{name}}…",
+      "signingInYou": "Signing in as you…",
+      "signingIn": "Signing in as {{name}}…"
+    },
+    "account": {
+      "unknown": "Your Microsoft Entra account, or a local account",
+      "entra": "{{name}} · Microsoft Entra ID",
+      "local": "{{name}} · local account"
+    },
+    "email": {
+      "label": "Test user’s email",
+      "empty": "Enter an email address.",
+      "invalid": "Enter an email address, like ana@example.com.",
+      "yours": "That’s your own account. Choose You instead.",
+      "exists": "{{name}} is already a test user."
+    },
+    "addUser": "Add test user…",
+    "addForm": "Add a test user",
+    "adding": "Adding…",
+    "hint": "Test users have no password: they sign in here, through Preview as.",
+    "note": "Switching clears the preview’s browser storage and reloads it."
+  },
+  "pane": {
+    "status": {
+      "publishing": "Publishing…",
+      "published": "Published",
+      "failed": "Couldn’t publish",
+      "notPublished": "Not published",
+      "updating": "Published · updating",
+      "title": "Showing the published app: what everyone on the team sees."
+    },
+    "fabric": {
+      "unavailable": "The Fabric portal view is unavailable for this published app",
+      "local": "The Fabric portal view shows your published app, not this preview on your computer",
+      "exit": "Viewing inside the Fabric portal shell — click to return to the direct app view",
+      "enter": "View the app inside the Fabric portal shell, where it works fully"
+    },
+    "forward": "Forward",
+    "reload": "Reload",
+    "views": {
+      "label": "App to show",
+      "local": "Local",
+      "localTitle": "Your app on this computer, with its local data",
+      "published": "Published",
+      "publishedTitle": "Your published app on Microsoft Fabric, with its data"
+    },
+    "data": {
+      "published": "Published data",
+      "publishedTitle": "It uses the published app’s data, so changes you make in it are real.",
+      "none": "No data yet",
+      "noneTitle": "Nothing is published yet, so it runs without data."
+    },
+    "url": {
+      "local": "Your app, running on this computer at {{url}}, with its own backend and local data: Copilot’s changes show here as it makes them. Click to open it in your browser.",
+      "teamPublishedData": "Your app, running on this computer at {{url}} with the team’s deployment of it in Fabric: Copilot’s changes show here as it makes them. It uses the published app’s data, so changes you make in it are real. Click to open it in your browser.",
+      "teamNoData": "Your app, running on this computer at {{url}} with the team’s deployment of it in Fabric: Copilot’s changes show here as it makes them. Nothing is published yet, so it runs without data. Click to open it in your browser.",
+      "teamOwnData": "Your app, running on this computer at {{url}} with the team’s deployment of it in Fabric: Copilot’s changes show here as it makes them. It uses your preview’s data. Click to open it in your browser.",
+      "manual": "Your app, running on this computer at {{url}} with your published app’s backend. While chat turns don’t publish, it shows your latest changes whenever the app is open. Click to open it in your browser.",
+      "published": "Your app, running on this computer at {{url}} with your published app’s backend while Copilot works, so its changes show as it makes them. Click to open it in your browser."
+    },
+    "device": {
+      "label": "Preview width",
+      "width": "{{device}} width",
+      "fixed": "{{device}} — {{width}}px wide",
+      "fill": "{{device}} — fill the pane"
+    },
+    "pick": {
+      "publishing": "{{feature}} is back once the publish finishes.",
+      "waiting": "{{feature}} works once your app shows here."
+    },
+    "focus": {
+      "exit": "Exit focus",
+      "enter": "Focus",
+      "exitTitle": "Exit focus — show the chat again",
+      "enterTitle": "Focus the preview — hide the chat"
+    },
+    "publishUnfinished": "Publishing didn’t finish.",
+    "workspace": {
+      "title": "Choose where to publish",
+      "text": "<b>{{name}}</b> hasn’t been published yet. Select <b>Publish</b> in the header above to name it and pick the Fabric workspace to publish it to."
+    },
+    "empty": {
+      "teamFailed": "The team pipeline couldn't publish this version. Open the team menu in the header to see what happened.",
+      "region": "Choose a workspace on a capacity in another region, then publish again.",
+      "failed": "Review the error and logs above, then publish again to retry.",
+      "team": "The published app shows here once your team publishes it.",
+      "local": "Your published app shows here once you publish it.",
+      "default": "Your published app will render here after a full <code>rayfin up</code>. Ask Copilot to build something, or select <b>Publish</b>."
+    }
+  }
+}

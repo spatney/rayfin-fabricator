@@ -3,6 +3,8 @@
  * can be shown at any size and saved at the image's full size.
  */
 
+import { translator } from '../../i18n'
+
 export type MarkTool = 'pen' | 'highlighter' | 'arrow' | 'box'
 
 export type Point = [x: number, y: number]
@@ -16,19 +18,69 @@ export interface Mark {
   points: Point[]
 }
 
+// Each `label` is read when it's shown, in the interface's language.
 export const MARK_TOOLS: { id: MarkTool; label: string; key: string }[] = [
-  { id: 'pen', label: 'Pen', key: 'P' },
-  { id: 'highlighter', label: 'Highlighter', key: 'H' },
-  { id: 'arrow', label: 'Arrow', key: 'A' },
-  { id: 'box', label: 'Box', key: 'B' }
+  {
+    id: 'pen',
+    get label() {
+      return translator('chat')('markup.pen')
+    },
+    key: 'P'
+  },
+  {
+    id: 'highlighter',
+    get label() {
+      return translator('chat')('markup.highlighter')
+    },
+    key: 'H'
+  },
+  {
+    id: 'arrow',
+    get label() {
+      return translator('chat')('markup.arrow')
+    },
+    key: 'A'
+  },
+  {
+    id: 'box',
+    get label() {
+      return translator('chat')('markup.box')
+    },
+    key: 'B'
+  }
 ]
 
 export const MARK_COLORS: { label: string; value: string }[] = [
-  { label: 'Red', value: '#ff3b30' },
-  { label: 'Yellow', value: '#ffcc00' },
-  { label: 'Green', value: '#2fd158' },
-  { label: 'Blue', value: '#2f8cff' },
-  { label: 'White', value: '#ffffff' }
+  {
+    get label() {
+      return translator('chat')('markup.red')
+    },
+    value: '#ff3b30'
+  },
+  {
+    get label() {
+      return translator('chat')('markup.yellow')
+    },
+    value: '#ffcc00'
+  },
+  {
+    get label() {
+      return translator('chat')('markup.green')
+    },
+    value: '#2fd158'
+  },
+  {
+    get label() {
+      return translator('chat')('markup.blue')
+    },
+    value: '#2f8cff'
+  },
+  {
+    get label() {
+      return translator('chat')('markup.white')
+    },
+    value: '#ffffff'
+  }
 ]
 
 /** How thick each tool draws, in CSS pixels on screen. */

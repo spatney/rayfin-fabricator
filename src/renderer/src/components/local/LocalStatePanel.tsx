@@ -1,4 +1,5 @@
 import { useState, type JSX } from 'react'
+import { useTranslation } from '../../i18n'
 import { localStateLabel, type LocalBackend } from '../../localBackend'
 import { Codicon } from '../icons'
 import { describeProblem, startingDetail } from './problems'
@@ -32,6 +33,7 @@ export default function LocalStatePanel({
   onOpenSetup,
   onReviewSchema
 }: Props): JSX.Element {
+  const { t } = useTranslation('preview')
   const [doing, setDoing] = useState<Action | null>(null)
   const act = (action: Action, run: () => Promise<unknown>): void => {
     setDoing(action)
@@ -41,7 +43,7 @@ export default function LocalStatePanel({
   const viewOutput = (
     <button type="button" className="btn btn--sm" onClick={onViewOutput}>
       <Codicon name="output" />
-      View output
+      {t('statePanel.viewOutput')}
     </button>
   )
 
@@ -58,7 +60,7 @@ export default function LocalStatePanel({
         </p>
         <p className="local-state-detail">{startingDetail(local.status)}</p>
         <button type="button" className="btn btn--sm btn--link" onClick={onViewOutput}>
-          View output
+          {t('statePanel.viewOutput')}
         </button>
       </div>
     )
@@ -69,7 +71,7 @@ export default function LocalStatePanel({
       <div className="local-state" role="status">
         <p className="local-state-label">{localStateLabel(local.status)}</p>
         <p className="local-state-detail">
-          {name} has no pages to show. Its backend runs at {local.ready?.apiUrl}.
+          {t('statePanel.noPages', { name, url: local.ready?.apiUrl ?? '' })}
         </p>
         {viewOutput}
       </div>
@@ -80,7 +82,7 @@ export default function LocalStatePanel({
     return (
       <div className="local-state" role="status">
         <p className="local-state-label">{localStateLabel(local.status)}</p>
-        <p className="local-state-detail">{name} isn’t running on this computer.</p>
+        <p className="local-state-detail">{t('statePanel.notRunning', { name })}</p>
         {local.actionError && <p className="local-state-failed">{local.actionError.message}</p>}
         <div className="local-state-actions">
           <button
@@ -89,7 +91,7 @@ export default function LocalStatePanel({
             disabled={disabled}
             onClick={() => act('start', local.start)}
           >
-            {doing === 'start' ? 'Starting…' : 'Start'}
+            {doing === 'start' ? t('statePanel.starting') : t('statePanel.start')}
           </button>
           {viewOutput}
         </div>
@@ -110,7 +112,7 @@ export default function LocalStatePanel({
         disabled={disabled}
         onClick={() => act('install', local.installPackages)}
       >
-        {doing === 'install' ? 'Installing…' : 'Install dependencies'}
+        {doing === 'install' ? t('statePanel.installing') : t('statePanel.install')}
       </button>
     )
   } else if (code === 'already-serving') {
@@ -121,19 +123,19 @@ export default function LocalStatePanel({
         disabled={disabled}
         onClick={() => act('stop-other', local.stopOtherServe)}
       >
-        {doing === 'stop-other' ? 'Stopping…' : 'Stop the other one'}
+        {doing === 'stop-other' ? t('statePanel.stopping') : t('statePanel.stopOther')}
       </button>
     )
   } else if (code === 'schema-refused' && onReviewSchema) {
     primary = (
       <button type="button" className="btn btn--sm btn--primary" onClick={onReviewSchema}>
-        Review the change
+        {t('schema.review')}
       </button>
     )
   } else if ((code === 'node-missing' || code === 'node-too-old') && onOpenSetup) {
     primary = (
       <button type="button" className="btn btn--sm btn--primary" onClick={onOpenSetup}>
-        Set up Node.js
+        {t('statePanel.setUpNode')}
       </button>
     )
   } else if (docs) {
@@ -143,7 +145,7 @@ export default function LocalStatePanel({
         className="btn btn--sm btn--primary"
         onClick={() => void window.api.openExternal(docs)}
       >
-        Learn how to allow it
+        {t('statePanel.allowHelp')}
       </button>
     )
   }
@@ -166,7 +168,7 @@ export default function LocalStatePanel({
             disabled={disabled}
             onClick={() => act('start', () => local.restart())}
           >
-            {doing === 'start' ? 'Starting…' : 'Try again'}
+            {doing === 'start' ? t('statePanel.starting') : t('actions.tryAgain')}
           </button>
           {viewOutput}
           {onDiagnose && (
@@ -174,10 +176,10 @@ export default function LocalStatePanel({
               type="button"
               className="btn btn--sm"
               onClick={onDiagnose}
-              title="Open Help, which reads what happened and explains it"
+              title={t('statePanel.whyTitle')}
             >
               <Codicon name="comment-discussion" />
-              Find out why
+              {t('statePanel.why')}
             </button>
           )}
         </div>

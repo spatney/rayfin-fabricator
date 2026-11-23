@@ -1,0 +1,101 @@
+{
+  "title": "Ayuda",
+  "view": {
+    "refreshed": "Ayuda actualizó su copia de la documentación y el código fuente.",
+    "refreshFailed": "No se pudo actualizar",
+    "projectTitle": "Las preguntas se responden sobre {{project}}",
+    "new": "Nueva",
+    "newTitle": "Empezar una conversación nueva y olvidar esta",
+    "docs": "Documentación",
+    "docsTitle": "Abrir la documentación de Fabricator en el explorador",
+    "close": "Cerrar Ayuda (Esc)",
+    "resumed": "Retomando donde lo dejaste, {{when}}",
+    "now": "Ahora"
+  },
+  "grounding": {
+    "reading": "leyendo la documentación",
+    "ready": "lista",
+    "docsOnly": "solo documentación",
+    "logsOnly": "solo registros",
+    "pinnedTitle": "Ayuda está leyendo la documentación y el código fuente de {{reference}}, que coincide con esta compilación.",
+    "latestTitle": "Ayuda está leyendo la documentación y el código fuente más reciente.",
+    "docsOnlyTitle": "Ayuda tiene la documentación, pero no el código fuente, así que no puede rastrear un error hasta su causa.",
+    "logsOnlyTitle": "Ayuda solo usa los registros de este dispositivo. Selecciona para descargar la documentación."
+  },
+  "welcome": {
+    "lead": "Pregunta por cualquier cosa que no funcione. Puedo leer lo que ha estado haciendo este dispositivo, la documentación y tu proyecto.",
+    "meta": "v{{version}} · solo lectura"
+  },
+  "prompts": {
+    "deploy": "¿Por qué falló mi última publicación?",
+    "whatsNew": "¿Qué hay de nuevo en esta versión?",
+    "previewWontStart": "La vista previa no se inicia",
+    "share": "¿Cómo comparto mi aplicación con alguien?",
+    "localStart": "¿Por qué no se inició mi aplicación en este dispositivo?"
+  },
+  "composer": {
+    "attachFilesTitle": "Adjuntar archivos para que Ayuda los lea",
+    "attachFolderTitle": "Adjuntar una carpeta para que Ayuda la lea",
+    "attachFailed": "No se pudo adjuntar",
+    "imageFailed": "No se pudo adjuntar la imagen",
+    "removeFile": "Quitar {{path}}",
+    "placeholder": "Describe qué salió mal o pega una captura de pantalla",
+    "label": "Preguntar a Ayuda",
+    "attachFiles": "Adjuntar archivos",
+    "attachFolder": "Adjuntar una carpeta",
+    "stop": "Detener (Esc)",
+    "ask": "Preguntar (Entrar)",
+    "hintIdle": "<kbd>Entrar</kbd> para preguntar · <kbd>Mayús</kbd>+<kbd>Entrar</kbd> para una nueva línea · <kbd>Esc</kbd> para cerrar",
+    "hintBusy": "<kbd>Entrar</kbd> para preguntar · <kbd>Mayús</kbd>+<kbd>Entrar</kbd> para una nueva línea · <kbd>Esc</kbd> para detener"
+  },
+  "answer": {
+    "failed": "Ayuda no pudo responder.",
+    "stopped": "Detenido."
+  },
+  "elapsed": {
+    "ms": "{{ms}} ms",
+    "seconds": "{{seconds}} s",
+    "minutes": "{{minutes}} min {{seconds}} s"
+  },
+  "issue": {
+    "featureReady": "Solicitud de característica lista",
+    "bugReady": "Informe de errores listo",
+    "featureNote": "Revísala en GitHub antes de enviarla.",
+    "bugNote": "Al informar del error se agregan tu versión de Fabricator, los detalles del sistema y un archivo de diagnóstico. Revisa todo en GitHub antes de enviarlo.",
+    "suggest": "Sugerir en GitHub",
+    "report": "Informar en GitHub",
+    "hide": "Ocultar",
+    "review": "Revisar primero"
+  },
+  "workLog": {
+    "looking_one": "revisando {{count}} elemento",
+    "looking_other": "revisando {{count}} elementos",
+    "checkedFailed_one": "{{count}} elemento revisado · {{failed}} ilegibles",
+    "checkedFailed_other": "{{count}} elementos revisados · {{failed}} ilegibles",
+    "checked_one": "{{count}} elemento revisado",
+    "checked_other": "{{count}} elementos revisados",
+    "unreadable": "no se pudo leer"
+  },
+  "ray": {
+    "label": "Ray, la mantarraya de Fabricator. Selecciónalo para acariciarlo."
+  },
+  "when": {
+    "earlier": "hace un rato",
+    "momentAgo": "hace un momento",
+    "minutesAgo_one": "hace {{count}} minuto",
+    "minutesAgo_other": "hace {{count}} minutos",
+    "anHourAgo": "hace una hora",
+    "hoursAgo_one": "hace {{count}} hora",
+    "hoursAgo_other": "hace {{count}} horas",
+    "yesterday": "ayer"
+  },
+  "unavailable": {
+    "lead": "Ayuda responde preguntas sobre lo que salió mal a partir de tu propio historial de errores. Necesita GitHub Copilot y ahora mismo no has iniciado sesión.",
+    "signIn": "Iniciar sesión en GitHub Copilot",
+    "signInSub": "Así Ayuda podrá investigarlo por ti",
+    "docs": "Examinar la documentación",
+    "docsSub": "Configuración, publicación y solución de problemas",
+    "report": "Informar de un problema",
+    "reportSub": "Abre un informe de errores con tu versión y un archivo de diagnóstico"
+  }
+}

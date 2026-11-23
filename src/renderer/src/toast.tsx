@@ -10,6 +10,7 @@ import {
   type JSX,
 } from 'react'
 import { inferArea, reportError, reportEvent } from './errorReport'
+import { inEnglish, useTranslation } from './i18n'
 
 export type ToastKind = 'success' | 'error' | 'info'
 
@@ -154,7 +155,8 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
       // through, unless the caller already recorded it with more detail.
       if (opts?.record !== false) {
         const text = opts?.title ? `${opts.title}: ${message}` : message
-        const area = inferArea(opts?.title, message)
+        // The parts of the app are told apart by English words.
+        const area = inferArea(inEnglish(opts?.title ?? ''), inEnglish(message))
         if (kind === 'error') {
           reportError({ surface: 'toast', message: text, area })
         } else {
@@ -238,30 +240,31 @@ function ToastHost({
   onPause: (id: number) => void
   onResume: (id: number) => void
 }): JSX.Element | null {
+  const { t } = useTranslation('app')
   if (toasts.length === 0) return null
   return (
-    <div className="toast-host" role="region" aria-label="Notifications">
-      {toasts.map((t) => (
+    <div className="toast-host" role="region" aria-label={t('toast.region')}>
+      {toasts.map((toast) => (
         <div
-          key={t.id}
-          className={`toast toast--${t.kind}`}
-          role={t.kind === 'error' ? 'alert' : 'status'}
-          aria-live={t.kind === 'error' ? 'assertive' : 'polite'}
-          onMouseEnter={() => onPause(t.id)}
-          onMouseLeave={() => onResume(t.id)}
-          onFocus={() => onPause(t.id)}
-          onBlur={() => onResume(t.id)}
+          key={toast.id}
+          className={`toast toast--${toast.kind}`}
+          role={toast.kind === 'error' ? 'alert' : 'status'}
+          aria-live={toast.kind === 'error' ? 'assertive' : 'polite'}
+          onMouseEnter={() => onPause(toast.id)}
+          onMouseLeave={() => onResume(toast.id)}
+          onFocus={() => onPause(toast.id)}
+          onBlur={() => onResume(toast.id)}
         >
-          <span className={`toast-icon codicon codicon-${ICON[t.kind]}`} aria-hidden="true" />
+          <span className={`toast-icon codicon codicon-${ICON[toast.kind]}`} aria-hidden="true" />
           <div className="toast-body">
-            {t.title && <div className="toast-title">{t.title}</div>}
-            <div className="toast-msg">{t.message}</div>
+            {toast.title && <div className="toast-title">{toast.title}</div>}
+            <div className="toast-msg">{toast.message}</div>
           </div>
           <button
             type="button"
             className="toast-close"
-            aria-label="Dismiss notification"
-            onClick={() => onDismiss(t.id)}
+            aria-label={t('toast.dismiss')}
+            onClick={() => onDismiss(toast.id)}
           >
             <span className="codicon codicon-close" aria-hidden="true" />
           </button>

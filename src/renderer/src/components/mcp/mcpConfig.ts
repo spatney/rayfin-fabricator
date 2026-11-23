@@ -1,4 +1,5 @@
 import type { McpServer, McpTransport } from '@shared/ipc'
+import { translator } from '../../i18n'
 
 /** An environment variable or header read from a pasted configuration. */
 export interface ParsedValue {
@@ -143,7 +144,7 @@ function nameFromUrl(url: string): string {
     const parts = host.split('.')
     return nameFrom(parts.length > 2 ? parts[0] : (parts[parts.length - 2] ?? host))
   } catch {
-    return 'MCP server'
+    return translator('mcp')('defaultName')
   }
 }
 
@@ -156,7 +157,7 @@ function nameFromCommand(words: string[]): string {
   const target = RUNNER.test(words[0] ?? '')
     ? words.slice(1).find((w) => !w.startsWith('-') && !RUNNER_VERBS.has(w))
     : words[0]
-  if (!target) return 'MCP server'
+  if (!target) return translator('mcp')('defaultName')
   if (target.startsWith('@')) return nameFrom(target)
   const last = target.split(/[\\/]/).filter(Boolean).pop() ?? target
   return nameFrom(last.replace(/\.(?:exe|cmd|js|mjs|py)$/i, ''))
@@ -202,17 +203,15 @@ function serverFrom(name: string | undefined, raw: Record<string, unknown>): Par
   }
 }
 
-const UNREADABLE =
-  'That isn’t a configuration Fabricator can read. Paste the JSON from the server’s instructions.'
-
 /**
  * Reads the servers in a configuration pasted from a server's instructions:
  * JSON (with comments) as Claude, Cursor, VS Code or Copilot CLI take it, one
  * server's entry, a command line, or a URL.
  */
 export function parseConfig(text: string): ParseResult {
+  const t = translator('mcp')
   const trimmed = text.trim()
-  if (!trimmed) return { error: 'Paste a configuration first.' }
+  if (!trimmed) return { error: t('parse.empty') }
   if (/^https?:\/\/\S+$/i.test(trimmed)) {
     return { servers: [serverFrom(undefined, { url: trimmed })] }
   }
@@ -224,9 +223,9 @@ export function parseConfig(text: string): ParseResult {
   try {
     parsed = parseJson(trimmed)
   } catch {
-    return { error: UNREADABLE }
+    return { error: t('parse.unreadable') }
   }
-  if (!isObject(parsed)) return { error: UNREADABLE }
+  if (!isObject(parsed)) return { error: t('parse.unreadable') }
   if (isServer(parsed)) {
     const name = typeof parsed.name === 'string' ? parsed.name : undefined
     return { servers: [serverFrom(name, parsed)] }
@@ -236,7 +235,7 @@ export function parseConfig(text: string): ParseResult {
     (candidate): candidate is Record<string, unknown> =>
       isObject(candidate) && Object.values(candidate).some(isServer)
   )
-  if (!map) return { error: 'That configuration doesn’t have a server with a command or a URL.' }
+  if (!map) return { error: t('parse.noServer') }
   const servers = Object.entries(map)
     .filter((entry): entry is [string, Record<string, unknown>] => isServer(entry[1]))
     .map(([name, server]) => serverFrom(name, server))

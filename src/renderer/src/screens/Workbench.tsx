@@ -117,6 +117,7 @@ import { DEPLOY_QUESTION } from '../components/help/parts'
 import Spotlight from '../components/spotlight/Spotlight'
 import { workbenchSearch } from '../components/spotlight/workbenchSearch'
 import { isMac, modKey, shortcut } from '../platform'
+import { Trans, translator, useTranslation } from '../i18n'
 import { errorMessage, setErrorProject } from '../errorReport'
 import { accountFacts, workbenchFacts } from '../helpFacts'
 import type { HelpAction, HelpIssueDraft, InstalledApp } from '@shared/ipc'
@@ -338,6 +339,7 @@ export default function Workbench({
   onSettled,
   onOpening
 }: Props): JSX.Element {
+  const { t } = useTranslation('workbench')
   const toast = useToast()
   const [versions, setVersions] = useState<AppVersions | null>(null)
   const [signingOut, setSigningOut] = useState(false)
@@ -692,8 +694,9 @@ export default function Workbench({
   }, [showAccounts])
 
   const onDevServerError = useCallback((reason: unknown): void => {
-    toast.error(authErrorMessage(reason, 'The local preview could not be updated.'), {
-      title: 'Local preview'
+    const t = translator('workbench')
+    toast.error(authErrorMessage(reason, t('preview.updateFailed')), {
+      title: t('preview.title')
     })
   }, [toast])
 
@@ -732,15 +735,16 @@ export default function Workbench({
       ])
     },
     onRemoved: (project, next, appDeleted) => {
+      const t = translator('workbench')
       setProjects((current) => (current ? withoutProject(current, project.id) : next))
-      toast.success(
-        appDeleted
-          ? 'Its folder is in your system trash, and its published app is deleted.'
-          : 'Its folder is in your system trash. You can restore it from there.',
-        { title: `Removed ${project.name}` }
-      )
+      toast.success(appDeleted ? t('remove.trashedAndAppDeleted') : t('remove.trashed'), {
+        title: t('remove.removed', { name: project.name })
+      })
     },
-    onFailed: (project, error) => toast.error(error, { title: `Couldn’t remove ${project.name}` })
+    onFailed: (project, error) =>
+      toast.error(error, {
+        title: translator('workbench')('remove.failed', { name: project.name })
+      })
   })
   /** Projects being removed can't be opened or managed, so the switcher and Search leave them out. */
   const removingIds = useMemo(
@@ -773,7 +777,7 @@ export default function Workbench({
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      deployQueueRef.current.cancelPending('The workbench closed before publishing started.')
+      deployQueueRef.current.cancelPending(translator('workbench')('publish.closedBeforeStart'))
       // Nothing else closes a live preview kept while turns don't publish (or
       // kept on screen through an after-turn publish) once the workbench is gone.
       for (const [projectId, server] of Object.entries(devServersRef.current)) {
@@ -981,10 +985,8 @@ export default function Workbench({
     if (!active?.team) return
     const status = teamWorkRef.current.status(active.id)
     if (status && status.unpublished > 0) {
-      toast.info(
-        `${active.name} has unpublished changes. They're saved on GitHub; publish them when you're ready.`,
-        { title: 'Not published yet' }
-      )
+      const t = translator('workbench')
+      toast.info(t('team.unpublished', { name: active.name }), { title: t('team.notPublished') })
     }
   }, [active, toast])
 
@@ -994,8 +996,9 @@ export default function Workbench({
       await onAuthChanged()
     } catch (reason) {
       if (!mountedRef.current) return
-      toast.error(authErrorMessage(reason, 'Could not verify sign-in. Please retry.'), {
-        title: 'Sign-in check failed'
+      const t = translator('workbench')
+      toast.error(authErrorMessage(reason, t('startup.verifySignIn', { ns: 'app' })), {
+        title: t('auth.verifyFailedTitle')
       })
     }
   }, [onAuthChanged, toast])
@@ -1044,7 +1047,8 @@ export default function Workbench({
           delete next[event.projectId]
           return next
         })
-        toast.error(event.error ?? 'The local preview stopped.', { title: 'Local preview stopped' })
+        const t = translator('workbench')
+        toast.error(event.error ?? t('preview.stopped'), { title: t('preview.stoppedTitle') })
       }),
     [toast]
   )
@@ -1082,9 +1086,10 @@ export default function Workbench({
 
   const executeDeploy = useCallback(
     async (projectId: string, workspace?: string, itemName?: string): Promise<DeployResult> => {
+      const t = translator('workbench')
       if (authActionRef.current) {
-        const error = 'Wait for Fabric authentication to finish, then publish again.'
-        toast.error(error, { title: 'Publishing paused' })
+        const error = t('publish.waitForAuth')
+        toast.error(error, { title: t('publish.paused') })
         return { ok: false, outcome: 'error', error }
       }
       deployingIdRef.current = projectId
@@ -1103,10 +1108,7 @@ export default function Workbench({
             if (!login.ok) {
               result = {
                 ...result,
-                error: authErrorMessage(
-                  login.error,
-                  'Fabric sign-in did not complete. Please try again.'
-                )
+                error: authErrorMessage(login.error, t('auth.fabricSignInFailed'))
               }
             } else {
               await onAuthChanged()
@@ -1120,7 +1122,7 @@ export default function Workbench({
           result = {
             ok: false,
             outcome: result.outcome,
-            error: authErrorMessage(reason, 'Publishing didn’t finish. Please try again.')
+            error: authErrorMessage(reason, t('publish.didNotFinishRetry'))
           }
         }
         // What Fabric answered, for the workspace picker: it turned the app down
@@ -1134,7 +1136,7 @@ export default function Workbench({
           (result.outcome === 'not-signed-in' || result.outcome === 'auth-cache-error')
         ) {
           // Don't open more sign-in flows for publishes queued behind a failed login.
-          deployQueueRef.current.cancelPending('Sign in to Fabric before publishing again.')
+          deployQueueRef.current.cancelPending(t('publish.signInFirst'))
         }
         // A live preview kept on screen through this publish closes with it, in
         // the same render, so the published app (now with the changes) replaces it.
@@ -1155,8 +1157,8 @@ export default function Workbench({
         // surface failures wherever they are. Success needs no toast — it's
         // already reflected in the preview pane and the publish status.
         if (!result.ok) {
-          toast.error(result.error ?? 'Publishing didn’t finish.', {
-            title: 'Couldn’t publish'
+          toast.error(result.error ?? t('publish.didNotFinish'), {
+            title: t('publish.failedTitle')
           })
         } else {
           // Draw the app again for Home and the gallery, from the published version.
@@ -1170,8 +1172,8 @@ export default function Workbench({
         try {
           await refreshProjects()
         } catch (reason) {
-          toast.error(authErrorMessage(reason, 'Could not refresh the project after publishing.'), {
-            title: 'Project refresh failed'
+          toast.error(authErrorMessage(reason, t('publish.refreshFailed')), {
+            title: t('project.refreshFailedTitle')
           })
         }
         // Failures can reveal an expired session; never leave the app bar's account stale.
@@ -1209,9 +1211,8 @@ export default function Workbench({
     async (projectId: string, workspace?: string, itemName?: string): Promise<void> => {
       // A chat turn holds the project's source until it finishes: publishing now could only fail.
       if ((chatsRef.current[projectId] ?? []).some((m) => m.role === 'assistant' && m.pending)) {
-        toast.info('Copilot is still working on this app. Publish it once the turn finishes.', {
-          title: 'Publishing waits for Copilot'
-        })
+        const t = translator('workbench')
+        toast.info(t('publish.waitForTurn'), { title: t('publish.waitForTurnTitle') })
         return
       }
       // Team apps are published by their pipeline: save to the working branch instead.
@@ -1300,10 +1301,8 @@ export default function Workbench({
       const conflict = plan.conflict
       if (!conflict) return null
       if (!hasPortChoice(conflict, context)) {
-        toast.info(
-          `localhost:${conflict.port} is in use, so this turn shows your published app. Fabricator will ask again with your next message.`,
-          { title: 'Live preview skipped' }
-        )
+        const t = translator('workbench')
+        toast.info(t('port.skipped', { port: conflict.port }), { title: t('port.skippedTitle') })
         return null
       }
       portResolveRef.current?.(null)
@@ -1320,6 +1319,7 @@ export default function Workbench({
     const prompt = portPromptRef.current
     const port = prompt?.conflict.suggestedPort
     if (!prompt || port === undefined || prompt.busy) return
+    const t = translator('workbench')
     setPortPrompt((p) => p && { ...p, busy: 'register', error: null, log: [] })
     const register = (): Promise<DeployResult> => window.api.dev.registerPort(prompt.projectId, port)
     let result: DeployResult
@@ -1334,17 +1334,23 @@ export default function Workbench({
         } else {
           result = {
             ...result,
-            error: authErrorMessage(login.error, 'Fabric sign-in did not complete. Please try again.')
+            error: authErrorMessage(login.error, t('auth.fabricSignInFailed'))
           }
         }
       }
     } catch (reason) {
-      result = { ok: false, outcome: 'error', error: authErrorMessage(reason, 'The port could not be registered.') }
+      result = {
+        ok: false,
+        outcome: 'error',
+        error: authErrorMessage(reason, t('port.registerFailed'))
+      }
     }
     if (!mountedRef.current) return
     setGitRefresh((n) => n + 1)
     if (!result.ok) {
-      setPortPrompt((p) => p && { ...p, busy: null, error: result.error ?? 'The port could not be registered.' })
+      setPortPrompt(
+        (p) => p && { ...p, busy: null, error: result.error ?? t('port.registerFailed') }
+      )
       if (result.outcome === 'not-signed-in' || result.outcome === 'auth-cache-error') {
         void refreshAuthWithFeedback()
       }
@@ -1363,22 +1369,21 @@ export default function Workbench({
     const { holder, occupant, port } = prompt.conflict
     const backend = holder?.kind === 'backend' ? holder.projectId : null
     if (!backend && occupant === undefined) return
+    const t = translator('workbench')
     setPortPrompt((p) => p && { ...p, busy: 'stop', error: null })
     let freed: number | undefined = port
     try {
       if (backend) {
         await window.api.local.stop(backend)
         freed = (await replanPort(prompt.projectId)).port
-        if (freed === undefined)
-          throw new Error(`localhost:${port} is still in use. Try again, or use another address.`)
+        if (freed === undefined) throw new Error(t('port.stillInUse', { port }))
       } else if (occupant) {
         await window.api.dev.freePort(port, occupant.pid)
       }
     } catch (reason) {
       if (!mountedRef.current) return
       setPortPrompt(
-        (p) =>
-          p && { ...p, busy: null, error: authErrorMessage(reason, 'That could not be stopped.') }
+        (p) => p && { ...p, busy: null, error: authErrorMessage(reason, t('port.stopFailed')) }
       )
       return
     }
@@ -1448,8 +1453,9 @@ export default function Workbench({
           }
         }
         if (!res.ok && res.outcome !== 'unsupported') {
-          toast.error(res.error ?? 'The local Vite server could not be started.', {
-            title: 'Local preview failed'
+          const t = translator('workbench')
+          toast.error(res.error ?? t('preview.startFailed'), {
+            title: t('preview.startFailedTitle')
           })
         }
         setDevServers((all) => {
@@ -1520,8 +1526,9 @@ export default function Workbench({
     async (projectId: string, packagesChanged = false): Promise<void> => {
       setGitRefresh((n) => n + 1)
       if (!packagesChanged) return
-      const notice = toast.info('Installing them and restarting your app…', {
-        title: 'Your app’s packages changed',
+      const t = translator('workbench')
+      const notice = toast.info(t('packages.installing'), {
+        title: t('packages.changedTitle'),
         duration: 0
       })
       const kept = Boolean(devServersRef.current[projectId]?.kept)
@@ -1531,11 +1538,11 @@ export default function Workbench({
       }
       try {
         await window.api.local.reinstallPackages(projectId)
-        toast.success('Your app runs on its new packages.', { title: 'Installed the packages' })
+        toast.success(t('packages.installed'), { title: t('packages.installedTitle') })
       } catch (reason) {
         const failed = toLocalBackendError(reason)
         toast.error(failed.hint ? `${failed.message} ${failed.hint}` : failed.message, {
-          title: 'Couldn’t install your app’s packages'
+          title: t('packages.failedTitle')
         })
       } finally {
         toast.dismiss(notice)
@@ -1555,6 +1562,7 @@ export default function Workbench({
   // `publishesAfterTurn`), publish what the agent changed.
   const afterTurn = useCallback(
     async (projectId: string, result: ChatTurnResult): Promise<void> => {
+      const t = translator('workbench')
       previewSkippedRef.current.delete(projectId)
       const prompt = portPromptRef.current
       if (prompt?.projectId === projectId && prompt.context === 'plan' && !prompt.busy) settlePortPrompt(null)
@@ -1631,8 +1639,8 @@ export default function Workbench({
       try {
         await refreshProjects()
       } catch (reason) {
-        toast.error(authErrorMessage(reason, 'Could not refresh the project after coding.'), {
-          title: 'Project refresh failed'
+        toast.error(authErrorMessage(reason, t('turn.refreshFailed')), {
+          title: t('project.refreshFailedTitle')
         })
       }
       // History and the published app's check read the version this turn saved.
@@ -1641,14 +1649,14 @@ export default function Workbench({
       void window.api.chat
         .saveHistory(projectId, toStored(chatsRef.current[projectId] ?? []))
         .catch((reason) => {
-          toast.error(authErrorMessage(reason, 'Could not save the conversation.'), {
-            title: 'Chat history save failed'
+          toast.error(authErrorMessage(reason, t('turn.saveChatFailed')), {
+            title: t('turn.saveChatFailedTitle')
           })
         })
       // The agent may have changed the Rayfin deps (e.g. an upgrade) — re-check.
       void refreshRayfinVer(projectId).catch((reason) => {
-        toast.error(authErrorMessage(reason, 'Could not refresh the Rayfin version.'), {
-          title: 'Version check failed'
+        toast.error(authErrorMessage(reason, t('turn.versionCheckFailed')), {
+          title: t('turn.versionCheckFailedTitle')
         })
       })
       if (!result.ok || !mountedRef.current) return
@@ -1674,8 +1682,10 @@ export default function Workbench({
         release()
         if (!mountedRef.current) return
         toast.error(
-          `${authErrorMessage(reason, 'Could not check for changes to publish.')} Select Publish to publish your changes.`,
-          { title: 'Couldn’t publish automatically' }
+          t('turn.autoPublishCheckFailed', {
+            error: authErrorMessage(reason, t('turn.changesCheckFailed'))
+          }),
+          { title: t('turn.autoPublishFailedTitle') }
         )
       }
     },
@@ -1758,7 +1768,7 @@ export default function Workbench({
       setChatOutbound({
         id: `rayfin-up-${Date.now()}`,
         projectId: id,
-        display: `Update Rayfin to ${to}`,
+        display: translator('workbench')('rayfin.updateTo', { version: to }),
         prompt
       })
       return true
@@ -1773,7 +1783,7 @@ export default function Workbench({
     if (!id || !active || active.id !== id || !versionInfo || rayfinVerForRef.current !== id) return
     pendingRayfinUpdateRef.current = null
     if (!requestRayfinUpdate(versionInfo)) {
-      toast.info(`Fabricator didn’t find a Rayfin update for ${active.name} just now.`)
+      toast.info(translator('workbench')('rayfin.noUpdate', { name: active.name }))
     }
   }, [active, versionInfo, requestRayfinUpdate, toast])
 
@@ -2067,7 +2077,7 @@ export default function Workbench({
 
   async function selectProject(p: StudioProject): Promise<void> {
     if (removingIds.has(p.id)) {
-      toast.info(`${p.name} is being removed.`)
+      toast.info(t('project.beingRemoved', { name: p.name }))
       return
     }
     setNotice(null)
@@ -2089,7 +2099,7 @@ export default function Workbench({
       setGallery(null)
       setShowHome(false)
       if (!requestRayfinUpdate(versionInfo)) {
-        toast.info(`Fabricator didn’t find a Rayfin update for ${p.name} just now.`)
+        toast.info(t('rayfin.noUpdate', { name: p.name }))
       }
       return
     }
@@ -2102,7 +2112,14 @@ export default function Workbench({
     try {
       setProjects(await window.api.projects.setPinned(p.id, pinned))
     } catch (reason) {
-      toast.error(errorMessage(reason, `Couldn’t ${pinned ? 'pin' : 'unpin'} ${p.name}.`))
+      toast.error(
+        errorMessage(
+          reason,
+          pinned
+            ? t('project.pinFailed', { name: p.name })
+            : t('project.unpinFailed', { name: p.name })
+        )
+      )
     }
   }
 
@@ -2111,7 +2128,7 @@ export default function Workbench({
     try {
       await window.api.projects.reveal(p.id)
     } catch (reason) {
-      toast.error(errorMessage(reason, `Couldn’t show ${p.name}’s folder.`))
+      toast.error(errorMessage(reason, t('project.revealFailed', { name: p.name })))
     }
   }
 
@@ -2133,7 +2150,7 @@ export default function Workbench({
       if (!path) return
       const result = await window.api.projects.open(path)
       if (!result.ok) {
-        setNotice(result.error ?? 'Could not open that folder.')
+        setNotice(result.error ?? t('project.openFolderFailed'))
         return
       }
       await refreshProjects()
@@ -2149,7 +2166,7 @@ export default function Workbench({
       const path = await window.api.projects.pickImport()
       if (path) queueImports([path])
     } catch (reason) {
-      setNotice(errorMessage(reason, 'Could not open that file.'))
+      setNotice(errorMessage(reason, t('project.openFileFailed')))
     }
   }
 
@@ -2157,7 +2174,9 @@ export default function Workbench({
   async function showImported(project: StudioProject): Promise<void> {
     setGallery(null)
     await refreshProjects()
-    toast.success(`It’s in ${displayPath(project.path)}.`, { title: `Imported ${project.name}` })
+    toast.success(t('project.importedWhere', { path: displayPath(project.path) }), {
+      title: t('project.imported', { name: project.name })
+    })
   }
 
   async function changeWorkspaceRoot(): Promise<void> {
@@ -2208,13 +2227,13 @@ export default function Workbench({
   async function renameProject(p: StudioProject, name: string): Promise<string | null> {
     try {
       const result = await window.api.projects.rename(p.id, name)
-      if (!result.ok) return result.error ?? 'Could not rename the project.'
+      if (!result.ok) return result.error ?? t('project.renameFailed')
       await refreshProjects()
       return null
     } catch (error) {
       return error instanceof Error && error.message
         ? error.message
-        : 'Could not rename the project. Please try again.'
+        : t('project.renameFailedRetry')
     }
   }
 
@@ -2226,16 +2245,14 @@ export default function Workbench({
       const result = await window.api.auth.logoutRayfin()
       if (!mountedRef.current) return
       if (!result.ok) {
-        throw new Error(
-          authErrorMessage(result.error, 'Fabric sign-out did not complete. Please try again.')
-        )
+        throw new Error(authErrorMessage(result.error, t('auth.fabricSignOutFailed')))
       }
       // Stay in the workbench (and keep unsent drafts): only Fabric changed.
       await refreshAuthWithFeedback()
     } catch (reason) {
       if (!mountedRef.current) return
-      toast.error(authErrorMessage(reason, 'Fabric sign-out did not complete. Please try again.'), {
-        title: 'Sign-out failed'
+      toast.error(authErrorMessage(reason, t('auth.fabricSignOutFailed')), {
+        title: t('auth.signOutFailedTitle')
       })
       await refreshAuthWithFeedback()
     } finally {
@@ -2252,15 +2269,13 @@ export default function Workbench({
       const res = await window.api.auth.loginRayfin()
       if (!mountedRef.current) return
       if (!res.ok) {
-        throw new Error(
-          authErrorMessage(res.error, 'Fabric sign-in did not complete. Please try again.')
-        )
+        throw new Error(authErrorMessage(res.error, t('auth.fabricSignInFailed')))
       }
       await onAuthChanged()
     } catch (reason) {
       if (!mountedRef.current) return
-      toast.error(authErrorMessage(reason, 'Fabric sign-in did not complete. Please try again.'), {
-        title: 'Sign-in failed'
+      toast.error(authErrorMessage(reason, t('auth.fabricSignInFailed')), {
+        title: t('auth.signInFailedTitle')
       })
     } finally {
       authActionRef.current = false
@@ -2282,7 +2297,7 @@ export default function Workbench({
     const target = authRefreshTarget
     if (!target) return
     if (authActionRef.current || deployingIdRef.current) {
-      setAuthRefreshError('Wait for publishing or the current sign-in to finish, then retry.')
+      setAuthRefreshError(t('authRefresh.busy'))
       return
     }
     authActionRef.current = true
@@ -2293,24 +2308,15 @@ export default function Workbench({
       const result = await window.api.auth.refreshRayfin(target.projectId, target.tenant)
       if (!mountedRef.current) return
       if (!result.ok) {
-        throw new Error(
-          authErrorMessage(
-            result.error,
-            'Fabric authentication could not be refreshed. Please retry.'
-          )
-        )
+        throw new Error(authErrorMessage(result.error, t('authRefresh.failed')))
       }
       await onAuthChanged()
       if (!mountedRef.current) return
       setAuthRefreshTarget(null)
-      toast.info('Fabric authentication is verified. Publish again to retry.', {
-        title: 'Fabric authentication refreshed'
-      })
+      toast.info(t('authRefresh.verified'), { title: t('authRefresh.verifiedTitle') })
     } catch (reason) {
       if (!mountedRef.current) return
-      setAuthRefreshError(
-        authErrorMessage(reason, 'Fabric authentication could not be refreshed. Please retry.')
-      )
+      setAuthRefreshError(authErrorMessage(reason, t('authRefresh.failed')))
       await refreshAuthWithFeedback()
     } finally {
       authActionRef.current = false
@@ -2325,10 +2331,7 @@ export default function Workbench({
   async function reportIssue(): Promise<void> {
     const bundlePath = await runReportIssue(window.api, versions)
     if (bundlePath) {
-      toast.info(
-        'A diagnostics file was saved and the logs folder opened — attach it to your bug report.',
-        { title: 'Diagnostics exported' }
-      )
+      toast.info(t('diagnostics.savedForReport'), { title: t('diagnostics.exportedTitle') })
     }
   }
 
@@ -2337,12 +2340,10 @@ export default function Workbench({
   async function exportDiagnostics(): Promise<void> {
     try {
       await window.api.diagnostics.export()
-      toast.info('A diagnostics file was saved and the logs folder opened.', {
-        title: 'Diagnostics exported'
-      })
+      toast.info(t('diagnostics.saved'), { title: t('diagnostics.exportedTitle') })
     } catch (reason) {
-      toast.error(authErrorMessage(reason, 'The diagnostics file could not be written.'), {
-        title: "Couldn't export diagnostics"
+      toast.error(authErrorMessage(reason, t('diagnostics.writeFailed')), {
+        title: t('diagnostics.exportFailedTitle')
       })
     }
   }
@@ -2526,10 +2527,7 @@ export default function Workbench({
     void (async () => {
       const bundlePath = await runReportIssue(window.api, versions, navigator.userAgent, issue)
       if (bundlePath) {
-        toast.info(
-          'A diagnostics file was saved and the logs folder opened — attach it to your bug report.',
-          { title: 'Diagnostics exported' }
-        )
+        toast.info(t('diagnostics.savedForReport'), { title: t('diagnostics.exportedTitle') })
       }
     })()
   }
@@ -2560,13 +2558,13 @@ export default function Workbench({
   const migrationWaiting = !active
     ? undefined
     : deploys[active.id]?.running
-      ? 'Waiting for publishing to finish.'
+      ? t('migration.waitPublish')
       : activeSyncing
-        ? 'Waiting for the save to GitHub.'
+        ? t('migration.waitSave')
         : activeChatBusy
-          ? 'Waiting for Copilot to finish.'
+          ? t('migration.waitCopilot')
           : !projectToolsReady
-            ? 'Waiting for the app’s dependencies.'
+            ? t('migration.waitDependencies')
             : undefined
   const migration = useMigration({
     enabled: migrationEnabled,
@@ -2583,7 +2581,7 @@ export default function Workbench({
         migration: turn.migration
       })
     },
-    onError: (message) => toast.error(message, { title: 'Report migration' })
+    onError: (message) => toast.error(message, { title: t('migration.title') })
   })
   migrationRef.current = migration
   /** The model a report migration uses, chosen on the New app from Power BI step. */
@@ -2597,20 +2595,21 @@ export default function Workbench({
   /** Start migrating a picked report into the project just created for it. */
   const startMigration = useCallback(
     async (projectId: string, pick: ReportPick, model: ModelSelection): Promise<void> => {
+      const t = translator('workbench')
       try {
         // The project's chat model, so its migration turns use the one chosen.
         await window.api.chat.setOptions(projectId, selectionArgs(model))
         void refreshProjects()
       } catch (reason) {
-        toast.error(authErrorMessage(reason, 'Could not set the migration’s Copilot model.'), {
-          title: 'Report migration'
+        toast.error(authErrorMessage(reason, t('migration.modelFailed')), {
+          title: t('migration.title')
         })
       }
       try {
         await window.api.migration.start(projectId, pick.source, pick.pages)
       } catch (reason) {
-        toast.error(authErrorMessage(reason, 'Could not start migrating the report.'), {
-          title: 'Report migration'
+        toast.error(authErrorMessage(reason, t('migration.startFailed')), {
+          title: t('migration.title')
         })
       }
     },
@@ -2640,6 +2639,11 @@ export default function Workbench({
       ? localFallbackReason(localStatus, { team: activeTeamApp })
       : null
   const fallbackCode = localId && activeFabricBackend ? localFallbackCode(localStatus) : null
+  /** The same reason in English, for the journal. */
+  const fallbackLogged =
+    fallbackCode && fallbackNow
+      ? localFallbackReason(localStatus, { team: activeTeamApp, english: true })
+      : null
   const activeFallback = localId ? (fallbacks[localId] ?? fallbackNow) : null
   /** The open app runs on its local backend. */
   const runsLocally = Boolean(localId) && !activeFallback
@@ -2653,7 +2657,9 @@ export default function Workbench({
       )
       if (fallbackCode && !reportedFallbacksRef.current.has(localId)) {
         reportedFallbacksRef.current.add(localId)
-        void window.api.local.reportFallback(localId, fallbackCode, fallbackNow).catch(() => {})
+        void window.api.local
+          .reportFallback(localId, fallbackCode, fallbackLogged ?? fallbackNow)
+          .catch(() => {})
       }
       return
     }
@@ -2666,7 +2672,7 @@ export default function Workbench({
         return next
       })
     }
-  }, [localId, fallbackNow, fallbackCode, activeFabricBackend, localStatus?.state])
+  }, [localId, fallbackNow, fallbackLogged, fallbackCode, activeFabricBackend, localStatus?.state])
   // Falling back, the local backend stops: its ports go to the live preview on
   // the published backend.
   useEffect(() => {
@@ -2900,10 +2906,10 @@ export default function Workbench({
           window.api.openInEditor(project.id).then(
             (res) => {
               if (!res.opened) {
-                toast.info('VS Code isn’t installed, so we opened the project folder instead.')
+                toast.info(t('editor.openedFolderInstead'))
               }
             },
-            (reason) => toast.error(errorMessage(reason, 'Fabricator couldn’t open VS Code.'))
+            (reason) => toast.error(errorMessage(reason, t('editor.openFailed')))
           )
         },
         openWorkspace: (workspace) =>
@@ -2915,7 +2921,7 @@ export default function Workbench({
         openProjectById: (projectId) => {
           const project = projects?.projects.find((p) => p.id === projectId)
           if (!project) {
-            toast.error('That project isn’t in Fabricator anymore.')
+            toast.error(t('project.gone'))
             return
           }
           setTeamMap(null)
@@ -3046,17 +3052,21 @@ export default function Workbench({
           <div className="app-bar-start">
             {teamMap && !showCreate && !showClone && !showMigrate ? (
               <BackToProject
-                name={teamMap.from === 'project' && active ? active.name : 'projects'}
-                title={teamMap.from === 'project' && active ? `Return to ${active.name}` : 'Return to your projects'}
+                name={teamMap.from === 'project' && active ? active.name : undefined}
+                title={
+                  teamMap.from === 'project' && active
+                    ? t('appBar.returnTo', { name: active.name })
+                    : t('appBar.returnToProjects')
+                }
                 onClick={() => setTeamMap(null)}
               />
             ) : gallery && !showCreate && !showClone && !showMigrate ? (
               <BackToProject
-                name={gallery.from === 'project' && active ? active.name : 'projects'}
+                name={gallery.from === 'project' && active ? active.name : undefined}
                 title={
                   gallery.from === 'project' && active
-                    ? `Return to ${active.name}`
-                    : 'Return to your projects'
+                    ? t('appBar.returnTo', { name: active.name })
+                    : t('appBar.returnToProjects')
                 }
                 onClick={() => setGallery(null)}
               />
@@ -3076,12 +3086,12 @@ export default function Workbench({
                 type="button"
                 className="app-search"
                 onClick={() => setShowSearch(true)}
-                aria-label="Search"
+                aria-label={t('actions.search')}
                 aria-keyshortcuts={isMac() ? 'Meta+K' : 'Control+K'}
-                title={`Search projects, actions and docs, or ask Help (${shortcut('K')})`}
+                title={t('appBar.searchTitle', { shortcut: shortcut('K') })}
               >
                 <Codicon name="search" className="app-search-ico" />
-                <span className="app-search-label">Search</span>
+                <span className="app-search-label">{t('actions.search')}</span>
                 <span className="app-search-keys" aria-hidden="true">
                   <kbd>{modKey()}</kbd>
                   <kbd>K</kbd>
@@ -3266,9 +3276,13 @@ export default function Workbench({
             void refreshProjects()
             if (migrationPick && result.project) void startMigration(result.project.id, migrationPick, migrationModel)
             setMigrationPick(null)
-            if (result.error) toast.error(result.error, { title: 'Not on GitHub yet' })
+            if (result.error) toast.error(result.error, { title: t('team.notOnGitHub') })
           }}
-          source={migrationPick ? { label: 'From Power BI', detail: describePick(migrationPick) } : undefined}
+          source={
+            migrationPick
+              ? { label: t('migration.fromPowerBi'), detail: describePick(migrationPick) }
+              : undefined
+          }
           initialName={
             migrationPick
               ? toProjectName(migrationPick.source.reportName)
@@ -3304,7 +3318,7 @@ export default function Workbench({
                   className={`project-pane${showHome || teamMap || gallery ? ' project-pane--hidden' : ''}`}
                 >
                   {viewMode === 'code' ? (
-                    <Suspense fallback={<div className="code-empty">Loading editor…</div>}>
+                    <Suspense fallback={<div className="code-empty">{t('editor.loading')}</div>}>
                       <CodeViewer
                         project={active}
                         refreshKey={gitRefresh}
@@ -3379,9 +3393,7 @@ export default function Workbench({
                               (Boolean(active.team) && teamWork.syncing(active.id))
                             }
                             blockSubmitWhileDeploying
-                            submitBlockedTitle={
-                              active.team ? 'Saving to GitHub — sending resumes in a moment' : undefined
-                            }
+                            submitBlockedTitle={active.team ? t('team.savingToGitHub') : undefined}
                             eventsManagedExternally
                             onOpenMention={openMention}
                             draft={drafts[active.id] ?? ''}
@@ -3418,8 +3430,8 @@ export default function Workbench({
                           className="pane-divider"
                           role="separator"
                           aria-orientation="vertical"
-                          aria-label="Resize chat and preview"
-                          title="Drag to resize · double-click to reset"
+                          aria-label={t('divider.label')}
+                          title={t('divider.title')}
                           onMouseDown={onDividerDown}
                           onDoubleClick={resetSplit}
                         >
@@ -3486,11 +3498,11 @@ export default function Workbench({
                           <div
                             className={`project-loading${previewLoading.fading ? ' project-loading--out' : ''}`}
                             role="status"
-                            aria-label="Loading project"
+                            aria-label={t('loading.label')}
                           >
                             <span className="project-loading-spinner" />
                             <span className="project-loading-label">
-                              Loading {previewLoading.name}…
+                              {t('loading.project', { name: previewLoading.name })}
                             </span>
                           </div>
                         )}
@@ -3556,7 +3568,7 @@ export default function Workbench({
                 onOpenProject={(projectId) => {
                   const project = projects?.projects.find((p) => p.id === projectId)
                   if (project) void selectProject(project)
-                  else toast.error('That project isn’t in Fabricator anymore.')
+                  else toast.error(t('project.gone'))
                 }}
                 onNewProject={() => {
                   setGallery(null)
@@ -3640,10 +3652,21 @@ export default function Workbench({
             {active.team ? (
               <span
                 className="statusbar-item team-status-item"
-                title={`Team workspace${activeTeamWorkspace ? ` ${activeTeamWorkspace.repo}` : ''}. Working branch: ${active.team.branch ?? 'none'}`}
+                title={
+                  activeTeamWorkspace
+                    ? active.team.branch != null
+                      ? t('statusBar.teamRepoBranch', {
+                          repo: activeTeamWorkspace.repo,
+                          branch: active.team.branch
+                        })
+                      : t('statusBar.teamRepoNoBranch', { repo: activeTeamWorkspace.repo })
+                    : active.team.branch != null
+                      ? t('statusBar.teamBranch', { branch: active.team.branch })
+                      : t('statusBar.teamNoBranch')
+                }
               >
                 <span className="codicon codicon-organization statusbar-ico" aria-hidden="true" />
-                {activeTeamWorkspace?.name ?? 'Team'}
+                {activeTeamWorkspace?.name ?? t('statusBar.team')}
                 {active.team.branch ? ` · ${branchLabel(active.team.branch)}` : ''}
               </span>
             ) : (
@@ -3678,8 +3701,8 @@ export default function Workbench({
               applyUiScale(uiScale)
               onSettingsChange({ uiScale })
             }}
-            title="Interface zoom — scales the whole UI (and Point & Edit in the preview)"
-            aria-label="Interface zoom"
+            title={t('statusBar.zoomTitle')}
+            aria-label={t('statusBar.zoom')}
           >
             {UI_SCALES.map((s) => (
               <option key={s} value={String(s)}>
@@ -3687,7 +3710,7 @@ export default function Workbench({
               </option>
             ))}
           </StatusMenu>
-          <span className="statusbar-item" title="Rayfin Fabricator version">
+          <span className="statusbar-item" title={t('statusBar.version')}>
             v{versions?.app ?? '—'}
           </span>
         </span>
@@ -3711,14 +3734,17 @@ export default function Workbench({
               }}
               aria-pressed={shellShowing && onProjectScreen}
               aria-keyshortcuts="Control+`"
-              title={`Terminal — run commands in ${active.name}’s folder (${isMac() ? '⌃`' : 'Ctrl+`'})`}
+              title={t('statusBar.terminalTitle', {
+                name: active.name,
+                shortcut: isMac() ? '⌃`' : `${t('keys.ctrl')}+\``
+              })}
             >
               <Codicon name="terminal" className="statusbar-ico" />
-              Terminal
+              {t('statusBar.terminal')}
               {liveCount(activeTerminals) > 0 && (
                 <span
                   className="statusbar-count"
-                  aria-label={`${liveCount(activeTerminals)} running`}
+                  aria-label={t('statusBar.running', { count: liveCount(activeTerminals) })}
                 >
                   {liveCount(activeTerminals)}
                 </span>
@@ -3728,10 +3754,10 @@ export default function Workbench({
           <button
             className="statusbar-report statusbar-help"
             onClick={() => openHelp()}
-            title="Ask Help — debug a problem, browse the docs, or report an issue (Ctrl+J)"
+            title={t('statusBar.helpTitle', { shortcut: `${t('keys.ctrl')}+J` })}
           >
             <Codicon name="comment-discussion" className="statusbar-ico" />
-            Help
+            {t('statusBar.help')}
           </button>
         </span>
       </footer>
@@ -3871,11 +3897,14 @@ export default function Workbench({
             teamEnabled
               ? async (p, workspaceId) => {
                   const result = await window.api.team.moveProject(workspaceId, p.id)
-                  if (!result.project) return result.error ?? 'Could not move the project.'
+                  if (!result.project) return result.error ?? t('team.moveFailed')
                   setShowHome(false)
                   await refreshProjects()
-                  if (result.error) toast.error(result.error, { title: 'Not on GitHub yet' })
-                  else toast.success(`${p.name} is now in the team workspace.`, { title: 'Moved' })
+                  if (result.error) toast.error(result.error, { title: t('team.notOnGitHub') })
+                  else
+                    toast.success(t('team.moved', { name: p.name }), {
+                      title: t('team.movedTitle')
+                    })
                   return null
                 }
               : undefined
@@ -3898,9 +3927,9 @@ export default function Workbench({
           project={exporting}
           busy={
             isTurnRunning(exporting.id)
-              ? `Copilot is still working on ${exporting.name}. Export it once the turn finishes.`
+              ? t('export.waitForTurn', { name: exporting.name })
               : deploys[exporting.id]?.running
-                ? `${exporting.name} is publishing. Export it once it finishes.`
+                ? t('export.waitForPublish', { name: exporting.name })
                 : undefined
           }
           onClose={() => setExporting(null)}
@@ -3959,12 +3988,12 @@ export default function Workbench({
 
       {confirmDeploy && (
         <ConfirmModal
-          title="You have changes to get first"
-          confirmLabel="Get latest first"
-          busyLabel="Getting latest…"
+          title={t('deployGuard.title')}
+          confirmLabel={t('deployGuard.getLatest')}
+          busyLabel={t('deployGuard.gettingLatest')}
           busy={deployGuardBusy}
-          secondaryLabel="Publish anyway"
-          cancelLabel="Cancel"
+          secondaryLabel={t('deployGuard.publishAnyway')}
+          cancelLabel={t('actions.cancel')}
           onConfirm={() => {
             void (async () => {
               const c = confirmDeploy
@@ -3974,7 +4003,7 @@ export default function Workbench({
               setGitRefresh((n) => n + 1)
               setDeployGuardBusy(false)
               if (!res.ok) {
-                setDeployGuardError(res.error ?? 'Could not get the latest changes.')
+                setDeployGuardError(res.error ?? t('deployGuard.pullFailed'))
                 return
               }
               setConfirmDeploy(null)
@@ -3994,11 +4023,12 @@ export default function Workbench({
           message={
             <>
               <p>
-                The remote has{' '}
-                <strong>
-                  {confirmDeploy.behind} change{confirmDeploy.behind === 1 ? '' : 's'}
-                </strong>{' '}
-                you haven’t downloaded yet. Publishing now sends your current version without them.
+                <Trans
+                  t={t}
+                  i18nKey="deployGuard.message"
+                  count={confirmDeploy.behind}
+                  components={{ strong: <strong /> }}
+                />
               </p>
               {deployGuardError && <p className="confirm-error">{deployGuardError}</p>}
             </>
@@ -4008,34 +4038,30 @@ export default function Workbench({
 
       {authRefreshTarget && (
         <ConfirmModal
-          title="Refresh Fabric authentication"
-          confirmLabel="Clear credentials and sign in"
+          title={t('authRefresh.title')}
+          confirmLabel={t('authRefresh.confirm')}
           busy={refreshingAuth}
-          busyLabel="Refreshing authentication…"
+          busyLabel={t('authRefresh.busyLabel')}
           onConfirm={() => void refreshFabricAuthentication()}
           onCancel={() => setAuthRefreshTarget(null)}
           message={
             <>
               <p>
-                Run <code>rayfin logout</code> and <code>rayfin login</code> with{' '}
-                <strong>{authRefreshTarget.name}</strong>&apos;s CLI, then verify the new Fabric credential.
-                This lets Rayfin recover stale token-cache locks and replace expired credentials.
+                <Trans
+                  t={t}
+                  i18nKey="authRefresh.message"
+                  values={{ name: authRefreshTarget.name }}
+                  components={{ code: <code />, strong: <strong /> }}
+                />
               </p>
-              <p>
-                Rayfin CLI credentials are shared across projects. This does not sign out of
-                Copilot, Azure CLI, or the preview browser, and it doesn’t publish your app again.
-                Update older projects to Rayfin 1.35.1 or newer using the Rayfin version control.
-              </p>
+              <p>{t('authRefresh.shared')}</p>
               {authRefreshError && (
                 <p className="confirm-error" role="alert">
                   {authRefreshError}
                 </p>
               )}
               {authRefreshLog.length > 0 && (
-                <pre
-                  className="deploy-log deploy-log--static"
-                  aria-label="Authentication refresh log"
-                >
+                <pre className="deploy-log deploy-log--static" aria-label={t('authRefresh.log')}>
                   {authRefreshLog.join('')}
                 </pre>
               )}
@@ -4049,7 +4075,7 @@ export default function Workbench({
           className="signout-overlay"
           role="alertdialog"
           aria-busy="true"
-          aria-label="Signing out"
+          aria-label={t('signOut.label')}
         >
           <SuppressPreview />
           <div className="signout-card">
@@ -4058,8 +4084,8 @@ export default function Workbench({
               <span className="signout-ring" />
             </div>
             <div className="signout-text">
-              <strong>Signing you out…</strong>
-              <span>Ending your Fabric session securely</span>
+              <strong>{t('signOut.title')}</strong>
+              <span>{t('signOut.detail')}</span>
             </div>
           </div>
         </div>

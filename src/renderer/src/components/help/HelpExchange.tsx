@@ -1,8 +1,9 @@
 import { useState, type JSX } from 'react'
 import type { HelpAction, HelpIssueDraft } from '@shared/ipc'
+import { currentLanguage, formatLocale, translator, useTranslation } from '../../i18n'
 import Markdown from '../Markdown'
 import { Codicon } from '../icons'
-import type { Exchange } from './conversation'
+import { HELP_FAILED, type Exchange } from './conversation'
 import { HelpWorkLog } from './HelpWorkLog'
 import { HelpRayThinking } from './HelpRay'
 
@@ -55,6 +56,7 @@ export function ExchangeAnswer({
   onAction: (action: HelpAction) => void
   onReportIssue: (issue: HelpIssueDraft) => void
 }): JSX.Element {
+  const { t } = useTranslation('help')
   const { status } = exchange
   const working = status === 'thinking' || status === 'streaming'
 
@@ -108,10 +110,10 @@ export function ExchangeAnswer({
       {status === 'error' && (
         <p className="help-err">
           <Codicon name="error" />
-          {exchange.error}
+          {exchange.error === HELP_FAILED ? t('answer.failed') : exchange.error}
         </p>
       )}
-      {status === 'stopped' && <p className="help-stopped">Stopped.</p>}
+      {status === 'stopped' && <p className="help-stopped">{t('answer.stopped')}</p>}
       {status === 'done' && exchange.elapsedMs !== undefined && (
         <p className="help-meta">{formatElapsed(exchange.elapsedMs)}</p>
       )}
@@ -169,6 +171,7 @@ export function IssueDraftCard({
   onReport: () => void
 }): JSX.Element {
   const [open, setOpen] = useState(false)
+  const { t } = useTranslation('help')
   const feature = issue.kind === 'feature'
   return (
     <div className={`help-issue ${open ? 'is-open' : ''}`}>
@@ -179,7 +182,7 @@ export function IssueDraftCard({
         />
         <div className="help-issue-id">
           <span className="help-issue-kind">
-            {feature ? 'Feature request ready' : 'Bug report ready'}
+            {feature ? t('issue.featureReady') : t('issue.bugReady')}
           </span>
           <span className="help-issue-title">{issue.title}</span>
         </div>
@@ -187,23 +190,19 @@ export function IssueDraftCard({
       {open && (
         <div className="help-issue-body">
           <Markdown>{issue.body}</Markdown>
-          <p className="help-issue-note">
-            {feature
-              ? 'Review it on GitHub before you submit.'
-              : 'Your Fabricator version, system details and a diagnostics file are added when you report it. Review everything on GitHub before you submit.'}
-          </p>
+          <p className="help-issue-note">{feature ? t('issue.featureNote') : t('issue.bugNote')}</p>
         </div>
       )}
       <div className="help-issue-actions">
         <button className="help-action is-primary" onClick={onReport}>
           <Codicon name="github" className="help-action-icon" />
           <span className="help-action-label">
-            {feature ? 'Suggest this on GitHub' : 'Report this on GitHub'}
+            {feature ? t('issue.suggest') : t('issue.report')}
           </span>
           <Codicon name="link-external" className="help-action-go" />
         </button>
         <button className="help-issue-toggle" onClick={() => setOpen((v) => !v)}>
-          {open ? 'Hide' : 'Review it first'}
+          {open ? t('issue.hide') : t('issue.review')}
         </button>
       </div>
     </div>
@@ -211,9 +210,18 @@ export function IssueDraftCard({
 }
 
 export function formatElapsed(ms: number): string {
-  if (ms < 1000) return `${ms} ms`
+  const t = translator('help')
+  if (ms < 1000) return t('elapsed.ms', { ms })
   const seconds = ms / 1000
-  if (seconds < 60) return `${seconds.toFixed(1)} s`
+  if (seconds < 60) {
+    // Rounded as ever, then written with the language's decimal mark (2.5 s, 2,5 s).
+    const locale = currentLanguage() === 'en' ? 'en' : formatLocale()
+    const tenths = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    })
+    return t('elapsed.seconds', { seconds: tenths.format(Number(seconds.toFixed(1))) })
+  }
   const minutes = Math.floor(seconds / 60)
-  return `${minutes}m ${Math.round(seconds % 60)}s`
+  return t('elapsed.minutes', { minutes, seconds: Math.round(seconds % 60) })
 }

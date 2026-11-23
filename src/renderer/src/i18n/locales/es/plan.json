@@ -1,0 +1,71 @@
+{
+  "actionLabels": {
+    "interactive": "Implementar plan",
+    "autopilot": "Ejecutar en Autopilot",
+    "autopilotFleet": "Ejecutar con flota",
+    "exitOnly": "Aprobar plan"
+  },
+  "errors": {
+    "planningIncomplete": "La planificación no se completó.",
+    "executionIncomplete": "La ejecución del plan no se completó."
+  },
+  "phases": {
+    "researching": "Investigando el código base…",
+    "clarifying": "Algunas preguntas antes de redactar",
+    "drafting": "Redactando el plan…",
+    "review": "Plan listo para revisar",
+    "revising": "Modificando el plan…",
+    "executing": "Ejecutando el plan",
+    "completed": "Plan completado",
+    "failed": "Error en el plan",
+    "interruptedReview": "Se interrumpió la revisión",
+    "interruptedExecution": "Se interrumpió la ejecución"
+  },
+  "card": {
+    "expandProgress": "Expandir el progreso del plan",
+    "executing": "Ejecutando el plan",
+    "workingThrough": "Trabajando en el plan aprobado",
+    "revision": "Revisión {{number}}",
+    "collapseProgress": "Contraer el progreso del plan",
+    "collapse": "Contraer",
+    "progress": "Progreso del plan",
+    "stepsDone_one": "{{done}} de {{count}} paso completado",
+    "stepsDone_other": "{{done}} de {{count}} pasos completados",
+    "now": "Ahora:",
+    "showFewer": "Mostrar menos",
+    "showAll_one": "Mostrar {{count}} paso",
+    "showAll_other": "Mostrar los {{count}} pasos",
+    "reviewFull": "Revisar el plan completo",
+    "continuePlanning": "Continuar la planificación",
+    "resumeRemaining": "Reanudar el trabajo pendiente",
+    "retryPlanning": "Reintentar la planificación"
+  },
+  "review": {
+    "copyFailed": "No se pudo copiar el plan en el portapapeles.",
+    "export": "Exportar",
+    "otherActions": "Otras acciones del plan",
+    "moreOptions": "Más opciones…",
+    "chooseAction": "Elige una acción…",
+    "requestChanges": "Solicitar cambios",
+    "feedbackPlaceholder": "Opcional: ¿qué debería cambiar en el plan?",
+    "sendFeedback": "Enviar comentarios"
+  },
+  "dialog": {
+    "title": "Plan para {{projectName}}",
+    "doneEditing": "Terminar de editar",
+    "loadingEditor": "Cargando el editor…",
+    "nothingWritten": "_Aún no hay nada escrito._",
+    "noContent": "_El plan aún no tiene contenido._",
+    "todos": "Tareas",
+    "dependencies": "Dependencias",
+    "dependency": "{{prereq}} debe terminar antes de {{dependent}}"
+  },
+  "question": {
+    "interrupted": "No se respondió antes de que se interrumpiera el turno.",
+    "recommended": "Recomendado",
+    "orOwnWords": "O responde con tus propias palabras",
+    "yourAnswer": "Tu respuesta",
+    "placeholder": "Escribe una respuesta…",
+    "send": "Enviar respuesta"
+  }
+}

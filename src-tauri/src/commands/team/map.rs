@@ -39,7 +39,7 @@ fn local_projects(ws: &TeamWorkspace) -> Vec<StudioProject> {
 /// The pipeline's recent runs, with the jobs of the ones still going. A draft
 /// pull request's run deploys nothing, so it isn't activity.
 async fn runs_with_jobs(full: &str) -> Result<Vec<TeamMapRun>, String> {
-  let mut runs = gh::recent_runs(full, RUN_COUNT).await.map_err(|e| e.describe("Read the pipeline's runs"))?;
+  let mut runs = gh::recent_runs(full, RUN_COUNT).await.map_err(|e| e.describe(&t!("team.actions.readRuns")))?;
   runs.retain(|run| !run.is_draft());
   let jobs = futures::future::join_all(runs.iter().map(|run| async move {
     if run.status == "completed" {
@@ -84,7 +84,7 @@ async fn read_map(workspace_id: String) -> TeamMap {
     return fail(e);
   }
   let Some(ws) = store::find_team_workspace(&workspace_id) else {
-    return fail("That team workspace is no longer on this computer.".into());
+    return fail(t!("team.workspaceMissing"));
   };
   if ws.setup.as_ref().is_some_and(|s| !s.done) {
     return TeamMap { ok: true, workspace: Some(ws), fetched_at: now_iso(), ..Default::default() };
@@ -108,7 +108,7 @@ async fn read_map(workspace_id: String) -> TeamMap {
     Vec::new()
   });
   let prs = prs.unwrap_or_else(|e| {
-    problems.push(e.describe("Read the working copies"));
+    problems.push(e.describe(&t!("team.actions.readCopies")));
     Vec::new()
   });
   let runs = runs.unwrap_or_else(|e| {
@@ -213,7 +213,7 @@ async fn read_map(workspace_id: String) -> TeamMap {
     HashMap::new()
   } else {
     gh::latest_deployments(&full, &environments).await.unwrap_or_else(|e| {
-      problems.push(e.describe("Read the deployments"));
+      problems.push(e.describe(&t!("team.actions.readDeployments")));
       HashMap::new()
     })
   };
@@ -259,7 +259,7 @@ async fn read_activity(workspace_id: String) -> TeamActivity {
     return fail(e);
   }
   let Some(ws) = store::find_team_workspace(&workspace_id) else {
-    return fail("That team workspace is no longer on this computer.".into());
+    return fail(t!("team.workspaceMissing"));
   };
   if ws.setup.as_ref().is_some_and(|s| !s.done) {
     return TeamActivity { ok: true, fetched_at: now_iso(), ..Default::default() };
@@ -284,12 +284,12 @@ async fn read_diff(workspace_id: String, folder: String, pr_number: Option<u64>)
     return fail(e);
   }
   let Some(ws) = store::find_team_workspace(&workspace_id) else {
-    return fail("That team workspace is no longer on this computer.".into());
+    return fail(t!("team.workspaceMissing"));
   };
   if let Some(number) = pr_number {
     return match gh::pr_files(&ws.repo, number).await {
       Ok(files) => limit(rest_files(&files)),
-      Err(e) => fail(e.describe("Read the changes")),
+      Err(e) => fail(e.describe(&t!("team.actions.readChanges"))),
     };
   }
   let Some(binding) = local_projects(&ws)
@@ -297,7 +297,7 @@ async fn read_diff(workspace_id: String, folder: String, pr_number: Option<u64>)
     .filter_map(|p| p.team)
     .find(|t| t.folder.eq_ignore_ascii_case(&folder))
   else {
-    return fail("This app isn't open on this computer.".into());
+    return fail(t!("team.map.notOpen"));
   };
   let wt = PathBuf::from(&binding.worktree);
   let mut files = split_unified_diff(&repo::local_diff(&wt, &binding.folder).await);
@@ -321,7 +321,7 @@ pub async fn team_resources(workspace_id: String, requests: Vec<TeamResourceRequ
     return fail(e);
   }
   let Some(ws) = store::find_team_workspace(&workspace_id) else {
-    return fail("That team workspace is no longer on this computer.".into());
+    return fail(t!("team.workspaceMissing"));
   };
   let locals = local_projects(&ws);
   let sources = stream::iter(requests.into_iter().take(MAX_RESOURCE_SOURCES))
@@ -344,7 +344,7 @@ fn resource_tree(request: &TeamResourceRequest) -> Result<String, String> {
     {
       Ok(format!("origin/{branch}"))
     }
-    Some(_) => Err("That isn't a working copy of this app.".into()),
+    Some(_) => Err(t!("team.map.notACopy")),
   }
 }
 
@@ -356,16 +356,16 @@ async fn read_resource_source(ws: &TeamWorkspace, locals: &[StudioProject], requ
     ..Default::default()
   };
   let read = if !naming::is_app_folder(&request.folder) {
-    Err("That isn't an app in this workspace.".to_string())
+    Err(t!("team.map.notAnApp"))
   } else if request.local {
     match locals.iter().filter_map(|p| p.team.as_ref()).find(|t| t.folder.eq_ignore_ascii_case(&request.folder)) {
       Some(binding) => {
         let dir = PathBuf::from(&binding.worktree).join(&binding.folder);
         tokio::task::spawn_blocking(move || repo::read_app_config_on_disk(&dir))
           .await
-          .map_err(|_| "Could not read your copy of the app.".to_string())
+          .map_err(|_| t!("team.map.cantReadCopy"))
       }
-      None => Err("Your copy of this app isn't on this computer.".into()),
+      None => Err(t!("team.map.copyMissing")),
     }
   } else {
     match resource_tree(&request) {

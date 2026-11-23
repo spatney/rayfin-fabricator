@@ -6,6 +6,7 @@ import type {
   TeamDiagnosisEvent,
   TeamDiagnosisResult
 } from '@shared/ipc'
+import { translator } from '../../../i18n'
 import { teamError } from '../common'
 
 /** What to diagnose; the hook adds the id that routes its events. */
@@ -53,7 +54,7 @@ export function finishDiagnosis(current: DiagnosisState, result: TeamDiagnosisRe
     text: result.ok ? result.text : '',
     context: result.context || current.context,
     conclusion: result.conclusion ?? current.conclusion,
-    error: result.ok ? undefined : (result.error ?? 'Couldn’t diagnose the problem.')
+    error: result.ok ? undefined : (result.error ?? translator('team')('diagnosis.failed'))
   }
 }
 
@@ -121,7 +122,7 @@ export function useTeamDiagnosis(): {
           ...current,
           status: 'error',
           text: '',
-          error: teamError(reason, 'Couldn’t diagnose the problem.')
+          error: teamError(reason, translator('team')('diagnosis.failed'))
         }))
       })
   }, [])

@@ -22,15 +22,15 @@ use crate::types::{
 
 fn workspace(id: &str) -> Result<TeamWorkspace, String> {
   team::require_enabled()?;
-  store::find_team_workspace(id).ok_or_else(|| "That team workspace is no longer on this computer.".into())
+  store::find_team_workspace(id).ok_or_else(|| t!("team.workspaceMissing"))
 }
 
 /// Owners: the Maintain or Admin role on the repository.
 async fn require_owner(ws: &TeamWorkspace) -> Result<gh::RepoInfo, String> {
   match gh::repo(&ws.repo).await {
     Ok(info) if info.manages() => Ok(info),
-    Ok(_) => Err("Only the workspace's owners (the Maintain or Admin role on its repository) can change its settings.".into()),
-    Err(e) => Err(e.describe("Check your access to the workspace")),
+    Ok(_) => Err(t!("team.workspace.ownersOnly")),
+    Err(e) => Err(e.describe(&t!("team.actions.checkAccess"))),
   }
 }
 
@@ -38,15 +38,15 @@ async fn require_owner(ws: &TeamWorkspace) -> Result<gh::RepoInfo, String> {
 async fn current_manifest(ws: &TeamWorkspace) -> Result<TeamManifest, String> {
   let _ = repo::fetch(ws).await;
   match repo::read_main_file(ws, naming::MANIFEST_FILE).await {
-    Ok(Some(text)) => templates::parse_manifest(&text).ok_or_else(|| "The workspace's settings file is damaged.".to_string()),
-    _ => ws.manifest.clone().ok_or_else(|| "The workspace's settings file is missing.".to_string()),
+    Ok(Some(text)) => templates::parse_manifest(&text).ok_or_else(|| t!("team.workspace.settingsDamaged")),
+    _ => ws.manifest.clone().ok_or_else(|| t!("team.workspace.settingsMissing")),
   }
 }
 
 async fn save_manifest(ws: &TeamWorkspace, manifest: &TeamManifest, message: &str) -> Result<(), String> {
   gh::put_main_file(&ws.repo, naming::MANIFEST_FILE, &templates::manifest_json(manifest), message)
     .await
-    .map_err(|e| e.describe("Save the workspace settings"))?;
+    .map_err(|e| e.describe(&t!("team.actions.saveSettings")))?;
   let saved = manifest.clone();
   store::mutate_team_workspace(&ws.id, |w| w.manifest = Some(saved));
   Ok(())
@@ -102,7 +102,7 @@ async fn check_identity(client_id: &str) -> IdentityCheck {
       error: None,
     },
     Ok(None) => IdentityCheck { object_id: None, sp: None, error: None },
-    Err(e) => IdentityCheck { object_id: None, sp: None, error: Some(e.describe("Check the deploy identity")) },
+    Err(e) => IdentityCheck { object_id: None, sp: None, error: Some(e.describe(&t!("team.actions.checkIdentity"))) },
   }
 }
 
@@ -121,12 +121,18 @@ async fn health(workspace_id: String) -> TeamHealth {
   let mut items = Vec::new();
   let info = match gh::repo(&ws.repo).await {
     Ok(info) => {
-      let role = if info.manages() { "You're an owner." } else if info.push { "You're a member." } else { "You can't change it." };
-      items.push(item("repo", "GitHub repository", if info.push { "ok" } else { "error" }, Some(format!("{} — {role}", info.full_name)), false));
+      let role = if info.manages() {
+        t!("team.health.role.owner")
+      } else if info.push {
+        t!("team.health.role.member")
+      } else {
+        t!("team.health.role.readOnly")
+      };
+      items.push(item("repo", &t!("team.health.repo"), if info.push { "ok" } else { "error" }, Some(format!("{} — {role}", info.full_name)), false));
       Some(info)
     }
     Err(e) => {
-      items.push(item("repo", "GitHub repository", "error", Some(e.describe("Open the repository")), false));
+      items.push(item("repo", &t!("team.health.repo"), "error", Some(e.describe(&t!("team.actions.openRepo"))), false));
       None
     }
   };
@@ -134,10 +140,11 @@ async fn health(workspace_id: String) -> TeamHealth {
   let manifest = current_manifest(&ws).await.ok();
 
   let workflow = repo::read_main_file(&ws, naming::WORKFLOW_PATH).await.ok().flatten();
+  let workflow_label = t!("team.health.workflow");
   items.push(match workflow {
-    Some(text) if text == templates::workflow() => item("workflow", "Deploy pipeline", "ok", None, false),
-    Some(_) => item("workflow", "Deploy pipeline", "warn", Some("An update to the pipeline is available, or it was edited.".into()), owner),
-    None => item("workflow", "Deploy pipeline", "error", Some("The pipeline file is missing.".into()), owner),
+    Some(text) if text == templates::workflow() => item("workflow", &workflow_label, "ok", None, false),
+    Some(_) => item("workflow", &workflow_label, "warn", Some(t!("team.health.workflowChanged")), owner),
+    None => item("workflow", &workflow_label, "error", Some(t!("team.health.workflowMissing")), owner),
   });
 
   // The rest is the pipeline's settings, which owners manage.
@@ -147,20 +154,15 @@ async fn health(workspace_id: String) -> TeamHealth {
   let targets = match team::trusted_targets(&ws).await {
     Ok(t) => t,
     Err(e) => {
-      items.push(item("variables", "Pipeline settings", "error", Some(e), false));
+      items.push(item("variables", &t!("team.health.variables"), "error", Some(e), false));
       return TeamHealth { ok: true, error: None, items };
     }
   };
+  let settings_label = t!("team.health.settings");
   items.push(match &manifest {
-    Some(m) if targets.matches(m) => item("settings", "Workspace settings", "ok", None, false),
-    Some(_) => item(
-      "settings",
-      "Workspace settings",
-      "error",
-      Some("fabricator.workspace.json names different identities or Fabric workspaces than the pipeline uses. It may have been edited.".into()),
-      true,
-    ),
-    None => item("settings", "Workspace settings", "error", Some("The workspace's settings file is missing.".into()), true),
+    Some(m) if targets.matches(m) => item("settings", &settings_label, "ok", None, false),
+    Some(_) => item("settings", &settings_label, "error", Some(t!("team.health.settingsMismatch")), true),
+    None => item("settings", &settings_label, "error", Some(t!("team.workspace.settingsMissing")), true),
   });
 
   let separate = targets.separate();
@@ -168,15 +170,20 @@ async fn health(workspace_id: String) -> TeamHealth {
   let preview = if separate { Some(check_identity(&targets.preview_client_id).await) } else { None };
   let identities: Vec<(&str, &IdentityCheck)> =
     std::iter::once(("deploy", &deploy)).chain(preview.as_ref().map(|c| ("preview", c))).collect();
-  let label = if separate { "Deploy identities" } else { "Deploy identity" };
+  let label = if separate { t!("team.health.identities") } else { t!("team.health.identity") };
   items.push(match identities.iter().find_map(|(_, c)| c.error.clone()) {
-    Some(e) => item("identity", label, "unknown", Some(e), false),
+    Some(e) => item("identity", &label, "unknown", Some(e), false),
     None => {
       let missing: Vec<&str> = identities.iter().filter(|(_, c)| c.sp.is_none()).map(|(n, _)| *n).collect();
       if missing.is_empty() {
-        item("identity", label, "ok", None, false)
+        item("identity", &label, "ok", None, false)
       } else {
-        item("identity", label, "error", Some(format!("The {} identity was deleted.", missing.join(" and "))), true)
+        let deleted = match missing.as_slice() {
+          ["deploy"] => t!("team.health.identityDeleted.deploy"),
+          ["preview"] => t!("team.health.identityDeleted.preview"),
+          _ => t!("team.health.identityDeleted.both"),
+        };
+        item("identity", &label, "error", Some(deleted), true)
       }
     }
   });
@@ -193,35 +200,42 @@ async fn health(workspace_id: String) -> TeamHealth {
         Ok(existing) => {
           untrusted |= wanted.iter().any(|(n, s)| !existing.iter().any(|(en, es)| en == n && es == s));
         }
-        Err(e) => unknown = Some(e.describe("Check the pipeline's sign-in")),
+        Err(e) => unknown = Some(e.describe(&t!("team.actions.checkTrust"))),
       }
     }
+    let trust_label = t!("team.health.trust");
     items.push(if untrusted {
-      item("trust", "Pipeline sign-in", "error", Some("The repository's pipeline isn't trusted (was the repository renamed?).".into()), true)
+      item("trust", &trust_label, "error", Some(t!("team.health.untrusted")), true)
     } else if let Some(e) = unknown {
-      item("trust", "Pipeline sign-in", "unknown", Some(e), false)
+      item("trust", &trust_label, "unknown", Some(e), false)
     } else {
-      item("trust", "Pipeline sign-in", "ok", None, false)
+      item("trust", &trust_label, "ok", None, false)
     });
   }
 
   let preview_sp = preview.as_ref().map_or(&deploy.sp, |c| &c.sp);
   let mut missing = Vec::new();
-  for (label, sp, ws_id) in [
-    ("published apps", &deploy.sp, &targets.production_workspace_id),
+  for (which, sp, ws_id) in [
+    ("published", &deploy.sp, &targets.production_workspace_id),
     ("previews", preview_sp, &targets.previews_workspace_id),
   ] {
     let Some(sp_id) = sp else { continue };
     if let Ok(roles) = fabric::role_assignments(ws_id).await {
       if !roles.iter().any(|r| &r.principal_id == sp_id) {
-        missing.push(label);
+        missing.push(which);
       }
     }
   }
+  let access_label = t!("team.health.access");
   items.push(if missing.is_empty() {
-    item("access", "Fabric access", "ok", None, false)
+    item("access", &access_label, "ok", None, false)
   } else {
-    item("access", "Fabric access", "error", Some(format!("The pipeline can't reach the {} workspace.", missing.join(" and "))), true)
+    let unreachable = match missing.as_slice() {
+      ["published"] => t!("team.health.unreachable.published"),
+      ["previews"] => t!("team.health.unreachable.previews"),
+      _ => t!("team.health.unreachable.both"),
+    };
+    item("access", &access_label, "error", Some(unreachable), true)
   });
 
   TeamHealth { ok: true, error: None, items }
@@ -232,8 +246,8 @@ async fn health(workspace_id: String) -> TeamHealth {
 async fn ensure_identity(client_id: &str, display: &str) -> Result<(entra::AppRegistration, bool), String> {
   match entra::app(client_id).await {
     Ok(Some(app)) => Ok((app, false)),
-    Ok(None) => entra::create_app(display).await.map(|app| (app, true)).map_err(|e| e.describe("Recreate the deploy identity")),
-    Err(e) => Err(e.describe("Check the deploy identity")),
+    Ok(None) => entra::create_app(display).await.map(|app| (app, true)).map_err(|e| e.describe(&t!("team.actions.recreateIdentity"))),
+    Err(e) => Err(e.describe(&t!("team.actions.checkIdentity"))),
   }
 }
 
@@ -281,17 +295,15 @@ pub async fn team_set_account(workspace_id: String, account: String) -> TeamActi
   };
   let account = account.trim().to_string();
   if !gh::is_login(&account) {
-    return fail("Choose one of the GitHub accounts you're signed in to.");
+    return fail(t!("team.workspace.chooseAccount"));
   }
   let checked = gh::as_account(Some(account.clone()), async {
     let me = super::viewer().await?;
     let info = match gh::repo(&ws.repo).await {
       Ok(info) if info.push => info,
-      Ok(_) => return Err(format!("{} can view {} but not change it. Choose an account with write access.", me.login, ws.repo)),
-      Err(e) if e.is_not_found() => {
-        return Err(format!("{} can't see {}. Choose an account that's a member of the workspace.", me.login, ws.repo))
-      }
-      Err(e) => return Err(e.describe(&format!("Check {}'s access to {}", me.login, ws.repo))),
+      Ok(_) => return Err(t!("team.workspace.accountReadOnly", login = me.login, repo = ws.repo)),
+      Err(e) if e.is_not_found() => return Err(t!("team.workspace.accountNoAccess", login = me.login, repo = ws.repo)),
+      Err(e) => return Err(e.describe(&t!("team.actions.checkAccountAccess", login = me.login, repo = ws.repo))),
     };
     let (name, email) = super::git_identity(&me);
     repo::set_identity(&ws, &name, &email).await?;
@@ -334,7 +346,7 @@ async fn runner(workspace_id: String) -> TeamRunnerInfo {
   );
   let repository = match repository {
     Ok(value) => value.map(source),
-    Err(e) => return failed(e.describe("Check where the pipeline runs")),
+    Err(e) => return failed(e.describe(&t!("team.actions.checkRunner"))),
   };
   // Best effort: personal repositories have no organization.
   let organization = organization.ok().flatten().map(source);
@@ -367,7 +379,7 @@ async fn set_runner(workspace_id: String, runner: TeamRunner) -> TeamActionResul
     None => gh::delete_variable(&ws.repo, templates::RUNS_ON_VARIABLE).await,
   };
   if let Err(e) = saved {
-    return fail(e.describe("Save where the pipeline runs"));
+    return fail(e.describe(&t!("team.actions.saveRunner")));
   }
   // An unfinished setup applies the same choice when it continues.
   let updated = store::mutate_team_workspace(&ws.id, |w| {
@@ -413,28 +425,28 @@ async fn repair(app: AppHandle, workspace_id: String, scope: String) -> TeamActi
   };
   let deploy_sp = match entra::ensure_service_principal(&deploy_app.app_id).await {
     Ok(id) => id,
-    Err(e) => return fail(e.describe("Create the service principal")),
+    Err(e) => return fail(e.describe(&t!("team.actions.createSp"))),
   };
   let preview_sp = if separate {
     match entra::ensure_service_principal(&preview_app.app_id).await {
       Ok(id) => id,
-      Err(e) => return fail(e.describe("Create the preview service principal")),
+      Err(e) => return fail(e.describe(&t!("team.actions.createPreviewSp"))),
     }
   } else {
     deploy_sp.clone()
   };
   let (deploy_subjects, preview_subjects) = naming::identity_subjects(&info.full_name, info.owner_id, info.id, separate);
   if let Err(e) = entra::ensure_federated_credentials(&deploy_app.object_id, &deploy_subjects).await {
-    return fail(e.describe("Trust the repository's pipeline"));
+    return fail(e.describe(&t!("team.actions.trustPipeline")));
   }
   if separate {
     if let Err(e) = entra::ensure_federated_credentials(&preview_app.object_id, &preview_subjects).await {
-      return fail(e.describe("Trust the repository's pull requests"));
+      return fail(e.describe(&t!("team.actions.trustPrs")));
     }
   }
   for (ws_id, principal) in [(&targets.production_workspace_id, &deploy_sp), (&targets.previews_workspace_id, &preview_sp)] {
     if let Err(e) = fabric::add_role(ws_id, principal, "ServicePrincipal", "Contributor").await {
-      return fail(e.describe("Give the deploy identities access to Fabric"));
+      return fail(e.describe(&t!("team.actions.grantIdentities")));
     }
   }
   if targets.tenant_id.is_empty() {
@@ -450,7 +462,7 @@ async fn repair(app: AppHandle, workspace_id: String, scope: String) -> TeamActi
     ("FABRIC_PREVIEW_WORKSPACE_ID", targets.previews_workspace_id.as_str()),
   ] {
     if let Err(e) = gh::set_variable(&ws.repo, name, value).await {
-      return fail(e.describe("Configure the pipeline"));
+      return fail(e.describe(&t!("team.actions.configurePipeline")));
     }
   }
   let _ = gh::apply_merge_settings(&ws.repo).await;
@@ -460,7 +472,7 @@ async fn repair(app: AppHandle, workspace_id: String, scope: String) -> TeamActi
   let current = repo::read_main_file(&ws, naming::WORKFLOW_PATH).await.ok().flatten();
   if current.as_deref() != Some(templates::workflow().as_str()) {
     if let Err(e) = gh::put_main_file(&ws.repo, naming::WORKFLOW_PATH, &templates::workflow(), "Update the Fabricator deploy pipeline").await {
-      return fail(e.describe("Update the deploy pipeline"));
+      return fail(e.describe(&t!("team.actions.updatePipeline")));
     }
   }
   // Put the settings file back in line with the trusted settings.

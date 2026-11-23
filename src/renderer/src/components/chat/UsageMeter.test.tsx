@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ChatUsage, CopilotQuota } from '@shared/ipc'
+import { setLanguage } from '../../i18n'
 import { UsageMeter } from './UsageMeter'
 
 const USAGE: ChatUsage = {
@@ -120,5 +121,20 @@ describe('UsageMeter', () => {
     chat.quota.mockRejectedValue(new Error('offline'))
     await openPanel()
     expect(await screen.findByText('Couldn’t check your Copilot plan.')).toBeTruthy()
+  })
+
+  it('names the usage no model claims in the user’s language, though it’s saved in English', async () => {
+    await setLanguage('de')
+    try {
+      chat.usage.mockResolvedValue({
+        ...USAGE,
+        models: [{ ...USAGE.models[0], model: '', name: 'Other models' }]
+      })
+      render(<UsageMeter projectId="p" sending={false} hidden={false} />)
+      fireEvent.click(await screen.findByRole('button'))
+      expect(within(screen.getByRole('dialog')).getByText('Andere Modelle')).toBeTruthy()
+    } finally {
+      await setLanguage('en')
+    }
   })
 })

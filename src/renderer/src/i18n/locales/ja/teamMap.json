@@ -1,0 +1,378 @@
+{
+  "health": {
+    "live": "公開中",
+    "deploying": "デプロイ中",
+    "failed": "失敗",
+    "idle": "未デプロイ"
+  },
+  "diffBar": {
+    "title": "{{additions}} 行を追加、{{deletions}} 行を削除"
+  },
+  "run": {
+    "waiting": "開始待ち",
+    "planning": "計画中",
+    "finishing": "完了処理中",
+    "seconds": "{{seconds}} 秒",
+    "deployed": "デプロイ済み",
+    "replaced": "新しい保存に置き換えられました"
+  },
+  "change": {
+    "line": "{{copy}}: {{what}}"
+  },
+  "copyName": {
+    "yours": "あなたのコピー",
+    "theirs": "{{author}} のコピー",
+    "teammate": "チーム メンバーのコピー"
+  },
+  "summary": {
+    "relationships_other": "{{count}} 個のリレーションシップ",
+    "reaches": "{{service}} にアクセス",
+    "reachesServices_other": "{{count}} 個のサービスにアクセス"
+  },
+  "usedBy": {
+    "names": "{{names}} で使用",
+    "apps_other": "{{count}} 個のアプリで使用"
+  },
+  "node": {
+    "more_other": "ほか {{count}} 件",
+    "reading": "アプリを読み取っています…",
+    "empty": "データベースも接続もありません"
+  },
+  "kinds": {
+    "semanticModel": "セマンティック モデル",
+    "warehouse": "ウェアハウス",
+    "sqlDatabase": "SQL データベース",
+    "lakehouse": "レイクハウス",
+    "eventhouse": "イベントハウス"
+  },
+  "abilities": {
+    "readWrite": "読み取りと書き込み",
+    "query": "クエリの実行",
+    "read": "読み取り"
+  },
+  "signIn": {
+    "delegated": "アプリを使用しているユーザー"
+  },
+  "list": {
+    "more_other": "{{first}}、{{second}} ほか {{count}} 件"
+  },
+  "items": {
+    "database": "データベース",
+    "tables_other": "{{count}} 個のテーブル",
+    "noTables": "テーブルはまだありません",
+    "files": "ファイル ストレージ",
+    "uploadedFiles": "アップロードされたファイル",
+    "functions": "関数",
+    "functionCount_other": "{{count}} 個の関数",
+    "noFunctions": "関数はまだありません",
+    "reachedByFunctions": "関数からアクセス",
+    "unreadable": "このアプリを読み取れませんでした。"
+  },
+  "what": {
+    "addsDatabaseWith": "{{names}} を含むデータベースを追加",
+    "addsDatabase": "データベースを追加",
+    "addsFiles": "ファイル ストレージを追加",
+    "adds": "{{names}} を追加",
+    "addsFunctions": "関数を追加",
+    "connectsTo": "{{name}} に接続",
+    "removesDatabase": "データベースを削除",
+    "removesFiles": "ファイル ストレージを削除",
+    "removesFunctions": "関数を削除",
+    "disconnects": "{{name}} から切断",
+    "changes": "{{names}} を変更",
+    "removes": "{{names}} を削除",
+    "nowReaches": "新たに {{names}} にアクセス",
+    "pointsElsewhere": "接続先を別のソースに変更",
+    "changesAbility": "実行できる操作を変更",
+    "changesSignIn": "サインイン方法を変更",
+    "separator": "、"
+  },
+  "runLabel": {
+    "previewOf": "{{what}} のプレビュー",
+    "published": "公開済み",
+    "publishing": "公開中",
+    "publishedWhat": "{{what}} を公開済み",
+    "publishingWhat": "{{what}} を公開中",
+    "publishedTitle": "公開済み: {{title}}",
+    "verify": "Fabric へのアクセスを確認中",
+    "pipelineRun": "パイプラインの実行"
+  },
+  "changing": {
+    "youAndOther": "あなたと {{name}} が変更しています",
+    "two": "{{first}} と {{second}} が変更しています",
+    "you": "あなたが変更しています",
+    "one": "{{name}} が変更しています",
+    "many_other": "{{count}} 人が変更しています",
+    "inProgress_other": "{{count}} 件が進行中",
+    "nobody": "変更している人はいません"
+  },
+  "lanes": {
+    "versions": "公開済みと進行中",
+    "data": "データと接続",
+    "sources": "接続先"
+  },
+  "shared": {
+    "apps": "アプリ",
+    "publishedApps": "公開済みアプリ",
+    "previews": "プレビュー",
+    "preview": "プレビュー",
+    "published": "公開済み",
+    "notPublished": "未公開",
+    "notDeployed": "まだデプロイされていません",
+    "notOnGitHub": "まだ GitHub にありません",
+    "updated": "更新: {{time}}",
+    "deploying_other": "デプロイ中: {{count}}",
+    "files_other": "{{count}} 個のファイル",
+    "you": "あなた",
+    "owner": "所有者",
+    "member": "メンバー",
+    "opening": "開いています…",
+    "visit": "アクセス",
+    "openInFabric": "Fabric で開く",
+    "watchOnGitHub": "GitHub で進行状況を確認",
+    "diagnose": "Copilot で診断",
+    "change": "変更",
+    "closeEsc": "閉じる (Esc)",
+    "backToDeployments": "デプロイに戻る",
+    "gone": "これはもうワークスペースにありません。"
+  },
+  "activity": {
+    "label": "パイプラインのアクティビティ",
+    "title": "デプロイ",
+    "running_other": "実行中: {{count}}",
+    "quiet": "実行中なし",
+    "empty": "過去 1 時間にデプロイされたものはありません。変更を保存すると作成者のプレビューがデプロイされ、公開するとアプリが全員向けにデプロイされます。",
+    "live_other": "稼働中: {{count}}",
+    "failed_other": "失敗: {{count}}",
+    "reveal": "概要に表示",
+    "openRun": "GitHub で実行を開く",
+    "deploysTo": "デプロイ先",
+    "showDeployed": "デプロイされている内容を表示",
+    "howItWorks": "しくみ",
+    "how1": "各メンバーは自分の作業コピーでアプリを変更します。",
+    "how2": "変更を保存するたびに、その人のプレビューがデプロイされます。プレビューには専用のデータがあるため、変更を試しても公開済みアプリのデータには影響しません。",
+    "how3": "公開すると変更がマージされ、公開済みアプリが全員向けにデプロイされます。",
+    "allRuns": "GitHub のすべてのパイプライン実行",
+    "diagnoseRun": "失敗した実行を診断"
+  },
+  "data": {
+    "openWorkspace": "Fabric でワークスペースを開く",
+    "connector": "{{kind}} コネクター",
+    "ownDatabase": "専用のデータベース",
+    "notPublished": "未公開です。現時点では作業コピーにのみ存在します。",
+    "tables": "テーブル",
+    "fields_other": "{{count}} 個のフィールド",
+    "whoCanRead": "行を読み取れるユーザー",
+    "noTables": "テーブルはまだありません。",
+    "databaseText": "アプリの一部です。公開済みアプリと各プレビューにはそれぞれ専用のコピーがあるため、変更を試しても公開済みのデータには影響しません。",
+    "filesText": "写真やドキュメントなど、ユーザーがアプリにアップロードしたファイルを保存します。",
+    "noFunctions": "関数はまだありません。",
+    "reaches": "アクセス先",
+    "functionsText": "関数は Fabric で実行されます。他のサービスには、アプリを使用しているユーザーとしてではなく、アプリ自体としてアクセスします。",
+    "access": "アクセス",
+    "signsInAs": "サインイン ユーザー",
+    "fabricItem": "Fabric アイテム",
+    "beingChanged": "変更中",
+    "openTheApp": "アプリを開く",
+    "inFabric": "Microsoft Fabric 内",
+    "service": "サービス",
+    "notConnected": "公開済みアプリではまだ接続されていません。現時点では作業コピーのみです。",
+    "usedBy": "使用しているアプリ",
+    "notPublishedSuffix": "未公開",
+    "serviceText": "関数はアプリ自体として {{service}} にアクセスするため、アプリにはそこでのアクセス権が必要です。"
+  },
+  "diff": {
+    "removedFile": "このファイルは削除されました。",
+    "noPreview": "このファイルのプレビューはありません (バイナリ ファイルか、非常に大きなファイルです)。",
+    "fileTruncated": "このファイルの残りの変更はここには表示されません。",
+    "loadFailed": "変更を読み込めませんでした。",
+    "loading": "変更を読み込んでいます…",
+    "none": "公開済みアプリと比べた変更はまだありません。",
+    "unsaved": "未保存の編集を含む",
+    "truncated": "一部の変更はここに表示されていません。",
+    "seeAll": "GitHub ですべて表示"
+  },
+  "remove": {
+    "failed": "アプリを削除できませんでした。",
+    "button": "ワークスペースから削除…",
+    "title": "{{name}} を削除しますか?",
+    "message": "アプリのフォルダーが、全員のワークスペースから削除されます。",
+    "alsoFabric": "Fabric の公開済みアプリとプレビューもデータごと削除する"
+  },
+  "fabric": {
+    "kicker": "Microsoft Fabric ワークスペース",
+    "prodText": "変更が公開されると、パイプラインが各アプリをここにデプロイします。チームの全員がこれらのアプリを使用します。",
+    "previewText": "パイプラインは全員の個人用プレビューを、ユーザーとアプリごとに 1 つずつここにデプロイします。そのため、作業中の変更が公開済みアプリやそのデータに影響することはありません。",
+    "you": "あなた"
+  },
+  "app": {
+    "kicker": "アプリ",
+    "notPublished": "未公開です。誰かが初めて公開すると、全員向けに公開されます。",
+    "workingCopies": "作業コピー",
+    "nobody": "現在、このアプリを変更している人はいません。",
+    "openHere": "このコンピューターで開く"
+  },
+  "pub": {
+    "kicker": "公開済みアプリ",
+    "publishingNow": "公開中",
+    "gettingReady": "パイプラインを準備しています…",
+    "latest": "最新のデプロイ",
+    "address": "アドレス",
+    "version": "バージョン",
+    "when": "日時",
+    "log": "ログ",
+    "notDeployed": "まだデプロイされていません。",
+    "dataLoss": "前回の公開は、データが削除されるため停止しました。アプリからもう一度公開し、確認して許可してください。"
+  },
+  "copy": {
+    "mine": "あなたの作業コピー",
+    "theirs": "{{author}} の作業コピー",
+    "draft": "下書き",
+    "ready": "準備完了",
+    "saves_other": "保存 {{count}} 回",
+    "unsaved": "未保存の編集",
+    "behind_other": "取り込む公開済みの変更: {{count}} 件",
+    "approved": "承認済み",
+    "changesRequested": "変更の要求あり",
+    "deploying": "パイプラインが最新の保存をデプロイしています",
+    "earlier": "以前の保存を表示しています",
+    "localMine": "お使いのコンピューターで実行されます。プレビューは公開時にデプロイされます。",
+    "localTheirs": "{{author}} のコンピューターで実行されます。プレビューは公開時にデプロイされます。",
+    "seeWhy": "失敗の原因を表示",
+    "changes": "変更",
+    "continue": "作業を続ける",
+    "viewOnGitHub": "GitHub で表示",
+    "gone": "この作業コピーは公開されたか、破棄されました。"
+  },
+  "inspector": {
+    "closeDetails": "詳細を閉じる",
+    "diagnoseDeploy": "失敗したデプロイを診断"
+  },
+  "view": {
+    "loadFailed": "ワークスペースを読み込めませんでした。",
+    "readFailed": "アプリを読み取れませんでした。",
+    "openFailed": "アプリを開けませんでした。",
+    "notes": {
+      "unsaved": "未保存の編集",
+      "behind_other": "{{count}} 件遅れ",
+      "approved": "承認済み",
+      "changesRequested": "変更の要求あり",
+      "previewOlder": "プレビューが古い"
+    },
+    "draft": "下書き",
+    "region": "{{name}} の概要",
+    "openOnGitHub": "GitHub で開く",
+    "summary": "概要",
+    "statApps_other": "アプリ <b>{{count}}</b> 個",
+    "statCopies_other": "進行中 <b>{{count}}</b> 件",
+    "statLive_other": "公開中 <b>{{count}}</b> 件",
+    "manageTitle": "メンバー、アプリへのアクセス、設定",
+    "members_other": "メンバー {{count}} 人",
+    "newApp": "新しいアプリ",
+    "manage": "管理",
+    "zoom": "ズーム",
+    "zoomOut": "縮小",
+    "zoomIn": "拡大",
+    "fit": "ウィンドウに合わせる",
+    "close": "概要を閉じる",
+    "loading": "{{name}} を読み込んでいます…",
+    "empty": "アプリはまだありません",
+    "emptyText": "このワークスペースで最初のアプリを作成してください。全員の作業内容とともにここに表示されます。"
+  },
+  "workspace": {
+    "label": "ワークスペース",
+    "kicker": "チーム ワークスペース · {{role}}",
+    "verifyStep": "パイプラインが Fabric にアクセスできることを確認",
+    "failed": "うまくいきませんでした。",
+    "diagnose": "ワークスペースを診断",
+    "tabs": {
+      "members": "メンバー",
+      "access": "アプリへのアクセス",
+      "settings": "設定"
+    },
+    "members": {
+      "loadFailed": "メンバーを読み込めませんでした。",
+      "title": "ユーザー",
+      "loading": "メンバーを読み込んでいます…",
+      "you": "(あなた)",
+      "invited": "招待済み",
+      "cancelInvite": "招待を取り消す",
+      "remove": "ワークスペースから削除",
+      "cancelInviteFor": "{{login}} への招待を取り消す",
+      "removeLogin": "{{login}} を削除",
+      "none": "メンバーが見つかりません。",
+      "invitedNotice": "{{name}} を招待しました。Fabricator の [ホーム] または GitHub で承諾できます。"
+    },
+    "invite": {
+      "title": "チーム メンバーを招待",
+      "maintainer": "GitHub では、{{repo}} の管理者しかユーザーを追加または削除できません。あなたのロールは Maintain です。管理者に依頼して、チーム メンバーを Write ロールで追加してもらってください。",
+      "username": "GitHub ユーザー名",
+      "email": "勤務先のメール アドレス",
+      "optional": "(省略可能)",
+      "emailPlaceholder": "name@company.com",
+      "emailHint": "Fabric でプレビューと公開済みアプリを開けるようになります。",
+      "ownerHint": "メンバーと設定を管理できます。",
+      "sending": "招待しています…",
+      "send": "招待を送信"
+    },
+    "access": {
+      "loadFailed": "Fabric へのアクセスを確認できませんでした。",
+      "title": "アプリを開けるユーザー",
+      "intro": "このワークスペースの Fabric ワークスペースにアクセスできるユーザーは、そのプレビューと公開済みアプリにサインインできます。追加するには、チーム メンバーを勤務先のメール アドレスで招待してください。",
+      "checking": "Fabric を確認しています…",
+      "published": "公開済みアプリ",
+      "previews": "プレビュー",
+      "canOpen": "{{targets}} を開けます",
+      "remove": "アプリへのアクセス権を削除",
+      "removeFor": "{{name}} のアクセス権を削除",
+      "none": "ワークスペースの管理者以外はまだいません。",
+      "revoked": "{{name}} はチームのアプリを開けなくなりました。"
+    },
+    "settings": {
+      "account": "GitHub アカウント",
+      "useAccount": "このアカウントを使用",
+      "cliAccount": "GitHub CLI のアクティブなアカウント",
+      "accountInUse": "Fabricator はこのワークスペースでこのアカウントとして動作します。",
+      "accountLater": "Fabricator はワークスペースを読み取った時点でアカウントを記憶します。",
+      "accountSaved": "Fabricator はこのワークスペースで {{login}} として動作するようになりました。",
+      "publishing": "公開",
+      "requireReview": "レビューを必須にする",
+      "reviewHint": "各変更は、公開前にチーム メンバーが承認します。",
+      "reviewHintEnforced": "各変更は、公開前にチーム メンバーが承認します。GitHub で main が保護されていない場合は、Fabricator がこれを適用します。",
+      "requireReviewLabel": "公開前にレビューを必須にする",
+      "deploys": "アプリのデプロイ先",
+      "openTarget": "Fabric で {{label}} を開く",
+      "runs": "パイプラインの実行場所",
+      "runnerFailed": "パイプラインの実行場所を確認できませんでした。",
+      "runnerSaved": "今後開始されるパイプラインの実行では、これらのランナーが使用されます。",
+      "checkingRunner": "パイプラインの実行場所を確認しています…",
+      "health": "パイプラインの正常性",
+      "healthFailed": "ワークスペースを確認できませんでした。",
+      "healthy": "ワークスペースは正常です。",
+      "checkAgain": "再確認",
+      "checkingHealth": "ワークスペースを確認しています…",
+      "repairing": "修復しています…",
+      "repair": "修復",
+      "checkPipeline": "パイプラインを確認",
+      "leaveTitle": "退出または削除",
+      "leaveText": "退出すると、このコンピューターからワークスペースが削除されます。公開済みアプリと GitHub に保存された作業は残ります。",
+      "leaveTextMaintainer": "退出すると、このコンピューターからワークスペースが削除されます。公開済みアプリと GitHub に保存された作業は残ります。ワークスペースを削除するとリポジトリがアーカイブされますが、GitHub ではこの操作をリポジトリの管理者しか行えません。",
+      "leave": "このコンピューターで退出",
+      "leaveFailed": "ワークスペースから退出できませんでした。",
+      "delete": "ワークスペースを削除…"
+    },
+    "confirm": {
+      "removeMember": "{{login}} を削除しますか?",
+      "revoke": "{{name}} のアクセス権を削除しますか?",
+      "leave": "{{name}} から退出しますか?",
+      "delete": "{{name}} を削除しますか?",
+      "leaveLabel": "退出",
+      "deleteLabel": "ワークスペースを削除",
+      "removeMemberText": "リポジトリへのアクセス権と、このコンピューターから付与した場合は Fabric のチームのアプリへのアクセス権が失われます。未公開の変更は GitHub に残ります。",
+      "revokeText": "Fabric でチームの公開済みアプリやプレビューを開けなくなります。",
+      "leaveText": "ワークスペースとそのアプリがこのコンピューターから削除されます。チーム メンバーには影響しません。",
+      "deleteText": "Fabricator は作成したデプロイ ID を削除し、GitHub リポジトリをアーカイブして (所有者は GitHub で復元できます)、このコンピューターからワークスペースを削除します。",
+      "deleteFabric": "両方の Fabric ワークスペースと、その中のすべてのアプリもデータごと削除する"
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { authErrorMessage } from './authErrors'
+import { translator } from './i18n'
 
 /** An Azure sign-in asked for by the feature that needs it. */
 export interface AzureSignIn {
@@ -11,7 +12,7 @@ export interface AzureSignIn {
   signIn: () => Promise<boolean>
 }
 
-const FAILED = 'Azure sign-in did not complete. Please try again.'
+const failed = (): string => translator('accounts')('azureSignInFailed')
 
 /**
  * Sign in to Azure on demand. Azure is optional at setup, so each feature that
@@ -41,11 +42,11 @@ export function useAzureSignIn(onSignedIn: () => Promise<void> | void): AzureSig
     setError(null)
     try {
       const result = await window.api.auth.loginAz()
-      if (!result.ok) throw new Error(authErrorMessage(result.error, FAILED))
+      if (!result.ok) throw new Error(authErrorMessage(result.error, failed()))
       if (mounted.current) await carryOn.current()
       return true
     } catch (reason) {
-      if (mounted.current) setError(authErrorMessage(reason, FAILED))
+      if (mounted.current) setError(authErrorMessage(reason, failed()))
       return false
     } finally {
       running.current = false

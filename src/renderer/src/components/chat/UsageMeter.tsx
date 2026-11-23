@@ -4,6 +4,7 @@ import type { ChatModelUsage, ChatUsage, CopilotQuota } from '@shared/ipc'
 import { openDocs } from '@renderer/docsLinks'
 import { menuLayout, type MenuLayout } from '@renderer/menuLayout'
 import { useSuppressPreview } from '@renderer/overlay'
+import { Trans, useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { ModelLogo } from '../models/ModelLogo'
 import { formatTokens } from '../models/ModelPicker'
@@ -51,15 +52,24 @@ function Logo({ model: m }: { model: ChatModelUsage }): JSX.Element {
 
 /** The key a model on your own key runs on: its provider's name, like the model picker's. */
 function KeyTag({ model: m }: { model: ChatModelUsage }): JSX.Element {
+  const { t } = useTranslation('chat')
   return (
     <span
       className="mp-tag usage-key"
-      title={`On your ${m.provider ?? 'own'} key, which its provider bills`}
+      title={
+        m.provider ? t('usageMeter.providerKey', { provider: m.provider }) : t('usageMeter.ownKey')
+      }
     >
       <Codicon name="key" />
-      {m.provider ?? 'Your key'}
+      {m.provider ?? t('usageMeter.yourKey')}
     </span>
   )
+}
+
+/** A model's name. Calls no model claims are saved as "Other models", in English. */
+function ModelName({ model: m }: { model: ChatModelUsage }): JSX.Element {
+  const { t } = useTranslation('chat')
+  return <>{!m.model && m.name === 'Other models' ? t('usageMeter.otherModels') : m.name}</>
 }
 
 function ModelRow({
@@ -76,19 +86,23 @@ function ModelRow({
   showShare: boolean
   unit: string
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   const amount = part ? (byTokens ? formatTokens(part.amount) : formatAmount(part.amount)) : '–'
   return (
     <li className="usage-model">
       <Logo model={m} />
       <span className={`usage-dot${part ? ` usage-c${part.color}` : ''}`} aria-hidden="true" />
       <span className="usage-model-name">
-        {m.name}
+        <ModelName model={m} />
         {m.ownKey && byTokens && <KeyTag model={m} />}
       </span>
       {m.ownKey && !byTokens ? (
         <KeyTag model={m} />
       ) : (
-        <span className="usage-model-amount" title={part ? `${amount} ${unit}` : undefined}>
+        <span
+          className="usage-model-amount"
+          title={part ? t('usage.amount', { amount, unit }) : undefined}
+        >
           <strong>{amount}</strong>
           {showShare && part && <span>{formatShare(part.share)}</span>}
         </span>
@@ -105,6 +119,7 @@ function PlanSection({
   quota: CopilotQuota | undefined
   failed: boolean
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   const state =
     !quota || quota.unlimited
       ? ''
@@ -115,30 +130,39 @@ function PlanSection({
           : ''
   const notes = quota ? quotaNotes(quota) : []
   return (
-    <section className="usage-plan" aria-label="Copilot plan">
+    <section className="usage-plan" aria-label={t('usageMeter.plan')}>
       <div className="usage-plan-head">
-        <span className="usage-plan-title">Copilot plan</span>
+        <span className="usage-plan-title">{t('usageMeter.plan')}</span>
         {quota && !quota.unlimited && (
-          <span className={`usage-pill${state}`}>{formatPercent(quota.remainingPercent)} left</span>
+          <span className={`usage-pill${state}`}>
+            {t('usageMeter.percentLeft', { percent: formatPercent(quota.remainingPercent) })}
+          </span>
         )}
       </div>
       {!quota ? (
         <p className="usage-foot">
-          {failed ? 'Couldn’t check your Copilot plan.' : 'Checking your plan…'}
+          {failed ? t('usageMeter.planFailed') : t('usageMeter.planChecking')}
         </p>
       ) : quota.unlimited ? (
-        <p className="usage-plan-line">Unlimited {unitName(quota.unit, 2)}</p>
+        <p className="usage-plan-line">{quotaLeft(quota)}</p>
       ) : (
         <>
           <p className="usage-plan-line">
-            <strong>{formatAmount(Math.max(0, quota.entitlement - quota.used))}</strong> of{' '}
-            {formatAmount(quota.entitlement)} {unitName(quota.unit, quota.entitlement, true)}{' '}
-            remaining
+            <Trans
+              t={t}
+              i18nKey="usageMeter.remaining"
+              values={{
+                left: formatAmount(Math.max(0, quota.entitlement - quota.used)),
+                total: formatAmount(quota.entitlement),
+                unit: unitName(quota.unit, quota.entitlement, true)
+              }}
+              components={{ strong: <strong /> }}
+            />
           </p>
           <div
             className={`usage-bar${state}`}
             role="meter"
-            aria-label="Copilot plan left"
+            aria-label={t('usageMeter.planLeft')}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(quota.remainingPercent)}
@@ -173,6 +197,7 @@ export function UsageMeter({
   /** The signed-in Copilot account's host (`https://github.com`, or a GHE.com one). */
   host?: string
 }): JSX.Element | null {
+  const { t } = useTranslation('chat')
   const [usage, setUsage] = useState<ChatUsage | null>(null)
   const [open, setOpen] = useState(false)
   const [tokensOpen, setTokensOpen] = useState(false)
@@ -243,13 +268,24 @@ export function UsageMeter({
 
   const byTokens = measuresTokens(usage)
   const total = byTokens ? totalTokens(usage) : billedAmount(usage)
-  const unit = byTokens ? 'tokens' : unitName(usage.billing, total, true)
+  const used = byTokens
+    ? t('usageMeter.usedTokens')
+    : usage.billing === 'ai_credits'
+      ? t('usageMeter.usedCredits', { count: total })
+      : t('usageMeter.usedRequests', { count: total })
   const parts = modelBreakdown(usage)
   const partOf = new Map(parts.map((p) => [p.index, p]))
   const cost =
     !byTokens && usage.billing === 'ai_credits' && total > 0 ? formatDollars(total) : null
-  const title = usage.billing === 'ai_credits' && !byTokens ? 'Session credits' : 'Session usage'
-  const column = byTokens ? 'Tokens' : usage.billing === 'ai_credits' ? 'Credits' : 'Requests'
+  const title =
+    usage.billing === 'ai_credits' && !byTokens
+      ? t('usageMeter.sessionCredits')
+      : t('usageMeter.sessionUsage')
+  const column = byTokens
+    ? t('usageMeter.columnTokens')
+    : usage.billing === 'ai_credits'
+      ? t('usageMeter.columnCredits')
+      : t('usageMeter.columnRequests')
 
   return (
     <div
@@ -269,8 +305,8 @@ export function UsageMeter({
         onClick={() => (open ? closePanel(false) : openPanel())}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`Chat usage: ${summary}`}
-        title={`What this chat has used: ${summary}`}
+        aria-label={t('usageMeter.chipLabel', { summary })}
+        title={t('usageMeter.chipTitle', { summary })}
       >
         <Codicon name="dashboard" />
         <span className="usage-chip-label">{summary}</span>
@@ -298,8 +334,8 @@ export function UsageMeter({
                   type="button"
                   className="usage-info"
                   onClick={() => openDocs('chatUsage')}
-                  aria-label="How usage is counted"
-                  title="How usage is counted"
+                  aria-label={t('usageMeter.howCounted')}
+                  title={t('usageMeter.howCounted')}
                 >
                   <Codicon name="info" />
                 </button>
@@ -308,10 +344,10 @@ export function UsageMeter({
                 <span className="usage-hero-num">
                   {byTokens ? formatTokens(total) : formatAmount(total)}
                 </span>
-                <span className="usage-hero-unit">{unit} used</span>
+                <span className="usage-hero-unit">{used}</span>
                 {cost && (
-                  <span className="usage-cost" title="At US$0.01 an AI credit">
-                    ≈ {cost}
+                  <span className="usage-cost" title={t('usageMeter.costTitle')}>
+                    {t('usageMeter.approx', { cost })}
                   </span>
                 )}
               </div>
@@ -327,15 +363,13 @@ export function UsageMeter({
                 </div>
               )}
               {!byTokens && usage.billing === 'ai_credits' && usage.creditsPartial && (
-                <p className="usage-foot">
-                  Some replies didn’t report their credits, so this is a minimum.
-                </p>
+                <p className="usage-foot">{t('usageMeter.partial')}</p>
               )}
               <div className="usage-cols" aria-hidden="true">
-                <span>Usage by model</span>
+                <span>{t('usageMeter.byModel')}</span>
                 <span>{column}</span>
               </div>
-              <ul className="usage-models" aria-label="Usage by model">
+              <ul className="usage-models" aria-label={t('usageMeter.byModel')}>
                 {usage.models.map((m, i) => (
                   <ModelRow
                     key={`${m.ownKey ? 'key' : 'copilot'}:${m.model}:${m.name}`}
@@ -343,7 +377,11 @@ export function UsageMeter({
                     part={partOf.get(i)}
                     byTokens={byTokens}
                     showShare={parts.length > 1}
-                    unit={byTokens ? 'tokens' : unitName(usage.billing, partOf.get(i)?.amount ?? 0)}
+                    unit={
+                      byTokens
+                        ? t('usageMeter.tokens')
+                        : unitName(usage.billing, partOf.get(i)?.amount ?? 0)
+                    }
                   />
                 ))}
               </ul>
@@ -356,14 +394,18 @@ export function UsageMeter({
                 onClick={() => setTokensOpen((v) => !v)}
               >
                 <Codicon name="chevron-right" />
-                Token details
+                {t('usageMeter.tokenDetails')}
               </button>
               {tokensOpen && (
-                <ul id={tokensId} className="usage-tokens" aria-label="Token details">
+                <ul
+                  id={tokensId}
+                  className="usage-tokens"
+                  aria-label={t('usageMeter.tokenDetails')}
+                >
                   {usage.models.map((m) => (
                     <li key={`${m.ownKey ? 'key' : 'copilot'}:${m.model}:${m.name}`}>
                       <span className="usage-tokens-name">
-                        {m.name}
+                        <ModelName model={m} />
                         {m.ownKey && <KeyTag model={m} />}
                       </span>
                       <span className="usage-tokens-val" title={tokenDetail(m)}>
@@ -388,7 +430,7 @@ export function UsageMeter({
                     closePanel(false)
                   }}
                 >
-                  View usage <Codicon name="arrow-right" />
+                  {t('usageMeter.viewUsage')} <Codicon name="arrow-right" />
                 </button>
               </div>
             </div>

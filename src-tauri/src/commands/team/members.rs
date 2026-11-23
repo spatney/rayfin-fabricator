@@ -18,8 +18,8 @@ const MEMBER_ROLE: &str = "Contributor";
 async fn require_owner(ws: &TeamWorkspace) -> Result<(), String> {
   match gh::repo(&ws.repo).await {
     Ok(info) if info.manages() => Ok(()),
-    Ok(_) => Err("Only the workspace's owners can manage who can open its apps.".into()),
-    Err(e) => Err(e.describe("Check your access to the workspace")),
+    Ok(_) => Err(t!("team.members.ownersOnlyAccess")),
+    Err(e) => Err(e.describe(&t!("team.actions.checkAccess"))),
   }
 }
 
@@ -28,24 +28,23 @@ async fn require_admin(ws: &TeamWorkspace) -> Result<(), String> {
   match gh::repo(&ws.repo).await {
     Ok(info) if info.admin => Ok(()),
     Ok(info) if info.manages() => Err(admin_only(&info.full_name)),
-    Ok(_) => Err("Only the workspace's owners can manage members.".into()),
-    Err(e) => Err(e.describe("Check your access to the workspace")),
+    Ok(_) => Err(t!("team.members.ownersOnly")),
+    Err(e) => Err(e.describe(&t!("team.actions.checkAccess"))),
   }
 }
 
 /// What an owner with the Maintain role hears when they try to add or remove someone.
 fn admin_only(repo: &str) -> String {
-  format!(
-    "GitHub only lets admins of {repo} add or remove people, and you have the Maintain role. Ask one of its admins to do it on GitHub, or to give you the Admin role."
-  )
+  t!("team.members.adminOnly", repo = repo)
 }
 
 fn workspace(id: &str) -> Result<TeamWorkspace, String> {
   team::require_enabled()?;
-  store::find_team_workspace(id).ok_or_else(|| "That team workspace is no longer on this computer.".into())
+  store::find_team_workspace(id).ok_or_else(|| t!("team.workspaceMissing"))
 }
 
 /// The workspace's Fabric workspaces with their labels, from trusted settings.
+/// The labels stay English: the renderer names them in the app's language.
 fn fabric_targets(targets: &TrustedTargets) -> [(&'static str, String); 2] {
   [
     ("published apps", targets.production_workspace_id.clone()),
@@ -56,8 +55,8 @@ fn fabric_targets(targets: &TrustedTargets) -> [(&'static str, String); 2] {
 async fn directory_user(email: &str) -> Result<String, String> {
   match entra::find_user(email).await {
     Ok(Some((id, _))) => Ok(id),
-    Ok(None) => Err(format!("There's nobody with the email {email} in your organization.")),
-    Err(e) => Err(e.describe("Look up the person in your organization")),
+    Ok(None) => Err(t!("team.members.noSuchEmail", email = email)),
+    Err(e) => Err(e.describe(&t!("team.actions.lookUpPerson"))),
   }
 }
 
@@ -67,14 +66,14 @@ async fn grant_fabric(targets: &TrustedTargets, email: &str) -> Result<String, S
   for (_, target) in fabric_targets(targets).iter().filter(|(_, t)| !t.is_empty()) {
     fabric::add_role(target, &id, "User", MEMBER_ROLE)
       .await
-      .map_err(|e| e.describe("Give access to the workspace's Fabric apps"))?;
+      .map_err(|e| e.describe(&t!("team.actions.grantFabric")))?;
   }
   Ok(id)
 }
 
 async fn revoke_fabric(targets: &TrustedTargets, principal_id: &str) -> Result<(), String> {
   for (_, target) in fabric_targets(targets).iter().filter(|(_, t)| !t.is_empty()) {
-    fabric::remove_role(target, principal_id).await.map_err(|e| e.describe("Remove their Fabric access"))?;
+    fabric::remove_role(target, principal_id).await.map_err(|e| e.describe(&t!("team.actions.revokeFabric")))?;
   }
   Ok(())
 }
@@ -109,7 +108,7 @@ async fn members(workspace_id: String) -> TeamMembersResult {
   };
   let info = match gh::repo(&ws.repo).await {
     Ok(info) => info,
-    Err(e) => return empty(e.describe("Open the workspace on GitHub")),
+    Err(e) => return empty(e.describe(&t!("team.actions.openWorkspace"))),
   };
   let (collaborators, invitations) = tokio::join!(gh::collaborators(&ws.repo), gh::repo_invitations(&ws.repo));
   let mut members: Vec<TeamMember> = match collaborators {
@@ -123,7 +122,7 @@ async fn members(workspace_id: String) -> TeamMembersResult {
         invitation_id: None,
       })
       .collect(),
-    Err(e) => return empty(e.describe("List the workspace's members")),
+    Err(e) => return empty(e.describe(&t!("team.actions.listMembers"))),
   };
   for (id, login, avatar_url, owner) in invitations.unwrap_or_default() {
     members.push(TeamMember {
@@ -158,15 +157,15 @@ async fn invite(workspace_id: String, login: String, owner: bool, email: Option<
   }
   let wanted = login.trim().trim_start_matches('@').to_string();
   if wanted.is_empty() {
-    return fail("Enter the person's GitHub username.");
+    return fail(t!("team.members.enterUsername"));
   }
   let canonical = match gh::user(&wanted).await {
     Ok(Some((login, _))) => login,
-    Ok(None) => return fail(format!("There's no GitHub account named {wanted}.")),
-    Err(e) => return fail(e.describe("Look up the GitHub account")),
+    Ok(None) => return fail(t!("team.members.noSuchAccount", login = wanted)),
+    Err(e) => return fail(e.describe(&t!("team.actions.lookUpAccount"))),
   };
   if let Err(e) = gh::invite(&ws.repo, &canonical, if owner { "admin" } else { "push" }).await {
-    return fail(e.describe("Invite them on GitHub"));
+    return fail(e.describe(&t!("team.actions.invite")));
   }
   let mut result = with_workspace(ws.clone());
   if let Some(email) = email.map(|e| e.trim().to_string()).filter(|e| !e.is_empty()) {
@@ -176,7 +175,7 @@ async fn invite(workspace_id: String, login: String, owner: bool, email: Option<
     };
     match granted.await {
       Ok(id) => remember(&ws, &canonical, &id),
-      Err(e) => result.error = Some(format!("{canonical} was invited on GitHub, but: {e}")),
+      Err(e) => result.error = Some(t!("team.members.invitedBut", login = canonical, error = e)),
     }
   }
   result.workspace = store::find_team_workspace(&ws.id);
@@ -240,7 +239,7 @@ async fn fabric_access(workspace_id: String) -> TeamFabricAccess {
   for (label, target) in fabric_targets(&targets) {
     let assignments = match fabric::role_assignments(&target).await {
       Ok(a) => a,
-      Err(e) => return empty(e.describe("List who can open the apps")),
+      Err(e) => return empty(e.describe(&t!("team.actions.listAccess"))),
     };
     for a in assignments.into_iter().filter(|a| a.principal_type == "User" || a.principal_type == "Group") {
       match people.iter_mut().find(|p| p.principal_id == a.principal_id) {
@@ -308,7 +307,7 @@ async fn remove_member(workspace_id: String, login: String, invitation_id: Optio
     None => gh::remove_collaborator(&ws.repo, login.trim()).await,
   };
   if let Err(e) = removed {
-    return fail(e.describe("Remove them on GitHub"));
+    return fail(e.describe(&t!("team.actions.removeMember")));
   }
   let mut result = with_workspace(ws.clone());
   if let Some(principal_id) = forget(&ws, login.trim()) {
@@ -317,7 +316,7 @@ async fn remove_member(workspace_id: String, login: String, invitation_id: Optio
       revoke_fabric(&targets, &principal_id).await
     };
     if let Err(e) = revoked.await {
-      result.error = Some(format!("{login} was removed on GitHub, but: {e}"));
+      result.error = Some(t!("team.members.removedBut", login = login, error = e));
     }
   }
   result.workspace = store::find_team_workspace(&ws.id);

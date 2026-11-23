@@ -8,6 +8,7 @@
 // is dropped (it is bulky and only interesting live), and a turn that never
 // produced an answer is dropped entirely — a question with no reply is noise
 // to come back to.
+import { translator } from '../../i18n'
 import type { Exchange } from './conversation'
 
 /** Exchanges kept on disk. Older ones fall off the top. */
@@ -69,13 +70,16 @@ export function fromSaved(data: unknown): Exchange[] {
  * purpose: the point is "this is older", not an audit trail.
  */
 export function describeWhen(savedAt: string, now: Date = new Date()): string {
+  const t = translator('help')
   const then = new Date(savedAt)
-  if (Number.isNaN(then.getTime())) return 'earlier'
+  if (Number.isNaN(then.getTime())) return t('when.earlier')
   const minutes = Math.round((now.getTime() - then.getTime()) / 60000)
-  if (minutes < 2) return 'a moment ago'
-  if (minutes < 60) return `${minutes} minutes ago`
+  if (minutes < 2) return t('when.momentAgo')
+  if (minutes < 60) return t('when.minutesAgo', { count: minutes })
   const hours = Math.round(minutes / 60)
-  if (hours < 2) return 'an hour ago'
+  if (hours < 2) return t('when.anHourAgo')
   // Capped at a day by the backend, so "yesterday" is as far as this goes.
-  return then.toDateString() === now.toDateString() ? `${hours} hours ago` : 'yesterday'
+  return then.toDateString() === now.toDateString()
+    ? t('when.hoursAgo', { count: hours })
+    : t('when.yesterday')
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react'
 import type { TeamMap, TeamMapApp, TeamMapRun, TeamWorkspace } from '@shared/ipc'
+import { translator, useTranslation } from '../../i18n'
 import { AddIcon, ChevronRightIcon } from '../icons'
 import { copyHealth, isActive, publishedHealth, type Health } from './map/model'
 import { Avatar, hueOf } from './map/parts'
@@ -26,15 +27,21 @@ function ownedBy(repo: string, login: string): boolean {
 
 /** An app's state on Home: deploying anywhere, else its published status. */
 export function appStatus(app: TeamMapApp, runs: TeamMapRun[]): { health: Health; label: string } {
+  const t = translator('team')
   const deploying =
     (app.published && publishedHealth(app, runs) === 'deploying') ||
     app.copies.some((c) => copyHealth(app, c, runs) === 'deploying')
-  if (deploying) return { health: 'deploying', label: 'Deploying…' }
-  if (!app.published) return { health: 'idle', label: 'Not published' }
+  if (deploying) return { health: 'deploying', label: t('card.health.deploying') }
+  if (!app.published) return { health: 'idle', label: t('card.health.notPublished') }
   const health = publishedHealth(app, runs)
   return {
     health,
-    label: health === 'live' ? 'Live' : health === 'failed' ? 'Deploy failed' : 'Not deployed'
+    label:
+      health === 'live'
+        ? t('card.health.live')
+        : health === 'failed'
+          ? t('card.health.failed')
+          : t('card.health.notDeployed')
   }
 }
 
@@ -48,6 +55,7 @@ export default function TeamWorkspaceCard({
   onFinishSetup,
   onAbandonSetup
 }: Props): JSX.Element {
+  const { t } = useTranslation('team')
   const pending = Boolean(workspace.setup && !workspace.setup.done)
   const [map, setMap] = useState<TeamMap | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
@@ -62,9 +70,9 @@ export default function TeamWorkspaceCard({
       .map(workspace.id)
       .then((next) => {
         setMap(next)
-        setFailed(next.ok ? null : (next.error ?? 'Could not read the workspace.'))
+        setFailed(next.ok ? null : (next.error ?? t('card.readFailed')))
       })
-      .catch(() => setFailed('Could not read the workspace.'))
+      .catch(() => setFailed(t('card.readFailed')))
   }
 
   useEffect(() => {
@@ -92,16 +100,16 @@ export default function TeamWorkspaceCard({
         <span className="team-card-text">
           <span className="team-card-name">{workspace.name}</span>
           <span className="team-card-sub">
-            {workspace.repo || 'Setting up…'} · {workspace.role === 'owner' ? 'Owner' : 'Member'}
+            {workspace.repo || t('card.settingUp')} · {workspace.role === 'owner' ? t('card.owner') : t('card.member')}
             {workspace.account && !ownedBy(workspace.repo, workspace.account) && (
-              <span title="The GitHub account Fabricator uses for this workspace"> · as {workspace.account}</span>
+              <span title={t('card.accountTitle')}> · {t('card.asAccount', { account: workspace.account })}</span>
             )}
           </span>
         </span>
         {deploying > 0 && (
-          <span className="team-live" title="The team pipeline is deploying">
+          <span className="team-live" title={t('card.deployingTitle')}>
             <span className="team-live-dot" aria-hidden="true" />
-            {deploying} deploying
+            {t('card.deploying', { count: deploying })}
           </span>
         )}
         {!pending && onOpenMap && (
@@ -109,17 +117,17 @@ export default function TeamWorkspaceCard({
             type="button"
             className="btn btn--sm"
             onClick={() => onOpenMap(workspace.id)}
-            title="Every app, everyone's changes, and what's deploying"
+            title={t('card.overviewTitle')}
           >
-            <span className="codicon codicon-type-hierarchy-sub" aria-hidden="true" /> Overview
+            <span className="codicon codicon-type-hierarchy-sub" aria-hidden="true" /> {t('shared.overview')}
           </button>
         )}
         {!pending && onOpenMap && (
           <button
             type="button"
             className="team-card-gear"
-            aria-label={`Manage ${workspace.name}`}
-            title="Members and settings"
+            aria-label={t('card.manage', { name: workspace.name })}
+            title={t('card.manageTitle')}
             onClick={() => onOpenMap(workspace.id, true)}
           >
             <span className="codicon codicon-gear" aria-hidden="true" />
@@ -129,18 +137,18 @@ export default function TeamWorkspaceCard({
 
       {pending ? (
         <div className="team-card-setup">
-          <span className="team-muted">Setup didn&apos;t finish. Pick up where it stopped; nothing is lost.</span>
+          <span className="team-muted">{t('card.setupUnfinished')}</span>
           <span className="team-card-setup-actions">
             <button
               type="button"
               className="btn btn--sm btn--ghost"
-              title="Delete what setup created and remove the workspace"
+              title={t('card.abandonTitle')}
               onClick={() => onAbandonSetup(workspace)}
             >
-              Abandon setup…
+              {t('shared.abandonSetup')}
             </button>
             <button type="button" className="btn btn--sm btn--primary" onClick={() => onFinishSetup(workspace)}>
-              Finish setup
+              {t('card.finishSetup')}
             </button>
           </span>
         </div>
@@ -148,7 +156,7 @@ export default function TeamWorkspaceCard({
         <ul className="team-card-apps">
           {!map && !failed && (
             <li className="team-card-note">
-              <span className="ws-spinner" /> Reading the workspace…
+              <span className="ws-spinner" /> {t('card.reading')}
             </li>
           )}
           {failed && !map?.apps.length && <li className="team-card-note">{failed}</li>}
@@ -161,7 +169,7 @@ export default function TeamWorkspaceCard({
                 <button
                   type="button"
                   className={`team-card-app${opening === key ? ' team-card-app--opening' : ''}`}
-                  aria-label={`Open ${app.name}`}
+                  aria-label={t('card.openApp', { name: app.name })}
                   disabled={opening !== null}
                   onClick={() => onOpenApp(workspace.id, app.folder)}
                 >
@@ -177,7 +185,10 @@ export default function TeamWorkspaceCard({
                     <span className="team-status-dot" aria-hidden="true" />
                     {status.label}
                   </span>
-                  <span className="team-card-app-people" title={people.map((c) => (c.mine ? 'You' : c.author)).join(', ')}>
+                  <span
+                    className="team-card-app-people"
+                    title={people.map((c) => (c.mine ? t('card.you') : c.author)).join(', ')}
+                  >
                     {people.length > 0 && (
                       <>
                         <span className="team-card-avatars">
@@ -185,7 +196,7 @@ export default function TeamWorkspaceCard({
                             <Avatar key={c.author || c.branch} login={c.author || 'you'} url={c.avatarUrl} size={18} />
                           ))}
                         </span>
-                        {app.copies.length} in progress
+                        {t('card.inProgress', { count: app.copies.length })}
                       </>
                     )}
                   </span>
@@ -201,7 +212,7 @@ export default function TeamWorkspaceCard({
               <span className="team-card-app-mark team-card-app-mark--new" aria-hidden="true">
                 <AddIcon />
               </span>
-              <span className="team-card-app-name">New app</span>
+              <span className="team-card-app-name">{t('card.newApp')}</span>
             </button>
           </li>
         </ul>

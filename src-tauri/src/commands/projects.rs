@@ -49,7 +49,7 @@ pub async fn projects_check_name(
     return crate::commands::projects_impl::check_local_name(&name, location.as_deref());
   };
   let Some(ws) = store::find_team_workspace(&id) else {
-    return ProjectNameCheck { ok: false, message: Some("That team workspace is no longer on this computer.".into()) };
+    return ProjectNameCheck { ok: false, message: Some(t!("commands.shared.teamWorkspaceGone")) };
   };
   match crate::commands::team::new_app_name_problem(&ws, &name).await {
     Some(message) => ProjectNameCheck { ok: false, message: Some(message) },
@@ -150,9 +150,9 @@ pub fn projects_set_pinned(id: String, pinned: bool) -> ProjectsState {
 #[tauri::command]
 pub fn projects_reveal(app: AppHandle, id: String) -> Result<(), String> {
   use tauri_plugin_opener::OpenerExt;
-  let project = store::find_project(&id).ok_or_else(|| "That project isn't in Fabricator anymore.".to_string())?;
+  let project = store::find_project(&id).ok_or_else(|| t!("commands.shared.projectGone"))?;
   if !std::path::Path::new(&project.path).is_dir() {
-    return Err("The project's folder isn't there anymore.".into());
+    return Err(t!("commands.shared.projectFolderGone"));
   }
   app.opener().open_path(project.path, None::<&str>).map_err(|e| e.to_string())
 }

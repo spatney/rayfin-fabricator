@@ -1,0 +1,91 @@
+{
+  "myWorkspace": "マイ ワークスペース",
+  "dataFrom": "「{{name}}」のデータ",
+  "pages_other": "{{count}} ページ",
+  "screen": {
+    "title": "Power BI レポートの移行",
+    "sub": "レポートを選んでください。Fabricator がレポートのデータをライブで読み取る新しいアプリに変換し、Copilot がそのページを 1 ページずつ作り直します。",
+    "find": "レポートを検索",
+    "placeholder": "名前で検索するか、レポートのリンクを貼り付けます",
+    "pressEnter": "Enter キーを押してこのレポートを読み取るか、<read>今すぐ読み取る</read>ことができます。",
+    "accountHint": "Azure CLI を通じて {{user}} として開けるレポートです。",
+    "hint": "Azure CLI を通じて開けるレポートです。",
+    "workspaces": "ワークスペース",
+    "searchResults": "検索結果",
+    "reports": "レポート",
+    "loadingWorkspaces": "ワークスペースを読み込んでいます…",
+    "loadingReports": "レポートを読み込んでいます…",
+    "noMatches": "一致するレポートはありません。",
+    "noReports": "このワークスペースにはレポートがありません。"
+  },
+  "azure": {
+    "pick": "Fabricator は Azure のサインインを使って Power BI レポートを読み取ります。レポートを選ぶには Azure にサインインしてください。",
+    "reports": "レポートを表示するには Azure にサインインしてください。",
+    "read": "このレポートを読み取るには Azure にサインインしてください。",
+    "finish": "ブラウザーで Azure へのサインインを完了してください。",
+    "signingIn": "サインインしています…",
+    "signIn": "Azure にサインイン"
+  },
+  "inspect": {
+    "reading": "レポートを読み取っています…",
+    "about": "{{name}} について",
+    "workspace": "ワークスペース",
+    "pages_other": "{{count}} ページ: {{names}}",
+    "more": "{{names}}、ほか {{rest}} ページ",
+    "checks": {
+      "definition": "定義",
+      "model": "データ モデル",
+      "images": "ページの画像"
+    }
+  },
+  "card": {
+    "label": "Power BI の移行",
+    "title": "Power BI から「{{name}}」を移行しています",
+    "progress_other": "{{count}} ページ中 {{done}} ページ",
+    "drawing": "ページを描画しています",
+    "reading": "レポートを読み取っています",
+    "stages": {
+      "definition": "レポートの定義",
+      "model": "データ モデル",
+      "export": "ページのエクスポート",
+      "images": "ページの画像"
+    },
+    "stageStatus": {
+      "done": "完了",
+      "skipped": "スキップ済み",
+      "failed": "利用不可",
+      "waiting": "待機中"
+    },
+    "pageStatus": {
+      "pending": "未開始",
+      "running": "移行中",
+      "done": "移行済み",
+      "failed": "再試行が必要"
+    },
+    "stageFailed": "{{stage}}: {{message}}",
+    "page": "{{n}}. {{name}}: {{status}}",
+    "pageTitle": "{{name}}: {{status}}",
+    "finished": "すべてのページを移行しました。近似した部分は MIGRATION.md に記載されています。",
+    "running": "Copilot が「{{name}}」を移行しています。",
+    "runningRest": "Copilot が「{{name}}」を移行しています。残りのページも 1 ページずつ続けて移行します。",
+    "next": "次:「{{name}}」",
+    "exportTime": "エクスポートには 1 ページあたり約 20 秒かかります。",
+    "skipImages": "ページの画像をスキップ",
+    "stopRest": "このページの後で停止",
+    "migrateNext": "次のページを移行",
+    "migrateRest": "残りを移行"
+  },
+  "turn": {
+    "first": "Power BI から「{{report}}」を移行してください",
+    "page": "{{total}} ページ中 {{n}} ページ目を移行してください: {{name}}"
+  },
+  "errors": {
+    "workspaces": "ワークスペースの一覧を取得できませんでした。",
+    "reports": "レポートの一覧を取得できませんでした。",
+    "search": "レポートを検索できませんでした。",
+    "inspect": "レポートを読み取れませんでした。",
+    "load": "レポートの移行を読み込めませんでした。",
+    "save": "移行を保存できませんでした。",
+    "dismiss": "移行カードを閉じられませんでした。"
+  }
+}

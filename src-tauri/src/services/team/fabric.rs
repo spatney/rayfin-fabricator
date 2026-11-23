@@ -29,7 +29,7 @@ impl FabricError {
 
   pub fn describe(&self, action: &str) -> String {
     if self.needs_login {
-      return format!("{action}: your Azure sign-in has expired. Sign in to Azure again from setup.");
+      return t!("team.az.describe.expired", action = action);
     }
     format!("{action}: {}", self.message)
   }
@@ -65,7 +65,7 @@ async fn request(method: reqwest::Method, path: &str, body: Option<Value>) -> Re
   if let Some(b) = body {
     req = req.json(&b);
   }
-  let res = req.send().await.map_err(|e| FabricError::new(format!("Couldn't reach Fabric: {e}")))?;
+  let res = req.send().await.map_err(|e| FabricError::new(t!("team.fabric.unreachable", error = e)))?;
   let status = res.status();
   let text = res.text().await.unwrap_or_default();
   let parsed: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
@@ -77,7 +77,7 @@ async fn request(method: reqwest::Method, path: &str, body: Option<Value>) -> Re
     .get("message")
     .and_then(Value::as_str)
     .map(String::from)
-    .unwrap_or_else(|| format!("Fabric returned HTTP {}.", status.as_u16()));
+    .unwrap_or_else(|| t!("team.fabric.httpStatus", status = status.as_u16()));
   Err(FabricError { status: Some(status.as_u16()), code, message, needs_login: status.as_u16() == 401 })
 }
 
@@ -138,7 +138,7 @@ pub async fn create_workspace(name: &str, capacity_id: &str) -> Result<(String, 
     .await
     {
       Ok(v) => {
-        let id = v.get("id").and_then(Value::as_str).ok_or_else(|| FabricError::new("Fabric returned no workspace id."))?;
+        let id = v.get("id").and_then(Value::as_str).ok_or_else(|| FabricError::new(t!("team.fabric.noWorkspaceId")))?;
         return Ok((id.to_string(), attempt));
       }
       Err(e) if e.code.as_deref() == Some("WorkspaceNameAlreadyExists") || e.status == Some(409) => {
@@ -147,7 +147,7 @@ pub async fn create_workspace(name: &str, capacity_id: &str) -> Result<(String, 
       Err(e) => return Err(e),
     }
   }
-  Err(FabricError::new("Every workspace name Fabricator tried is already taken."))
+  Err(FabricError::new(t!("team.fabric.namesTaken")))
 }
 
 /// One role assignment on a Fabric workspace.

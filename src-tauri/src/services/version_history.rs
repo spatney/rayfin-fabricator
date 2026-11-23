@@ -156,12 +156,12 @@ async fn ensure_tracked_with(dir: &Path, large_file_bytes: u64) -> Result<Option
     return Ok(None);
   }
   if !dir.is_dir() {
-    return Err(format!("The app's folder {} doesn't exist.", dir.display()));
+    return Err(t!("services.versionHistory.folderMissing", path = dir.display()));
   }
 
   let init = run(dir, &["init", "--quiet"], 30_000).await;
   if !init.ok {
-    return Err(failure("Couldn't create a git repository", &init));
+    return Err(failure(&init, |detail| t!("services.versionHistory.initFailed", detail = detail)));
   }
   match prepare_first_version(dir, large_file_bytes).await {
     Ok(started) => Ok(Some(started)),
@@ -179,7 +179,7 @@ async fn prepare_first_version(dir: &Path, large_file_bytes: u64) -> Result<Star
 
   let listed = run(dir, &["ls-files", "--others", "--exclude-standard", "-z"], 120_000).await;
   if !listed.ok {
-    return Err(failure("Couldn't list the app's files", &listed));
+    return Err(failure(&listed, |detail| t!("services.versionHistory.listFailed", detail = detail)));
   }
   let candidates: Vec<&str> = listed.stdout.split('\0').filter(|p| !p.is_empty()).collect();
   let inspection = inspect(dir, &candidates, large_file_bytes);
@@ -193,11 +193,14 @@ async fn prepare_first_version(dir: &Path, large_file_bytes: u64) -> Result<Star
 
   let add = run(dir, &["add", "-A"], 300_000).await;
   if !add.ok {
-    return Err(failure("Couldn't add the app's files to its history", &add));
+    return Err(failure(&add, |detail| t!("services.versionHistory.addFilesFailed", detail = detail)));
   }
   ensure_identity(dir).await;
   let commit = run(dir, &["commit", "--quiet", "--allow-empty", "-m", FIRST_VERSION_MESSAGE], 120_000).await;
-  let commit_error = (!commit.ok).then(|| failure("Couldn't save the first version", &commit));
+  // Only for the log and the activity journal, which stay English.
+  let commit_error = (!commit.ok).then(|| {
+    format!("Couldn't save the first version: {}", git_said(&commit).as_deref().unwrap_or("git gave no reason."))
+  });
   if let Some(error) = &commit_error {
     log::warn!("{}: {error}", dir.display());
   }
@@ -309,7 +312,7 @@ fn append(file: &Path, text: &str) -> Result<(), String> {
     let mut f = std::fs::OpenOptions::new().create(true).append(true).open(file)?;
     f.write_all(text.as_bytes())
   };
-  write().map_err(|e| format!("Couldn't write {}: {e}", file.display()))
+  write().map_err(|e| t!("services.versionHistory.writeFailed", path = file.display(), error = e))
 }
 
 /// Commits need a name and email; use Fabricator's when git has none.
@@ -326,10 +329,14 @@ async fn run(dir: &Path, args: &[&str], timeout_ms: u64) -> RunResult {
   git::run(args, RunOptions { cwd: Some(dir.to_path_buf()), timeout_ms: Some(timeout_ms), ..Default::default() }).await
 }
 
-fn failure(what: &str, res: &RunResult) -> String {
-  let detail = [res.stderr.trim(), res.stdout.trim()].into_iter().find(|s| !s.is_empty()).unwrap_or("git gave no reason.");
-  let detail: String = detail.chars().take(400).collect();
-  format!("{what}: {detail}")
+/// What git said about a failed run, clipped; `None` when it said nothing.
+fn git_said(res: &RunResult) -> Option<String> {
+  [res.stderr.trim(), res.stdout.trim()].into_iter().find(|s| !s.is_empty()).map(|detail| detail.chars().take(400).collect())
+}
+
+/// The error for a failed run: `what` with what git said.
+fn failure(res: &RunResult, what: impl FnOnce(&str) -> String) -> String {
+  what(&git_said(res).unwrap_or_else(|| t!("services.versionHistory.gitNoReason")))
 }
 
 /// [`ensure_tracked`] for a registered app. Team apps always live in their
@@ -438,14 +445,14 @@ pub fn turn_message(request: &str, fallback: &str) -> String {
 pub async fn save_version(dir: &Path, message: &str) -> Result<Option<String>, String> {
   let status = run(dir, &["status", "--porcelain", "--untracked-files=all", "--", ".", NEVER_SAVED], 30_000).await;
   if !status.ok {
-    return Err(failure("Couldn't read the app's changes", &status));
+    return Err(failure(&status, |detail| t!("services.versionHistory.readChangesFailed", detail = detail)));
   }
   if status.stdout.trim().is_empty() {
     return Ok(None);
   }
   let add = run(dir, &["add", "-A", "--", ".", NEVER_SAVED], 300_000).await;
   if !add.ok {
-    return Err(failure("Couldn't add the app's changes to its history", &add));
+    return Err(failure(&add, |detail| t!("services.versionHistory.addChangesFailed", detail = detail)));
   }
   ensure_identity(dir).await;
   let commit = run(dir, &["commit", "--quiet", "-m", message, "--", ".", NEVER_SAVED], 120_000).await;
@@ -454,7 +461,7 @@ pub async fn save_version(dir: &Path, message: &str) -> Result<Option<String>, S
     if said.contains("nothing to commit") || said.contains("no changes added") {
       return Ok(None);
     }
-    return Err(failure("Couldn't save the version", &commit));
+    return Err(failure(&commit, |detail| t!("services.versionHistory.saveFailed", detail = detail)));
   }
   let head = run(dir, &["rev-parse", "HEAD"], 30_000).await;
   Ok(head.ok.then(|| head.stdout.trim().to_string()).filter(|sha| !sha.is_empty()))

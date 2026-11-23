@@ -1,0 +1,261 @@
+{
+  "file": {
+    "progress_one": "{{processed, number}} de {{count, number}} archivo",
+    "progress_other": "{{processed, number}} de {{count, number}} archivos",
+    "files_one": "{{count, number}} archivo",
+    "files_other": "{{count, number}} archivos",
+    "versions_one": "{{count, number}} versión",
+    "versions_other": "{{count, number}} versiones"
+  },
+  "parts": {
+    "code": "Código de la aplicación",
+    "history": "Historial de versiones",
+    "published": "Aplicación publicada",
+    "secrets": "Secretos",
+    "from": "De {{from}}",
+    "version": "Versión {{version}}"
+  },
+  "installedApps": {
+    "title": "Aplicaciones instaladas",
+    "count_one": "{{count}} aplicación",
+    "count_other": "{{count}} aplicaciones",
+    "openName": "Abrir {{name}}",
+    "isOpen": "Abierta",
+    "fromFile": "Instalada desde un archivo .rayfin",
+    "confirm": "¿Quitarla junto con sus datos?",
+    "removing": "Quitando…",
+    "keep": "Conservar",
+    "removeName": "Quitar {{name}}",
+    "cantRemove": "Fabricator no pudo quitar {{name}}."
+  },
+  "guard": {
+    "cantPrepare": "No se pudo preparar este proyecto. Comprueba sus dependencias e inténtalo de nuevo.",
+    "cantInstall": "No se pudieron instalar las dependencias de este proyecto.",
+    "failedLabel": "No se pudo preparar {{name}}",
+    "preparing": "Preparando {{name}}",
+    "failedTitle": "No se pudieron instalar las dependencias del proyecto",
+    "retry": "Reintentar la instalación",
+    "switchProjects": "Cambiar de proyecto",
+    "checking": "Comprobando la Rayfin CLI del proyecto e instalando las dependencias que faltan..."
+  },
+  "remove": {
+    "title": "Quitar proyecto",
+    "lead": "Elige qué quitar de <strong>{{name}}</strong>.",
+    "folder": {
+      "title": "Carpeta local del proyecto",
+      "badge": "Recuperable",
+      "desc": "Se mueve a la <strong>papelera del sistema</strong>. Puedes restaurarla desde allí."
+    },
+    "app": {
+      "title": "Aplicación de Fabric publicada",
+      "badge": "Permanente",
+      "desc": "Elimina {{name}} y todos los datos de la aplicación en {{workspace}}.",
+      "descNoWorkspace": "Elimina {{name}} y todos los datos de la aplicación en su área de trabajo de Fabric.",
+      "warn": "Esta acción no se puede deshacer."
+    },
+    "note": {
+      "noApp": "No hay ninguna aplicación de Fabric publicada vinculada a este proyecto.",
+      "keepsWorkspace": "Tu área de trabajo de Fabric se conservará.",
+      "keepsApp": "La aplicación publicada y sus datos se quedan en Fabric."
+    },
+    "confirmBoth": "Mover a la papelera y eliminar aplicación",
+    "confirmFolder": "Mover carpeta a la papelera"
+  },
+  "manage": {
+    "title": "Administrar proyecto",
+    "close": "Cerrar la administración del proyecto",
+    "nameLabel": "Nombre del proyecto",
+    "renameHint": "También cambia su nombre en <code>rayfin/rayfin.yml</code>.",
+    "actionsHeading": "Acciones del proyecto",
+    "errors": {
+      "cantRename": "No se pudo cambiar el nombre del proyecto. Inténtalo de nuevo.",
+      "cantMove": "No se pudo mover el proyecto.",
+      "noName": "Escribe un nombre para el proyecto."
+    },
+    "move": {
+      "title": "Mover a un área de trabajo de equipo",
+      "desc": "Copia esta aplicación y su chat en el área de trabajo de equipo para que tu equipo pueda trabajar en ella. La canalización del equipo la implementa como una aplicación nueva, sin los datos de la aplicación publicada de este proyecto. Este proyecto local se queda como está.",
+      "workspaceLabel": "Área de trabajo de equipo",
+      "moving": "Moviendo…",
+      "move": "Mover"
+    },
+    "export": {
+      "button": "Exportar"
+    },
+    "recents": {
+      "title": "Proyectos recientes",
+      "remove": "Quitar de proyectos recientes",
+      "team": "Ocúltalo de tu lista de recientes. Tu trabajo en GitHub se conserva y puedes volver a abrirlo desde su área de trabajo de equipo.",
+      "missing": "Fabricator no encuentra este proyecto en este dispositivo. Quítalo de tu lista de recientes.",
+      "withApp": "Ocúltalo de tu lista de recientes. Los archivos y la aplicación de Fabric quedan intactos.",
+      "filesOnly": "Ocúltalo de tu lista de recientes. Los archivos quedan intactos."
+    },
+    "team": {
+      "title": "Aplicación de equipo",
+      "desc": "Esta aplicación pertenece al área de trabajo de equipo <strong>{{team}}</strong>. Sus propietarios pueden quitarla para todos desde la configuración del área de trabajo.",
+      "descUnknown": "Esta aplicación pertenece al área de trabajo de equipo desde la que se abrió. Sus propietarios pueden quitarla para todos desde la configuración del área de trabajo."
+    },
+    "remove": {
+      "review": "Revisar opciones",
+      "withApp": "Mueve la carpeta a la papelera y, si quieres, elimina también su aplicación publicada.",
+      "folderOnly": "Mueve la carpeta a la papelera. No se cambia ninguna aplicación de Fabric."
+    }
+  },
+  "import": {
+    "title": "Importar proyecto",
+    "reading": "Leyendo {{file}}…",
+    "exportedByOn": "Exportado por {{from}} el {{date}}",
+    "exportedBy": "Exportado por {{from}}",
+    "fromFile": "De {{file}}",
+    "importingFrom": "Importándolo desde {{file}}.",
+    "importingName": "Importando {{name}}…",
+    "progress": "Progreso de la importación",
+    "bringsIn": "Qué incluye",
+    "code": {
+      "desc": "Fabricator instala sus paquetes cuando lo abres."
+    },
+    "history": {
+      "desc": "Todas las versiones guardadas antes, para que Historial y Restaurar funcionen."
+    },
+    "published": {
+      "askFrom": "Al publicar se actualiza esta misma aplicación. Pide a {{from}} acceso al área de trabajo.",
+      "needAccess": "Al publicar se actualiza esta misma aplicación, cuando tengas acceso a su área de trabajo."
+    },
+    "secrets": {
+      "desc": "Sus valores no se incluyen. Configura los tuyos en Código → Secretos."
+    },
+    "folder": "Se guarda en una carpeta nueva, <code>{{folder}}</code>.",
+    "trust": "Importa solo proyectos de personas de confianza. Su código se ejecuta en este dispositivo.",
+    "importing": "Importando…",
+    "importAnyway": "Importar de todos modos",
+    "import": "Importar",
+    "errors": {
+      "cantRead": "Fabricator no pudo leer {{file}}.",
+      "cantImport": "Fabricator no pudo importar {{file}}."
+    }
+  },
+  "export": {
+    "title": "Exportar proyecto",
+    "lead": {
+      "project": "Guarda una copia que otra persona pueda importar en Fabricator.",
+      "app": "Guárdalo como una aplicación que otra persona pueda instalar y usar.",
+      "done": "Ya está exportado y listo para enviar."
+    },
+    "format": {
+      "label": "Exportar como",
+      "project": "Proyecto",
+      "projectDesc": "Para seguir creándolo en Fabricator · .fabricator",
+      "app": "Aplicación",
+      "appDesc": "Para usarlo en una ventana propia · .rayfin"
+    },
+    "checking": "Comprobando qué incluir…",
+    "includes": "Qué incluye la exportación",
+    "code": {
+      "desc": "Código fuente y configuración. Los paquetes instalados y la salida de compilación se quedan fuera."
+    },
+    "app": {
+      "desc": "Se abre en una ventana propia, con este nombre y este icono. Sus datos se quedan en el dispositivo donde se instala."
+    },
+    "history": {
+      "desc": "Todas las versiones guardadas, para que también puedan usar Historial y Restaurar."
+    },
+    "published": {
+      "include": "Lo que publiquen actualizará esta misma aplicación. Necesitarán acceso a su área de trabajo.",
+      "exclude": "Lo publicarán como una aplicación nueva, en el área de trabajo que elijan."
+    },
+    "never": {
+      "project": "Nunca se incluye: tu chat, los valores de los secretos, los datos locales de la aplicación ni los inicios de sesión.",
+      "projectSecrets": "Nunca se incluye: tu chat, los valores de los secretos ({{secrets}}), los datos locales de la aplicación ni los inicios de sesión.",
+      "app": "Nunca se incluye: tu chat, el historial de versiones, dónde está publicada, los valores de los secretos, los datos locales de la aplicación ni los inicios de sesión.",
+      "appSecrets": "Nunca se incluye: tu chat, el historial de versiones, dónde está publicada, los valores de los secretos ({{secrets}}), los datos locales de la aplicación ni los inicios de sesión."
+    },
+    "keptOut": "También se omiten por si contienen secretos: {{files}}.",
+    "keptOutMore_one": "{{count}} más",
+    "keptOutMore_other": "{{count}} más",
+    "secretsWarning": "Usa secretos que no se incluyen, así que lo que los necesite no funcionará donde se instale.",
+    "exportingName": "Exportando {{name}}…",
+    "progress": "Progreso de la exportación",
+    "saved": "Se guardó {{file}}",
+    "next": {
+      "title": "Qué ocurre ahora",
+      "send": "Envíales el archivo por correo electrónico, chat o una carpeta compartida.",
+      "openApp": "Hacen doble clic en él. Fabricator pregunta antes de instalar la aplicación y luego la abre en una ventana propia. La primera vez tarda uno o dos minutos. ¿No tienen Fabricator?",
+      "openProject": "Hacen doble clic en él para importarlo en Fabricator, o seleccionan <strong>Abrir proyecto existente</strong> y luego <strong>Importar un proyecto</strong>. ¿Aún no usan Fabricator?",
+      "copyLink": "Copiar el vínculo de instalación",
+      "linkCopied": "Vínculo de instalación copiado",
+      "afterApp": "Después, se abre como cualquier aplicación. En Windows está en el menú Inicio, en “Rayfin apps”.",
+      "access": "Para que puedan publicar, dales acceso de colaborador a <strong>{{workspace}}</strong> en Fabric.",
+      "openWorkspace": "Abrir el área de trabajo"
+    },
+    "showInFolder": "Mostrar en la carpeta",
+    "exporting": "Exportando…",
+    "export": "Exportar…",
+    "errors": {
+      "cantLook": "Fabricator no pudo revisar este proyecto.",
+      "cantExportApp": "Fabricator no pudo exportar la aplicación.",
+      "cantExportProject": "Fabricator no pudo exportar el proyecto.",
+      "cantCopy": "Fabricator no pudo copiar el vínculo.",
+      "cantShow": "Fabricator no pudo mostrar el archivo."
+    }
+  },
+  "appWindow": {
+    "defaultName": "Aplicación de Rayfin",
+    "installText": "Instálala para usarla en este dispositivo. Se abre en una ventana propia y guarda sus datos en este dispositivo.",
+    "update": {
+      "noDates": "{{name}} ya está instalada. Este archivo tiene otra versión. Al actualizar, se reemplaza la aplicación y se conservan sus datos.",
+      "installedDate": "{{name}} ya está instalada (exportada el {{installedOn}}). Este archivo tiene otra versión. Al actualizar, se reemplaza la aplicación y se conservan sus datos.",
+      "fileDate": "{{name}} ya está instalada. Este archivo tiene otra versión, exportada el {{fileOn}}. Al actualizar, se reemplaza la aplicación y se conservan sus datos.",
+      "bothDates": "{{name}} ya está instalada (exportada el {{installedOn}}). Este archivo tiene otra versión, exportada el {{fileOn}}. Al actualizar, se reemplaza la aplicación y se conservan sus datos."
+    },
+    "bringsIn": "Qué incluye",
+    "codeDesc": "La primera vez que se abre, Fabricator instala sus paquetes y la compila.",
+    "secretsDesc": "Sus valores no se incluyen, así que lo que los necesite no funcionará.",
+    "trust": "Instala solo aplicaciones de personas de confianza. Su código se ejecuta en este dispositivo, con tu identidad.",
+    "openInstalled": "Abrir la instalada",
+    "updateAnyway": "Actualizar de todos modos",
+    "installAnyway": "Instalar de todos modos",
+    "installingName": "Instalando {{name}}…",
+    "progress": "Progreso de la instalación",
+    "gettingReady": "Preparando {{name}}…",
+    "building": "Compilando {{name}}…",
+    "starting": "Iniciando {{name}}…",
+    "packagesHint": "Instalando sus paquetes. La primera vez tarda uno o dos minutos.",
+    "needsNode": "Esta aplicación necesita Node.js",
+    "didntStart": "{{name}} no se inició",
+    "restartForNode": "Cuando Node.js esté instalado, reinicia para usarla.",
+    "noOutput": "Todavía no hay salida.",
+    "showDetails": "Mostrar detalles",
+    "installNode": "Instalar Node.js",
+    "installingNode": "Instalando Node.js…",
+    "cantOpenTitle": "Fabricator no puede abrir esta aplicación",
+    "errors": {
+      "didntStart": "La aplicación no se inició.",
+      "cantOpen": "Fabricator no pudo abrir esta aplicación.",
+      "nothingToOpen": "No hay nada que abrir.",
+      "cantInstall": "Fabricator no pudo instalar la aplicación."
+    }
+  },
+  "appIcon": {
+    "unreadable": "No se pudo leer el icono.",
+    "cantDraw": "Fabricator no pudo dibujar el icono de la aplicación."
+  },
+  "removals": {
+    "waitingSignIn": "Esperando a que inicies sesión en Fabric…",
+    "deletingApp": "Eliminando la aplicación publicada…",
+    "deletingAppFrom": "Eliminando la aplicación publicada de {{workspace}}…",
+    "trashing": "Moviendo la carpeta a la papelera…",
+    "counting": "Contando archivos… {{processed, number}}",
+    "moving_one": "Moviendo {{count, number}} archivo a la papelera…",
+    "moving_other": "Moviendo {{count, number}} archivos a la papelera…",
+    "movingFor_one": "Moviendo {{count, number}} archivo a la papelera… {{seconds}} s",
+    "movingFor_other": "Moviendo {{count, number}} archivos a la papelera… {{seconds}} s",
+    "sessionExpired": "Tu sesión de Fabric expiró. Inicia sesión en Fabric e inténtalo de nuevo.",
+    "cantDeleteApp": "No se pudo eliminar la aplicación publicada.",
+    "cantDeleteAppRetry": "No se pudo eliminar la aplicación publicada. Inténtalo de nuevo.",
+    "tooLong": "Eliminar la aplicación publicada está tardando demasiado. Puede que la conexión sea lenta; inténtalo de nuevo.",
+    "cantTrash": "No se pudo mover la carpeta a la papelera. Inténtalo de nuevo.",
+    "signInUnfinished": "El inicio de sesión en Fabric no terminó. Inténtalo de nuevo.",
+    "cantConfirmSignIn": "No se pudo confirmar el inicio de sesión en Fabric. Inténtalo de nuevo.",
+    "closedBeforeSignIn": "Fabricator se cerró antes de que terminara el inicio de sesión."
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "actionLabels": {
+    "interactive": "Plan umsetzen",
+    "autopilot": "In Autopilot ausführen",
+    "autopilotFleet": "Mit Flotte ausführen",
+    "exitOnly": "Plan genehmigen"
+  },
+  "errors": {
+    "planningIncomplete": "Die Planung wurde nicht abgeschlossen.",
+    "executionIncomplete": "Die Ausführung des Plans wurde nicht abgeschlossen."
+  },
+  "phases": {
+    "researching": "Codebasis wird untersucht…",
+    "clarifying": "Ein paar Fragen vor dem Entwurf",
+    "drafting": "Plan wird entworfen…",
+    "review": "Plan bereit zur Überprüfung",
+    "revising": "Plan wird überarbeitet…",
+    "executing": "Plan wird ausgeführt",
+    "completed": "Plan abgeschlossen",
+    "failed": "Plan fehlgeschlagen",
+    "interruptedReview": "Überprüfung wurde unterbrochen",
+    "interruptedExecution": "Ausführung wurde unterbrochen"
+  },
+  "card": {
+    "expandProgress": "Planfortschritt erweitern",
+    "executing": "Plan wird ausgeführt",
+    "workingThrough": "Genehmigter Plan wird abgearbeitet",
+    "revision": "Überarbeitung {{number}}",
+    "collapseProgress": "Planfortschritt reduzieren",
+    "collapse": "Reduzieren",
+    "progress": "Planfortschritt",
+    "stepsDone_one": "{{done}} von {{count}} Schritt erledigt",
+    "stepsDone_other": "{{done}} von {{count}} Schritten erledigt",
+    "now": "Jetzt:",
+    "showFewer": "Weniger anzeigen",
+    "showAll_one": "{{count}} Schritt anzeigen",
+    "showAll_other": "Alle {{count}} Schritte anzeigen",
+    "reviewFull": "Vollständigen Plan überprüfen",
+    "continuePlanning": "Planung fortsetzen",
+    "resumeRemaining": "Verbleibende Arbeit fortsetzen",
+    "retryPlanning": "Planung wiederholen"
+  },
+  "review": {
+    "copyFailed": "Der Plan konnte nicht in die Zwischenablage kopiert werden.",
+    "export": "Exportieren",
+    "otherActions": "Weitere Planaktionen",
+    "moreOptions": "Weitere Optionen…",
+    "chooseAction": "Aktion auswählen…",
+    "requestChanges": "Änderungen anfordern",
+    "feedbackPlaceholder": "Optional: Was soll sich am Plan ändern?",
+    "sendFeedback": "Feedback senden"
+  },
+  "dialog": {
+    "title": "Plan für {{projectName}}",
+    "doneEditing": "Bearbeitung beenden",
+    "loadingEditor": "Editor wird geladen…",
+    "nothingWritten": "_Noch nichts geschrieben._",
+    "noContent": "_Der Plan hat noch keinen Inhalt._",
+    "todos": "Aufgaben",
+    "dependencies": "Abhängigkeiten",
+    "dependency": "{{prereq}} muss vor {{dependent}} abgeschlossen sein"
+  },
+  "question": {
+    "interrupted": "Nicht beantwortet, bevor der Durchgang unterbrochen wurde.",
+    "recommended": "Empfohlen",
+    "orOwnWords": "Oder antworte in eigenen Worten",
+    "yourAnswer": "Deine Antwort",
+    "placeholder": "Antwort eingeben…",
+    "send": "Antwort senden"
+  }
+}

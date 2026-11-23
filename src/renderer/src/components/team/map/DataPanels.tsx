@@ -1,5 +1,6 @@
 import type { CSSProperties, JSX } from 'react'
 import type { TeamMap } from '@shared/ipc'
+import { useTranslation } from '../../../i18n'
 import { Codicon } from '../../icons'
 import { ChangeLine, SourceIcon, resourceSummary, sourceApps, usedBy } from './DataNodes'
 import { fabricWorkspaceUrl, hueOf } from './parts'
@@ -14,10 +15,6 @@ import {
   type SourceItem
 } from './resources'
 
-function plural(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`
-}
-
 function itemOf(view: ResourceView, id: string): ResourceItem | undefined {
   for (const app of Object.values(view.apps)) {
     const item = app.items.find((i) => i.id === id)
@@ -27,10 +24,11 @@ function itemOf(view: ResourceView, id: string): ResourceItem | undefined {
 }
 
 function OpenInFabric({ workspaceId }: { workspaceId?: string }): JSX.Element | null {
+  const { t } = useTranslation('teamMap')
   if (!workspaceId) return null
   return (
     <button type="button" className="btn btn--sm" onClick={() => void window.api.openExternal(fabricWorkspaceUrl(workspaceId))}>
-      Open its workspace in Fabric <Codicon name="link-external" />
+      {t('data.openWorkspace')} <Codicon name="link-external" />
     </button>
   )
 }
@@ -47,10 +45,15 @@ interface DetailsProps {
 }
 
 function ItemDetails({ map, view, item, opening, onSelect, onOpenApp }: Omit<DetailsProps, 'selection' | 'onClose'> & { item: ResourceItem }): JSX.Element {
+  const { t } = useTranslation('teamMap')
   const app = map.apps.find((a) => a.folder === item.folder)
   const c = item.connector
   const kicker =
-    item.kind === 'connector' ? `${connectorKind(c?.type ?? '').label} connector` : item.kind === 'database' ? 'Its own database' : item.title
+    item.kind === 'connector'
+      ? t('data.connector', { kind: connectorKind(c?.type ?? '').label })
+      : item.kind === 'database'
+        ? t('data.ownDatabase')
+        : item.title
   return (
     <>
       <header className="tmap-insp-head">
@@ -64,47 +67,44 @@ function ItemDetails({ map, view, item, opening, onSelect, onOpenApp }: Omit<Det
         </div>
       </header>
       {!item.published && (
-        <p className="tmap-insp-text">Not published yet: it&apos;s only in working copies so far.</p>
+        <p className="tmap-insp-text">{t('data.notPublished')}</p>
       )}
 
       {item.kind === 'database' && (
         <>
           <section className="tmap-insp-section">
-            <h4>Tables</h4>
+            <h4>{t('data.tables')}</h4>
             {item.tables?.length ? (
               <ul className="tmap-insp-list">
-                {item.tables.map((t) => (
-                  <li key={t.name} className="tmap-insp-row">
+                {item.tables.map((table) => (
+                  <li key={table.name} className="tmap-insp-row">
                     <Codicon name="table" />
                     <span className="tmap-insp-grow">
-                      {t.name}
-                      <span className="tmap-dim tmap-block">{plural(t.fields, 'field')}</span>
+                      {table.name}
+                      <span className="tmap-dim tmap-block">{t('data.fields', { count: table.fields })}</span>
                     </span>
-                    <span className="tmap-chip" title="Who can read its rows">
-                      {t.accessLabel}
+                    <span className="tmap-chip" title={t('data.whoCanRead')}>
+                      {table.accessLabel}
                     </span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="tmap-insp-text">No tables yet.</p>
+              <p className="tmap-insp-text">{t('data.noTables')}</p>
             )}
           </section>
-          <p className="tmap-insp-text">
-            Part of the app. The published app and every preview each have their own copy, so trying a change never
-            touches the published data.
-          </p>
+          <p className="tmap-insp-text">{t('data.databaseText')}</p>
         </>
       )}
 
       {item.kind === 'files' && (
-        <p className="tmap-insp-text">Keeps files people upload in the app, such as photos and documents.</p>
+        <p className="tmap-insp-text">{t('data.filesText')}</p>
       )}
 
       {item.kind === 'functions' && (
         <>
           <section className="tmap-insp-section">
-            <h4>Functions</h4>
+            <h4>{t('items.functions')}</h4>
             {item.functions?.length ? (
               <ul className="tmap-insp-list">
                 {item.functions.map((name) => (
@@ -115,12 +115,12 @@ function ItemDetails({ map, view, item, opening, onSelect, onOpenApp }: Omit<Det
                 ))}
               </ul>
             ) : (
-              <p className="tmap-insp-text">No functions yet.</p>
+              <p className="tmap-insp-text">{t('data.noFunctions')}</p>
             )}
           </section>
           {(item.audiences?.length ?? 0) > 0 && (
             <section className="tmap-insp-section">
-              <h4>Reaches</h4>
+              <h4>{t('data.reaches')}</h4>
               <ul className="tmap-insp-list">
                 {item.audiences?.map((audience) => {
                   const id = dataIds.source(`service:${audience}`)
@@ -137,9 +137,7 @@ function ItemDetails({ map, view, item, opening, onSelect, onOpenApp }: Omit<Det
               </ul>
             </section>
           )}
-          <p className="tmap-insp-text">
-            Functions run in Fabric. They reach other services as the app itself, not as the person using it.
-          </p>
+          <p className="tmap-insp-text">{t('data.functionsText')}</p>
         </>
       )}
 
@@ -148,25 +146,25 @@ function ItemDetails({ map, view, item, opening, onSelect, onOpenApp }: Omit<Det
           <ul className="tmap-facts">
             {connectorAbility(c) && (
               <li>
-                <span>Access</span>
+                <span>{t('data.access')}</span>
                 <span>{connectorAbility(c)}</span>
               </li>
             )}
             {connectorSignIn(c) && (
               <li>
-                <span>Signs in as</span>
+                <span>{t('data.signsInAs')}</span>
                 <span>{connectorSignIn(c)}</span>
               </li>
             )}
             {c.database && (
               <li>
-                <span>Database</span>
+                <span>{t('items.database')}</span>
                 <span>{c.database}</span>
               </li>
             )}
             {c.itemId && (
               <li>
-                <span>Fabric item</span>
+                <span>{t('data.fabricItem')}</span>
                 <span className="tmap-mono tmap-ellipsis" title={c.itemId}>
                   {c.itemId}
                 </span>
@@ -197,7 +195,7 @@ function ItemDetails({ map, view, item, opening, onSelect, onOpenApp }: Omit<Det
 
       {item.changes.length > 0 && (
         <section className="tmap-insp-section">
-          <h4>Being changed</h4>
+          <h4>{t('data.beingChanged')}</h4>
           <ul className="tmap-insp-list">
             {item.changes.map((change, i) => (
               <li key={`${change.author}-${i}`} className="tmap-insp-row">
@@ -210,7 +208,11 @@ function ItemDetails({ map, view, item, opening, onSelect, onOpenApp }: Omit<Det
 
       <div className="tmap-insp-actions">
         <button type="button" className="btn btn--sm btn--primary" disabled={opening !== null} onClick={() => onOpenApp(item.folder)}>
-          {opening === item.folder ? 'Opening…' : `Open ${app?.name ?? 'the app'}`}
+          {opening === item.folder
+            ? t('shared.opening')
+            : app
+              ? t('actions.openNamed', { name: app.name })
+              : t('data.openTheApp')}
         </button>
         {c && <OpenInFabric workspaceId={c.workspaceId} />}
       </div>
@@ -219,21 +221,22 @@ function ItemDetails({ map, view, item, opening, onSelect, onOpenApp }: Omit<Det
 }
 
 function SourceDetails({ map, view, source, onSelect }: Pick<DetailsProps, 'map' | 'view' | 'onSelect'> & { source: SourceItem }): JSX.Element {
+  const { t } = useTranslation('teamMap')
   return (
     <>
       <header className="tmap-insp-head">
         <SourceIcon source={source} />
         <div className="tmap-titles">
-          <span className="tmap-kicker">{source.kind === 'fabric' ? 'In Microsoft Fabric' : 'Service'}</span>
+          <span className="tmap-kicker">{source.kind === 'fabric' ? t('data.inFabric') : t('data.service')}</span>
           <h3>{source.title}</h3>
           <span className="tmap-dim">{source.detail}</span>
         </div>
       </header>
       {!source.published && (
-        <p className="tmap-insp-text">Not connected in a published app yet: only in working copies so far.</p>
+        <p className="tmap-insp-text">{t('data.notConnected')}</p>
       )}
       <section className="tmap-insp-section">
-        <h4>Used by</h4>
+        <h4>{t('data.usedBy')}</h4>
         <ul className="tmap-insp-list">
           {source.users.map((id) => {
             const item = itemOf(view, id)
@@ -249,7 +252,7 @@ function SourceDetails({ map, view, source, onSelect }: Pick<DetailsProps, 'map'
                     {app.name}
                     <span className="tmap-dim tmap-block">
                       {item.title}
-                      {item.published ? '' : ' · not published yet'}
+                      {item.published ? '' : ` · ${t('data.notPublishedSuffix')}`}
                     </span>
                   </span>
                 </button>
@@ -259,9 +262,7 @@ function SourceDetails({ map, view, source, onSelect }: Pick<DetailsProps, 'map'
         </ul>
       </section>
       {source.kind === 'service' && (
-        <p className="tmap-insp-text">
-          Functions reach {source.title} as the app itself, so the app needs access to it there.
-        </p>
+        <p className="tmap-insp-text">{t('data.serviceText', { service: source.title })}</p>
       )}
       {source.workspaceId && (
         <div className="tmap-insp-actions">
@@ -274,11 +275,18 @@ function SourceDetails({ map, view, source, onSelect }: Pick<DetailsProps, 'map'
 
 /** Details of the selected resource or source in the data view. */
 export function ResourceDetails({ map, view, selection, opening, onClose, onSelect, onOpenApp }: DetailsProps): JSX.Element {
+  const { t } = useTranslation('teamMap')
   const item = itemOf(view, selection)
   const source = item ? undefined : view.sources.find((s) => s.id === selection)
   return (
-    <aside className="tmap-side tmap-inspector" aria-label="Details">
-      <button type="button" className="tmap-icon-btn tmap-inspector-close" onClick={onClose} aria-label="Close" title="Close (Esc)">
+    <aside className="tmap-side tmap-inspector" aria-label={t('actions.details')}>
+      <button
+        type="button"
+        className="tmap-icon-btn tmap-inspector-close"
+        onClick={onClose}
+        aria-label={t('actions.close')}
+        title={t('shared.closeEsc')}
+      >
         <Codicon name="close" />
       </button>
       {item ? (
@@ -286,7 +294,7 @@ export function ResourceDetails({ map, view, selection, opening, onClose, onSele
       ) : source ? (
         <SourceDetails map={map} view={view} source={source} onSelect={onSelect} />
       ) : (
-        <p className="tmap-dim">This is no longer in the workspace.</p>
+        <p className="tmap-dim">{t('shared.gone')}</p>
       )}
     </aside>
   )

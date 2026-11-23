@@ -71,6 +71,7 @@ const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 /// sign-ins to MCP servers the user added (see `mcp::SessionAuth`).
 const MCP_TOKEN_STORAGE: &str = "in-memory";
 
+/// Stays English: the chat (copilotAuth.ts) and the security check match it.
 pub const COPILOT_SIGN_IN_REQUIRED: &str =
   "GitHub Copilot is not signed in. Sign in to Copilot in Fabricator, then retry your message.";
 
@@ -992,16 +993,17 @@ fn wire_str<T: serde::Serialize>(value: &T) -> Option<String> {
 
 fn remaining_auth_error(auth_type: Option<&str>) -> String {
   match auth_type {
-    Some("user") => "A Copilot account is still signed in after sign-out. Another remembered account may be active; re-check and sign out of that account if needed.",
-    Some("gh-cli") => "Copilot is authenticated through GitHub CLI. Sign out of that account with `gh auth logout`, then restart Fabricator. GitHub CLI credentials were not changed.",
-    Some("env" | "token" | "copilot-api-token") => "Copilot is authenticated by a token supplied outside Fabricator. Unset COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN (or remove the configured SDK token), then restart Fabricator.",
-    _ => "Copilot is using credentials managed outside Fabricator. Remove them at their source, then restart Fabricator to sign out.",
-  }.to_string()
+    Some("user") => t!("services.copilot.stillSignedIn"),
+    Some("gh-cli") => t!("services.copilot.signedInWithGhCli"),
+    Some("env" | "token" | "copilot-api-token") => t!("services.copilot.signedInWithToken"),
+    _ => t!("services.copilot.signedInElsewhere"),
+  }
 }
 
 async fn current_account(client: &Client) -> Result<Option<AuthInfo>, String> {
   let current = client.rpc().account().get_current_auth().await
-    .map_err(|e| format!("Could not read the Copilot account for sign-out: {e}"))?;
+    .map_err(|e| t!("services.copilot.accountUnreadable", error = e))?;
+  // Stays English: the setup screen reads "could not resolve" in a failed sign-out (setupProblems.ts).
   if current.auth_errors.as_ref().is_some_and(|errors| !errors.is_empty()) {
     return Err("Copilot could not resolve its credentials. Re-check your account status before signing out.".into());
   }
@@ -1017,8 +1019,7 @@ impl Engine {
     if self.mock {
       return Err("The mock Copilot engine disconnected; refusing to start the user's CLI.".into());
     }
-    let path = bundled_cli_path()
-      .ok_or("The bundled Copilot CLI is unavailable. Restart or reinstall Fabricator and try again.")?;
+    let path = bundled_cli_path().ok_or_else(|| t!("services.copilot.cliMissing"))?;
     // Do not let SDK environment overrides select a different runtime from the
     // binary used by sign-in and the version check.
     let options = ClientOptions::default()
@@ -1026,7 +1027,7 @@ impl Engine {
       .with_transport(Transport::Stdio);
     let client = Client::start(options)
       .await
-      .map_err(|e| format!("Failed to start the Copilot engine: {e}"))?;
+      .map_err(|e| t!("services.copilot.engineFailed", error = e))?;
     self.client = Some(client.clone());
     Ok(client)
   }
@@ -1043,7 +1044,7 @@ impl Engine {
         })
       }
       Err(error) => {
-        let detail = format!("Could not check GitHub Copilot authentication: {error}");
+        let detail = t!("services.copilot.authCheckFailed", error = error);
         if error.is_transport_failure() {
           self.reset_client().await;
         }
@@ -1058,14 +1059,14 @@ impl Engine {
       return Ok(());
     };
     let auth = client.get_auth_status().await
-      .map_err(|e| format!("Could not identify the Copilot credential source: {e}"))?;
+      .map_err(|e| t!("services.copilot.sourceUnknown", error = e))?;
     if auth.auth_type.as_deref() != Some("user") {
       return Err(remaining_auth_error(auth.auth_type.as_deref()));
     }
     // Keep the credential payload in the backend and let the CLI remove its
     // own keychain/config entries, rather than editing shared credential files.
     client.rpc().account().logout(AccountLogoutRequest { auth_info: Some(auth_info), ..Default::default() }).await
-      .map_err(|e| format!("Could not remove the Copilot account: {e}"))?;
+      .map_err(|e| t!("services.copilot.removeFailed", error = e))?;
     Ok(())
   }
 
@@ -1077,7 +1078,7 @@ impl Engine {
       }
       let account = current_account(&client).await?;
       let auth = client.get_auth_status().await
-        .map_err(|e| format!("Could not verify Copilot sign-out: {e}. Re-check your account status."))?;
+        .map_err(|e| t!("services.copilot.signOutUnverified", error = e))?;
       if account.is_some() || auth.is_authenticated {
         return Err(remaining_auth_error(auth.auth_type.as_deref()));
       }
@@ -1111,6 +1112,7 @@ impl Engine {
 
 impl CopilotManager {
   pub fn begin_auth_change(&self) -> Result<CopilotAuthGuard<'_>, String> {
+    // Stays English: the setup screen reads "already in progress" in a failed sign-in (setupProblems.ts).
     self.changing_auth.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
       .map_err(|_| "A Copilot sign-in or sign-out is already in progress.".to_string())?;
     Ok(CopilotAuthGuard(&self.changing_auth))
@@ -1118,7 +1120,7 @@ impl CopilotManager {
 
   fn check_available(&self) -> Result<(), String> {
     if self.changing_auth.load(Ordering::SeqCst) {
-      return Err("Copilot sign-in or sign-out is in progress. Finish the account change, then retry your message.".into());
+      return Err(t!("services.copilot.authChanging"));
     }
     Ok(())
   }
@@ -1138,7 +1140,7 @@ impl CopilotManager {
       Err(last_error)
     };
     tokio::time::timeout(AUTH_TIMEOUT, wait).await
-      .map_err(|_| "Checking GitHub Copilot authentication timed out. Re-check or sign in again.".to_string())?
+      .map_err(|_| t!("services.copilot.authTimedOut"))?
   }
 
   /// Verify credentials in the same runtime that serves chat, without sending a
@@ -1163,10 +1165,7 @@ impl CopilotManager {
     };
     let result = match tokio::time::timeout(timeout, probe).await {
       Ok(result) => result,
-      Err(_) => Err(
-        "Checking GitHub Copilot authentication timed out. Check your connection and use Re-check, or try signing in again."
-          .to_string(),
-      ),
+      Err(_) => Err(t!("services.copilot.authCheckTimedOut")),
     };
     match result {
       Ok(status) => status,
@@ -1186,15 +1185,13 @@ impl CopilotManager {
   pub async fn logout(&self) -> Result<(), String> {
     let removal = tokio::time::timeout(AUTH_TIMEOUT, async {
       self.engine.lock().await.remove_current_account().await
-    }).await.unwrap_or_else(|_| Err(
-      "Copilot sign-out timed out. Re-check your account status before trying again.".into(),
-    ));
+    }).await.unwrap_or_else(|_| Err(t!("services.copilot.signOutTimedOut")));
     // Even a failed removal may have partially changed persisted credentials.
     self.reload_auth().await;
     removal?;
     tokio::time::timeout(AUTH_TIMEOUT, async {
       self.engine.lock().await.verify_signed_out(AUTH_RETRY_DELAY).await
-    }).await.map_err(|_| "Verifying Copilot sign-out timed out. Re-check your account status.".to_string())?
+    }).await.map_err(|_| t!("services.copilot.signOutCheckTimedOut"))?
   }
 
   /// List the Copilot models available to the signed-in user. The SDK caches the
@@ -1237,7 +1234,7 @@ impl CopilotManager {
         engine.reset_client().await;
       }
     }
-    Err(format!("Failed to list Copilot models: {last_err}"))
+    Err(t!("services.copilot.modelsFailed", error = last_err))
   }
 
   /// What Auto can optimize for, for the signed-in account. Copilot only lists
@@ -1252,7 +1249,7 @@ impl CopilotManager {
     if let Err(e) = session.client().delete_session(session.id()).await {
       log::debug!("couldn't delete the session that read Auto's options: {e}");
     }
-    let listed = listed.map_err(|e| format!("Couldn't read Auto's options: {e}"))?;
+    let listed = listed.map_err(|e| t!("services.copilot.autoOptionsFailed", error = e))?;
     Ok(listed.auto.and_then(map_auto_tiers))
   }
 
@@ -1268,7 +1265,7 @@ impl CopilotManager {
     let raw = client
       .call("account.getQuota", Some(serde_json::json!({})))
       .await
-      .map_err(|e| format!("Couldn't check your Copilot plan: {e}"))?;
+      .map_err(|e| t!("services.copilot.planFailed", error = e))?;
     Ok(crate::services::usage::parse_quota(&raw))
   }
 
@@ -1280,11 +1277,7 @@ impl CopilotManager {
     };
     // Unlike Client::list_models, this issues a fresh RPC on every check, so a
     // previously successful model lookup cannot mask revoked/expired credentials.
-    client.rpc().models().list().await.map_err(|e| {
-      format!(
-        "Could not verify GitHub Copilot access: {e}. Check your connection and Copilot access, then re-check or sign in again."
-      )
-    })?;
+    client.rpc().models().list().await.map_err(|e| t!("services.copilot.accessUnverified", error = e))?;
     Ok(CopilotAuthStatus { signed_in: true, user: auth.login, host: auth.host, error: None })
   }
 

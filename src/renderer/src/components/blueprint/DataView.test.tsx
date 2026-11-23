@@ -16,7 +16,9 @@ import type {
 import { makeProject } from '../../../test/harness'
 import { emptyDataModel, type DataModel } from '../../model/parseSchema'
 import { LocalBackendError, localBackendStore } from '../../localBackend'
+import { setLanguage } from '../../i18n'
 import DataView from './DataView'
+import { formatBytes, listNames } from './localData'
 
 /**
  * The Data explorer shows an app's local data through `window.api.local`: its
@@ -507,6 +509,10 @@ describe('DataView', () => {
       '122 rows of 2 entities, in rayfin/seed/data',
       '2 stored files, in rayfin/seed/storage'
     ])
+    expect(Array.from(dialog.querySelectorAll('code'), (code) => code.textContent)).toEqual([
+      '$developer',
+      '$user:<username>'
+    ])
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save as seed data' }))
     expect((await screen.findByRole('status')).textContent).toContain(
       'Saved 120 rows in 1 entity and 2 files to rayfin/seed.'
@@ -811,5 +817,30 @@ describe('DataView', () => {
     expect(await screen.findByText('1 entity · 0 rows')).toBeTruthy()
     expect(screen.queryByRole('note', { name: 'Data model change not read' })).toBeNull()
     expect(screen.getByText('Running')).toBeTruthy()
+  })
+})
+
+describe('local data helpers', () => {
+  afterEach(async () => {
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('give sizes and lists of names in the interface’s language', async () => {
+    expect([formatBytes(1), formatBytes(1000), formatBytes(1536), formatBytes(2048)]).toEqual([
+      '1 byte',
+      '1,000 bytes',
+      '1.5 KB',
+      '2 KB'
+    ])
+    expect(listNames(['Expense', 'Tag', 'Receipt'])).toBe('Expense, Tag and Receipt')
+
+    await setLanguage('de')
+    expect([formatBytes(1), formatBytes(1000), formatBytes(1536)]).toEqual([
+      '1 Byte',
+      '1.000 Bytes',
+      '1,5 KB'
+    ])
+    expect(listNames(['Expense', 'Tag', 'Receipt'])).toBe('Expense, Tag und Receipt')
   })
 })

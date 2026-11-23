@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useTranslation } from '../../i18n'
 import { lineLabel, type MascotLine } from './lines'
 
 /** Typing speed, per character. */
@@ -67,6 +68,7 @@ export const SpeechBubble = forwardRef<HTMLDivElement, Props>(function SpeechBub
   { line, typing, onClick, balance = true },
   ref
 ) {
+  const { t } = useTranslation('mascot')
   const chars = Array.from(line.text)
   const [shown, setShown] = useState(typing ? 0 : chars.length)
   const textRef = useRef<HTMLSpanElement>(null)
@@ -103,7 +105,7 @@ export const SpeechBubble = forwardRef<HTMLDivElement, Props>(function SpeechBub
       className={`mascot-bubble mascot-bubble--${line.kind}${balance ? ' is-balanced' : ''}${onClick ? ' is-clickable' : ''}`}
       aria-hidden="true"
       onClick={onClick}
-      title={onClick ? 'Click for another' : undefined}
+      title={onClick ? t('ui.another') : undefined}
     >
       {label && <span className="mascot-bubble-label">{label}</span>}
       <span ref={textRef} className="mascot-bubble-text">

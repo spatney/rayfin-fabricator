@@ -5,6 +5,7 @@ import { DATA_KINDS, type DataKind } from '@renderer/fabricData'
 import { moveMenuFocus } from '@renderer/menuFocus'
 import { menuLayout, type MenuLayout } from '@renderer/menuLayout'
 import { useSuppressPreview } from '@renderer/overlay'
+import { useTranslation } from '../../i18n'
 import { Codicon, ImageIcon } from '../icons'
 import { serverSummary } from '../mcp/mcpConfig'
 import { mcpPluginId, type ChatPlugin } from './plugins'
@@ -12,17 +13,18 @@ import fabricSvg from '../../assets/brands/fabric.svg'
 import '../models/modelPicker.css'
 
 const MAIN_WIDTH = 236
-const FLY_WIDTH = 236
+/** The data flyout is as wide as its words, up to this. */
+const FLY_MAX_WIDTH = 300
 const GAP = 6
 const PLUGINS_WIDTH = 340
 
 /** What each kind of Fabric data lets the app do, in a word or two. */
-const DATA_HINT: Record<DataKind, string> = {
-  semanticmodel: 'DAX',
-  warehouse: 'Read & write',
-  sqldatabase: 'Read & write',
-  lakehouse: 'Read-only'
-}
+const DATA_HINT = {
+  semanticmodel: 'addMenu.dax',
+  warehouse: 'access.readWrite',
+  sqldatabase: 'access.readWrite',
+  lakehouse: 'access.readOnly'
+} as const satisfies Record<DataKind, string>
 
 /**
  * The composer's "+" menu, after the model picker: an image, files and folders
@@ -47,6 +49,7 @@ export function AddMenu({
   /** Pick files and folders on this computer with the system's file dialog. */
   onBrowse: () => void
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   const [open, setOpen] = useState(false)
   const [fly, setFly] = useState(false)
   const [layout, setLayout] = useState<MenuLayout>({ side: 'right', style: {} })
@@ -91,7 +94,7 @@ export function AddMenu({
 
   function openMenu(): void {
     const r = triggerRef.current?.getBoundingClientRect()
-    if (r) setLayout(menuLayout(r, 'up', MAIN_WIDTH + GAP + FLY_WIDTH + 12))
+    if (r) setLayout(menuLayout(r, 'up', MAIN_WIDTH + GAP + FLY_MAX_WIDTH + 12))
     setOpen(true)
   }
 
@@ -151,8 +154,8 @@ export function AddMenu({
         onClick={() => (open ? closeMenu(false) : openMenu())}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Add images, files or data"
-        title="Add images, files or data"
+        aria-label={t('addMenu.title')}
+        title={t('addMenu.title')}
       >
         {attaching ? <span className="step-spin" aria-hidden="true" /> : <Codicon name="add" />}
       </button>
@@ -166,7 +169,7 @@ export function AddMenu({
             <div
               className="mp-panel am-main"
               role="menu"
-              aria-label="Add"
+              aria-label={t('actions.add')}
               ref={mainRef}
               onKeyDown={onMainKey}
             >
@@ -180,10 +183,10 @@ export function AddMenu({
               >
                 <ImageIcon className="am-icon" />
                 <span className="mp-item-text">
-                  <span className="mp-item-label">Image</span>
+                  <span className="mp-item-label">{t('addMenu.image')}</span>
                   {imageNote && <span className="mp-item-desc">{imageNote}</span>}
                 </span>
-                {!imageNote && <span className="am-hint">Or paste</span>}
+                {!imageNote && <span className="am-hint">{t('addMenu.orPaste')}</span>}
               </button>
               <button
                 type="button"
@@ -192,7 +195,7 @@ export function AddMenu({
                 onClick={() => pick(onBrowse)}
               >
                 <Codicon name="files" className="am-icon" />
-                <span className="mp-item-label am-label">Files and folders…</span>
+                <span className="mp-item-label am-label">{t('addMenu.files')}</span>
               </button>
               <div className="mp-sep" role="separator" />
               <button
@@ -205,7 +208,7 @@ export function AddMenu({
                 onClick={() => (fly ? closeFly() : setFly(true))}
               >
                 <img src={fabricSvg} alt="" draggable={false} className="am-icon" />
-                <span className="mp-item-label am-label">Fabric data</span>
+                <span className="mp-item-label am-label">{t('addMenu.fabricData')}</span>
                 <Codicon name="chevron-right" className="mp-caret" />
               </button>
             </div>
@@ -213,7 +216,7 @@ export function AddMenu({
               <div
                 className="mp-panel mp-fly am-fly"
                 role="menu"
-                aria-label="Fabric data"
+                aria-label={t('addMenu.fabricData')}
                 ref={flyRef}
                 onKeyDown={onFlyKey}
               >
@@ -228,7 +231,7 @@ export function AddMenu({
                   >
                     <Codicon name={k.icon} className="am-icon" />
                     <span className="mp-item-label am-label">{k.label}</span>
-                    <span className="am-hint">{DATA_HINT[k.kind]}</span>
+                    <span className="am-hint">{t(DATA_HINT[k.kind])}</span>
                   </button>
                 ))}
                 <div className="mp-sep" role="separator" />
@@ -239,7 +242,7 @@ export function AddMenu({
                   onClick={() => pick(() => onConnectData())}
                 >
                   <Codicon name="search" className="am-icon" />
-                  <span className="mp-item-label am-label">Browse all Fabric data…</span>
+                  <span className="mp-item-label am-label">{t('addMenu.browseAll')}</span>
                 </button>
               </div>
             )}
@@ -278,6 +281,7 @@ export function PluginsMenu({
   onManageServers?: (add: boolean) => void
   onLearnMore?: () => void
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   const [open, setOpen] = useState(false)
   const [layout, setLayout] = useState<MenuLayout>({ side: 'right', style: {} })
   const rootRef = useRef<HTMLDivElement>(null)
@@ -352,13 +356,13 @@ export function PluginsMenu({
         disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={names ? `Plugins: ${names}` : 'Plugins'}
+        aria-label={names ? t('pluginsMenu.pluginsOn', { names }) : t('pluginsMenu.plugins')}
         title={
           disabled
-            ? 'Plugins can’t be changed while the assistant is working'
+            ? t('pluginsMenu.disabled')
             : names
-              ? `Plugins: ${names}`
-              : 'Plugins'
+              ? t('pluginsMenu.pluginsOn', { names })
+              : t('pluginsMenu.plugins')
         }
       >
         <Codicon name="plug" />
@@ -386,18 +390,18 @@ export function PluginsMenu({
               <div className="pl-head">
                 <div className="pl-head-text">
                   <span className="pl-title" id={titleId}>
-                    Plugins &amp; tools
+                    {t('pluginsMenu.title')}
                   </span>
-                  <span className="pl-sub">Choose what this chat can use.</span>
+                  <span className="pl-sub">{t('pluginsMenu.sub')}</span>
                 </div>
-                <span className="pl-count">{enabled} enabled</span>
+                <span className="pl-count">{t('pluginsMenu.enabled', { count: enabled })}</span>
               </div>
 
               <div className="pl-section" aria-hidden="true">
-                <span className="pl-section-title">Plugins</span>
+                <span className="pl-section-title">{t('pluginsMenu.plugins')}</span>
                 <span className="pl-section-note">
                   <Codicon name="workspace-trusted" />
-                  Read-only
+                  {t('access.readOnly')}
                 </span>
               </div>
               {plugins.map((p) => {
@@ -417,7 +421,9 @@ export function PluginsMenu({
                     <span className="mp-item-text">
                       <span className="mp-item-label">
                         {p.name}
-                        {p.experiment && <span className="pl-badge">Experiment</span>}
+                        {p.experiment && (
+                          <span className="pl-badge">{t('pluginsMenu.experiment')}</span>
+                        )}
                       </span>
                       <span className="mp-item-desc">{p.description}</span>
                     </span>
@@ -435,7 +441,7 @@ export function PluginsMenu({
                 <>
                   <div className="mp-sep" role="separator" />
                   <div className="pl-section" aria-hidden="true">
-                    <span className="pl-section-title">MCP servers</span>
+                    <span className="pl-section-title">{t('pluginsMenu.mcpServers')}</span>
                   </div>
                   {servers.map((s) => {
                     const id = mcpPluginId(s.id)
@@ -457,7 +463,7 @@ export function PluginsMenu({
                         <span className="mp-item-text">
                           <span className="mp-item-label">
                             {s.name}
-                            {s.readOnly && <span className="pl-badge">Read-only</span>}
+                            {s.readOnly && <span className="pl-badge">{t('access.readOnly')}</span>}
                           </span>
                           <span className="mp-item-desc">{summary}</span>
                         </span>
@@ -473,7 +479,7 @@ export function PluginsMenu({
                   {servers.length > 0 && (
                     <p className="pl-note">
                       <Codicon name="info" />
-                      An MCP server can do whatever its tools do.
+                      {t('pluginsMenu.mcpNote')}
                     </p>
                   )}
                   {onManageServers && (
@@ -488,7 +494,7 @@ export function PluginsMenu({
                     >
                       <Codicon name={servers.length ? 'settings-gear' : 'add'} />
                       <span className="mp-item-label">
-                        {servers.length ? 'Manage MCP servers…' : 'Add an MCP server…'}
+                        {servers.length ? t('pluginsMenu.manage') : t('pluginsMenu.addServer')}
                       </span>
                       <Codicon name="chevron-right" className="pl-manage-caret" />
                     </button>
@@ -499,7 +505,7 @@ export function PluginsMenu({
               <div className="mp-sep" role="separator" />
               <p className="pl-note">
                 <Codicon name="info" />
-                Chat uses these only when a request needs them.
+                {t('pluginsMenu.note')}
               </p>
               {onLearnMore && (
                 <button
@@ -512,7 +518,7 @@ export function PluginsMenu({
                   }}
                 >
                   <Codicon name="book" />
-                  <span className="mp-item-label">Learn about plugins</span>
+                  <span className="mp-item-label">{t('pluginsMenu.learn')}</span>
                 </button>
               )}
             </div>

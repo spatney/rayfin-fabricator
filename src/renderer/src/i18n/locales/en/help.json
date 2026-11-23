@@ -1,0 +1,101 @@
+{
+  "title": "Help",
+  "view": {
+    "refreshed": "Help refreshed its copy of the docs and source.",
+    "refreshFailed": "Couldn't refresh",
+    "projectTitle": "Questions are answered about {{project}}",
+    "new": "New",
+    "newTitle": "Start a new conversation and forget this one",
+    "docs": "Docs",
+    "docsTitle": "Open the Fabricator documentation in your browser",
+    "close": "Close Help (Esc)",
+    "resumed": "Picking up where you left off, {{when}}",
+    "now": "Now"
+  },
+  "grounding": {
+    "reading": "reading docs",
+    "ready": "ready",
+    "docsOnly": "docs only",
+    "logsOnly": "logs only",
+    "pinnedTitle": "Help is reading the documentation and the source for {{reference}}, which matches this build.",
+    "latestTitle": "Help is reading the documentation and the latest source.",
+    "docsOnlyTitle": "Help has the documentation but not the source, so it can't trace an error to its cause.",
+    "logsOnlyTitle": "Help is working from this machine’s logs only. Select to download the documentation."
+  },
+  "welcome": {
+    "lead": "Ask about anything that isn't working. I can read what this machine has been doing, the documentation, and your project.",
+    "meta": "v{{version}} · read-only"
+  },
+  "prompts": {
+    "deploy": "Why did my last publish fail?",
+    "whatsNew": "What’s new in this release?",
+    "previewWontStart": "The preview won’t start",
+    "share": "How do I share my app with someone?",
+    "localStart": "Why didn’t my app start on this computer?"
+  },
+  "composer": {
+    "attachFilesTitle": "Attach files for Help to read",
+    "attachFolderTitle": "Attach a folder for Help to read",
+    "attachFailed": "Couldn't attach that",
+    "imageFailed": "Couldn't attach the image",
+    "removeFile": "Remove {{path}}",
+    "placeholder": "Describe what went wrong, or paste a screenshot",
+    "label": "Ask Help",
+    "attachFiles": "Attach files",
+    "attachFolder": "Attach a folder",
+    "stop": "Stop (Esc)",
+    "ask": "Ask (Enter)",
+    "hintIdle": "<kbd>Enter</kbd> to ask · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line · <kbd>Esc</kbd> to close",
+    "hintBusy": "<kbd>Enter</kbd> to ask · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line · <kbd>Esc</kbd> to stop"
+  },
+  "answer": {
+    "failed": "Help could not answer.",
+    "stopped": "Stopped."
+  },
+  "elapsed": {
+    "ms": "{{ms}} ms",
+    "seconds": "{{seconds}} s",
+    "minutes": "{{minutes}}m {{seconds}}s"
+  },
+  "issue": {
+    "featureReady": "Feature request ready",
+    "bugReady": "Bug report ready",
+    "featureNote": "Review it on GitHub before you submit.",
+    "bugNote": "Your Fabricator version, system details and a diagnostics file are added when you report it. Review everything on GitHub before you submit.",
+    "suggest": "Suggest this on GitHub",
+    "report": "Report this on GitHub",
+    "hide": "Hide",
+    "review": "Review it first"
+  },
+  "workLog": {
+    "looking_one": "looking at {{count}} things",
+    "looking_other": "looking at {{count}} things",
+    "checkedFailed_one": "checked {{count}} things · {{failed}} unreadable",
+    "checkedFailed_other": "checked {{count}} things · {{failed}} unreadable",
+    "checked_one": "checked {{count}} thing",
+    "checked_other": "checked {{count}} things",
+    "unreadable": "couldn't read"
+  },
+  "ray": {
+    "label": "Ray, the Fabricator stingray. Select to pet him."
+  },
+  "when": {
+    "earlier": "earlier",
+    "momentAgo": "a moment ago",
+    "minutesAgo_one": "{{count}} minute ago",
+    "minutesAgo_other": "{{count}} minutes ago",
+    "anHourAgo": "an hour ago",
+    "hoursAgo_one": "{{count}} hour ago",
+    "hoursAgo_other": "{{count}} hours ago",
+    "yesterday": "yesterday"
+  },
+  "unavailable": {
+    "lead": "Help answers questions about what went wrong using your own error history. It needs GitHub Copilot, and you're not signed in right now.",
+    "signIn": "Sign in to GitHub Copilot",
+    "signInSub": "Then Help can look into it for you",
+    "docs": "Browse the documentation",
+    "docsSub": "Setup, publishing, and troubleshooting",
+    "report": "Report an issue",
+    "reportSub": "Opens a bug report with your version and a diagnostics file"
+  }
+}

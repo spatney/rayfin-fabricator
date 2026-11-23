@@ -1,0 +1,150 @@
+{
+  "filters": {
+    "all": "Alle",
+    "on": "Aktiv",
+    "off": "Inaktiv"
+  },
+  "groups": {
+    "alwaysOn": "Immer aktiv",
+    "alwaysOnHint": "Grundlegende Anleitungen, die Rayfin verwaltet.",
+    "library": "Deine Skill-Bibliothek",
+    "libraryHint": "Deine wiederverwendbaren Skills. Wenn du einen aktivierst, wird er in diese App kopiert.",
+    "app": "In dieser App hinzugefügt",
+    "appHint": "Skills, die es nur in dieser App gibt, z. B. die aus ihrer Vorlage.",
+    "more": "Weitere"
+  },
+  "skill": {
+    "alwaysOn": "Immer aktiv",
+    "updateAvailable": "Update verfügbar",
+    "on": "Aktiv",
+    "off": "Inaktiv",
+    "managed": "Von Rayfin verwaltet. Immer aktiv.",
+    "use": "{{title}} in dieser App verwenden",
+    "updating": "Wird aktualisiert…"
+  },
+  "kicker": {
+    "rayfin": "Von Rayfin verwaltet",
+    "library": "Deine Bibliothek",
+    "app": "Diese App",
+    "builtIn": "Integriert",
+    "builtInCategory": "Integriert · {{category}}"
+  },
+  "toasts": {
+    "turnedOn": "„{{title}}“ aktiviert. In dieser App gespeichert.",
+    "turnedOff": "„{{title}}“ deaktiviert. In dieser App gespeichert.",
+    "updated": "„{{title}}“ aktualisiert.",
+    "updateFailed": "„{{title}}“ konnte nicht aktualisiert werden.",
+    "updatedCount_one": "{{count}} Skill aktualisiert.",
+    "updatedCount_other": "{{count}} Skills aktualisiert.",
+    "saved": "In deinen Skills gespeichert.",
+    "savedToLibrary": "„{{title}}“ in deiner Skill-Bibliothek gespeichert.",
+    "deleted": "„{{title}}“ aus deiner Skill-Bibliothek gelöscht.",
+    "removed": "„{{title}}“ aus dieser App entfernt."
+  },
+  "view": {
+    "title": "Skills",
+    "subtitle": "Anleitungen, denen Copilot beim Erstellen dieser App folgt",
+    "search": "Skills durchsuchen",
+    "clearSearch": "Suche löschen",
+    "show": "Anzeigen",
+    "newSkillTitle": "Eigenen Skill schreiben oder hochladen",
+    "newSkill": "Neuer Skill"
+  },
+  "empty": {
+    "noMatch": "Keine Skills entsprechen „{{query}}“",
+    "noneOn": "Keine Skills aktiv",
+    "allOn": "Alle Skills sind aktiv",
+    "showAll": "Alle Skills anzeigen"
+  },
+  "deleteDialog": {
+    "title": "Benutzerdefinierten Skill löschen?",
+    "message": "„{{title}}“ aus deiner Skill-Bibliothek löschen? Apps, die ihn bereits verwenden, behalten ihre Kopie. Er wird nur aus deiner wiederverwendbaren Bibliothek entfernt."
+  },
+  "removeDialog": {
+    "title": "Skill aus dieser App entfernen?",
+    "message": "Copilot verwendet „{{title}}“ in dieser App nicht mehr. Der Skill ist nicht in deiner Skill-Bibliothek. Um ihn zurückzuholen, müsstest du ihn über „Verlauf“ wiederherstellen.",
+    "messageSaveFirst": "Copilot verwendet „{{title}}“ in dieser App nicht mehr. Der Skill ist nicht in deiner Skill-Bibliothek. Um ihn zurückzuholen, müsstest du ihn über „Verlauf“ wiederherstellen. Wenn du ihn wiederverwenden möchtest, speichere ihn zuerst in deiner Bibliothek.",
+    "removing": "Wird entfernt…"
+  },
+  "inspector": {
+    "readError": "Dieser Skill konnte nicht gelesen werden.",
+    "label": "Details zu {{title}}",
+    "close": "Details schließen",
+    "closeTitle": "Schließen (Esc)",
+    "managedNote": "Rayfin verwaltet diesen Skill. Er ist immer aktiv und wird mit der Rayfin CLI aktualisiert.",
+    "appNote": "Diesen Skill gibt es nur in dieser App. Speichere ihn in deiner Bibliothek, um ihn in anderen Apps zu verwenden.",
+    "appNoteLocked": "Diesen Skill gibt es nur in dieser App. Unter seinem aktuellen Namen kann er nicht in deiner Bibliothek gespeichert werden.",
+    "use": "In dieser App verwenden",
+    "useOn": "Copilot folgt ihm ab deiner nächsten Nachricht.",
+    "useOff": "Fügt ihn dieser App hinzu. Jede Änderung wird in „Verlauf“ gespeichert.",
+    "newer": "Eine neuere Version dieses Skills ist verfügbar.",
+    "whenHeading": "Wann Copilot ihn verwendet",
+    "triggers": "Auslösewörter",
+    "fewer": "Weniger",
+    "more_one": "+{{count}} weitere",
+    "more_other": "+{{count}} weitere",
+    "noTriggers": "Copilot entscheidet anhand der Anweisungen des Skills.",
+    "teachesHeading": "Was er vermittelt",
+    "showAll": "Alles anzeigen",
+    "fileHeading": "Datei",
+    "notInstalled": "Wird dieser App hinzugefügt, wenn du den Skill aktivierst.",
+    "viewSource": "SKILL.md anzeigen",
+    "saveToLibrary": "In Bibliothek speichern"
+  },
+  "overview": {
+    "label": "Über Skills",
+    "howTitle": "So funktionieren Skills",
+    "how1": "Aktiviere einen Skill. Fabricator fügt seine Anweisungen dieser App hinzu und speichert die Änderung in „Verlauf“.",
+    "how2": "Wenn eine Anfrage zum Skill passt, liest Copilot ihn und folgt seiner Anleitung.",
+    "how3": "Du kannst ihn jederzeit deaktivieren. Wähle einen Skill aus, um zu sehen, was er vermittelt.",
+    "inThisApp": "In dieser App",
+    "alwaysOn": "Immer aktiv",
+    "builtIn": "Integrierte Skills",
+    "onOf": "{{on}} von {{total}} aktiv",
+    "library": "Deine Bibliothek",
+    "appOnly": "In dieser App hinzugefügt",
+    "updates": "Updates",
+    "updatesText_one": "Für einen integrierten Skill in dieser App gibt es eine neuere Version.",
+    "updatesText_other": "Für {{count}} integrierte Skills in dieser App gibt es neuere Versionen.",
+    "updateAll_one": "Aktualisieren",
+    "updateAll_other": "Alle {{count}} aktualisieren",
+    "ownTitle": "Eigene Skills",
+    "ownText": "Wähle <strong>Neuer Skill</strong> aus, um einen Skill für deine Marke, das Vokabular deiner Daten oder die Review-Checkliste deines Teams zu schreiben oder einen vorhandenen Skill hochzuladen.",
+    "learnMore": "Weitere Informationen zu Skills"
+  },
+  "custom": {
+    "titleEdit": "Benutzerdefinierten Skill bearbeiten",
+    "titleAdd": "Benutzerdefinierten Skill hinzufügen",
+    "tabs": "So fügst du einen Skill hinzu",
+    "write": "Schreiben",
+    "upload": "Hochladen",
+    "libraryTitle": "In meiner Skill-Bibliothek speichern",
+    "libraryHint": "Behalte ihn auch in deiner Bibliothek, um ihn in anderen Apps wiederzuverwenden.",
+    "titleLabel": "Titel",
+    "titlePlaceholder": "z. B. Unser Markenstil",
+    "iconLabel": "Symbol",
+    "iconAria": "Emoji-Symbol",
+    "descriptionLabel": "Kurzbeschreibung",
+    "descriptionPlaceholder": "Eine Zeile, die auf der Skill-Karte angezeigt wird",
+    "instructions": "Skill-Anweisungen (SKILL.md)",
+    "hint": "Das Frontmatter-Feld <code>description</code> sagt dem Agenten, wann er diesen Skill verwenden soll; der Textteil ist die Anleitung, der er folgt.",
+    "references_one": "Enthält {{count}} Referenzdatei",
+    "references_other": "Enthält {{count}} Referenzdateien",
+    "chooseDifferent": "Anderen Skill wählen",
+    "previewLabel": "SKILL.md (Vorschau)",
+    "reviewHint": "Überprüfe den Skill und füge ihn dann dieser App hinzu.",
+    "uploadLead": "Lade einen vorhandenen Skill hoch, um eine Vorschau zu sehen, und füge ihn dann dieser App hinzu. Er benötigt eine <code>SKILL.md</code> mit <code>name</code> und <code>description</code> im Frontmatter; Dateien in <code>references/</code> werden mit übernommen.",
+    "chooseFolder": "Ordner auswählen…",
+    "chooseFile": "Datei auswählen (.md oder .zip)…",
+    "reading": "Wird gelesen…",
+    "saveChanges": "Änderungen speichern",
+    "addSkill": "Skill hinzufügen"
+  },
+  "editor": {
+    "loading": "Editor wird geladen…"
+  },
+  "preview": {
+    "notInstalled": "noch nicht in dieser App",
+    "close": "Vorschau schließen"
+  }
+}

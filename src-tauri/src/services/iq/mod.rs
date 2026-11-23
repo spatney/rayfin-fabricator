@@ -398,7 +398,7 @@ pub async fn prepare(
       let status = server.map_or(McpServerStatus::NotConfigured, |s| s.status.clone());
       if status == McpServerStatus::Connected {
         if attempt.signed_in {
-          (ui.notice)(format!("Signed in to {}.", iq.label()));
+          (ui.notice)(t!("services.signIn.signedIn", name = iq.label()));
         }
         memory.connected(iq);
         prepared.ready = prepared.ready.with(iq);
@@ -420,7 +420,7 @@ pub async fn prepare(
               left_out(&mut prepared, memory, iq, &why);
               continue;
             }
-            (ui.notice)(format!("Sign in to {} in your browser…", iq.label()));
+            (ui.notice)(t!("services.signIn.inBrowser", name = iq.label()));
             match credentials.sign_in(iq, ui.open, cancel, waits.sign_in).await {
               SignIn::Done => attempt.signed_in = true,
               SignIn::Unfinished => {

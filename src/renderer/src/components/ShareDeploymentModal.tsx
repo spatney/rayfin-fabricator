@@ -12,6 +12,7 @@ import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { useToast } from '../toast'
 import { authErrorMessage } from '../authErrors'
+import { Trans, translator, useTranslation } from '../i18n'
 import { Codicon } from './icons'
 
 interface Props {
@@ -42,9 +43,10 @@ function grantStatus(g: FabricShareGrant | FabricShareModelGrant): {
   label: string
   tone: 'ok' | 'skip' | 'error'
 } {
-  if (!g.ok) return { icon: 'error', label: g.error ?? 'Failed', tone: 'error' }
-  if (g.skipped) return { icon: 'check', label: 'Already had access', tone: 'skip' }
-  return { icon: 'check', label: 'Shared', tone: 'ok' }
+  const t = translator('publish')
+  if (!g.ok) return { icon: 'error', label: g.error ?? t('share.status.failed'), tone: 'error' }
+  if (g.skipped) return { icon: 'check', label: t('share.status.skipped'), tone: 'skip' }
+  return { icon: 'check', label: t('share.status.shared'), tone: 'ok' }
 }
 
 /** Teams-like avatar palette; a stable colour is picked per email. */
@@ -110,6 +112,7 @@ export default function ShareDeploymentModal({
   onClose,
   onSignedIn
 }: Props): JSX.Element {
+  const { t } = useTranslation('publish')
   const toast = useToast()
   useSuppressPreview()
   const titleId = useId()
@@ -159,8 +162,8 @@ export default function ShareDeploymentModal({
       (reason) => {
         if (alive) {
           setModels([])
-          toast.error(authErrorMessage(reason, 'Could not check the app’s semantic models.'), {
-            title: 'Model check failed'
+          toast.error(authErrorMessage(reason, t('share.modelCheck.failed')), {
+            title: t('share.modelCheck.title')
           })
         }
       }
@@ -202,7 +205,7 @@ export default function ShareDeploymentModal({
     }
     setShowSuggest(true)
     setSearching(true)
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       void window.api.fabric
         .directorySearch(q)
         .then((res) => {
@@ -212,10 +215,10 @@ export default function ShareDeploymentModal({
             setDirectoryError(authErrorMessage(
               res.error,
               res.needsAz
-                ? 'Sign in to Azure to search the directory.'
+                ? t('share.directory.signInAzure')
                 : res.needsLogin
-                  ? 'Sign in to Fabric to search the directory.'
-                  : 'Could not search the directory. You can still enter an email.'
+                  ? t('share.directory.signInFabric')
+                  : t('share.directory.failed')
             ))
           }
           const taken = new Set(recipients.map((r) => r.email.toLowerCase()))
@@ -231,12 +234,12 @@ export default function ShareDeploymentModal({
           setSuggestions([])
           setSearching(false)
           setDirectoryError(
-            authErrorMessage(reason, 'Could not search the directory. You can still enter an email.')
+            authErrorMessage(reason, t('share.directory.failed'))
           )
         })
     }, 150)
     return () => {
-      clearTimeout(t)
+      clearTimeout(timer)
       ++searchSeq.current
     }
   }, [draft, recipients, directoryReloadTick])
@@ -345,15 +348,15 @@ export default function ShareDeploymentModal({
       const res = await window.api.fabric.shareApp(project.id, workspaceId, emails)
       setResult(res)
       if (res.ok) {
-        toast.success(`Shared with ${emails.length} recipient${emails.length === 1 ? '' : 's'}.`, {
-          title: 'App shared'
+        toast.success(t('share.shared', { count: emails.length }), {
+          title: t('share.sharedTitle')
         })
       }
     } catch (err) {
       setResult({
         ok: false,
         recipients: [],
-        error: authErrorMessage(err, 'Could not share the app. Please retry.')
+        error: authErrorMessage(err, t('share.failed'))
       })
     } finally {
       sharingRef.current = false
@@ -375,7 +378,7 @@ export default function ShareDeploymentModal({
         kind === 'az' ? await window.api.auth.loginAz() : await window.api.auth.loginRayfin()
       if (seq !== loginSeqRef.current) return
       if (!login.ok) {
-        throw new Error(authErrorMessage(login.error, 'Sign-in did not complete. Please try again.'))
+        throw new Error(authErrorMessage(login.error, t('signIn.notCompleted')))
       }
       await onSignedIn?.()
       if (seq !== loginSeqRef.current) return
@@ -387,8 +390,8 @@ export default function ShareDeploymentModal({
       }
     } catch (reason) {
       if (seq === loginSeqRef.current) {
-        toast.error(authErrorMessage(reason, 'Sign-in did not complete. Please try again.'), {
-          title: 'Sign-in failed'
+        toast.error(authErrorMessage(reason, t('signIn.notCompleted')), {
+          title: t('signIn.failed')
         })
       }
     } finally {
@@ -404,9 +407,9 @@ export default function ShareDeploymentModal({
     if (!appUrl) return
     try {
       await navigator.clipboard.writeText(appUrl)
-      toast.success('App link copied to clipboard.', { title: 'Copied' })
+      toast.success(t('share.linkCopied'), { title: t('actions.copied') })
     } catch {
-      toast.error('Could not copy the link.', { title: 'Copy failed' })
+      toast.error(t('copy.linkFailed'), { title: t('copy.failed') })
     }
   }
 
@@ -425,26 +428,32 @@ export default function ShareDeploymentModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>Share app</h2>
+          <h2 id={titleId}>{t('share.title')}</h2>
         </div>
 
         <div className="modal-body">
           <p className="share-intro">
-            Grant people in your tenant access to <strong>{appLabel}</strong>. Each recipient gets
-            the <strong>Contributor</strong> role on its workspace
-            {buildModels.length > 0 && (
-              <>
-                {' '}
-                and <strong>Build</strong> access to the semantic model
-                {buildModels.length === 1 ? '' : 's'} it uses
-              </>
+            {buildModels.length > 0 ? (
+              <Trans
+                t={t}
+                i18nKey="share.introBuild"
+                count={buildModels.length}
+                values={{ app: appLabel }}
+                components={{ strong: <strong /> }}
+              />
+            ) : (
+              <Trans
+                t={t}
+                i18nKey="share.intro"
+                values={{ app: appLabel }}
+                components={{ strong: <strong /> }}
+              />
             )}
-            .
           </p>
 
           <div className="share-field">
             <label className="share-label" htmlFor={`${titleId}-input`}>
-              People or groups
+              {t('share.people')}
             </label>
             <div className="share-combo">
               <div className="share-chips" onClick={() => inputRef.current?.focus()}>
@@ -461,7 +470,7 @@ export default function ShareDeploymentModal({
                       <button
                         type="button"
                         className="share-chip-x"
-                        aria-label={`Remove ${r.displayName || r.email}`}
+                        aria-label={t('share.remove', { name: r.displayName || r.email })}
                         onClick={() => removeRecipient(r.email)}
                         disabled={busy}
                       >
@@ -480,7 +489,7 @@ export default function ShareDeploymentModal({
                   role="combobox"
                   aria-expanded={showSuggest}
                   aria-autocomplete="list"
-                  placeholder={recipients.length ? '' : 'Search by name or email'}
+                  placeholder={recipients.length ? '' : t('share.placeholder')}
                   value={draft}
                   disabled={busy}
                   onChange={(e) => setDraft(e.target.value)}
@@ -497,7 +506,7 @@ export default function ShareDeploymentModal({
                 <ul className="share-suggest" role="listbox" ref={listRef}>
                   {searching && (
                     <li className="share-suggest-state">
-                      <span className="btn-spin" aria-hidden="true" /> Searching…
+                      <span className="btn-spin" aria-hidden="true" /> {t('share.searching')}
                     </li>
                   )}
                   {!searching &&
@@ -537,18 +546,20 @@ export default function ShareDeploymentModal({
                           <Codicon name="add" />
                         </span>
                         <span className="share-suggest-text">
-                          <span className="share-suggest-name">Add “{pendingDraft}”</span>
+                          <span className="share-suggest-name">
+                            {t('share.add', { email: pendingDraft })}
+                          </span>
                         </span>
                       </li>
                     ) : !directoryError ? (
-                      <li className="share-suggest-state">No matches</li>
+                      <li className="share-suggest-state">{t('share.noMatches')}</li>
                     ) : null)}
                 </ul>
               )}
             </div>
             {invalidEmails.length > 0 && (
               <span className="share-hint share-hint--bad">
-                Not a valid email: {invalidEmails.join(', ')}
+                {t('share.invalid', { emails: invalidEmails.join(', ') })}
               </span>
             )}
             {directoryError && (
@@ -563,8 +574,10 @@ export default function ShareDeploymentModal({
                     onClick={() => void reauthAndRetry(directoryAuth, 'directory')}
                   >
                     {reauthing
-                      ? 'Signing in…'
-                      : `Sign in to ${directoryAuth === 'az' ? 'Azure' : 'Fabric'} to search`}
+                      ? t('signIn.busy')
+                      : directoryAuth === 'az'
+                        ? t('share.searchSignIn.azure')
+                        : t('share.searchSignIn.fabric')}
                   </button>
                 )}
               </div>
@@ -576,10 +589,10 @@ export default function ShareDeploymentModal({
             <div className="share-target">
               <Codicon name="globe" />
               <span className="share-target-main">{deployment.workspaceName}</span>
-              <span className="share-target-tag">Contributor</span>
+              <span className="share-target-tag">{t('share.contributor')}</span>
             </div>
             {models === null ? (
-              <div className="share-target share-target--muted">Checking semantic models…</div>
+              <div className="share-target share-target--muted">{t('share.checkingModels')}</div>
             ) : (
               (models ?? []).map((m) => {
                 const build = !sameWorkspace(m.workspaceId, workspaceId)
@@ -588,7 +601,7 @@ export default function ShareDeploymentModal({
                     <Codicon name="database" />
                     <span className="share-target-main">{m.alias}</span>
                     <span className={`share-target-tag${build ? '' : ' share-target-tag--muted'}`}>
-                      {build ? 'Build' : 'Covered by workspace'}
+                      {build ? t('share.build') : t('share.covered')}
                     </span>
                   </div>
                 )
@@ -598,25 +611,25 @@ export default function ShareDeploymentModal({
 
           {needsLogin && (
             <div className="share-banner">
-              <span>Your Fabric session expired. Sign in to finish sharing.</span>
+              <span>{t('share.expired')}</span>
               <button
                 className="btn btn--sm btn--primary"
                 disabled={busy}
                 onClick={() => void reauthAndRetry('rayfin')}
               >
-                {reauthing ? 'Signing in…' : 'Sign in & retry'}
+                {reauthing ? t('signIn.busy') : t('share.signInRetry')}
               </button>
             </div>
           )}
           {needsAz && (
             <div className="share-banner">
-              <span>Azure CLI sign-in is required to look up recipients in your directory.</span>
+              <span>{t('share.azRequired')}</span>
               <button
                 className="btn btn--sm btn--primary"
                 disabled={busy}
                 onClick={() => void reauthAndRetry('az')}
               >
-                {reauthing ? 'Signing in…' : 'Sign in to Azure & retry'}
+                {reauthing ? t('signIn.busy') : t('share.azRetry')}
               </button>
             </div>
           )}
@@ -636,7 +649,7 @@ export default function ShareDeploymentModal({
                     <ul className="share-result-lines">
                       <li className={`share-line share-line--${app.tone}`}>
                         <Codicon name={app.icon} />
-                        <span className="share-line-what">App</span>
+                        <span className="share-line-what">{t('share.app')}</span>
                         <span className="share-line-status">{app.label}</span>
                       </li>
                       {r.models.map((m) => {
@@ -647,7 +660,7 @@ export default function ShareDeploymentModal({
                             className={`share-line share-line--${s.tone}`}
                           >
                             <Codicon name={s.icon} />
-                            <span className="share-line-what">{m.alias ?? 'Model'}</span>
+                            <span className="share-line-what">{m.alias ?? t('share.model')}</span>
                             <span className="share-line-status">{s.label}</span>
                           </li>
                         )
@@ -663,22 +676,22 @@ export default function ShareDeploymentModal({
         <div className="modal-footer">
           {result?.ok && appUrl && (
             <button className="btn btn--ghost share-copy-link" onClick={() => void copyLink()}>
-              <Codicon name="link" /> Copy link
+              <Codicon name="link" /> {t('copy.link')}
             </button>
           )}
           <button className="btn btn--ghost" onClick={onClose} disabled={busy}>
-            {result?.ok ? 'Done' : 'Cancel'}
+            {result?.ok ? t('actions.done') : t('actions.cancel')}
           </button>
           <button className="btn btn--primary" onClick={() => void runShare()} disabled={!canShare}>
             {sharing ? (
               <span className="btn-busy">
                 <span className="btn-spin" aria-hidden="true" />
-                Sharing…
+                {t('share.sharing')}
               </span>
             ) : result ? (
-              'Share again'
+              t('share.again')
             ) : (
-              'Share'
+              t('share.share')
             )}
           </button>
         </div>

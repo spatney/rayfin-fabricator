@@ -1,4 +1,5 @@
 import type { QuickHit, QuickRuleImpl } from '../quick'
+import { say } from '../quick'
 import { lineOf, matchAll, methodCalls, statementAround, stringLiterals } from '../source'
 import { code, regexHits } from './util'
 
@@ -17,7 +18,9 @@ export const queryRules: QuickRuleImpl[] = [
             file: src.path,
             line,
             label: `${src.path}:${line}`,
-            message: `${code(src.path)} calls ${code('.count()')} on a Rayfin query, which has no such method.`
+            ...say((w) =>
+              w.t('queries/count-method.hit', { file: code(src.path), method: code('.count()') })
+            )
           })
         }
       }
@@ -27,10 +30,10 @@ export const queryRules: QuickRuleImpl[] = [
   {
     id: 'queries/find-by-pk',
     run: (ctx) =>
-      regexHits(
-        ctx.frontend,
-        /\.findByPk\s*\(/,
-        (src) => `${code(src.path)} calls ${code('findByPk')}, which doesn't exist in Rayfin.`
+      regexHits(ctx.frontend, /\.findByPk\s*\(/, (src) =>
+        say((w) =>
+          w.t('queries/find-by-pk.hit', { file: code(src.path), method: code('findByPk') })
+        )
       )
   },
   {
@@ -39,7 +42,10 @@ export const queryRules: QuickRuleImpl[] = [
       regexHits(
         ctx.frontend.filter((src) => /\.data\.|executePaginated/.test(src.masked)),
         /\.totalCount\b/,
-        (src) => `${code(src.path)} reads ${code('totalCount')}, which Rayfin never populates.`
+        (src) =>
+          say((w) =>
+            w.t('queries/total-count.hit', { file: code(src.path), property: code('totalCount') })
+          )
       )
   },
   {
@@ -57,7 +63,13 @@ export const queryRules: QuickRuleImpl[] = [
               file: src.path,
               line,
               label: `${src.path}:${line}`,
-              message: `${code(src.path)} filters on ${code(`'${lit.value}'`)}; dot-paths only work in ${code('.select()')}.`
+              ...say((w) =>
+                w.t('queries/where-dot-path.hit', {
+                  file: code(src.path),
+                  path: code(`'${lit.value}'`),
+                  select: code('.select()')
+                })
+              )
             })
           }
         }
@@ -78,7 +90,12 @@ export const queryRules: QuickRuleImpl[] = [
               file: src.path,
               line,
               label: `${src.path}:${line}`,
-              message: `${code(src.path)} selects ${code(`'${lit.value}'`)}, which is more than one relationship level deep.`
+              ...say((w) =>
+                w.t('queries/select-nested-path.hit', {
+                  file: code(src.path),
+                  path: code(`'${lit.value}'`)
+                })
+              )
             })
           }
         }
@@ -103,7 +120,13 @@ export const queryRules: QuickRuleImpl[] = [
             file: src.path,
             line,
             label: `${src.path}:${line}`,
-            message: `${code(src.path)} combines ${code(`.${m[1]}()`)} with ${code(`.${row[1]}()`)} in one query.`
+            ...say((w) =>
+              w.t('queries/aggregate-with-row-methods.hit', {
+                file: code(src.path),
+                aggregate: code(`.${m[1]}()`),
+                rowMethod: code(`.${row[1]}()`)
+              })
+            )
           })
         }
       }
@@ -123,7 +146,13 @@ export const queryRules: QuickRuleImpl[] = [
             file: src.path,
             line,
             label: `${src.path}:${line}`,
-            message: `${code(src.path)} sorts with ${code(`'${bad[2]}'`)} instead of ${code(`'${bad[2].toLowerCase()}'`)}.`
+            ...say((w) =>
+              w.t('queries/sort-direction-case.hit', {
+                file: code(src.path),
+                direction: code(`'${bad[2]}'`),
+                lowercase: code(`'${bad[2].toLowerCase()}'`)
+              })
+            )
           })
         }
       }
@@ -144,7 +173,9 @@ export const queryRules: QuickRuleImpl[] = [
             file: src.path,
             line,
             label: `${src.path}:${line}`,
-            message: `${code(src.path)} sends a hand-built GraphQL request with ${code('fetch()')}.`
+            ...say((w) =>
+              w.t('queries/raw-data-fetch.fetch', { file: code(src.path), fetch: code('fetch()') })
+            )
           })
         }
         for (const tag of matchAll(/\bgql\s*`/, src.masked)) {
@@ -153,7 +184,9 @@ export const queryRules: QuickRuleImpl[] = [
             file: src.path,
             line,
             label: `${src.path}:${line}`,
-            message: `${code(src.path)} builds a raw GraphQL document with ${code('gql')}.`
+            ...say((w) =>
+              w.t('queries/raw-data-fetch.gql', { file: code(src.path), gql: code('gql') })
+            )
           })
         }
       }

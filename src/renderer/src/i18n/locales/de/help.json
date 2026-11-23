@@ -1,0 +1,101 @@
+{
+  "title": "Hilfe",
+  "view": {
+    "refreshed": "Die Hilfe hat ihre Kopie der Dokumentation und des Quellcodes aktualisiert.",
+    "refreshFailed": "Aktualisierung fehlgeschlagen",
+    "projectTitle": "Fragen werden zu {{project}} beantwortet",
+    "new": "Neu",
+    "newTitle": "Neue Unterhaltung beginnen und diese vergessen",
+    "docs": "Doku",
+    "docsTitle": "Fabricator-Dokumentation im Browser öffnen",
+    "close": "Hilfe schließen (Esc)",
+    "resumed": "Weiter da, wo du {{when}} aufgehört hast",
+    "now": "Jetzt"
+  },
+  "grounding": {
+    "reading": "liest Doku",
+    "ready": "bereit",
+    "docsOnly": "nur Doku",
+    "logsOnly": "nur Protokolle",
+    "pinnedTitle": "Die Hilfe liest die Dokumentation und den Quellcode für {{reference}}, passend zu diesem Build.",
+    "latestTitle": "Die Hilfe liest die Dokumentation und den neuesten Quellcode.",
+    "docsOnlyTitle": "Die Hilfe hat die Dokumentation, aber nicht den Quellcode, und kann einen Fehler daher nicht bis zu seiner Ursache zurückverfolgen.",
+    "logsOnlyTitle": "Die Hilfe arbeitet nur mit den Protokollen dieses Computers. Zum Herunterladen der Dokumentation auswählen."
+  },
+  "welcome": {
+    "lead": "Frag nach allem, was nicht funktioniert. Ich kann lesen, was dieser Computer gemacht hat, die Dokumentation und dein Projekt.",
+    "meta": "v{{version}} · schreibgeschützt"
+  },
+  "prompts": {
+    "deploy": "Warum ist meine letzte Veröffentlichung fehlgeschlagen?",
+    "whatsNew": "Was ist neu in dieser Version?",
+    "previewWontStart": "Die Vorschau startet nicht",
+    "share": "Wie teile ich meine App mit anderen?",
+    "localStart": "Warum ist meine App auf diesem Computer nicht gestartet?"
+  },
+  "composer": {
+    "attachFilesTitle": "Dateien anhängen, die die Hilfe lesen soll",
+    "attachFolderTitle": "Ordner anhängen, den die Hilfe lesen soll",
+    "attachFailed": "Anhängen nicht möglich",
+    "imageFailed": "Das Bild konnte nicht angehängt werden",
+    "removeFile": "{{path}} entfernen",
+    "placeholder": "Beschreibe, was schiefgelaufen ist, oder füge einen Screenshot ein",
+    "label": "Hilfe fragen",
+    "attachFiles": "Dateien anhängen",
+    "attachFolder": "Ordner anhängen",
+    "stop": "Stoppen (Esc)",
+    "ask": "Fragen (Eingabe)",
+    "hintIdle": "<kbd>Eingabe</kbd> zum Fragen · <kbd>Umschalt</kbd>+<kbd>Eingabe</kbd> für eine neue Zeile · <kbd>Esc</kbd> zum Schließen",
+    "hintBusy": "<kbd>Eingabe</kbd> zum Fragen · <kbd>Umschalt</kbd>+<kbd>Eingabe</kbd> für eine neue Zeile · <kbd>Esc</kbd> zum Stoppen"
+  },
+  "answer": {
+    "failed": "Die Hilfe konnte nicht antworten.",
+    "stopped": "Gestoppt."
+  },
+  "elapsed": {
+    "ms": "{{ms}} ms",
+    "seconds": "{{seconds}} s",
+    "minutes": "{{minutes}} min {{seconds}} s"
+  },
+  "issue": {
+    "featureReady": "Funktionswunsch bereit",
+    "bugReady": "Fehlerbericht bereit",
+    "featureNote": "Überprüfe ihn auf GitHub, bevor du ihn einreichst.",
+    "bugNote": "Beim Melden werden deine Fabricator-Version, Systemdetails und eine Diagnosedatei hinzugefügt. Überprüfe alles auf GitHub, bevor du ihn einreichst.",
+    "suggest": "Auf GitHub vorschlagen",
+    "report": "Auf GitHub melden",
+    "hide": "Ausblenden",
+    "review": "Zuerst prüfen"
+  },
+  "workLog": {
+    "looking_one": "sieht sich {{count}} Element an",
+    "looking_other": "sieht sich {{count}} Elemente an",
+    "checkedFailed_one": "{{count}} Element geprüft · {{failed}} nicht lesbar",
+    "checkedFailed_other": "{{count}} Elemente geprüft · {{failed}} nicht lesbar",
+    "checked_one": "{{count}} Element geprüft",
+    "checked_other": "{{count}} Elemente geprüft",
+    "unreadable": "nicht lesbar"
+  },
+  "ray": {
+    "label": "Ray, der Stachelrochen von Fabricator. Wähle ihn aus, um ihn zu streicheln."
+  },
+  "when": {
+    "earlier": "vorhin",
+    "momentAgo": "gerade eben",
+    "minutesAgo_one": "vor {{count}} Minute",
+    "minutesAgo_other": "vor {{count}} Minuten",
+    "anHourAgo": "vor einer Stunde",
+    "hoursAgo_one": "vor {{count}} Stunde",
+    "hoursAgo_other": "vor {{count}} Stunden",
+    "yesterday": "gestern"
+  },
+  "unavailable": {
+    "lead": "Die Hilfe beantwortet Fragen dazu, was schiefgelaufen ist, anhand deines eigenen Fehlerverlaufs. Sie benötigt GitHub Copilot, und du bist gerade nicht angemeldet.",
+    "signIn": "Bei GitHub Copilot anmelden",
+    "signInSub": "Dann kann die Hilfe der Sache für dich nachgehen",
+    "docs": "Dokumentation durchsuchen",
+    "docsSub": "Einrichtung, Veröffentlichung und Problembehandlung",
+    "report": "Problem melden",
+    "reportSub": "Öffnet einen Fehlerbericht mit deiner Version und einer Diagnosedatei"
+  }
+}

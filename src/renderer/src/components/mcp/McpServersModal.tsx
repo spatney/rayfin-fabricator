@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type JSX } from 'react'
 import type { McpCheckResult, McpServer, McpServerInput } from '@shared/ipc'
 import { authErrorMessage } from '../../authErrors'
 import { openDocs } from '../../docsLinks'
+import { Trans, useTranslation } from '../../i18n'
 import { loadMcpServers, setMcpServers, useMcpServers } from '../../mcpServers'
 import { useModalFocus } from '../../modalFocus'
 import { useSuppressPreview } from '../../overlay'
@@ -51,6 +52,7 @@ export default function McpServersModal({
   /** A server was saved or removed: chats that had it on may have changed. */
   onChanged?: () => void
 }): JSX.Element {
+  const { t } = useTranslation('mcp')
   useSuppressPreview()
   const titleId = useId()
   const formId = useId()
@@ -84,7 +86,7 @@ export default function McpServersModal({
       (reason) => {
         if (!mountedRef.current) return
         setLoaded(true)
-        setLoadError(authErrorMessage(reason, 'Couldn’t read your MCP servers.'))
+        setLoadError(authErrorMessage(reason, t('errors.read')))
       }
     )
   }, [])
@@ -123,7 +125,7 @@ export default function McpServersModal({
     } catch (reason) {
       result = {
         status: 'failed',
-        error: authErrorMessage(reason, 'Fabricator couldn’t check it.')
+        error: authErrorMessage(reason, t('errors.check'))
       }
     }
     if (mountedRef.current) setChecks((all) => ({ ...all, [id]: { running: false, result } }))
@@ -143,7 +145,7 @@ export default function McpServersModal({
       const saved = input.id ?? next.find((s) => !before.has(s.id))?.id
       if (saved) void check(saved)
     } catch (reason) {
-      if (mountedRef.current) setFormError(authErrorMessage(reason, 'Couldn’t save the server.'))
+      if (mountedRef.current) setFormError(authErrorMessage(reason, t('errors.save')))
     } finally {
       if (mountedRef.current) setSaving(false)
     }
@@ -167,7 +169,7 @@ export default function McpServersModal({
       if (mountedRef.current) {
         setErrors((all) => ({
           ...all,
-          [server.id]: authErrorMessage(reason, 'Couldn’t remove the server.')
+          [server.id]: authErrorMessage(reason, t('errors.remove'))
         }))
       }
     } finally {
@@ -191,15 +193,11 @@ export default function McpServersModal({
           <h2 id={titleId}>
             {form
               ? form.server
-                ? `Edit ${form.server.name}`
-                : 'Add an MCP server'
-              : 'MCP servers'}
+                ? t('editServer', { name: form.server.name })
+                : t('addServer')
+              : t('title')}
           </h2>
-          <button
-            className="btn btn--sm btn--ghost"
-            onClick={onClose}
-            aria-label="Close MCP servers"
-          >
+          <button className="btn btn--sm btn--ghost" onClick={onClose} aria-label={t('close')}>
             ✕
           </button>
         </div>
@@ -217,12 +215,10 @@ export default function McpServersModal({
           ) : (
             <>
               <p className="modal-sub mcp-lead">
-                MCP servers give chat more tools, such as searching documentation, drawing charts or
-                reading your issue tracker. Add a server here, then turn it on in a chat’s{' '}
-                <strong>Plugins</strong>. Chat uses it only when a request needs it.
+                <Trans t={t} i18nKey="lead" components={{ b: <strong /> }} />
               </p>
               {!loaded ? (
-                <p className="acct-note">Loading…</p>
+                <p className="acct-note">{t('status.loading')}</p>
               ) : loadError ? (
                 <p className="acct-error" role="alert">
                   {loadError}
@@ -230,14 +226,8 @@ export default function McpServersModal({
               ) : servers.length === 0 ? (
                 <div className="mcp-empty">
                   <Codicon name="plug" className="mcp-empty-ico" />
-                  <p>
-                    You haven’t added a server yet. Add one with the command that starts it or its
-                    URL, or paste the configuration from its instructions.
-                  </p>
-                  <p className="mcp-empty-try">
-                    To try one, add Microsoft Learn, which searches Microsoft’s documentation, such
-                    as Fabric’s and Power BI’s.
-                  </p>
+                  <p>{t('empty')}</p>
+                  <p className="mcp-empty-try">{t('tryExample')}</p>
                   <div className="mcp-empty-actions">
                     <button
                       type="button"
@@ -245,14 +235,14 @@ export default function McpServersModal({
                       onClick={() => openForm({})}
                     >
                       <Codicon name="add" />
-                      Add a server
+                      {t('add')}
                     </button>
                     <button
                       type="button"
                       className="btn btn--sm btn--ghost"
                       onClick={() => openForm({ initial: EXAMPLE })}
                     >
-                      Add Microsoft Learn
+                      {t('addExample')}
                     </button>
                   </div>
                 </div>
@@ -282,26 +272,26 @@ export default function McpServersModal({
 
         <div className="modal-footer">
           <button className="btn btn--sm btn--link mcp-help" onClick={() => openDocs('mcpServers')}>
-            MCP servers help
+            {t('help')}
           </button>
           {form ? (
             <>
               <button className="btn btn--ghost" disabled={saving} onClick={closeForm}>
-                Cancel
+                {t('actions.cancel')}
               </button>
               <button type="submit" form={formId} className="btn btn--primary" disabled={saving}>
-                {saving ? 'Saving…' : 'Save'}
+                {saving ? t('status.saving') : t('actions.save')}
               </button>
             </>
           ) : (
             <>
               {servers.length > 0 && (
                 <button className="btn btn--ghost" disabled={busy} onClick={() => openForm({})}>
-                  Add a server
+                  {t('add')}
                 </button>
               )}
               <button className="btn btn--primary" onClick={onClose}>
-                Done
+                {t('actions.done')}
               </button>
             </>
           )}
@@ -341,6 +331,7 @@ function ServerCard({
   onCancelRemove: () => void
   onRemove: () => void
 }): JSX.Element {
+  const { t } = useTranslation('mcp')
   const summary = serverSummary(server)
   const running = Boolean(check?.running)
   const result = running ? undefined : check?.result
@@ -357,17 +348,22 @@ function ServerCard({
         </span>
         <h3 className="acct-title">
           <span className="mcp-name">{server.name}</span>
-          {server.readOnly && <span className="acct-badge">Read-only</span>}
+          {server.readOnly && <span className="acct-badge">{t('card.readOnly')}</span>}
           {running ? (
-            <span className="acct-chip acct-chip--checking">Checking…</span>
+            <span className="acct-chip acct-chip--checking">{t('status.checking')}</span>
           ) : result?.status === 'connected' ? (
-            <span className="acct-ok" role="img" aria-label="Connected" title="Connected">
+            <span
+              className="acct-ok"
+              role="img"
+              aria-label={t('card.connected')}
+              title={t('card.connected')}
+            >
               <CheckIcon />
             </span>
           ) : result?.status === 'needs-sign-in' ? (
-            <span className="acct-chip">Signs in when used</span>
+            <span className="acct-chip">{t('card.signsIn')}</span>
           ) : result?.status === 'failed' ? (
-            <span className="acct-chip acct-chip--error">Didn’t connect</span>
+            <span className="acct-chip acct-chip--error">{t('card.failed')}</span>
           ) : null}
         </h3>
         <p className="acct-purpose mcp-summary" title={summary}>
@@ -377,27 +373,27 @@ function ServerCard({
           <button
             className="btn btn--xs btn--ghost"
             disabled={busy || running}
-            aria-label={`Check ${server.name}`}
-            title="Start or connect to it, and list its tools"
+            aria-label={t('card.checkLabel', { name: server.name })}
+            title={t('card.checkTitle')}
             onClick={onCheck}
           >
-            {running ? 'Checking…' : 'Check'}
+            {running ? t('status.checking') : t('card.check')}
           </button>
           <button
             className="btn btn--xs btn--ghost"
             disabled={busy}
-            aria-label={`Edit ${server.name}`}
+            aria-label={t('editServer', { name: server.name })}
             onClick={onEdit}
           >
-            Edit
+            {t('actions.edit')}
           </button>
           <button
             className="btn btn--xs btn--ghost acct-quiet"
             disabled={busy}
-            aria-label={`Remove ${server.name}`}
+            aria-label={t('card.removeLabel', { name: server.name })}
             onClick={onAskRemove}
           >
-            {removing ? 'Removing…' : 'Remove'}
+            {removing ? t('card.removing') : t('actions.remove')}
           </button>
         </div>
       </div>
@@ -405,26 +401,25 @@ function ServerCard({
         <div className="acct-foot">
           {confirming && (
             <div className="mcp-confirm">
-              <span className="acct-confirm">
-                Remove {server.name}? Chats that have it on stop using it.
-              </span>
+              <span className="acct-confirm">{t('card.confirmRemove', { name: server.name })}</span>
               <button className="btn btn--xs btn--danger" onClick={onRemove}>
-                Remove
+                {t('actions.remove')}
               </button>
               <button className="btn btn--xs btn--ghost" onClick={onCancelRemove}>
-                Cancel
+                {t('actions.cancel')}
               </button>
             </div>
           )}
           {result?.status === 'connected' && (
             <div className="mcp-tools">
               <span className="acct-note">
-                {tools.length === 0
-                  ? 'It connected, and offers no tools.'
-                  : `It connected, and offers ${tools.length} ${tools.length === 1 ? 'tool' : 'tools'}:`}
+                {tools.length === 0 ? t('card.noTools') : t('card.tools', { count: tools.length })}
               </span>
               {tools.length > 0 && (
-                <ul className="mcp-tool-list" aria-label={`${server.name} tools`}>
+                <ul
+                  className="mcp-tool-list"
+                  aria-label={t('card.toolsLabel', { name: server.name })}
+                >
                   {shown.map((tool) => (
                     <li key={tool.name} className="mcp-tool" title={tool.description}>
                       {tool.name}
@@ -433,7 +428,7 @@ function ServerCard({
                   {shown.length < tools.length && (
                     <li>
                       <button type="button" className="btn btn--xs btn--ghost" onClick={onShowAll}>
-                        Show all {tools.length}
+                        {t('card.showAll', { total: tools.length })}
                       </button>
                     </li>
                   )}
@@ -442,10 +437,7 @@ function ServerCard({
             </div>
           )}
           {result?.status === 'needs-sign-in' && (
-            <p className="acct-note">
-              It needs you to sign in. The first time a message in a chat uses it, Fabricator opens
-              its sign-in page in your browser.
-            </p>
+            <p className="acct-note">{t('card.needsSignIn')}</p>
           )}
           {result?.error && (
             <p className="acct-error" role="alert">

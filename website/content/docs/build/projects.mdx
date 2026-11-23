@@ -23,7 +23,7 @@ A new Fabricator project starts from the Universal App, the default template tha
 
 ![The New project screen with Contoso Expenses typed as the project name, the folder name below it, the Details and Publish steps, and the Create project button.](/screenshots/new-project.webp)
 
-Fabricator creates the project on the Rayfin release line it starts new projects on, such as 1.36.x, with that line's newest release, and keeps the project's Rayfin packages on it, such as `~1.36.0` in `package.json`, so the app keeps running here. You can move the app to a newer Rayfin release later: see [Keep Rayfin up to date](/docs/ship/rayfin-versions). It installs the packages, starts the project's version history, and opens the project in the workbench with chat ready. The app runs on this computer from the start, and its data starts empty and stays here. Publish it to a Fabric workspace whenever you're ready. See [Develop on this computer](/docs/build/local-development) and [Publish to Microsoft Fabric](/docs/ship/deploy).
+Fabricator creates the project on the Rayfin release line it starts new projects on, such as 2.0.x, with that line's newest release, and keeps the project's Rayfin packages on it, such as `~2.0.0` in `package.json`, so the app keeps running here. You can move the app to a newer Rayfin release later: see [Keep Rayfin up to date](/docs/ship/rayfin-versions). It installs the packages, starts the project's version history, and opens the project in the workbench with chat ready. The app runs on this computer from the start, and its data starts empty and stays here. Publish it to a Fabric workspace whenever you're ready. See [Develop on this computer](/docs/build/local-development) and [Publish to Microsoft Fabric](/docs/ship/deploy).
 
 With **Create a GitHub repository** selected, Fabricator then creates the repository, pushes the app's first version to it, and says "The app’s first version is at `github.com/<owner>/<name>`." If it can't, the project opens anyway, and a **Not on GitHub yet** notice says why. Create the repository later from the git item in the status bar.
 
@@ -188,7 +188,7 @@ Moving the folder uses your system trash, so you can restore it there. An app th
 
 The removal runs in the background, so you can keep working and remove other projects at the same time. If the project is open, it closes first. Until the removal finishes, the project's row on **Your projects** shows **Removing** and what's happening, such as how many files are moving to the trash. When it's done, the project leaves the list, and a notification says its folder is in your system trash.
 
-If a removal can't finish, the project stays, and its row shows **Not removed** with the reason. For example, the folder can't move to the trash while another program, such as an editor or a terminal, has one of its files open. Close that program, then select **Try again**. To stop trying, select **Keep**.
+If a removal can't finish, the project stays, and its row shows **Not removed** with the reason. Fabricator first stops what it runs in the folder: the project's chat, the MCP servers and commands Copilot started there, its terminals and its local backend. So the reason is usually another program, such as an editor or a terminal, that has one of the folder's files open or runs in the folder. Close that program, then select **Try again**. To stop trying, select **Keep**.
 
 ## Change where new projects are saved
 

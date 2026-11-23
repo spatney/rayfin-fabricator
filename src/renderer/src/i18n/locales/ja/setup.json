@@ -1,0 +1,167 @@
+{
+  "hero": {
+    "eyebrow": "ようこそ",
+    "tagline": "AI エージェントとチャットして、Rayfin アプリを構築して公開できます。"
+  },
+  "progress": {
+    "checking": "既にインストールされているものを確認しています…",
+    "ready": "準備が整いました。構築を開始できます。",
+    "start": "Fabricator をセットアップしましょう。通常は 1 分ほどで完了します。",
+    "left_other": "セットアップする項目が残り {{count}} 個あります。"
+  },
+  "problem": {
+    "askHelp": "ヘルプに質問",
+    "showDetails": "詳細を表示",
+    "hideDetails": "詳細を非表示"
+  },
+  "problems": {
+    "busy": {
+      "title": "このコンピューターでは既に別のインストールが実行中です。",
+      "fix": "完了するまで待ってから、もう一度お試しください。多くの場合、Windows Update が原因です。"
+    },
+    "permission": {
+      "title": "Fabricator にはこれをインストールするアクセス許可がありません。",
+      "fix": "Fabricator を閉じ、右クリックして [管理者として実行] を選択してから、もう一度お試しください。お使いのコンピューターが職場で管理されている場合は、IT 部門によるインストールが必要になることがあります。"
+    },
+    "offline": {
+      "title": "Fabricator はダウンロードのためにインターネットに接続できませんでした。",
+      "fix": "接続を確認して、もう一度お試しください。職場のネットワークや VPN を使用している場合は、ダウンロードがブロックされている可能性があります。"
+    },
+    "diskFull": {
+      "title": "インストールに必要な空き容量が不足しています。",
+      "fix": "ディスクの空き容量を増やしてから、もう一度お試しください。"
+    },
+    "noWinget": {
+      "title": "このコンピューターには Windows パッケージ マネージャー (winget) がありません。",
+      "fix": "Microsoft Store で「アプリ インストーラー」を検索してインストールするか、ダウンロード リンクからツールを自分でインストールしてください。"
+    },
+    "noHomebrew": {
+      "title": "この Mac には、Fabricator がツールのインストールに使用する Homebrew がありません。",
+      "fix": "brew.sh から Homebrew をインストールするか、ダウンロード リンクからツールを自分でインストールしてください。"
+    },
+    "cancelled": {
+      "title": "インストールはキャンセルされました。",
+      "fix": "準備ができたら、もう一度お試しください。"
+    },
+    "sso": {
+      "title": "先に組織経由でサインインする必要があります。",
+      "fix": "ブラウザーで開いたサインインを、組織の追加の手順も含めて完了してから、もう一度お試しください。"
+    },
+    "noCopilot": {
+      "title": "このアカウントでは GitHub Copilot を利用できません。",
+      "fix": "Copilot を利用できるアカウントでサインインするか、github.com/features/copilot で設定してください。"
+    },
+    "notOnPath": {
+      "title": "ツールはインストールされましたが、このコンピューターではまだ認識されていません。",
+      "fix": "新しいツールを認識させるため、Fabricator を再起動してください。"
+    },
+    "unknownFix": "この問題が続く場合は、ヘルプに質問してください。何が問題だったかを読み取って説明します。"
+  },
+  "relaunch": {
+    "message": "<strong>もう少しです。</strong>再起動して、インストールしたツールのセットアップを完了してください。",
+    "restartNow": "今すぐ再起動"
+  },
+  "copilot": {
+    "title": "GitHub Copilot の接続",
+    "note": "アプリを構築する AI です。残りのセットアップ中も質問に答えます",
+    "subtitle": "サインインすると、構築を開始でき、ヘルプも利用できるようになります",
+    "helpReady": "ヘルプを利用できるようになりました。以下で問題が発生した場合は、<strong>ヘルプ</strong> を選択すると、何が起きたかを読み取ります。"
+  },
+  "tools": {
+    "title": "ツールのインストール",
+    "note": "Fabricator がバックグラウンドで使用する無料のツールです。Fabricator がインストールすることもできます。",
+    "allInstalled_other": "{{count}} 個すべてインストール済み",
+    "requiredInstalled_other": "必要なツール {{count}} 個がすべてインストール済み",
+    "installAll": "すべてインストール",
+    "installing": "インストールしています…",
+    "updating": "更新しています…",
+    "getIt": "入手",
+    "needsInternet": "インストールにはインターネット接続が必要です",
+    "resolveChecks": "先に CLI のチェック エラーを解決してください",
+    "offline": "オフラインのため、Fabricator はまだこれらをダウンロードできません。再接続してから <strong>再確認</strong> を選択してください。",
+    "purpose": {
+      "node": "アプリの作成中に、このコンピューターでアプリを実行します",
+      "npm": "アプリを構成する部品をダウンロードします",
+      "git": "アプリの履歴を保存し、いつでも以前の状態に戻せるようにします",
+      "az": "Fabricator から Azure にサインインできるようにします",
+      "gh": "Fabricator が GitHub 上のコードを操作できるようにします",
+      "fallback": "Fabricator がバックグラウンドで使用します"
+    },
+    "versionNeedsMin": "バージョン {{version}} — Fabricator には {{min}} 以降が必要です",
+    "versionNeedsNewer": "バージョン {{version}} — Fabricator には、より新しいバージョンが必要です",
+    "unknownVersionNeedsMin": "バージョン不明 — Fabricator には {{min}} 以降が必要です",
+    "unknownVersionNeedsNewer": "バージョン不明 — Fabricator には、より新しいバージョンが必要です",
+    "state": {
+      "ready": "準備完了",
+      "needsUpdating": "更新が必要",
+      "optional": "オプション",
+      "missing": "未インストール"
+    }
+  },
+  "azure": {
+    "title": "Azure へのサインイン",
+    "note": "オプション。アプリの共有、Fabric データの追加、Power BI レポートの移行ができるようになります。後でサインインすることもできます。",
+    "optional": "オプション",
+    "subtitle": "Azure リソースにアクセスします",
+    "installCliFirst": "先に Azure CLI をインストールしてください"
+  },
+  "account": {
+    "signedIn": "サインイン済み",
+    "checking": "確認中",
+    "connected": "接続済み",
+    "signOutOf": "{{name}} からサインアウト",
+    "signingOut": "サインアウトしています…",
+    "waiting": "待機しています…"
+  },
+  "finish": {
+    "allSet": "準備完了です",
+    "almostThere": "もう少しです",
+    "restart": "Fabricator を再起動して、インストールしたツールのセットアップを完了してください。",
+    "ready": "ツールがインストールされ、アカウントが接続されました。",
+    "readyWithoutAzure": "ツールがインストールされ、GitHub Copilot が接続されました。Azure には必要なときにサインインしてください。",
+    "stepsLeft_other": "続行するには、上の {{count}} 個の手順を完了してください。",
+    "enter": "Fabricator を開始"
+  },
+  "log": {
+    "empty": "プロセスの出力がここに表示されます。",
+    "manualInstall": "開いたページでインストールを完了してから、[再起動] をクリックしてください。"
+  },
+  "section": {
+    "hide": "非表示"
+  },
+  "actionBar": {
+    "help": "ヘルプ",
+    "helpTitle": "うまくいかないことをヘルプに質問します",
+    "helpOfflineTitle": "セットアップのヘルプを表示します (ドキュメントを含む)",
+    "showLog": "ログを表示",
+    "hideLog": "ログを非表示",
+    "checking": "確認しています…",
+    "signingOut": "サインアウトしています…",
+    "recheckRequired": "再確認が必要です",
+    "stepsLeft_other": "残り {{count}} 個の手順",
+    "back": "Fabricator に戻る"
+  },
+  "recheck": {
+    "button": "再確認",
+    "tool": "{{name}} を再確認"
+  },
+  "signingIn": {
+    "label": "サインイン",
+    "title": "サインインしています…",
+    "finalizing": "準備しています…",
+    "browser": "ブラウザーで {{provider}} へのサインインを完了するか、以下のデバイス コードの手順に従ってください。"
+  },
+  "run": {
+    "copilotSignIn": "GitHub Copilot にサインイン",
+    "copilotSignOut": "GitHub Copilot からサインアウト",
+    "azureSignIn": "Azure にサインイン",
+    "azureSignOut": "Azure からサインアウト",
+    "installAll": "すべてインストール",
+    "install": "{{name}} をインストール",
+    "update": "{{name}} を更新",
+    "failed": "「{{action}}」が完了しませんでした。もう一度お試しください。",
+    "installFailed": "「{{action}}」が完了しませんでした。プロセスの出力を確認してください。",
+    "verifyFailed": "アカウントの状態を確認できませんでした: {{error}}",
+    "recheckFailed": "環境を再確認できませんでした: {{error}}"
+  }
+}

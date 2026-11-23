@@ -1,0 +1,91 @@
+{
+  "title": "MCP servers",
+  "close": "Close MCP servers",
+  "lead": "MCP servers give chat more tools, such as searching documentation, drawing charts or reading your issue tracker. Add a server here, then turn it on in a chat’s <b>Plugins</b>. Chat uses it only when a request needs it.",
+  "empty": "You haven’t added a server yet. Add one with the command that starts it or its URL, or paste the configuration from its instructions.",
+  "tryExample": "To try one, add Microsoft Learn, which searches Microsoft’s documentation, such as Fabric’s and Power BI’s.",
+  "add": "Add a server",
+  "addExample": "Add Microsoft Learn",
+  "addServer": "Add an MCP server",
+  "editServer": "Edit {{name}}",
+  "help": "MCP servers help",
+  "errors": {
+    "read": "Couldn’t read your MCP servers.",
+    "check": "Fabricator couldn’t check it.",
+    "save": "Couldn’t save the server.",
+    "remove": "Couldn’t remove the server."
+  },
+  "card": {
+    "readOnly": "Read-only",
+    "connected": "Connected",
+    "signsIn": "Signs in when used",
+    "failed": "Didn’t connect",
+    "checkLabel": "Check {{name}}",
+    "checkTitle": "Start or connect to it, and list its tools",
+    "check": "Check",
+    "removeLabel": "Remove {{name}}",
+    "removing": "Removing…",
+    "confirmRemove": "Remove {{name}}? Chats that have it on stop using it.",
+    "noTools": "It connected, and offers no tools.",
+    "tools_one": "It connected, and offers {{count}} tool:",
+    "tools_other": "It connected, and offers {{count}} tools:",
+    "toolsLabel": "{{name}} tools",
+    "showAll": "Show all {{total}}",
+    "needsSignIn": "It needs you to sign in. The first time a message in a chat uses it, Fabricator opens its sign-in page in your browser."
+  },
+  "form": {
+    "paste": "Paste a configuration…",
+    "configuration": "Configuration",
+    "pasteHint": "Paste the JSON from the server’s instructions, its command or its URL. Fabricator fills in the form for you to check.",
+    "choicesLabel": "Servers in the configuration",
+    "choose": "It has {{total}} servers. Choose the one to add:",
+    "fillIn": "Fill in",
+    "name": "Name",
+    "namePlaceholder": "Charts",
+    "startsWith": "Starts with",
+    "kind": {
+      "command": "A command",
+      "url": "A URL"
+    },
+    "command": "Command",
+    "commandHint": "The command that starts the server, with its arguments, as you’d type it in a terminal. Fabricator runs it on this computer, in the app’s folder.",
+    "url": "URL",
+    "sse": "It uses Server-Sent Events (SSE), as some older servers do",
+    "values": {
+      "env": {
+        "title": "Environment variables",
+        "nameLabel": "variable name",
+        "valueLabel": "Value of variable",
+        "removeLabel": "Remove variable",
+        "add": "Add variable"
+      },
+      "header": {
+        "title": "Headers",
+        "nameLabel": "header name",
+        "valueLabel": "Value of header",
+        "removeLabel": "Remove header",
+        "add": "Add header"
+      },
+      "value": "Value",
+      "saved": "Saved",
+      "change": "Change",
+      "changeLabel": "Change the value of {{name}}",
+      "valueOf": "Value of {{name}}",
+      "newValue": "New value",
+      "remove": "Remove {{name}}"
+    },
+    "secrets": {
+      "windows": "For keys and tokens. Fabricator keeps their values in Windows Credential Manager, not in its settings, and never shows them again.",
+      "mac": "For keys and tokens. Fabricator keeps their values in your Keychain, not in its settings, and never shows them again."
+    },
+    "readOnly": "Only tools that read",
+    "readOnlyHint": "Chat can call only the tools the server marks as read-only, so it can’t change anything with the server. In a team app, that’s always the case.",
+    "trust": "A server runs with your access to this computer and your accounts, and what chat sends it leaves Fabricator. Add only servers you trust."
+  },
+  "parse": {
+    "empty": "Paste a configuration first.",
+    "unreadable": "That isn’t a configuration Fabricator can read. Paste the JSON from the server’s instructions.",
+    "noServer": "That configuration doesn’t have a server with a command or a URL."
+  },
+  "defaultName": "MCP server"
+}

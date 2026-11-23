@@ -27,8 +27,7 @@ impl Values {
 /// The values saved for server `id` (none when there are none).
 pub fn load(id: &str) -> Result<Values, String> {
   match keychain::read(Item::McpServer(id))? {
-    Some(raw) => serde_json::from_str(&raw)
-      .map_err(|_| "The server's saved values couldn't be read. Enter them again.".to_string()),
+    Some(raw) => serde_json::from_str(&raw).map_err(|_| t!("services.keychain.valuesUnreadable")),
     None => Ok(Values::default()),
   }
 }
@@ -38,7 +37,7 @@ pub fn save(id: &str, values: &Values) -> Result<(), String> {
   if values.is_empty() {
     return forget(id);
   }
-  let raw = serde_json::to_string(values).map_err(|e| format!("Couldn't save the server's values ({e})."))?;
+  let raw = serde_json::to_string(values).map_err(|e| t!("services.mcp.valuesNotSaved", error = e))?;
   keychain::write(Item::McpServer(id), &raw)
 }
 

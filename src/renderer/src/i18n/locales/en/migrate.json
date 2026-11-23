@@ -1,0 +1,94 @@
+{
+  "myWorkspace": "My workspace",
+  "dataFrom": "data from “{{name}}”",
+  "pages_one": "{{count}} page",
+  "pages_other": "{{count}} pages",
+  "screen": {
+    "title": "Migrate a Power BI report",
+    "sub": "Pick a report. Fabricator turns it into a new app that reads the report’s data live, and Copilot rebuilds its pages one at a time.",
+    "find": "Find a report",
+    "placeholder": "Search by name, or paste a report link",
+    "pressEnter": "Press Enter to read this report, or <read>read it now</read>.",
+    "accountHint": "Reports you can open as {{user}}, through the Azure CLI.",
+    "hint": "Reports you can open, through the Azure CLI.",
+    "workspaces": "Workspaces",
+    "searchResults": "Search results",
+    "reports": "Reports",
+    "loadingWorkspaces": "Loading workspaces…",
+    "loadingReports": "Loading reports…",
+    "noMatches": "No reports match.",
+    "noReports": "This workspace has no reports."
+  },
+  "azure": {
+    "pick": "Fabricator reads your Power BI reports with your Azure sign-in. Sign in to Azure to pick one.",
+    "reports": "Sign in to Azure to see the reports.",
+    "read": "Sign in to Azure to read this report.",
+    "finish": "Finish signing in to Azure in your browser.",
+    "signingIn": "Signing in…",
+    "signIn": "Sign in to Azure"
+  },
+  "inspect": {
+    "reading": "Reading the report…",
+    "about": "About {{name}}",
+    "workspace": "Workspace",
+    "pages_one": "{{count}} page: {{names}}",
+    "pages_other": "{{count}} pages: {{names}}",
+    "more": "{{names}}, and {{rest}} more",
+    "checks": {
+      "definition": "Definition",
+      "model": "Data model",
+      "images": "Page images"
+    }
+  },
+  "card": {
+    "label": "Power BI migration",
+    "title": "Migrating “{{name}}” from Power BI",
+    "progress_one": "{{done}} of {{count}} page",
+    "progress_other": "{{done}} of {{count}} pages",
+    "drawing": "Drawing pages",
+    "reading": "Reading the report",
+    "stages": {
+      "definition": "Report definition",
+      "model": "Data model",
+      "export": "Page export",
+      "images": "Page images"
+    },
+    "stageStatus": {
+      "done": "Done",
+      "skipped": "Skipped",
+      "failed": "Not available",
+      "waiting": "Waiting"
+    },
+    "pageStatus": {
+      "pending": "Not started",
+      "running": "Migrating",
+      "done": "Migrated",
+      "failed": "Needs another try"
+    },
+    "stageFailed": "{{stage}}: {{message}}",
+    "page": "{{n}}. {{name}}: {{status}}",
+    "pageTitle": "{{name}}: {{status}}",
+    "finished": "Every page is migrated. MIGRATION.md lists what’s approximated.",
+    "running": "Copilot is migrating “{{name}}”.",
+    "runningRest": "Copilot is migrating “{{name}}”. The rest follow, one page at a time.",
+    "next": "Next: “{{name}}”.",
+    "exportTime": "Exporting takes about 20 seconds a page.",
+    "skipImages": "Skip page images",
+    "stopRest": "Stop after this page",
+    "migrateNext": "Migrate next page",
+    "migrateRest": "Migrate the rest"
+  },
+  "turn": {
+    "first": "Migrate “{{report}}” from Power BI",
+    "page": "Migrate page {{n}} of {{total}}: {{name}}"
+  },
+  "errors": {
+    "workspaces": "Could not list your workspaces.",
+    "reports": "Could not list the reports.",
+    "search": "Could not search for reports.",
+    "inspect": "Could not read the report.",
+    "load": "Could not load the report migration.",
+    "save": "Could not save the migration.",
+    "dismiss": "Could not close the migration card."
+  }
+}

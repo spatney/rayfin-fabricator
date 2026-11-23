@@ -1,5 +1,6 @@
 import type { CSSProperties, JSX } from 'react'
 import type { SkillInfo } from '@shared/ipc'
+import { translator, useTranslation } from '../../i18n'
 import { AccessibilityIcon, Codicon } from '../icons'
 
 /** Where a skill comes from, which decides what you can do with it. */
@@ -115,27 +116,31 @@ export function SkillMark({ skill, size = 'md' }: { skill: SkillInfo; size?: 'md
 
 /** The small label above a skill's name in its details. */
 export function kickerFor(skill: SkillInfo): string {
+  const t = translator('skills')
   switch (sourceOf(skill)) {
     case 'rayfin':
-      return 'Managed by Rayfin'
+      return t('kicker.rayfin')
     case 'library':
-      return 'Your library'
+      return t('kicker.library')
     case 'app':
-      return 'This app'
+      return t('kicker.app')
     default:
-      return skill.category ? `Built in · ${skill.category}` : 'Built in'
+      return skill.category
+        ? t('kicker.builtInCategory', { category: skill.category })
+        : t('kicker.builtIn')
   }
 }
 
 /** A skill's state as a small dot and a word. */
 export function SkillStatus({ skill }: { skill: SkillInfo }): JSX.Element {
+  const { t } = useTranslation('skills')
   const [tone, label] = skill.base
-    ? ['on', 'Always on']
+    ? ['on', t('skill.alwaysOn')]
     : skill.outdated && skill.active
-      ? ['update', 'Update available']
+      ? ['update', t('skill.updateAvailable')]
       : skill.active
-        ? ['on', 'On']
-        : ['off', 'Off']
+        ? ['on', t('skill.on')]
+        : ['off', t('skill.off')]
   return (
     <span className={`skl-status skl-status--${tone}`}>
       <span className="skl-status-dot" aria-hidden="true" />

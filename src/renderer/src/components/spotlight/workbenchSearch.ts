@@ -2,7 +2,8 @@
 // apps the gallery last read, what can be done from where you are, and what's
 // worth suggesting before you type.
 import type { GalleryApp, StudioProject, TeamWorkspace } from '@shared/ipc'
-import { DEPLOY_QUESTION, PROMPTS } from '../help/parts'
+import { translator } from '../../i18n'
+import { DEPLOY_QUESTION, PROMPTS, promptText } from '../help/parts'
 import { buildActions, type ActionContext, type ActionHandlers } from './actions'
 import { galleryAppItems, projectItems, workspaceItems } from './sources'
 import type { AskSuggestion, SearchItem } from './model'
@@ -42,11 +43,8 @@ export interface WorkbenchSearch {
 const MAX_SUGGESTIONS = 3
 const MAX_QUESTIONS = 3
 
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? '' : 's'}`
-}
-
 export function workbenchSearch(ctx: WorkbenchSearchContext): WorkbenchSearch {
+  const t = translator('spotlight')
   const teamNames = new Map(ctx.teamWorkspaces.map((w) => [w.id, w.name]))
   const projectOptions = {
     activeId: ctx.project?.id,
@@ -68,8 +66,10 @@ export function workbenchSearch(ctx: WorkbenchSearchContext): WorkbenchSearch {
     add({
       ...advisor,
       id: 'suggest:advisor',
-      title: `Review ${plural(ctx.advisorIssues, 'Advisor issue')}`,
-      subtitle: `High and medium issues are open in ${ctx.project?.name ?? 'this app'}`,
+      title: t('suggest.advisor', { count: ctx.advisorIssues }),
+      subtitle: ctx.project
+        ? t('suggest.advisorOpen', { name: ctx.project.name })
+        : t('suggest.advisorOpenHere'),
       hint: undefined
     })
   }
@@ -80,17 +80,21 @@ export function workbenchSearch(ctx: WorkbenchSearchContext): WorkbenchSearch {
     add(action('action:clone'))
   }
 
+  // Starter questions keep their English text as their id, and are read and asked
+  // in the user's language.
   const questions: AskSuggestion[] = []
   if (ctx.deployFailed && ctx.project) {
     questions.push({
       id: 'deploy-failed',
-      question: DEPLOY_QUESTION,
-      title: 'Find out why publishing failed',
-      subtitle: `Couldn’t publish ${ctx.project.name}`
+      question: promptText(DEPLOY_QUESTION),
+      title: t('suggest.deployFailed'),
+      subtitle: t('suggest.couldNotPublish', { name: ctx.project.name })
     })
   }
   for (const prompt of PROMPTS) {
-    if (prompt !== DEPLOY_QUESTION) questions.push({ id: `prompt:${prompt}`, question: prompt })
+    if (prompt !== DEPLOY_QUESTION) {
+      questions.push({ id: `prompt:${prompt}`, question: promptText(prompt) })
+    }
   }
 
   const openGalleryApp = ctx.do.openGalleryApp

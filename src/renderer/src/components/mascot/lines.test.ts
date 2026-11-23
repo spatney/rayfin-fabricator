@@ -1,5 +1,16 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { FactDeck, RAYFIN_FACTS, buildDeck, greeting, launchGreeting, successLine } from './lines'
+import { setLanguage } from '../../i18n'
+import {
+  FactDeck,
+  RAYFIN_FACTS,
+  SPLASH_LINES,
+  buildDeck,
+  deployLiveLine,
+  greeting,
+  launchGreeting,
+  lineLabel,
+  successLine
+} from './lines'
 
 /** A repeatable stand-in for Math.random. */
 function seeded(seed: number): () => number {
@@ -10,14 +21,17 @@ function seeded(seed: number): () => number {
   }
 }
 
-afterEach(() => localStorage.clear())
+afterEach(async () => {
+  await setLanguage('en')
+  localStorage.clear()
+})
 
 describe('what Ray says', () => {
   it('shares every Rayfin fact once per deck, with an aside after every two', () => {
     const deck = buildDeck(seeded(7))
-    const facts = deck.filter((c) => c.kind === 'rayfin').map((c) => c.text)
+    const facts = deck.filter((c) => c.kind === 'rayfin').map((c) => c.key)
     expect([...facts].sort()).toEqual([...RAYFIN_FACTS].sort())
-    expect(new Set(deck.map((c) => c.text)).size).toBe(deck.length)
+    expect(new Set(deck.map((c) => c.key)).size).toBe(deck.length)
     deck.forEach((card, i) => {
       // Every third line is an aside; the rest are Rayfin facts.
       expect(card.kind === 'rayfin').toBe(i % 3 !== 2)
@@ -41,6 +55,41 @@ describe('what Ray says', () => {
       JSON.stringify([{ kind: 'rayfin', text: 'A line that no longer exists.' }])
     )
     expect(new FactDeck(seeded(5)).next().text).not.toBe('A line that no longer exists.')
+  })
+
+  it('carries on with a deck saved before he spoke other languages', () => {
+    localStorage.setItem(
+      'fabricator.mascot.deck',
+      JSON.stringify([
+        { kind: 'ray', text: 'Manta rays have the biggest brains of any fish.' },
+        { kind: 'quip', text: 'Most fish can’t blink. I practiced.' }
+      ])
+    )
+    expect(new FactDeck(seeded(5)).next()).toEqual({
+      kind: 'ray',
+      text: 'Manta rays have the biggest brains of any fish.'
+    })
+    expect(new FactDeck(seeded(5)).next()).toEqual({
+      kind: 'quip',
+      text: 'Most fish can’t blink. I practiced.'
+    })
+  })
+
+  it('says each line in the language shown when he says it', async () => {
+    localStorage.setItem(
+      'fabricator.mascot.deck',
+      JSON.stringify([{ kind: 'ray', text: 'Manta rays have the biggest brains of any fish.' }])
+    )
+    const deck = new FactDeck(seeded(5))
+    const ready = SPLASH_LINES.ready
+    await setLanguage('de')
+    expect(deck.next()).toEqual({
+      kind: 'ray',
+      text: 'Mantas haben das größte Gehirn aller Fische.'
+    })
+    expect(lineLabel('ray')).toBe('Ray-Fakt')
+    expect(ready[0]).toBe('Alles bereit! Lass uns was Großartiges bauen.')
+    expect(deployLiveLine('Kanban')).toBe('Kanban ist live! Schau mal rein.')
   })
 
   it('introduces himself only the first time', () => {

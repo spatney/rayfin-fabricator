@@ -1,5 +1,6 @@
 import { skipString } from '../../model/parseSchema'
 import type { QuickHit, QuickRuleImpl } from '../quick'
+import { say } from '../quick'
 import { lineOf, matchAll } from '../source'
 import { code } from './util'
 
@@ -38,7 +39,9 @@ export const frontendRules: QuickRuleImpl[] = [
             file: src.path,
             line,
             label: `${src.path}:${line}`,
-            message: `${code(src.path)} requests pages of ${size.toLocaleString('en-US')} rows.`
+            ...say((w) =>
+              w.t('performance/oversized-page.hit', { file: code(src.path), rows: w.number(size) })
+            )
           })
         }
       }
@@ -58,7 +61,13 @@ export const frontendRules: QuickRuleImpl[] = [
             file: src.path,
             line,
             label: `${src.path}:${line}`,
-            message: `An ${code('<img>')} in ${code(src.path)} has no ${code('alt')} attribute.`
+            ...say((w) =>
+              w.t('accessibility/img-alt.hit', {
+                img: code('<img>'),
+                file: code(src.path),
+                alt: code('alt')
+              })
+            )
           })
         }
       }

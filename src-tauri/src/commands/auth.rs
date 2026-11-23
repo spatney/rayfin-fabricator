@@ -75,7 +75,7 @@ pub(crate) async fn rayfin_auth_write() -> tokio::sync::RwLockWriteGuard<'static
 /// accounts can be managed from Home too.
 pub(crate) fn rayfin_project_dir(project_id: Option<&str>) -> Result<Option<PathBuf>, String> {
   if let Some(id) = project_id {
-    let project = store::find_project(id).ok_or_else(|| "Project not found.".to_string())?;
+    let project = store::find_project(id).ok_or_else(|| t!("commands.shared.projectNotFound"))?;
     return Ok(Some(PathBuf::from(project.path)));
   }
   Ok(store::active_project().map(|p| PathBuf::from(p.path)).or_else(installed_project_dir))
@@ -196,7 +196,7 @@ fn signed_in(user: Option<String>, tenant: Option<String>, unverified: Option<St
   RayfinAuthStatus {
     signed_in: true,
     unverified: unverified.is_some(),
-    error: unverified.map(|reason| format!("Couldn't confirm your Fabric sign-in just now. {reason}")),
+    error: unverified.map(|reason| t!("commands.auth.unconfirmed", reason = reason)),
     user,
     tenant,
   }
@@ -211,19 +211,19 @@ fn signed_out(error: Option<String>) -> RayfinAuthStatus {
 /// answered unexpectedly). Not knowing isn't being signed out: when the account's
 /// folder still holds a sign-in (`identity`), that's who you are, unverified.
 fn status_without_cli(res: &exec::RunResult, identity: Option<(String, Option<String>)>) -> RayfinAuthStatus {
-  let detail = |hint: &str| {
+  let detail = |hint: String| {
     if res.ok {
-      format!("The Rayfin CLI returned an unrecognized sign-in status. {hint}")
+      t!("commands.auth.unrecognizedStatus", hint = hint)
     } else {
-      cli_failure_detail(res, "Fabric authentication check", hint)
+      cli_failure_detail(res, &t!("commands.auth.actions.fabricCheck"), &hint)
     }
   };
   match identity {
-    Some((user, tenant)) => signed_in(Some(user), tenant, Some(detail("Re-check your accounts in a moment."))),
+    Some((user, tenant)) => signed_in(Some(user), tenant, Some(detail(t!("commands.auth.hints.recheckSoon")))),
     None => signed_out(Some(detail(if res.ok {
-      "Re-check or sign in to Fabric again."
+      t!("commands.auth.hints.recheckOrSignInFabric")
     } else {
-      "Open a Rayfin project and sign in to Fabric again."
+      t!("commands.auth.hints.openProjectAndSignIn")
     }))),
   }
 }
@@ -265,8 +265,8 @@ fn az_token_failure(res: &exec::RunResult) -> AzAuthStatus {
   AzAuthStatus {
     error: Some(cli_failure_detail(
       res,
-      "Azure authentication check",
-      "Check your connection and sign in to Azure again.",
+      &t!("commands.auth.actions.azureCheck"),
+      &t!("commands.auth.hints.checkConnectionAzure"),
     )),
     ..Default::default()
   }
@@ -312,7 +312,7 @@ pub async fn auth_status(state: State<'_, AppState>) -> Result<AuthStatus, Strin
 #[tauri::command]
 pub async fn auth_check(state: State<'_, AppState>, providers: Vec<String>) -> Result<AuthCheck, String> {
   if let Some(unknown) = providers.iter().find(|p| !matches!(p.as_str(), "copilot" | "rayfin" | "az")) {
-    return Err(format!("Unknown sign-in provider: {unknown}."));
+    return Err(t!("commands.auth.unknownProvider", provider = unknown));
   }
   let wants = |name: &str| providers.iter().any(|p| p == name);
   let (copilot, rayfin, az) =
@@ -327,7 +327,7 @@ pub async fn auth_login_copilot(
   host: Option<String>,
 ) -> Result<ProcResult, String> {
   let Ok(_guard) = COPILOT_AUTH_ACTION.try_lock() else {
-    return Ok(auth_failure("copilot-login", None, "A Copilot sign-in or sign-out is already in progress.".into()));
+    return Ok(auth_failure("copilot-login", None, t!("commands.auth.copilotBusy")));
   };
   let args = match copilot_login_args(host.as_deref()) {
     Ok(args) => args,
@@ -338,21 +338,13 @@ pub async fn auth_login_copilot(
     Err(error) => return Ok(auth_failure("copilot-login", None, error)),
   };
   if state.is_copilot_busy() {
-    return Ok(auth_failure(
-      "copilot-login",
-      None,
-      "Wait for active Copilot tasks to finish or stop them, then sign in again.".into(),
-    ));
+    return Ok(auth_failure("copilot-login", None, t!("commands.auth.copilotTasksSignIn")));
   }
   let on_data = proc_streamer(&app, "login:copilot");
-  on_data(exec::Stream::Stdout, &format!("Starting GitHub Copilot sign-in at {}...\n", args[2]));
+  on_data(exec::Stream::Stdout, &format!("{}\n", t!("commands.auth.startingCopilot", host = &args[2])));
   let Some(cli) = crate::services::copilot::bundled_cli_path() else {
-    on_data(exec::Stream::Stderr, "The bundled Copilot CLI is unavailable on this platform.\n");
-    return Ok(auth_failure(
-      "copilot-login",
-      None,
-      "The bundled Copilot CLI is unavailable. Restart or reinstall Fabricator and try again.".into(),
-    ));
+    on_data(exec::Stream::Stderr, &format!("{}\n", t!("commands.auth.bundledCliUnavailableHere")));
+    return Ok(auth_failure("copilot-login", None, t!("commands.auth.bundledCliUnavailable")));
   };
   let res = exec::run_program(
     cli,
@@ -368,13 +360,13 @@ pub async fn auth_login_copilot(
   if !res.ok {
     let detail = cli_failure_detail(
       &res,
-      "GitHub Copilot sign-in",
-      "Try signing in again and complete the browser or device-code instructions shown above.",
+      &t!("commands.auth.actions.copilotSignIn"),
+      &t!("commands.auth.hints.copilotSignInAgain"),
     );
     on_data(exec::Stream::Stderr, &format!("{detail}\n"));
     return Ok(auth_failure("copilot-login", res.exit_code, detail));
   }
-  on_data(exec::Stream::Stdout, "Verifying access in the Copilot chat engine...\n");
+  on_data(exec::Stream::Stdout, &format!("{}\n", t!("commands.auth.verifyingCopilot")));
   drop(login_guard);
   let auth = get_copilot_auth(state.inner()).await;
   let host_error = copilot_host_error(&args[2], &auth);
@@ -388,10 +380,7 @@ pub async fn auth_login_copilot(
 }
 
 fn normalize_copilot_host(host: &str) -> Result<String, String> {
-  let invalid = || {
-    "Enter github.com or a GitHub Enterprise Cloud hostname such as company.ghe.com (optionally with https://). Do not include a path, credentials, or a non-HTTPS port."
-      .to_string()
-  };
+  let invalid = || t!("commands.auth.invalidHost");
   let host = host.trim();
   if host.is_empty() || host.contains('\\') || host.chars().any(char::is_whitespace) {
     return Err(invalid());
@@ -427,32 +416,27 @@ fn copilot_login_args(host: Option<&str>) -> Result<[String; 3], String> {
 
 fn copilot_host_error(requested_host: &str, auth: &CopilotAuthStatus) -> Option<String> {
   let actual_host = auth.host.as_deref().and_then(|host| normalize_copilot_host(host).ok());
-  (auth.signed_in && actual_host.as_deref() != Some(requested_host)).then(|| format!(
-    "Copilot sign-in completed, but the chat engine is not using {requested_host}. Check for COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN overrides, remove unintended overrides, and sign in again."
-  ))
+  (auth.signed_in && actual_host.as_deref() != Some(requested_host))
+    .then(|| t!("commands.auth.wrongHost", host = requested_host))
 }
 
 #[tauri::command]
 pub async fn auth_logout_copilot(app: AppHandle, state: State<'_, AppState>) -> Result<ProcResult, String> {
   let Ok(_guard) = COPILOT_AUTH_ACTION.try_lock() else {
-    return Ok(auth_failure("copilot-logout", None, "A Copilot sign-in or sign-out is already in progress.".into()));
+    return Ok(auth_failure("copilot-logout", None, t!("commands.auth.copilotBusy")));
   };
   let _auth_guard = match state.copilot.begin_auth_change() {
     Ok(guard) => guard,
     Err(error) => return Ok(auth_failure("copilot-logout", None, error)),
   };
   if state.is_copilot_busy() {
-    return Ok(auth_failure(
-      "copilot-logout",
-      None,
-      "Wait for active Copilot tasks to finish or stop them, then sign out again.".into(),
-    ));
+    return Ok(auth_failure("copilot-logout", None, t!("commands.auth.copilotTasksSignOut")));
   }
   let on_data = proc_streamer(&app, "logout:copilot");
-  on_data(exec::Stream::Stdout, "Signing out of GitHub Copilot...\n");
+  on_data(exec::Stream::Stdout, &format!("{}\n", t!("commands.auth.signingOutCopilot")));
   Ok(match state.copilot.logout().await {
     Ok(()) => {
-      on_data(exec::Stream::Stdout, "Signed out of GitHub Copilot.\n");
+      on_data(exec::Stream::Stdout, &format!("{}\n", t!("commands.auth.signedOutCopilot")));
       ProcResult { ok: true, exit_code: None, error: None }
     }
     Err(error) => {
@@ -493,9 +477,7 @@ fn login_verification_result(
   ProcResult {
     ok: false,
     exit_code: res.exit_code,
-    error: Some(error.unwrap_or_else(|| format!(
-      "{provider} sign-in finished, but authentication could not be verified. Check your connection and try signing in again."
-    ))),
+    error: Some(error.unwrap_or_else(|| t!("commands.auth.unverified", provider = provider))),
   }
 }
 
@@ -536,21 +518,25 @@ fn cli_message(text: &str, failures_only: bool) -> Option<String> {
 pub(crate) fn cli_failure_detail(res: &exec::RunResult, action: &str, hint: &str) -> String {
   let detail = cli_message(&res.stderr, false).or_else(|| cli_message(&res.stdout, true));
   let reason = if res.not_found {
-    "The required CLI could not be found.".to_string()
+    t!("commands.auth.cliNotFound")
   } else if let Some(detail) = detail {
     detail
   } else if let Some(code) = res.exit_code {
-    format!("The CLI exited with code {code}.")
+    t!("commands.auth.cliExited", code = code)
   } else {
-    "The CLI timed out or could not be started.".to_string()
+    t!("commands.auth.cliTimedOut")
   };
-  format!("{action} failed. {reason} {hint}")
+  t!("commands.auth.cliFailed", action = action, reason = reason, hint = hint)
 }
 
 fn parse_az_account(res: &exec::RunResult) -> AzAuthStatus {
   if !res.ok {
     return AzAuthStatus {
-      error: Some(cli_failure_detail(res, "Azure account check", "Sign in to Azure again.")),
+      error: Some(cli_failure_detail(
+        res,
+        &t!("commands.auth.actions.azureAccountCheck"),
+        &t!("commands.auth.hints.signInAzureAgain"),
+      )),
       ..Default::default()
     };
   }
@@ -566,7 +552,7 @@ fn parse_az_account(res: &exec::RunResult) -> AzAuthStatus {
   }
   log::warn!("Azure account check returned an invalid or incomplete profile");
   AzAuthStatus {
-    error: Some("Azure returned an incomplete account profile. Re-check or sign in to Azure again.".into()),
+    error: Some(t!("commands.auth.incompleteProfile")),
     ..Default::default()
   }
 }
@@ -592,8 +578,7 @@ fn one_line(text: &str) -> String {
 /// points at the same `npx rayfin login` fallback we suggest in the UI.
 fn login_failure_detail(res: &exec::RunResult) -> String {
   if res.not_found {
-    return "The Rayfin CLI could not be found. Open the project so its dependencies install (or install Node.js and the Rayfin CLI), then try signing in again."
-      .to_string();
+    return t!("commands.auth.rayfinNotFound");
   }
   // Prefer the CLI's failure message (it logs `❌ Login failed: …` last), with
   // the lines that continue it; else its last message.
@@ -604,18 +589,15 @@ fn login_failure_detail(res: &exec::RunResult) -> String {
     return msg;
   }
   match res.exit_code {
-    Some(code) => format!(
-      "Sign-in exited with code {code} without opening a sign-in window or reporting a reason. Please try again; if it keeps happening, run `npx rayfin login` in the project folder to see the full error."
-    ),
-    None => "Sign-in ended without opening a sign-in window or reporting a reason (it may have timed out or been blocked). Please try again; if it keeps happening, run `npx rayfin login` in the project folder to see the full error."
-      .to_string(),
+    Some(code) => t!("commands.auth.loginExited", code = code),
+    None => t!("commands.auth.loginEnded"),
   }
 }
 
 #[tauri::command]
 pub async fn auth_login_rayfin(app: AppHandle, tenant: Option<String>, project_id: Option<String>) -> ProcResult {
   let Ok(_guard) = RAYFIN_AUTH_ACTION.try_lock() else {
-    return auth_failure("fabric-login", None, "A Fabric sign-in, sign-out, or credential refresh is already in progress.".into());
+    return auth_failure("fabric-login", None, t!("commands.auth.fabricBusy"));
   };
   let project_dir = match rayfin_project_dir(project_id.as_deref()) {
     Ok(dir) => dir,
@@ -627,7 +609,7 @@ pub async fn auth_login_rayfin(app: AppHandle, tenant: Option<String>, project_i
 }
 
 pub(crate) async fn login_rayfin(project_dir: Option<&Path>, tenant: Option<String>, on_data: OnData) -> ProcResult {
-  on_data(exec::Stream::Stdout, "Starting Fabric / Rayfin sign-in…\n");
+  on_data(exec::Stream::Stdout, &format!("{}\n", t!("commands.auth.startingFabric")));
   // Sign-in runs the project's CLI, which can't load from a missing or
   // half-finished install.
   if let Some(dir) = project_dir {
@@ -661,15 +643,15 @@ pub(crate) async fn login_rayfin(project_dir: Option<&Path>, tenant: Option<Stri
   )
   .await;
   if res.ok {
-    on_data(exec::Stream::System, "Verifying the refreshed credential against Fabric...\n");
+    on_data(exec::Stream::System, &format!("{}\n", t!("commands.auth.verifyingFabric")));
     let auth = get_rayfin_auth_for(project_dir).await;
     if auth.signed_in {
       telemetry::track_signin(cached_identity().as_ref(), "login");
       let note = match (&auth.error, auth.unverified) {
-        (Some(reason), true) => format!("Signed in. {reason}\n"),
-        _ => "Fabric authentication verified.\n".to_string(),
+        (Some(reason), true) => t!("commands.auth.signedInUnverified", reason = reason),
+        _ => t!("commands.auth.fabricVerified"),
       };
-      on_data(exec::Stream::System, &note);
+      on_data(exec::Stream::System, &format!("{note}\n"));
     }
     let result = verified_login("fabric-login", "Fabric", &res, auth.signed_in, auth.error);
     if let Some(error) = &result.error {
@@ -704,13 +686,13 @@ pub(crate) async fn login_rayfin(project_dir: Option<&Path>, tenant: Option<Stri
 #[tauri::command]
 pub async fn auth_refresh_rayfin(app: AppHandle, project_id: String, tenant: Option<String>) -> ProcResult {
   let Ok(_guard) = RAYFIN_AUTH_ACTION.try_lock() else {
-    return auth_failure("fabric-refresh", None, "A Fabric sign-in, sign-out, or credential refresh is already in progress.".into());
+    return auth_failure("fabric-refresh", None, t!("commands.auth.fabricBusy"));
   };
   let Some(project) = store::find_project(&project_id) else {
-    return auth_failure("fabric-refresh", None, "Project not found.".into());
+    return auth_failure("fabric-refresh", None, t!("commands.shared.projectNotFound"));
   };
   let on_data = proc_streamer(&app, "refresh:rayfin");
-  on_data(exec::Stream::System, "Waiting for current Fabric operations to finish before refreshing credentials...\n");
+  on_data(exec::Stream::System, &format!("{}\n", t!("commands.auth.waitingForOperations")));
   let _access = RAYFIN_AUTH_USE.write().await;
   refresh_rayfin(Path::new(&project.path), tenant, on_data).await
 }
@@ -721,7 +703,7 @@ async fn refresh_rayfin(project_dir: &Path, tenant: Option<String>, on_data: OnD
     on_data(exec::Stream::Stderr, &format!("{error}\n"));
     return auth_failure("fabric-refresh", None, error);
   }
-  on_data(exec::Stream::System, "Clearing the shared Fabric / Rayfin credentials with rayfin logout...\n");
+  on_data(exec::Stream::System, &format!("{}\n", t!("commands.auth.clearingCredentials")));
   let res = run_rayfin(
     Some(project_dir),
     &["logout"],
@@ -738,8 +720,8 @@ async fn refresh_rayfin(project_dir: &Path, tenant: Option<String>, on_data: OnD
   if !res.ok {
     let error = cli_failure_detail(
       &res,
-      "Fabric credential reset",
-      "Nothing was retried. Update this project's Rayfin CLI and SDK to 1.35.1 or newer, then try refreshing again.",
+      &t!("commands.auth.actions.fabricReset"),
+      &t!("commands.auth.hints.updateRayfin"),
     );
     on_data(exec::Stream::Stderr, &format!("{error}\n"));
     return auth_failure("fabric-refresh", res.exit_code, error);
@@ -754,7 +736,7 @@ async fn refresh_rayfin(project_dir: &Path, tenant: Option<String>, on_data: OnD
 #[tauri::command]
 pub async fn auth_login_az(app: AppHandle, tenant: Option<String>) -> ProcResult {
   let Ok(_guard) = AZ_AUTH_ACTION.try_lock() else {
-    return auth_failure("azure-login", None, "An Azure sign-in, sign-out, or account change is already in progress.".into());
+    return auth_failure("azure-login", None, crate::commands::accounts::azure_busy());
   };
   let tenant = match crate::commands::accounts::checked_tenant(tenant) {
     Ok(tenant) => tenant,
@@ -769,7 +751,7 @@ pub async fn auth_login_az(app: AppHandle, tenant: Option<String>) -> ProcResult
 #[tauri::command]
 pub async fn auth_logout_az(app: AppHandle) -> ProcResult {
   let Ok(_guard) = AZ_AUTH_ACTION.try_lock() else {
-    return auth_failure("azure-logout", None, "An Azure sign-in, sign-out, or account change is already in progress.".into());
+    return auth_failure("azure-logout", None, crate::commands::accounts::azure_busy());
   };
   let on_data = proc_streamer(&app, "logout:az");
   crate::commands::accounts::sign_out_azure(on_data, None).await
@@ -780,7 +762,7 @@ pub async fn auth_logout_az(app: AppHandle) -> ProcResult {
 #[tauri::command]
 pub async fn auth_logout_rayfin(app: AppHandle) -> ProcResult {
   let Ok(_guard) = RAYFIN_AUTH_ACTION.try_lock() else {
-    return auth_failure("fabric-logout", None, "A Fabric sign-in, sign-out, or credential refresh is already in progress.".into());
+    return auth_failure("fabric-logout", None, t!("commands.auth.fabricBusy"));
   };
   let on_data = proc_streamer(&app, "logout:rayfin");
   let _access = RAYFIN_AUTH_USE.write().await;

@@ -170,7 +170,7 @@ export const SCRIPT = {
     },
     {
       id: 'stinger',
-      // From RAY_FACTS (src/renderer/src/components/mascot/lines.ts). The intro used the fever,
+      // From RAY_FACTS (facts.ray in src/renderer/src/i18n/locales/en/mascot.json). The intro used the fever,
       // lesson 1 the cartilage, lesson 2 the eyes on top, and lesson 3 the electric fields.
       beats: [{ id: 'fact', text: "[whispers] Psst… despite the name, rays aren't ray-finned fish. [giggles] Talk about the wrong type!" }],
     },

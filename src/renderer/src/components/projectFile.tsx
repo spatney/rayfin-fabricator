@@ -1,10 +1,6 @@
 import type { CSSProperties, JSX, ReactNode } from 'react'
+import { useTranslation } from '../i18n'
 import { initials, markHue } from './gallery/model'
-
-/** `1 file`, `1,234 files`. */
-export function count(n: number, word: string): string {
-  return `${n.toLocaleString('en-US')} ${word}${n === 1 ? '' : 's'}`
-}
 
 /** The last part of a path, on Windows or macOS. */
 export function fileName(path: string): string {
@@ -50,6 +46,7 @@ export function ProjectFileProgress({
   processed: number
   total: number
 }): JSX.Element {
+  const { t } = useTranslation('projects')
   const percent = total ? Math.max(2, (processed / total) * 100) : 2
   return (
     <div className="project-file-progress" role="status">
@@ -67,9 +64,7 @@ export function ProjectFileProgress({
       >
         <span style={{ width: `${percent}%` }} />
       </span>
-      <span className="project-file-count">
-        {processed.toLocaleString('en-US')} of {count(total, 'file')}
-      </span>
+      <span className="project-file-count">{t('file.progress', { processed, count: total })}</span>
     </div>
   )
 }

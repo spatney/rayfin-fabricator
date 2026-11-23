@@ -6,6 +6,7 @@ import type {
   StudioProject
 } from '@shared/ipc'
 import { authErrorMessage } from './authErrors'
+import { translator } from './i18n'
 
 /**
  * A project being removed in the background, or one whose removal stopped. The
@@ -70,8 +71,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 function appFailure(result: FabricDeleteResult): string {
-  if (result.needsLogin) return 'Your Fabric session expired. Sign in to Fabric and try again.'
-  return result.failures[0]?.error ?? result.error ?? 'Couldn’t delete the published app.'
+  const t = translator('projects')
+  if (result.needsLogin) return t('removals.sessionExpired')
+  return result.failures[0]?.error ?? result.error ?? t('removals.cantDeleteApp')
 }
 
 /**
@@ -90,22 +92,23 @@ export function withoutProject(state: ProjectsState, id: string): ProjectsState 
 /** What a removal is doing, in a few words, for its project's row. */
 export function removalStatus(removal: ProjectRemoval, now: number): string {
   if (removal.error) return removal.error
-  if (removal.step === 'signin') return 'Waiting for you to sign in to Fabric…'
+  const t = translator('projects')
+  if (removal.step === 'signin') return t('removals.waitingSignIn')
   if (removal.step === 'app') {
     return removal.project.workspaceName
-      ? `Deleting the published app from ${removal.project.workspaceName}…`
-      : 'Deleting the published app…'
+      ? t('removals.deletingAppFrom', { workspace: removal.project.workspaceName })
+      : t('removals.deletingApp')
   }
   const progress = removal.progress
-  if (!progress) return 'Moving the folder to trash…'
+  if (!progress) return t('removals.trashing')
   if (progress.phase === 'scanning') {
-    return `Counting files… ${progress.processed.toLocaleString()}`
+    return t('removals.counting', { processed: progress.processed })
   }
-  const files = (progress.total ?? progress.processed).toLocaleString()
+  const files = progress.total ?? progress.processed
   const seconds = removal.trashingSince ? Math.floor((now - removal.trashingSince) / 1000) : 0
   return seconds > 0
-    ? `Moving ${files} files to trash… ${seconds}s`
-    : `Moving ${files} files to trash…`
+    ? t('removals.movingFor', { count: files, seconds })
+    : t('removals.moving', { count: files })
 }
 
 /**
@@ -170,14 +173,17 @@ export function useProjectRemovals(options: Options): ProjectRemovals {
         try {
           const login = await window.api.auth.loginRayfin()
           if (!login.ok) {
-            return authErrorMessage(login.error, 'Fabric sign-in didn’t finish. Please try again.')
+            return authErrorMessage(
+              login.error,
+              translator('projects')('removals.signInUnfinished')
+            )
           }
-          if (!mountedRef.current) return 'Fabricator closed before the sign-in finished.'
+          if (!mountedRef.current) return translator('projects')('removals.closedBeforeSignIn')
           await optionsRef.current.onSignedIn?.()
           signInsRef.current += 1
           return null
         } catch (reason) {
-          return authErrorMessage(reason, 'Couldn’t confirm the Fabric sign-in. Please try again.')
+          return authErrorMessage(reason, translator('projects')('removals.cantConfirmSignIn'))
         }
       })()
       signInRef.current = attempt
@@ -226,8 +232,8 @@ export function useProjectRemovals(options: Options): ProjectRemovals {
             fail(
               'app',
               reason instanceof Error && reason.message === 'timeout'
-                ? 'Deleting the published app is taking too long. It may be a slow connection; try again.'
-                : authErrorMessage(reason, 'Couldn’t delete the published app. Please try again.')
+                ? translator('projects')('removals.tooLong')
+                : authErrorMessage(reason, translator('projects')('removals.cantDeleteAppRetry'))
             )
             return
           }
@@ -250,10 +256,7 @@ export function useProjectRemovals(options: Options): ProjectRemovals {
           next = await window.api.projects.remove(id, true)
         } catch (reason) {
           if (!mountedRef.current) return
-          fail(
-            'folder',
-            authErrorMessage(reason, 'Couldn’t move the folder to trash. Please try again.')
-          )
+          fail('folder', authErrorMessage(reason, translator('projects')('removals.cantTrash')))
           return
         }
         if (!mountedRef.current) return

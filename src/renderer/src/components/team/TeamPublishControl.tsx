@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import type { StudioProject, TeamMapRun, TeamSessionStatus } from '@shared/ipc'
+import { translator, useTranslation } from '../../i18n'
 import { useSuppressPreview } from '../../overlay'
 import { appRunsKey } from './appRun'
 import { StepTimeline } from './map/parts'
@@ -27,23 +28,22 @@ interface Props {
   onOpenMap?: () => void
 }
 
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? '' : 's'}`
-}
-
 /** One-line state of a team app for the chip. */
 export function teamChipLabel(status: TeamSessionStatus | undefined, syncing: boolean): string {
-  if (syncing) return 'Saving…'
-  if (!status) return 'Team app'
-  if (status.conflicted) return 'Combining changes…'
+  const t = translator('team')
+  if (syncing) return t('status.saving')
+  if (!status) return t('control.teamApp')
+  if (status.conflicted) return t('control.chip.combining')
   if (status.run && status.run.status !== 'completed') {
-    return status.run.kind === 'production' ? 'Publishing…' : 'Deploying preview…'
+    return status.run.kind === 'production'
+      ? t('shared.publishing')
+      : t('control.chip.deployingPreview')
   }
-  if (status.publish?.stage === 'review') return 'Waiting for review'
-  if (status.publish?.stage === 'deploying') return 'Publishing…'
-  if (status.unpublished > 0) return `${status.unpublished} unpublished`
-  if (status.dirty) return 'Unsaved edits'
-  return 'Up to date'
+  if (status.publish?.stage === 'review') return t('control.chip.review')
+  if (status.publish?.stage === 'deploying') return t('shared.publishing')
+  if (status.unpublished > 0) return t('control.chip.unpublished', { count: status.unpublished })
+  if (status.dirty) return t('control.chip.unsaved')
+  return t('control.chip.upToDate')
 }
 
 /**
@@ -75,6 +75,7 @@ export default function TeamPublishControl({
   onRefresh,
   onOpenMap
 }: Props): JSX.Element {
+  const { t } = useTranslation('team')
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   // The native preview paints above all HTML; step it aside while the menu is open.
@@ -118,11 +119,28 @@ export default function TeamPublishControl({
 
   const busy = syncing || Boolean(status?.run && status.run.status !== 'completed') || publishing
   const chipTitle = [
-    unpublished > 0 ? `${plural(unpublished, 'change')} not published yet` : null,
-    status?.branch ? `Working branch: ${status.branch}` : null
+    unpublished > 0 ? t('control.notPublished', { count: unpublished }) : null,
+    status?.branch ? t('control.branch', { branch: status.branch }) : null
   ]
     .filter(Boolean)
     .join(' · ')
+  const runCancelled = status?.run?.conclusion === 'cancelled'
+  const runTitle =
+    status?.run?.kind === 'production'
+      ? !runFailed
+        ? t('control.run.production')
+        : runCancelled
+          ? t('control.run.productionCancelled')
+          : t('control.run.productionFailed')
+      : !runFailed
+        ? t('control.run.preview')
+        : runCancelled
+          ? t('control.run.previewCancelled')
+          : t('control.run.previewFailed')
+  const changesText =
+    unpublished > 0
+      ? t('control.notPublishedYet', { count: unpublished })
+      : t('control.nothingWaiting')
 
   return (
     <div className="team-control" ref={rootRef}>
@@ -132,7 +150,7 @@ export default function TeamPublishControl({
           className="seg-btn team-split-status"
           aria-haspopup="dialog"
           aria-expanded={open}
-          title={chipTitle || 'Team app'}
+          title={chipTitle || t('control.teamApp')}
           onClick={() => setOpen((o) => !o)}
         >
           {busy ? (
@@ -147,13 +165,13 @@ export default function TeamPublishControl({
           type="button"
           className={`seg-btn team-split-publish${canPublish && !publishing ? ' seg-btn--primary' : ''}`}
           disabled={!canPublish || publishing}
-          title={canPublish ? 'Publish your changes for everyone' : 'Nothing new to publish'}
+          title={canPublish ? t('control.publishTitle') : t('control.nothingNew')}
           onClick={() => {
             setOpen(false)
             onPublish()
           }}
         >
-          Publish
+          {t('shared.publish')}
         </button>
         {onOpenMap && (
           <TeamMapButton
@@ -172,19 +190,16 @@ export default function TeamPublishControl({
       </div>
 
       {open && (
-        <div className="team-menu" role="dialog" aria-label="Team app">
+        <div className="team-menu" role="dialog" aria-label={t('control.teamApp')}>
           <div className="team-menu-section">
-            <span className="team-menu-name">{workspaceName ?? 'Team workspace'}</span>
+            <span className="team-menu-name">{workspaceName ?? t('control.teamWorkspace')}</span>
             {status?.branch && (
-              <span className="team-menu-branch" title="Your working branch">
+              <span className="team-menu-branch" title={t('control.yourBranch')}>
                 <span className="codicon codicon-git-branch" aria-hidden="true" />
                 <span className="team-menu-branch-name">{status.branch}</span>
               </span>
             )}
-            <span className="team-muted">
-              Your app runs on this computer while you work. Your edits are saved to your own
-              working copy on GitHub after each change, and Publish makes them live for everyone.
-            </span>
+            <span className="team-muted">{t('control.intro')}</span>
             {onOpenMap && (
               <div className="team-menu-actions">
                 <button
@@ -195,7 +210,8 @@ export default function TeamPublishControl({
                     onOpenMap()
                   }}
                 >
-                  <span className="codicon codicon-type-hierarchy-sub" aria-hidden="true" /> Workspace overview
+                  <span className="codicon codicon-type-hierarchy-sub" aria-hidden="true" />{' '}
+                  {t('shared.workspaceOverview')}
                 </button>
               </div>
             )}
@@ -203,15 +219,12 @@ export default function TeamPublishControl({
 
           {status?.run && (runActive || runFailed) && (
             <div className="team-menu-section">
-              <span className="team-menu-title">
-                {status.run.kind === 'production' ? 'Publishing' : 'Deploying your preview'}
-                {runFailed && (status.run.conclusion === 'cancelled' ? ' · cancelled' : ' · failed')}
-              </span>
+              <span className="team-menu-title">{runTitle}</span>
               <StepTimeline steps={status.run.steps} now={now} />
               {runFailed && (
                 <div className="team-menu-actions">
                   <button type="button" className="btn btn--sm" onClick={() => onViewLogs(status.run?.id ?? 0)}>
-                    View logs
+                    {t('control.viewLogs')}
                   </button>
                   {onDiagnose && status.run.conclusion !== 'cancelled' && (
                     <button
@@ -222,7 +235,8 @@ export default function TeamPublishControl({
                         onDiagnose({ runId: status.run?.id })
                       }}
                     >
-                      <span className="codicon codicon-sparkle" aria-hidden="true" /> Diagnose with Copilot
+                      <span className="codicon codicon-sparkle" aria-hidden="true" />{' '}
+                      {t('shared.diagnoseWithCopilot')}
                     </button>
                   )}
                 </div>
@@ -232,27 +246,21 @@ export default function TeamPublishControl({
 
           {status?.conflicted ? (
             <div className="team-menu-section">
-              <span className="team-menu-title">Teammates&apos; changes</span>
-              <span className="team-muted">
-                You&apos;re combining your changes with your teammates&apos;. Ask Copilot to finish, then
-                they&apos;re saved automatically.
-              </span>
+              <span className="team-menu-title">{t('control.teammates')}</span>
+              <span className="team-muted">{t('control.combiningText')}</span>
               <div className="team-menu-actions">
                 <button type="button" className="btn btn--sm btn--primary" onClick={onCombine}>
-                  Ask Copilot to finish
+                  {t('control.askCopilot')}
                 </button>
               </div>
             </div>
           ) : status && status.behind > 0 ? (
             <div className="team-menu-section">
-              <span className="team-menu-title">Teammates&apos; changes</span>
-              <span className="team-muted">
-                Your teammates published {plural(status.behind, 'change')} to this app since you
-                started.
-              </span>
+              <span className="team-menu-title">{t('control.teammates')}</span>
+              <span className="team-muted">{t('control.behind', { count: status.behind })}</span>
               <div className="team-menu-actions">
                 <button type="button" className="btn btn--sm" onClick={onUpdate}>
-                  Bring in their changes
+                  {t('control.bringIn')}
                 </button>
               </div>
             </div>
@@ -260,13 +268,15 @@ export default function TeamPublishControl({
 
           {failedPublish && (
             <div className="team-menu-section">
-              <span className="team-menu-title">Last publish</span>
-              <span className="team-muted">{failedPublish.error ?? 'The last publish didn’t finish.'}</span>
+              <span className="team-menu-title">{t('control.lastPublish')}</span>
+              <span className="team-muted">
+                {failedPublish.error ?? t('control.lastPublishFailed')}
+              </span>
               {(failedPublish.runUrl || onDiagnose) && (
                 <div className="team-menu-actions">
                   {failedPublish.runUrl && (
                     <button type="button" className="btn btn--sm" onClick={() => void window.api.openExternal(failedPublish.runUrl ?? '')}>
-                      View on GitHub
+                      {t('shared.viewOnGithub')}
                     </button>
                   )}
                   {onDiagnose && (
@@ -278,7 +288,8 @@ export default function TeamPublishControl({
                         onDiagnose({ runId: failedPublish.runId, runUrl: failedPublish.runUrl, error: failedPublish.error })
                       }}
                     >
-                      <span className="codicon codicon-sparkle" aria-hidden="true" /> Diagnose with Copilot
+                      <span className="codicon codicon-sparkle" aria-hidden="true" />{' '}
+                      {t('shared.diagnoseWithCopilot')}
                     </button>
                   )}
                 </div>
@@ -287,27 +298,29 @@ export default function TeamPublishControl({
           )}
 
           <div className="team-menu-section">
-            <span className="team-menu-title">Your changes</span>
+            <span className="team-menu-title">{t('control.yourChanges')}</span>
             <span className="team-muted">
-              {unpublished > 0
-                ? `${plural(unpublished, 'change')} not published yet.`
-                : 'Nothing waiting to be published.'}
-              {status?.requireReview && ' Publishing needs a teammate’s approval.'}
+              {status?.requireReview
+                ? t('control.withApproval', {
+                    changes: changesText,
+                    approval: t('control.needsApproval')
+                  })
+                : changesText}
             </span>
             <div className="team-menu-actions">
               {status?.pr && (
                 <button type="button" className="btn btn--sm" onClick={() => void window.api.openExternal(status.pr?.url ?? '')}>
-                  View on GitHub
+                  {t('shared.viewOnGithub')}
                 </button>
               )}
               {previewUrl && (
                 <button
                   type="button"
                   className="btn btn--sm"
-                  title="Your preview in Fabric, deployed when you published, which your reviewers can open too"
+                  title={t('control.previewTitle')}
                   onClick={() => void window.api.openExternal(previewUrl)}
                 >
-                  Open your preview
+                  {t('control.openPreview')}
                 </button>
               )}
               <button
@@ -319,7 +332,7 @@ export default function TeamPublishControl({
                   onDiscard()
                 }}
               >
-                Discard changes
+                {t('shared.discardChanges')}
               </button>
             </div>
           </div>

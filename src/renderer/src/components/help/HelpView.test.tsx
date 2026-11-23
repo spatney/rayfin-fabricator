@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { HelpAnswer, HelpEventEnvelope, HelpGrounding } from '@shared/ipc'
 import { HelpView } from './HelpView'
 import { ToastProvider } from '../../toast'
+import { setLanguage } from '../../i18n'
+import { LOCAL_QUESTION } from '../local/problems'
 
 /** Push a streamed event to the subscriber the view registered. */
 let emit: (envelope: HelpEventEnvelope) => void = () => {}
@@ -410,6 +412,56 @@ describe('opening Help to ask something', () => {
     fireEvent.click(screen.getByText('New'))
     expect(await screen.findByText('Why did my last publish fail?')).toBeTruthy()
     expect(ask).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('in the language Help is shown in', () => {
+  beforeEach(async () => {
+    await setLanguage('de')
+  })
+
+  afterEach(async () => {
+    cleanup()
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('asks a starter question as the user reads it', async () => {
+    setup()
+    fireEvent.click(await screen.findByText('Was ist neu in dieser Version?'))
+    await waitFor(() =>
+      expect(ask).toHaveBeenCalledWith(
+        expect.objectContaining({ question: 'Was ist neu in dieser Version?' })
+      )
+    )
+  })
+
+  it('asks a starter question it was opened with in that language too', async () => {
+    setup({ initialQuestion: 'Why did my last publish fail?' })
+    await waitFor(() =>
+      expect(ask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          question: 'Warum ist meine letzte Veröffentlichung fehlgeschlagen?'
+        })
+      )
+    )
+  })
+
+  it('asks the local preview’s question in that language', async () => {
+    setup({ initialQuestion: LOCAL_QUESTION })
+    await waitFor(() =>
+      expect(ask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          question: 'Warum ist meine App auf diesem Computer nicht gestartet?'
+        })
+      )
+    )
+  })
+
+  it('writes how long the answer took with the language’s decimal mark', async () => {
+    ask.mockResolvedValueOnce({ text: 'Done.', actions: [], citations: [], elapsedMs: 1500 })
+    setup({ initialQuestion: 'what changed?' })
+    expect(await screen.findByText('1,5 s')).toBeTruthy()
   })
 })
 

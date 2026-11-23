@@ -8,6 +8,7 @@ import type {
   TeamRunnerInfo,
   TeamWorkspace
 } from '@shared/ipc'
+import { formatList, useTranslation } from '../../../i18n'
 import ConfirmModal from '../../ConfirmModal'
 import { Codicon } from '../../icons'
 import { GithubAccountField, ProblemView, StepList, teamError, useStepProgress } from '../common'
@@ -18,7 +19,7 @@ import { Avatar, FabricGlyph, fabricWorkspaceUrl } from './parts'
 
 export type WorkspaceTab = 'members' | 'access' | 'settings'
 
-const VERIFY_STEPS = [{ id: 'verify', label: 'Check that the pipeline can reach Fabric' }] as const
+const VERIFY_STEPS = [{ id: 'verify', label: 'workspace.verifyStep' }] as const
 
 const sameAccount = (a: string, b: string | undefined): boolean => a.toLowerCase() === (b ?? '').toLowerCase()
 
@@ -52,6 +53,7 @@ export default function WorkspacePanel({
   onChanged,
   onGone
 }: Props): JSX.Element {
+  const { t } = useTranslation('teamMap')
   const [tab, setTab] = useState<WorkspaceTab>(initialTab)
   const [members, setMembers] = useState<TeamMembersResult | null>(null)
   const [fabricPeople, setFabricPeople] = useState<TeamFabricAccess | null>(null)
@@ -77,7 +79,10 @@ export default function WorkspacePanel({
   /** The last action was Repair (so `problem`/`error` are its outcome). */
   const [repairTried, setRepairTried] = useState(false)
   const repairScope = useMemo(() => `team-repair-${crypto.randomUUID()}`, [])
-  const [repairRows, setRepairRows] = useStepProgress(VERIFY_STEPS, repairScope)
+  const [repairRows, setRepairRows] = useStepProgress(
+    VERIFY_STEPS.map((s) => ({ id: s.id, label: t(s.label) })),
+    repairScope
+  )
   const ws = workspace
   /** Owners (the Maintain or Admin role on the repository) manage settings, runners, Repair and app access. */
   const canManage = Boolean(members?.canManage) || ws.role === 'owner'
@@ -92,7 +97,7 @@ export default function WorkspacePanel({
     try {
       setMembers(await window.api.team.members(ws.id))
     } catch (reason) {
-      setMembers({ ok: false, error: teamError(reason, 'Could not load members.'), members: [], canManage: false })
+      setMembers({ ok: false, error: teamError(reason, t('workspace.members.loadFailed')), members: [], canManage: false })
     }
   }
 
@@ -101,7 +106,7 @@ export default function WorkspacePanel({
     try {
       setFabricPeople(await window.api.team.fabricAccess(ws.id))
     } catch (reason) {
-      setFabricPeople({ ok: false, error: teamError(reason, 'Could not check Fabric access.'), people: [] })
+      setFabricPeople({ ok: false, error: teamError(reason, t('workspace.access.loadFailed')), people: [] })
     }
   }
 
@@ -110,7 +115,7 @@ export default function WorkspacePanel({
     try {
       setHealth(await window.api.team.health(ws.id))
     } catch (reason) {
-      setHealth({ ok: false, error: teamError(reason, 'Could not check the workspace.'), items: [] })
+      setHealth({ ok: false, error: teamError(reason, t('workspace.settings.healthFailed')), items: [] })
     }
   }
 
@@ -119,7 +124,7 @@ export default function WorkspacePanel({
     try {
       setRunnerInfo(await window.api.team.runner(ws.id))
     } catch (reason) {
-      setRunnerInfo({ ok: false, error: teamError(reason, 'Could not check where the pipeline runs.') })
+      setRunnerInfo({ ok: false, error: teamError(reason, t('workspace.settings.runnerFailed')) })
     }
   }
 
@@ -152,7 +157,7 @@ export default function WorkspacePanel({
       const result = await action()
       if (!result.ok) {
         if (result.problem) setProblem(result.problem)
-        else setError(result.error ?? 'That didn’t work.')
+        else setError(result.error ?? t('workspace.failed'))
         return false
       }
       // Partial success: the main action worked but a follow-up didn't.
@@ -162,7 +167,7 @@ export default function WorkspacePanel({
       onChanged()
       return true
     } catch (reason) {
-      setError(teamError(reason, 'That didn’t work.'))
+      setError(teamError(reason, t('workspace.failed')))
       return false
     } finally {
       setBusy(null)
@@ -178,7 +183,7 @@ export default function WorkspacePanel({
         await loadMembers()
         if (fabricPeople) await loadFabricPeople()
       },
-      `Invited ${who}. They can accept from Fabricator's Home or on GitHub.`
+      t('workspace.members.invitedNotice', { name: who })
     )
     if (ok) {
       setLogin('')
@@ -188,8 +193,8 @@ export default function WorkspacePanel({
   }
 
   async function repair(): Promise<void> {
-    setRepairRows(VERIFY_STEPS.map((s) => ({ id: s.id, label: s.label, state: 'pending' })))
-    await act('repair', () => window.api.team.repair(ws.id, repairScope), loadHealth, 'The workspace is healthy.')
+    setRepairRows(VERIFY_STEPS.map((s) => ({ id: s.id, label: t(s.label), state: 'pending' })))
+    await act('repair', () => window.api.team.repair(ws.id, repairScope), loadHealth, t('workspace.settings.healthy'))
   }
 
   async function saveAccount(): Promise<void> {
@@ -198,7 +203,7 @@ export default function WorkspacePanel({
       'account',
       () => window.api.team.setAccount(ws.id, login),
       loadMembers,
-      `Fabricator now works on this workspace as ${login}.`
+      t('workspace.settings.accountSaved', { login })
     )
     if (ok) setChangingAccount(false)
   }
@@ -208,7 +213,7 @@ export default function WorkspacePanel({
       'runner',
       () => window.api.team.setRunner(ws.id, draftRunner(runnerChoice)),
       loadRunner,
-      'Pipeline runs that start from now on use these runners.'
+      t('workspace.settings.runnerSaved')
     )
     if (ok) setChangingRunner(false)
   }
@@ -223,7 +228,7 @@ export default function WorkspacePanel({
         'confirm',
         () => window.api.team.revokeFabricAccess(ws.id, current.principalId),
         loadFabricPeople,
-        `${current.name} can no longer open the team's apps.`
+        t('workspace.access.revoked', { name: current.name })
       )
     } else if (current.kind === 'leave') {
       setBusy('confirm')
@@ -233,7 +238,7 @@ export default function WorkspacePanel({
         onGone()
         return
       } catch (reason) {
-        setError(teamError(reason, 'Could not leave the workspace.'))
+        setError(teamError(reason, t('workspace.settings.leaveFailed')))
       } finally {
         setBusy(null)
       }
@@ -263,21 +268,36 @@ export default function WorkspacePanel({
     })
   }
   const isMe = (who: string): boolean => Boolean(viewer && viewer.toLowerCase() === who.toLowerCase())
+  /** The core names what each person can open in English: say it in the interface's language. */
+  const accessName = (kind: string): string =>
+    kind === 'published apps'
+      ? t('workspace.access.published')
+      : kind === 'previews'
+        ? t('workspace.access.previews')
+        : kind
   const tabs: { id: WorkspaceTab; label: string }[] = [
-    { id: 'members', label: 'Members' },
-    ...(canManage ? [{ id: 'access' as const, label: 'App access' }] : []),
-    { id: 'settings', label: 'Settings' }
+    { id: 'members', label: t('workspace.tabs.members') },
+    ...(canManage ? [{ id: 'access' as const, label: t('workspace.tabs.access') }] : []),
+    { id: 'settings', label: t('workspace.tabs.settings') }
   ]
 
   return (
-    <aside className="tmap-side" aria-label="Workspace">
-      <button type="button" className="tmap-icon-btn tmap-inspector-close" onClick={onClose} aria-label="Close" title="Back to deployments">
+    <aside className="tmap-side" aria-label={t('workspace.label')}>
+      <button
+        type="button"
+        className="tmap-icon-btn tmap-inspector-close"
+        onClick={onClose}
+        aria-label={t('actions.close')}
+        title={t('shared.backToDeployments')}
+      >
         <Codicon name="close" />
       </button>
       <header className="tmap-insp-head">
         <span className="tmap-mark tmap-mark--hub">{(ws.name.trim()[0] ?? 'T').toUpperCase()}</span>
         <div className="tmap-titles">
-          <span className="tmap-kicker">Team workspace · {ws.role === 'owner' ? 'Owner' : 'Member'}</span>
+          <span className="tmap-kicker">
+            {t('workspace.kicker', { role: ws.role === 'owner' ? t('shared.owner') : t('shared.member') })}
+          </span>
           <h3>{ws.name}</h3>
           <button type="button" className="tmap-link" onClick={() => void window.api.openExternal(`https://github.com/${ws.repo}`)}>
             {ws.repo} <Codicon name="link-external" />
@@ -285,17 +305,17 @@ export default function WorkspacePanel({
         </div>
       </header>
 
-      <div className="tmap-tabs" role="tablist" aria-label="Workspace">
-        {tabs.map((t) => (
+      <div className="tmap-tabs" role="tablist" aria-label={t('workspace.label')}>
+        {tabs.map((item) => (
           <button
-            key={t.id}
+            key={item.id}
             type="button"
             role="tab"
-            aria-selected={tab === t.id}
-            className={`tmap-tab${tab === t.id ? ' tmap-tab--active' : ''}`}
-            onClick={() => setTab(t.id)}
+            aria-selected={tab === item.id}
+            className={`tmap-tab${tab === item.id ? ' tmap-tab--active' : ''}`}
+            onClick={() => setTab(item.id)}
           >
-            {t.label}
+            {item.label}
           </button>
         ))}
       </div>
@@ -303,10 +323,10 @@ export default function WorkspacePanel({
       {tab === 'members' && (
         <>
           <section className="tmap-insp-section">
-            <h4>People</h4>
+            <h4>{t('workspace.members.title')}</h4>
             {!members ? (
               <p className="tmap-dim">
-                <span className="tmap-spinner" /> Loading members…
+                <span className="tmap-spinner" /> {t('workspace.members.loading')}
               </p>
             ) : (
               <ul className="tmap-insp-list">
@@ -315,16 +335,20 @@ export default function WorkspacePanel({
                     <Avatar login={m.login} url={m.avatarUrl} size={24} />
                     <span className="tmap-insp-grow">
                       {m.login}
-                      {isMe(m.login) && <span className="tmap-dim"> (you)</span>}
+                      {isMe(m.login) && <span className="tmap-dim"> {t('workspace.members.you')}</span>}
                     </span>
-                    {m.pending && <span className="tmap-chip tmap-chip--warn">Invited</span>}
-                    <span className="tmap-chip">{m.role === 'owner' ? 'Owner' : 'Member'}</span>
+                    {m.pending && <span className="tmap-chip tmap-chip--warn">{t('workspace.members.invited')}</span>}
+                    <span className="tmap-chip">{m.role === 'owner' ? t('shared.owner') : t('shared.member')}</span>
                     {members.canManage && !isMe(m.login) ? (
                       <button
                         type="button"
                         className="tmap-icon-btn"
-                        title={m.pending ? 'Cancel the invitation' : 'Remove from the workspace'}
-                        aria-label={m.pending ? `Cancel ${m.login}'s invitation` : `Remove ${m.login}`}
+                        title={m.pending ? t('workspace.members.cancelInvite') : t('workspace.members.remove')}
+                        aria-label={
+                          m.pending
+                            ? t('workspace.members.cancelInviteFor', { login: m.login })
+                            : t('workspace.members.removeLogin', { login: m.login })
+                        }
                         disabled={Boolean(busy)}
                         onClick={() => setConfirm({ kind: 'remove-member', login: m.login, invitationId: m.invitationId })}
                       >
@@ -335,24 +359,21 @@ export default function WorkspacePanel({
                     )}
                   </li>
                 ))}
-                {members.members.length === 0 && <li className="tmap-dim">{members.error ?? 'No members found.'}</li>}
+                {members.members.length === 0 && <li className="tmap-dim">{members.error ?? t('workspace.members.none')}</li>}
               </ul>
             )}
           </section>
 
           {maintainer && (
             <section className="tmap-insp-section">
-              <h4>Invite a teammate</h4>
-              <p className="tmap-insp-text">
-                GitHub only lets admins of {ws.repo} add or remove people, and you have the Maintain role. Ask one of
-                its admins to add your teammates with the Write role.
-              </p>
+              <h4>{t('workspace.invite.title')}</h4>
+              <p className="tmap-insp-text">{t('workspace.invite.maintainer', { repo: ws.repo })}</p>
             </section>
           )}
 
           {isAdmin && (
             <section className="tmap-insp-section">
-              <h4>Invite a teammate</h4>
+              <h4>{t('workspace.invite.title')}</h4>
               <form
                 className="tmap-form"
                 onSubmit={(event) => {
@@ -361,7 +382,7 @@ export default function WorkspacePanel({
                 }}
               >
                 <label className="tmap-field">
-                  <span>GitHub username</span>
+                  <span>{t('workspace.invite.username')}</span>
                   <input
                     className="field-input"
                     value={login}
@@ -373,28 +394,28 @@ export default function WorkspacePanel({
                 </label>
                 <label className="tmap-field">
                   <span>
-                    Work email <span className="tmap-dim">(optional)</span>
+                    {t('workspace.invite.email')} <span className="tmap-dim">{t('workspace.invite.optional')}</span>
                   </span>
                   <input
                     className="field-input"
                     value={email}
-                    placeholder="name@company.com"
+                    placeholder={t('workspace.invite.emailPlaceholder')}
                     spellCheck={false}
                     autoComplete="off"
                     onChange={(event) => setEmail(event.target.value)}
                   />
-                  <span className="tmap-hint">Lets them open previews and published apps in Fabric.</span>
+                  <span className="tmap-hint">{t('workspace.invite.emailHint')}</span>
                 </label>
                 <label className="tmap-check">
                   <input type="checkbox" checked={asOwner} onChange={(event) => setAsOwner(event.target.checked)} />
                   <span>
-                    Owner
-                    <span className="tmap-hint">Can manage members and settings.</span>
+                    {t('shared.owner')}
+                    <span className="tmap-hint">{t('workspace.invite.ownerHint')}</span>
                   </span>
                 </label>
                 <div>
                   <button type="submit" className="btn btn--sm btn--primary" disabled={!login.trim() || Boolean(busy)}>
-                    {busy === 'invite' ? 'Inviting…' : 'Send invitation'}
+                    {busy === 'invite' ? t('workspace.invite.sending') : t('workspace.invite.send')}
                   </button>
                 </div>
               </form>
@@ -405,14 +426,11 @@ export default function WorkspacePanel({
 
       {tab === 'access' && (
         <section className="tmap-insp-section">
-          <h4>Who can open the apps</h4>
-          <p className="tmap-insp-text">
-            People with access to the workspace&apos;s Fabric workspaces can sign in to its previews and published apps.
-            Invite a teammate with their work email to add them.
-          </p>
+          <h4>{t('workspace.access.title')}</h4>
+          <p className="tmap-insp-text">{t('workspace.access.intro')}</p>
           {!fabricPeople ? (
             <p className="tmap-dim">
-              <span className="tmap-spinner" /> Checking Fabric…
+              <span className="tmap-spinner" /> {t('workspace.access.checking')}
             </p>
           ) : fabricPeople.error ? (
             <p className="tmap-dim">{fabricPeople.error}</p>
@@ -426,13 +444,15 @@ export default function WorkspacePanel({
                     {person.email && person.email !== person.name && (
                       <span className="tmap-dim tmap-block tmap-ellipsis">{person.email}</span>
                     )}
-                    <span className="tmap-dim tmap-block">Can open {person.access.join(' and ')}</span>
+                    <span className="tmap-dim tmap-block">
+                      {t('workspace.access.canOpen', { targets: formatList(person.access.map(accessName)) })}
+                    </span>
                   </span>
                   <button
                     type="button"
                     className="tmap-icon-btn"
-                    title="Remove their access to the apps"
-                    aria-label={`Remove ${person.name}'s access`}
+                    title={t('workspace.access.remove')}
+                    aria-label={t('workspace.access.removeFor', { name: person.name })}
                     disabled={Boolean(busy)}
                     onClick={() => setConfirm({ kind: 'revoke-fabric', principalId: person.principalId, name: person.name })}
                   >
@@ -440,7 +460,7 @@ export default function WorkspacePanel({
                   </button>
                 </li>
               ))}
-              {fabricPeople.people.length === 0 && <li className="tmap-dim">Nobody yet besides the workspace&apos;s admins.</li>}
+              {fabricPeople.people.length === 0 && <li className="tmap-dim">{t('workspace.access.none')}</li>}
             </ul>
           )}
         </section>
@@ -449,7 +469,7 @@ export default function WorkspacePanel({
       {tab === 'settings' && (
         <>
           <section className="tmap-insp-section">
-            <h4>GitHub account</h4>
+            <h4>{t('workspace.settings.account')}</h4>
             {changingAccount ? (
               <>
                 <GithubAccountField hideLabel value={newAccount} onChange={setNewAccount} onReady={setNewAccountReady} />
@@ -460,10 +480,10 @@ export default function WorkspacePanel({
                     disabled={!newAccountReady || Boolean(busy) || sameAccount(newAccount, ws.account)}
                     onClick={() => void saveAccount()}
                   >
-                    {busy === 'account' ? 'Checking…' : 'Use this account'}
+                    {busy === 'account' ? t('status.checking') : t('workspace.settings.useAccount')}
                   </button>
                   <button type="button" className="btn btn--sm btn--ghost" disabled={Boolean(busy)} onClick={() => setChangingAccount(false)}>
-                    Cancel
+                    {t('actions.cancel')}
                   </button>
                 </div>
               </>
@@ -472,11 +492,9 @@ export default function WorkspacePanel({
                 <li className="tmap-insp-row">
                   <Codicon name="github" />
                   <span className="tmap-insp-grow">
-                    {ws.account ?? 'The GitHub CLI’s active account'}
+                    {ws.account ?? t('workspace.settings.cliAccount')}
                     <span className="tmap-dim tmap-block">
-                      {ws.account
-                        ? 'Fabricator works on this workspace as this account.'
-                        : 'Fabricator remembers the account once it reads the workspace.'}
+                      {ws.account ? t('workspace.settings.accountInUse') : t('workspace.settings.accountLater')}
                     </span>
                   </span>
                   <button
@@ -488,7 +506,7 @@ export default function WorkspacePanel({
                       setChangingAccount(true)
                     }}
                   >
-                    Change
+                    {t('shared.change')}
                   </button>
                 </li>
               </ul>
@@ -496,19 +514,20 @@ export default function WorkspacePanel({
           </section>
 
           <section className="tmap-insp-section">
-            <h4>Publishing</h4>
+            <h4>{t('workspace.settings.publishing')}</h4>
             <label className="tmap-toggle">
               <span>
-                Require a review
+                {t('workspace.settings.requireReview')}
                 <span className="tmap-hint">
-                  A teammate approves each change before it&apos;s published.
-                  {ws.setup?.protection === 'app' || !ws.setup ? ' Where GitHub doesn’t protect main, Fabricator enforces this.' : ''}
+                  {ws.setup?.protection === 'app' || !ws.setup
+                    ? t('workspace.settings.reviewHintEnforced')
+                    : t('workspace.settings.reviewHint')}
                 </span>
               </span>
               <span className={`switch${requireReview ? ' switch--on' : ''}`}>
                 <input
                   type="checkbox"
-                  aria-label="Require a review before publishing"
+                  aria-label={t('workspace.settings.requireReviewLabel')}
                   checked={requireReview}
                   disabled={!canManage || Boolean(busy)}
                   onChange={(event) => void act('review', () => window.api.team.setRequireReview(ws.id, event.target.checked))}
@@ -519,11 +538,11 @@ export default function WorkspacePanel({
           </section>
 
           <section className="tmap-insp-section">
-            <h4>Where apps deploy</h4>
+            <h4>{t('workspace.settings.deploys')}</h4>
             <ul className="tmap-insp-list">
               {[
-                { label: 'Published apps', target: fabric?.production },
-                { label: 'Previews', target: fabric?.previews }
+                { label: t('shared.publishedApps'), target: fabric?.production },
+                { label: t('shared.previews'), target: fabric?.previews }
               ].map(({ label, target }) =>
                 target?.id ? (
                   <li key={label} className="tmap-insp-row">
@@ -535,8 +554,8 @@ export default function WorkspacePanel({
                     <button
                       type="button"
                       className="tmap-icon-btn"
-                      title="Open in Fabric"
-                      aria-label={`Open ${label} in Fabric`}
+                      title={t('shared.openInFabric')}
+                      aria-label={t('workspace.settings.openTarget', { label })}
                       onClick={() => void window.api.openExternal(fabricWorkspaceUrl(target.id))}
                     >
                       <Codicon name="link-external" />
@@ -549,7 +568,7 @@ export default function WorkspacePanel({
 
           {canManage && (
             <section className="tmap-insp-section">
-              <h4>Where the pipeline runs</h4>
+              <h4>{t('workspace.settings.runs')}</h4>
               {changingRunner ? (
                 <>
                   <RunnerFields
@@ -566,16 +585,16 @@ export default function WorkspacePanel({
                       disabled={!runnerDraftReady(runnerChoice) || Boolean(busy)}
                       onClick={() => void saveRunner()}
                     >
-                      {busy === 'runner' ? 'Saving…' : 'Save'}
+                      {busy === 'runner' ? t('status.saving') : t('actions.save')}
                     </button>
                     <button type="button" className="btn btn--sm btn--ghost" disabled={Boolean(busy)} onClick={() => setChangingRunner(false)}>
-                      Cancel
+                      {t('actions.cancel')}
                     </button>
                   </div>
                 </>
               ) : !runnerInfo ? (
                 <p className="tmap-dim">
-                  <span className="tmap-spinner" /> Checking where the pipeline runs…
+                  <span className="tmap-spinner" /> {t('workspace.settings.checkingRunner')}
                 </p>
               ) : !runnerNow ? (
                 <p className="tmap-dim tmap-wrap">{runnerInfo.error}</p>
@@ -602,7 +621,7 @@ export default function WorkspacePanel({
                         setChangingRunner(true)
                       }}
                     >
-                      Change
+                      {t('shared.change')}
                     </button>
                   </li>
                 </ul>
@@ -612,14 +631,21 @@ export default function WorkspacePanel({
 
           <section className="tmap-insp-section">
             <div className="tmap-section-head">
-              <h4>Pipeline health</h4>
-              <button type="button" className="tmap-icon-btn" title="Check again" aria-label="Check again" disabled={Boolean(busy)} onClick={() => void loadHealth()}>
+              <h4>{t('workspace.settings.health')}</h4>
+              <button
+                type="button"
+                className="tmap-icon-btn"
+                title={t('workspace.settings.checkAgain')}
+                aria-label={t('workspace.settings.checkAgain')}
+                disabled={Boolean(busy)}
+                onClick={() => void loadHealth()}
+              >
                 <Codicon name="refresh" />
               </button>
             </div>
             {!health ? (
               <p className="tmap-dim">
-                <span className="tmap-spinner" /> Checking the workspace…
+                <span className="tmap-spinner" /> {t('workspace.settings.checkingHealth')}
               </p>
             ) : (
               <ul className="tmap-insp-list">
@@ -641,12 +667,16 @@ export default function WorkspacePanel({
               <div className="tmap-insp-actions">
                 {canManage && (
                   <button type="button" className={`btn btn--sm${needsRepair ? ' btn--primary' : ''}`} disabled={Boolean(busy)} onClick={() => void repair()}>
-                    {busy === 'repair' ? 'Repairing…' : needsRepair ? 'Repair' : 'Check the pipeline'}
+                    {busy === 'repair'
+                      ? t('workspace.settings.repairing')
+                      : needsRepair
+                        ? t('workspace.settings.repair')
+                        : t('workspace.settings.checkPipeline')}
                   </button>
                 )}
                 {(healthTrouble || repairFailed) && (
                   <button type="button" className="btn btn--sm" disabled={busy === 'repair'} onClick={diagnoseHealth}>
-                    <Codicon name="sparkle" /> Diagnose with Copilot
+                    <Codicon name="sparkle" /> {t('shared.diagnose')}
                   </button>
                 )}
               </div>
@@ -655,18 +685,17 @@ export default function WorkspacePanel({
           </section>
 
           <section className="tmap-insp-section">
-            <h4>Leave or delete</h4>
+            <h4>{t('workspace.settings.leaveTitle')}</h4>
             <p className="tmap-insp-text">
-              Leaving removes the workspace from this computer. Published apps and work saved to GitHub stay.
-              {maintainer && ' Deleting the workspace archives its repository, which GitHub only lets its admins do.'}
+              {maintainer ? t('workspace.settings.leaveTextMaintainer') : t('workspace.settings.leaveText')}
             </p>
             <div className="tmap-insp-actions">
               <button type="button" className="btn btn--sm" disabled={Boolean(busy)} onClick={() => setConfirm({ kind: 'leave' })}>
-                Leave on this computer
+                {t('workspace.settings.leave')}
               </button>
               {isAdmin && (
                 <button type="button" className="btn btn--sm btn--danger" disabled={Boolean(busy)} onClick={() => setConfirm({ kind: 'delete' })}>
-                  Delete workspace…
+                  {t('workspace.settings.delete')}
                 </button>
               )}
             </div>
@@ -677,41 +706,41 @@ export default function WorkspacePanel({
       {problem && <ProblemView problem={problem} />}
       {error && <div className="alert alert--error">{error}</div>}
       {notice && <div className="tmap-notice">{notice}</div>}
-      {diagnose && <TeamDiagnosisModal input={diagnose} title="Diagnose the workspace" onClose={() => setDiagnose(null)} />}
+      {diagnose && <TeamDiagnosisModal input={diagnose} title={t('workspace.diagnose')} onClose={() => setDiagnose(null)} />}
 
       {confirm && (
         <ConfirmModal
           title={
             confirm.kind === 'remove-member'
-              ? `Remove ${confirm.login}?`
+              ? t('workspace.confirm.removeMember', { login: confirm.login })
               : confirm.kind === 'revoke-fabric'
-                ? `Remove ${confirm.name}'s access?`
+                ? t('workspace.confirm.revoke', { name: confirm.name })
                 : confirm.kind === 'leave'
-                  ? `Leave ${ws.name}?`
-                  : `Delete ${ws.name}?`
+                  ? t('workspace.confirm.leave', { name: ws.name })
+                  : t('workspace.confirm.delete', { name: ws.name })
           }
           danger={confirm.kind !== 'leave'}
           busy={busy === 'confirm'}
-          confirmLabel={confirm.kind === 'leave' ? 'Leave' : confirm.kind === 'delete' ? 'Delete workspace' : 'Remove'}
+          confirmLabel={
+            confirm.kind === 'leave'
+              ? t('workspace.confirm.leaveLabel')
+              : confirm.kind === 'delete'
+                ? t('workspace.confirm.deleteLabel')
+                : t('actions.remove')
+          }
           message={
             confirm.kind === 'remove-member' ? (
-              <p>
-                They lose access to the repository, and to the team&apos;s apps in Fabric if you gave it to them from
-                this computer. Their unpublished changes stay on GitHub.
-              </p>
+              <p>{t('workspace.confirm.removeMemberText')}</p>
             ) : confirm.kind === 'revoke-fabric' ? (
-              <p>They can no longer open the team&apos;s published apps or previews in Fabric.</p>
+              <p>{t('workspace.confirm.revokeText')}</p>
             ) : confirm.kind === 'leave' ? (
-              <p>The workspace and its apps are removed from this computer. Nothing changes for your teammates.</p>
+              <p>{t('workspace.confirm.leaveText')}</p>
             ) : (
               <>
-                <p>
-                  Fabricator deletes the deploy identities it created, archives the GitHub repository (an owner can
-                  restore it on GitHub), and removes the workspace from this computer.
-                </p>
+                <p>{t('workspace.confirm.deleteText')}</p>
                 <label className="tmap-check">
                   <input type="checkbox" checked={deleteFabric} onChange={(event) => setDeleteFabric(event.target.checked)} />
-                  <span>Also delete both Fabric workspaces and every app in them, with their data</span>
+                  <span>{t('workspace.confirm.deleteFabric')}</span>
                 </label>
               </>
             )

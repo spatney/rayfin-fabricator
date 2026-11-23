@@ -67,7 +67,9 @@ const PORTS: std::ops::RangeInclusive<u16> = 47100..=47999;
 /// Backends of installed apps that run at once.
 const MAX_RUNNING: usize = 16;
 
-const NOT_INSTALLED: &str = "This app isn’t installed anymore. Open its .rayfin file to install it again.";
+fn not_installed() -> String {
+  t!("services.apps.notInstalled")
+}
 
 /// What Fabricator keeps about an installed app (`<apps>/<key>/app.json`).
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -176,7 +178,7 @@ fn write_record(record: &Record) -> Result<(), String> {
   let json = serde_json::to_vec_pretty(record).map_err(|e| e.to_string())?;
   std::fs::write(&partial, json)
     .and_then(|()| std::fs::rename(&partial, &file))
-    .map_err(|e| format!("Couldn’t save what Fabricator knows about {}: {e}", record.name))
+    .map_err(|e| t!("services.apps.saveRecordFailed", name = record.name, error = e))
 }
 
 /// Every installed app, by name.
@@ -288,8 +290,8 @@ pub fn open(app: &AppHandle, opened: Opened) {
       Opened::AppFile(path) => open_file(&app, path).await,
       Opened::App(key) => {
         let record = read_record(&key);
-        let title = record.as_ref().map(|r| r.name.clone()).unwrap_or_else(|| "Rayfin app".into());
-        let error = record.is_none().then(|| NOT_INSTALLED.to_string());
+        let title = record.as_ref().map(|r| r.name.clone()).unwrap_or_else(|| t!("services.apps.defaultTitle"));
+        let error = record.is_none().then(not_installed);
         window::open(&app, &key, &title, icon_of(&key), None, error);
       }
       Opened::Project(_) => {}
@@ -321,7 +323,7 @@ async fn open_file(app: &AppHandle, path: PathBuf) {
 /// What the app window `label` is for, for Fabricator's page in it.
 pub async fn window_info(app: &AppHandle, label: &str) -> AppWindowInfo {
   let Some((key, file, error)) = window::purpose(app, label) else {
-    return AppWindowInfo { mode: "error".into(), error: Some("This window isn’t an app’s.".into()), ..Default::default() };
+    return AppWindowInfo { mode: "error".into(), error: Some(t!("services.apps.notAppWindow")), ..Default::default() };
   };
   let status = backends(app).status(&key);
   let installed = read_record(&key).map(|record| info(app, &record));
@@ -331,7 +333,7 @@ pub async fn window_info(app: &AppHandle, label: &str) -> AppWindowInfo {
   let Some(path) = file else {
     return match installed {
       Some(installed) => AppWindowInfo { key, mode: "run".into(), installed: Some(installed), status, ..Default::default() },
-      None => AppWindowInfo { key, mode: "error".into(), error: Some(NOT_INSTALLED.into()), status, ..Default::default() },
+      None => AppWindowInfo { key, mode: "error".into(), error: Some(not_installed()), status, ..Default::default() },
     };
   };
   let from = path.clone();
@@ -356,7 +358,7 @@ pub async fn window_info(app: &AppHandle, label: &str) -> AppWindowInfo {
     Ok(_) => AppWindowInfo {
       key,
       mode: "error".into(),
-      error: Some("That file holds a different app now. Open it again.".into()),
+      error: Some(t!("services.apps.fileChanged")),
       installed,
       status,
       ..Default::default()
@@ -439,27 +441,27 @@ fn swap_in(dir: &Path, incoming: &Path) -> Result<(), String> {
     let data = code.join(".rayfin-local");
     if data.exists() && !incoming.join(".rayfin-local").exists() {
       patiently(|| std::fs::rename(&data, incoming.join(".rayfin-local")))
-        .map_err(|e| format!("Couldn’t keep the app’s data from the version installed: {e}"))?;
+        .map_err(|e| t!("services.apps.keepDataFailed", error = e))?;
     }
     let old = dir.join(format!(".old-{}", short_id()));
-    patiently(|| std::fs::rename(&code, &old)).map_err(|e| format!("Couldn’t replace the version installed: {e}"))?;
+    patiently(|| std::fs::rename(&code, &old)).map_err(|e| t!("services.apps.replaceFailed", error = e))?;
     std::thread::spawn(move || {
       let _ = std::fs::remove_dir_all(&old);
     });
   }
-  patiently(|| std::fs::rename(incoming, &code)).map_err(|e| format!("Couldn’t put the app in place: {e}"))
+  patiently(|| std::fs::rename(incoming, &code)).map_err(|e| t!("services.apps.placeFailed", error = e))
 }
 
 /// Unpack the app file at `path` (of the app `key`) into place, and record it.
 fn install_file(app: &AppHandle, key: &str, path: &Path) -> Result<Record, String> {
   let mut file = export::read_app(path)?;
   if file.manifest.key != key {
-    return Err("That file holds a different app now. Open it again.".into());
+    return Err(t!("services.apps.fileChanged"));
   }
   let dir = app_dir(key);
-  std::fs::create_dir_all(&dir).map_err(|e| format!("Couldn’t create {}: {e}", dir.display()))?;
+  std::fs::create_dir_all(&dir).map_err(|e| t!("services.apps.createFailed", path = dir.display(), error = e))?;
   let incoming = dir.join(format!(".incoming-{}", short_id()));
-  std::fs::create_dir(&incoming).map_err(|e| format!("Couldn’t create {}: {e}", incoming.display()))?;
+  std::fs::create_dir(&incoming).map_err(|e| t!("services.apps.createFailed", path = incoming.display(), error = e))?;
   let unpacked = file
     .unpack_into(&incoming, |done, total| emit_progress(app, key, "unpacking", done, total, None))
     .and_then(|()| swap_in(&dir, &incoming));
@@ -500,10 +502,10 @@ fn install_file(app: &AppHandle, key: &str, path: &Path) -> Result<Record, Strin
 /// version installed, if any. The window then runs it (see [`run`]).
 pub async fn install(app: &AppHandle, label: &str) -> AppActionResult {
   let Some((key, Some(path), None)) = window::purpose(app, label) else {
-    return failed("not-installed", "There’s no app file to install in this window.");
+    return failed("not-installed", t!("services.apps.noAppFile"));
   };
   let Some(_busy) = Busy::take(app, &key) else {
-    return failed("busy", "Fabricator is already installing this app.");
+    return failed("busy", t!("services.apps.alreadyInstalling"));
   };
   // Its files are about to change.
   backends(app).stop(&key).await;
@@ -548,11 +550,11 @@ fn choose_port(key: &str, current: Option<u16>) -> Option<u16> {
 /// even when the window was opened with a file of another version.
 pub async fn run_window(app: &AppHandle, label: &str) -> AppActionResult {
   let Some((key, file, None)) = window::purpose(app, label).filter(|(key, _, _)| !key.is_empty()) else {
-    return failed("not-installed", NOT_INSTALLED);
+    return failed("not-installed", not_installed());
   };
   if file.is_some() {
     if read_record(&key).is_none() {
-      return failed("not-installed", "Install the app first.");
+      return failed("not-installed", t!("services.apps.installFirst"));
     }
     window::forget_file(app, label);
   }
@@ -585,10 +587,10 @@ pub async fn run(app: &AppHandle, key: &str) -> AppActionResult {
   let launch = app.state::<Apps>().launching.lock().unwrap().entry(key.to_string()).or_default().clone();
   let _launching = launch.lock().await;
   let Some(mut record) = read_record(key) else {
-    return failed("not-installed", NOT_INSTALLED);
+    return failed("not-installed", not_installed());
   };
   if app.state::<Apps>().busy.lock().unwrap().contains(key) {
-    return failed("busy", "Fabricator is installing this app. Try again in a moment.");
+    return failed("busy", t!("services.apps.installing"));
   }
   let backends = backends(app);
   let status = backends.status(key);
@@ -601,7 +603,7 @@ pub async fn run(app: &AppHandle, key: &str) -> AppActionResult {
     _ => {}
   }
   if !tokio::task::spawn_blocking(has_node).await.unwrap_or(false) {
-    return failed("node-missing", "This app runs on Node.js, which isn’t installed on this computer.");
+    return failed("node-missing", t!("services.apps.nodeMissing"));
   }
   let dir = code_dir(key);
   if !dir.join("node_modules").is_dir() {
@@ -616,7 +618,7 @@ pub async fn run(app: &AppHandle, key: &str) -> AppActionResult {
     return failed("install-failed", error);
   }
   let Some(port) = choose_port(key, record.port) else {
-    return failed("no-port", "Every port Fabricator runs apps on is in use. Close some apps, then try again.");
+    return failed("no-port", t!("services.apps.noPort"));
   };
   if record.port != Some(port) {
     record.port = Some(port);
@@ -690,10 +692,10 @@ pub fn list(app: &AppHandle) -> Vec<InstalledApp> {
 /// and its shortcut.
 pub async fn remove(app: &AppHandle, key: &str) -> AppActionResult {
   let Some(record) = read_record(key) else {
-    return failed("not-installed", NOT_INSTALLED);
+    return failed("not-installed", not_installed());
   };
   let Some(_busy) = Busy::take(app, key) else {
-    return failed("busy", "Fabricator is installing this app. Try again in a moment.");
+    return failed("busy", t!("services.apps.installing"));
   };
   window::close(app, key);
   backends(app).forget(key).await;
@@ -715,7 +717,7 @@ pub async fn remove(app: &AppHandle, key: &str) -> AppActionResult {
         .write();
       done()
     }
-    Err(error) => failed("remove-failed", format!("Couldn’t delete {}: {error}", record.name)),
+    Err(error) => failed("remove-failed", t!("services.apps.deleteFailed", name = record.name, error = error)),
   }
 }
 

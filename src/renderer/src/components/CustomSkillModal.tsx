@@ -3,6 +3,7 @@ import Editor from '@monaco-editor/react'
 // Point @monaco-editor/react at the locally-bundled Monaco (offline file:// renderer),
 // same as the Code tab / SkillPreviewModal. Without this the editor hangs on the CDN.
 import '../monaco'
+import { Trans, useTranslation } from '../i18n'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import type { CustomSkillActionResult, CustomSkillPreview } from '@shared/ipc'
@@ -79,6 +80,7 @@ export default function CustomSkillModal({
   onSaved
 }: Props): JSX.Element {
   useSuppressPreview()
+  const { t } = useTranslation('skills')
   const theme = useEditorTheme()
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
@@ -206,21 +208,26 @@ export default function CustomSkillModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>{editing ? 'Edit custom skill' : 'Add a custom skill'}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Close" disabled={busy}>
+          <h2 id={titleId}>{editing ? t('custom.titleEdit') : t('custom.titleAdd')}</h2>
+          <button
+            className="icon-btn"
+            onClick={onClose}
+            aria-label={t('actions.close')}
+            disabled={busy}
+          >
             ✕
           </button>
         </div>
 
         {!editing && (
-          <div className="custom-skill-tabs" role="tablist" aria-label="How to add a skill">
+          <div className="custom-skill-tabs" role="tablist" aria-label={t('custom.tabs')}>
             <button
               role="tab"
               aria-selected={tab === 'author'}
               className={`custom-skill-tab${tab === 'author' ? ' custom-skill-tab--on' : ''}`}
               onClick={() => setTab('author')}
             >
-              Write
+              {t('custom.write')}
             </button>
             <button
               role="tab"
@@ -228,7 +235,7 @@ export default function CustomSkillModal({
               className={`custom-skill-tab${tab === 'upload' ? ' custom-skill-tab--on' : ''}`}
               onClick={() => setTab('upload')}
             >
-              Upload
+              {t('custom.upload')}
             </button>
           </div>
         )}
@@ -243,10 +250,8 @@ export default function CustomSkillModal({
               }`}
             >
               <span className="custom-skill-library-opt-text">
-                <span className="custom-skill-library-opt-title">Save to my skill library</span>
-                <span className="custom-skill-library-opt-hint">
-                  Also keep it in your library so you can reuse it in other apps.
-                </span>
+                <span className="custom-skill-library-opt-title">{t('custom.libraryTitle')}</span>
+                <span className="custom-skill-library-opt-hint">{t('custom.libraryHint')}</span>
               </span>
               <span className={`switch${toLibrary ? ' switch--on' : ''}`}>
                 <input
@@ -264,39 +269,39 @@ export default function CustomSkillModal({
             <div className="custom-skill-form">
               <div className="custom-skill-fields">
                 <label className="custom-skill-field">
-                  <span>Title</span>
+                  <span>{t('custom.titleLabel')}</span>
                   <input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. Our brand style"
+                    placeholder={t('custom.titlePlaceholder')}
                     disabled={busy}
                   />
                 </label>
                 <label className="custom-skill-field custom-skill-field--icon">
-                  <span>Icon</span>
+                  <span>{t('custom.iconLabel')}</span>
                   <input
                     value={icon}
                     onChange={(e) => setIcon(e.target.value)}
                     maxLength={4}
-                    aria-label="Emoji icon"
+                    aria-label={t('custom.iconAria')}
                     disabled={busy}
                   />
                 </label>
               </div>
               <label className="custom-skill-field">
-                <span>Short description</span>
+                <span>{t('custom.descriptionLabel')}</span>
                 <input
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="One line shown on the skill card"
+                  placeholder={t('custom.descriptionPlaceholder')}
                   disabled={busy}
                 />
               </label>
 
-              <div className="custom-skill-editor-label">Skill instructions (SKILL.md)</div>
+              <div className="custom-skill-editor-label">{t('custom.instructions')}</div>
               <div className="custom-skill-editor">
                 {loading ? (
-                  <div className="code-empty">Loading…</div>
+                  <div className="code-empty">{t('status.loading')}</div>
                 ) : (
                   <Editor
                     height="100%"
@@ -307,7 +312,7 @@ export default function CustomSkillModal({
                       setContent(value ?? '')
                       setContentTouched(true)
                     }}
-                    loading={<div className="code-empty">Loading editor…</div>}
+                    loading={<div className="code-empty">{t('editor.loading')}</div>}
                     options={{
                       readOnly: busy,
                       minimap: { enabled: false },
@@ -322,8 +327,7 @@ export default function CustomSkillModal({
                 )}
               </div>
               <p className="custom-skill-hint">
-                The frontmatter <code>description</code> tells the agent when to use this skill; the
-                body is the guidance it follows.
+                <Trans t={t} i18nKey="custom.hint" components={{ code: <code /> }} />
               </p>
             </div>
           ) : uploadPreview ? (
@@ -337,8 +341,7 @@ export default function CustomSkillModal({
                   <div className="custom-skill-preview-desc">{uploadPreview.description}</div>
                   {uploadPreview.referenceCount > 0 && (
                     <div className="custom-skill-preview-refs">
-                      Includes {uploadPreview.referenceCount} reference file
-                      {uploadPreview.referenceCount === 1 ? '' : 's'}
+                      {t('custom.references', { count: uploadPreview.referenceCount })}
                     </div>
                   )}
                 </div>
@@ -347,17 +350,17 @@ export default function CustomSkillModal({
                   disabled={busy}
                   onClick={() => setUploadPreview(null)}
                 >
-                  Choose different
+                  {t('custom.chooseDifferent')}
                 </button>
               </div>
-              <div className="custom-skill-editor-label">SKILL.md (preview)</div>
+              <div className="custom-skill-editor-label">{t('custom.previewLabel')}</div>
               <div className="custom-skill-editor">
                 <Editor
                   height="100%"
                   theme={theme}
                   language="markdown"
                   value={uploadPreview.content ?? ''}
-                  loading={<div className="code-empty">Loading editor…</div>}
+                  loading={<div className="code-empty">{t('editor.loading')}</div>}
                   options={{
                     readOnly: true,
                     domReadOnly: true,
@@ -372,14 +375,12 @@ export default function CustomSkillModal({
                   }}
                 />
               </div>
-              <p className="custom-skill-hint">Review the skill, then add it to this app.</p>
+              <p className="custom-skill-hint">{t('custom.reviewHint')}</p>
             </div>
           ) : (
             <div className="custom-skill-upload">
               <p className="custom-skill-upload-lead">
-                Upload a skill you already have to preview it, then add it to this app. It needs a{' '}
-                <code>SKILL.md</code> with <code>name</code> and <code>description</code>{' '}
-                frontmatter; any <code>references/</code> files come along too.
+                <Trans t={t} i18nKey="custom.uploadLead" components={{ code: <code /> }} />
               </p>
               <div className="custom-skill-upload-actions">
                 <button
@@ -387,17 +388,17 @@ export default function CustomSkillModal({
                   disabled={busy}
                   onClick={() => void runImport(() => window.api.customSkills.pickFolderPreview())}
                 >
-                  Choose a folder…
+                  {t('custom.chooseFolder')}
                 </button>
                 <button
                   className="btn"
                   disabled={busy}
                   onClick={() => void runImport(() => window.api.customSkills.pickFilePreview())}
                 >
-                  Choose a file (.md or .zip)…
+                  {t('custom.chooseFile')}
                 </button>
               </div>
-              {busy && <p className="custom-skill-hint">Reading…</p>}
+              {busy && <p className="custom-skill-hint">{t('custom.reading')}</p>}
             </div>
           )}
         </div>
@@ -405,7 +406,7 @@ export default function CustomSkillModal({
         {(tab === 'author' || (tab === 'upload' && uploadPreview)) && (
           <div className="modal-footer">
             <button className="btn btn--ghost" onClick={onClose} disabled={busy}>
-              Cancel
+              {t('actions.cancel')}
             </button>
             <button
               className="btn btn--primary"
@@ -415,12 +416,12 @@ export default function CustomSkillModal({
               {busy ? (
                 <span className="btn-busy">
                   <span className="btn-spin" aria-hidden="true" />
-                  Saving…
+                  {t('status.saving')}
                 </span>
               ) : editing ? (
-                'Save changes'
+                t('custom.saveChanges')
               ) : (
-                'Add skill'
+                t('custom.addSkill')
               )}
             </button>
           </div>

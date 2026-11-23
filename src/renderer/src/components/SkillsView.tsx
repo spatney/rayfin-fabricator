@@ -9,6 +9,7 @@ import {
   type JSX,
 } from 'react'
 import type { CustomSkillActionResult, SkillInfo, StudioProject } from '@shared/ipc'
+import { translator, useTranslation } from '../i18n'
 import { Codicon } from './icons'
 import Skeleton from './Skeleton'
 import SkillInspector, { SkillsOverview, type SkillCounts } from './skills/SkillInspector'
@@ -20,6 +21,8 @@ const SkillPreviewModal = lazy(() => import('./SkillPreviewModal'))
 const CustomSkillModal = lazy(() => import('./CustomSkillModal'))
 const ConfirmModal = lazy(() => import('./ConfirmModal'))
 
+type SkillsT = ReturnType<typeof translator<'skills'>>
+
 interface Props {
   project: StudioProject
   /** Called after a skill is added/removed so the parent can refresh Code/History. */
@@ -28,11 +31,11 @@ interface Props {
 
 type Filter = 'all' | 'on' | 'off'
 
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'on', label: 'On' },
-  { id: 'off', label: 'Off' }
-]
+const FILTERS = [
+  { id: 'all', label: 'filters.all' },
+  { id: 'on', label: 'filters.on' },
+  { id: 'off', label: 'filters.off' }
+] as const satisfies ReadonlyArray<{ id: Filter; label: string }>
 
 interface SkillGroup {
   key: string
@@ -45,17 +48,17 @@ interface SkillGroup {
  * Bucket skills into display groups: Rayfin's always-on skills, the catalog by
  * category, the reusable library, then skills that live only in this app.
  */
-function groupSkills(skills: SkillInfo[]): SkillGroup[] {
+function groupSkills(skills: SkillInfo[], t: SkillsT): SkillGroup[] {
   const groups: SkillGroup[] = []
   const base = skills.filter((s) => s.base)
   if (base.length) {
-    groups.push({ key: '__base', title: 'Always on', hint: 'Core guidance managed by Rayfin.', skills: base })
+    groups.push({ key: '__base', title: t('groups.alwaysOn'), hint: t('groups.alwaysOnHint'), skills: base })
   }
   for (const skill of skills.filter((s) => sourceOf(s) === 'catalog')) {
-    const name = skill.category ?? 'More'
-    let group = groups.find((g) => g.key === `cat:${name}`)
+    const key = `cat:${skill.category ?? 'More'}`
+    let group = groups.find((g) => g.key === key)
     if (!group) {
-      group = { key: `cat:${name}`, title: name, skills: [] }
+      group = { key, title: skill.category ?? t('groups.more'), skills: [] }
       groups.push(group)
     }
     group.skills.push(skill)
@@ -64,8 +67,8 @@ function groupSkills(skills: SkillInfo[]): SkillGroup[] {
   if (library.length) {
     groups.push({
       key: '__library',
-      title: 'Your skill library',
-      hint: 'Your reusable skills. Turning one on copies it into this app.',
+      title: t('groups.library'),
+      hint: t('groups.libraryHint'),
       skills: library
     })
   }
@@ -73,8 +76,8 @@ function groupSkills(skills: SkillInfo[]): SkillGroup[] {
   if (app.length) {
     groups.push({
       key: '__app',
-      title: 'Added in this app',
-      hint: 'Skills that live only in this app, such as the ones its template came with.',
+      title: t('groups.app'),
+      hint: t('groups.appHint'),
       skills: app
     })
   }
@@ -119,6 +122,7 @@ function SkillCard({
   onToggle: (skill: SkillInfo) => void
 }): JSX.Element {
   const source = sourceOf(skill)
+  const { t } = useTranslation('skills')
   return (
     <div className={`skl-card${selected ? ' skl-card--selected' : ''}`}>
       <button type="button" className="skl-card-main" aria-pressed={selected} onClick={() => onSelect(skill)}>
@@ -126,20 +130,22 @@ function SkillCard({
         <span className="skl-card-text">
           <span className="skl-card-title">{skill.title}</span>
           <span className="skl-card-desc">{skill.description}</span>
-          {skill.outdated && skill.active && <span className="skl-card-flag">Update available</span>}
+          {skill.outdated && skill.active && (
+            <span className="skl-card-flag">{t('skill.updateAvailable')}</span>
+          )}
         </span>
       </button>
       {source === 'rayfin' ? (
-        <span className="skl-card-side skl-lock" title="Managed by Rayfin. Always on.">
+        <span className="skl-card-side skl-lock" title={t('skill.managed')}>
           <Codicon name="lock" />
-          <span className="sr-only">Always on</span>
+          <span className="sr-only">{t('skill.alwaysOn')}</span>
         </span>
       ) : source !== 'app' ? (
         <span className="skl-card-side">
           <SkillSwitch
             on={skill.active}
             busy={busy}
-            label={`Use ${skill.title} in this app`}
+            label={t('skill.use', { title: skill.title })}
             onChange={() => onToggle(skill)}
           />
         </span>
@@ -156,6 +162,7 @@ function SkillCard({
  * Selecting a skill shows what it teaches beside the grid.
  */
 export default function SkillsView({ project, onChanged }: Props): JSX.Element {
+  const { t } = useTranslation('skills')
   const [skills, setSkills] = useState<SkillInfo[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -232,18 +239,18 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
       void setSkill(
         skill,
         next,
-        next ? `Turned on “${skill.title}”. Saved to this app.` : `Turned off “${skill.title}”. Saved to this app.`
+        next ? t('toasts.turnedOn', { title: skill.title }) : t('toasts.turnedOff', { title: skill.title })
       )
     },
-    [busy, updatingAll, setSkill]
+    [busy, updatingAll, setSkill, t]
   )
 
   const update = useCallback(
     (skill: SkillInfo) => {
       if (busy || updatingAll) return
-      void setSkill(skill, true, `Updated “${skill.title}”.`)
+      void setSkill(skill, true, t('toasts.updated', { title: skill.title }))
     },
-    [busy, updatingAll, setSkill]
+    [busy, updatingAll, setSkill, t]
   )
 
   const outdated = useMemo(() => (skills ?? []).filter((s) => s.outdated && s.active), [skills])
@@ -260,7 +267,7 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
         const result = await window.api.skills.set(project.id, skill.id, true)
         latest = result.skills
         if (!result.ok) {
-          setError(result.error ?? `Couldn’t update “${skill.title}”.`)
+          setError(result.error ?? t('toasts.updateFailed', { title: skill.title }))
           break
         }
         updated += 1
@@ -272,11 +279,11 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
       setBusy(null)
       setUpdatingAll(false)
       if (updated > 0) {
-        flash(updated === 1 ? 'Updated 1 skill.' : `Updated ${updated} skills.`)
+        flash(t('toasts.updatedCount', { count: updated }))
         onChanged()
       }
     }
-  }, [outdated, busy, updatingAll, project.id, flash, onChanged])
+  }, [outdated, busy, updatingAll, project.id, flash, onChanged, t])
 
   // After a save/import/promote, refresh this project's list. When editing a skill
   // that's already active here, re-copy it so the project's copy picks up the edit.
@@ -293,9 +300,9 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
       }
       onChanged()
       await load()
-      flash('Saved to your skills.')
+      flash(t('toasts.saved'))
     },
-    [skills, project.id, load, onChanged, flash]
+    [skills, project.id, load, onChanged, flash, t]
   )
 
   const promote = useCallback(
@@ -306,7 +313,7 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
       try {
         const result = await window.api.customSkills.promote(project.id, skill.id)
         if (result.ok) {
-          flash(`Saved “${skill.title}” to your skill library.`)
+          flash(t('toasts.savedToLibrary', { title: skill.title }))
           await load()
         } else if (result.error) {
           setError(result.error)
@@ -317,7 +324,7 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
         setBusy(null)
       }
     },
-    [busy, project.id, flash, load]
+    [busy, project.id, flash, load, t]
   )
 
   const confirmDelete = useCallback(async () => {
@@ -327,7 +334,7 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
     try {
       const result = await window.api.customSkills.remove(deleting.id)
       if (result.ok) {
-        flash(`Deleted “${deleting.title}” from your skill library.`)
+        flash(t('toasts.deleted', { title: deleting.title }))
         setDeleting(null)
         await load()
       } else if (result.error) {
@@ -338,16 +345,16 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
     } finally {
       setDeleteBusy(false)
     }
-  }, [deleting, load, flash])
+  }, [deleting, load, flash, t])
 
   const confirmRemove = useCallback(async () => {
     if (!removing) return
     setRemoveBusy(true)
-    const removed = await setSkill(removing, false, `Removed “${removing.title}” from this app.`)
+    const removed = await setSkill(removing, false, t('toasts.removed', { title: removing.title }))
     setRemoveBusy(false)
     setRemoving(null)
     if (removed) setSelectedId(null)
-  }, [removing, setSkill])
+  }, [removing, setSkill, t])
 
   // Esc closes the details, unless a dialog is open (it handles Esc itself).
   const dialogOpen = Boolean(preview || authoring || deleting || removing)
@@ -367,9 +374,10 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
   const groups = useMemo(
     () =>
       groupSkills(
-        (skills ?? []).filter((s) => (filter === 'all' || (filter === 'on') === s.active) && matches(s, trimmed))
+        (skills ?? []).filter((s) => (filter === 'all' || (filter === 'on') === s.active) && matches(s, trimmed)),
+        t
       ),
-    [skills, filter, trimmed]
+    [skills, filter, trimmed, t]
   )
   const selected = skills?.find((s) => s.id === selectedId) ?? null
 
@@ -380,8 +388,8 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
           <span className="skl-head-glyph" aria-hidden="true">
             <Codicon name="mortar-board" />
           </span>
-          <h2 className="skl-title">Skills</h2>
-          <span className="skl-subtitle">Guidance Copilot follows while it builds this app</span>
+          <h2 className="skl-title">{t('view.title')}</h2>
+          <span className="skl-subtitle">{t('view.subtitle')}</span>
         </div>
         <div className="skl-tools">
           <div className="skl-search">
@@ -389,8 +397,8 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
             <input
               className="skl-search-input"
               value={query}
-              placeholder="Search skills"
-              aria-label="Search skills"
+              placeholder={t('view.search')}
+              aria-label={t('view.search')}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Escape' && query) {
@@ -400,12 +408,17 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
               }}
             />
             {query && (
-              <button type="button" className="skl-search-clear" aria-label="Clear search" onClick={() => setQuery('')}>
+              <button
+                type="button"
+                className="skl-search-clear"
+                aria-label={t('view.clearSearch')}
+                onClick={() => setQuery('')}
+              >
                 <Codicon name="close" />
               </button>
             )}
           </div>
-          <div className="skl-tabs" role="radiogroup" aria-label="Show">
+          <div className="skl-tabs" role="radiogroup" aria-label={t('view.show')}>
             {FILTERS.map((f) => (
               <button
                 key={f.id}
@@ -415,7 +428,7 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
                 className={`skl-tab${filter === f.id ? ' skl-tab--on' : ''}`}
                 onClick={() => setFilter(f.id)}
               >
-                {f.label}
+                {t(f.label)}
                 {skills && <span className="skl-tab-count">{filterCount[f.id]}</span>}
               </button>
             ))}
@@ -424,9 +437,9 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
             type="button"
             className="model-tool-btn"
             onClick={() => setAuthoring({ kind: 'new' })}
-            title="Write or upload your own skill"
+            title={t('view.newSkillTitle')}
           >
-            <Codicon name="add" /> New skill
+            <Codicon name="add" /> {t('view.newSkill')}
           </button>
         </div>
       </header>
@@ -447,15 +460,19 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
           ) : groups.length === 0 ? (
             <div className="skl-empty">
               <strong>
-                {trimmed ? `No skills match “${trimmed}”` : filter === 'on' ? 'No skills are on' : 'Every skill is on'}
+                {trimmed
+                  ? t('empty.noMatch', { query: trimmed })
+                  : filter === 'on'
+                    ? t('empty.noneOn')
+                    : t('empty.allOn')}
               </strong>
               {trimmed ? (
                 <button type="button" className="skl-link" onClick={() => setQuery('')}>
-                  Clear search
+                  {t('view.clearSearch')}
                 </button>
               ) : (
                 <button type="button" className="skl-link" onClick={() => setFilter('all')}>
-                  Show all skills
+                  {t('empty.showAll')}
                 </button>
               )}
             </div>
@@ -539,17 +556,12 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
       {deleting && (
         <Suspense fallback={null}>
           <ConfirmModal
-            title="Delete custom skill?"
-            message={
-              <>
-                Delete “{deleting.title}” from your skill library? Apps that already use it keep their copy. This only
-                removes it from your reusable library.
-              </>
-            }
-            confirmLabel="Delete"
+            title={t('deleteDialog.title')}
+            message={t('deleteDialog.message', { title: deleting.title })}
+            confirmLabel={t('actions.delete')}
             danger
             busy={deleteBusy}
-            busyLabel="Deleting…"
+            busyLabel={t('status.deleting')}
             onConfirm={() => void confirmDelete()}
             onCancel={() => (deleteBusy ? undefined : setDeleting(null))}
           />
@@ -559,18 +571,16 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
       {removing && (
         <Suspense fallback={null}>
           <ConfirmModal
-            title="Remove skill from this app?"
+            title={t('removeDialog.title')}
             message={
-              <>
-                Copilot stops using “{removing.title}” in this app. It isn’t in your skill library, so to get it back
-                you’d restore it from History.
-                {removing.promotable && ' Save it to your library first if you want to reuse it.'}
-              </>
+              removing.promotable
+                ? t('removeDialog.messageSaveFirst', { title: removing.title })
+                : t('removeDialog.message', { title: removing.title })
             }
-            confirmLabel="Remove"
+            confirmLabel={t('actions.remove')}
             danger
             busy={removeBusy}
-            busyLabel="Removing…"
+            busyLabel={t('removeDialog.removing')}
             onConfirm={() => void confirmRemove()}
             onCancel={() => (removeBusy ? undefined : setRemoving(null))}
           />

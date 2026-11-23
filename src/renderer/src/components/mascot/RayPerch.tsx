@@ -5,6 +5,7 @@
  * he says and how he feels; this draws him and does his tricks.
  */
 import { useEffect, useRef, useState, type ReactNode, type JSX } from 'react'
+import { useTranslation } from '../../i18n'
 import { Ray, RAY_MOUTH, RAY_VIEWBOX, type RayMood } from './Ray'
 import { Particles, useParticles } from './Particles'
 import { SpeechBubble, TYPE_MS } from './SpeechBubble'
@@ -44,6 +45,7 @@ export function RayPerch({
   className,
   children
 }: RayPerchProps): JSX.Element {
+  const { t } = useTranslation('mascot')
   const reduced = useReducedMotion()
   const height = (size * RAY_VIEWBOX.h) / RAY_VIEWBOX.w
   const { particles, burst } = useParticles()
@@ -140,7 +142,7 @@ export function RayPerch({
           ref={rayRef}
           className="ray-perch-hit"
           onClick={pet}
-          aria-label="Ray, the Fabricator stingray. Select to pet him."
+          aria-label={t('ui.ray')}
         >
           <span className="ray-perch-bob">
             <span ref={squishRef} className="ray-perch-squish">

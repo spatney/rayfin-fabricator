@@ -57,7 +57,7 @@ pub fn failure_flags(error: &str) -> (bool, bool) {
 
 pub fn failure_message(res: &exec::RunResult) -> String {
   let message = if res.not_found {
-    "Node.js was not found on PATH.".to_string()
+    t!("services.fabricHelper.nodeMissing")
   } else if !res.stderr.trim().is_empty() {
     res.stderr.trim().to_string()
   } else if let Some(error) = serde_json::from_str::<serde_json::Value>(res.stdout.trim())
@@ -66,12 +66,12 @@ pub fn failure_message(res: &exec::RunResult) -> String {
   {
     error
   } else if !res.stdout.trim().is_empty() {
-    "The Fabric helper returned an invalid response.".to_string()
+    t!("services.fabricHelper.invalidResponse")
   } else {
-    format!(
-      "The Fabric helper failed (exit {}).",
-      res.exit_code.map(|code| code.to_string()).unwrap_or_else(|| "unknown".into())
-    )
+    match res.exit_code {
+      Some(code) => t!("services.fabricHelper.failedCode", code = code),
+      None => t!("services.fabricHelper.failedUnknown"),
+    }
   };
   redact(&message)
 }

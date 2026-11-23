@@ -1,17 +1,16 @@
 import { memo, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import type { ChatSegment } from '@shared/ipc'
+import { translator, useTranslation } from '../../i18n'
 import Markdown from '../Markdown'
 import { ChevronRightIcon } from '../icons'
+import { formatSeconds } from './format'
 
 type ReasoningSegment = Extract<ChatSegment, { kind: 'reasoning' }>
 
 function thoughtFor(ms: number | undefined): string {
-  if (ms == null) return 'Thought it through'
-  const secs = Math.max(1, Math.round(ms / 1000))
-  if (secs < 60) return `Thought for ${secs}s`
-  const m = Math.floor(secs / 60)
-  const s = secs % 60
-  return s ? `Thought for ${m}m ${s}s` : `Thought for ${m}m`
+  const t = translator('chat')
+  if (ms == null) return t('thinking.thoughtItThrough')
+  return t('thinking.thoughtFor', { duration: formatSeconds(Math.max(1, Math.round(ms / 1000))) })
 }
 
 /** The model's readable reasoning: streamed live, then folded into "Thought for Ns". */
@@ -22,6 +21,7 @@ export const ThinkingRow = memo(function ThinkingRow({
   seg: ReasoningSegment
   live: boolean
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   const [open, setOpen] = useState(false)
   const liveRef = useRef<HTMLDivElement>(null)
   const text = seg.text.trim()
@@ -37,7 +37,7 @@ export const ThinkingRow = memo(function ThinkingRow({
       <div className="thinking thinking--live" role="status" aria-live="polite">
         <div className="thinking-head">
           <span className="thinking-dot" aria-hidden="true" />
-          <span className="thinking-label">Thinking…</span>
+          <span className="thinking-label">{t('thinking.live')}</span>
         </div>
         <div className="thinking-live" ref={liveRef}>
           {text}

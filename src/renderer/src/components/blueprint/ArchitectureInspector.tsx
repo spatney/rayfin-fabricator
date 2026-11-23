@@ -1,8 +1,10 @@
 import { useEffect, useState, type CSSProperties, type ReactNode, type JSX } from 'react'
 import type { SecretInfo, SecretsState, StudioProject } from '@shared/ipc'
+import { Trans, translator, useTranslation } from '../../i18n'
 import {
   audienceKind,
   connectorKind,
+  connectorTypeLabel,
   hardcodedSummary,
   ids,
   parsePort,
@@ -109,15 +111,22 @@ function Panel({
   children: ReactNode
   actions?: ReactNode
 }): JSX.Element {
+  const { t } = useTranslation('blueprint')
   return (
-    <aside className="bp-insp" aria-label={`${title} details`}>
+    <aside className="bp-insp" aria-label={t('inspector.panelAria', { title })}>
       <header className="bp-insp-head">
         {glyph}
         <div className="bp-insp-titles">
           <span className="bp-insp-kicker">{kicker}</span>
           <h3 className="bp-insp-title">{title}</h3>
         </div>
-        <button type="button" className="bp-insp-close" onClick={onClose} aria-label="Close details" title="Close (Esc)">
+        <button
+          type="button"
+          className="bp-insp-close"
+          onClick={onClose}
+          aria-label={t('inspector.close')}
+          title={t('inspector.closeTitle')}
+        >
           <Codicon name="close" />
         </button>
       </header>
@@ -174,10 +183,11 @@ function Code({ text }: { text: string }): JSX.Element {
 }
 
 function Guid({ value }: { value: string }): JSX.Element {
+  const { t } = useTranslation('blueprint')
   return (
     <span className="bp-guid">
       <code title={value}>{value}</code>
-      <CopyButton text={value} compact title="Copy" className="bp-guid-copy" />
+      <CopyButton text={value} compact title={t('actions.copy')} className="bp-guid-copy" />
     </span>
   )
 }
@@ -211,19 +221,20 @@ function SignsInAs({
   target: string
   onSelect: (id: string) => void
 }): JSX.Element {
+  const { t } = useTranslation('blueprint')
   return (
     <button type="button" className={`bp-signs bp-signs--${identity}`} onClick={() => onSelect(target)}>
       <span className={`bp-glyph bp-glyph--${identity}`} aria-hidden="true">
         <Codicon name={IDENTITY_ICON[identity]} />
       </span>
       <span className="bp-signs-text">
-        <strong>{IDENTITY_LABEL[identity]}</strong>
+        <strong>{t(IDENTITY_LABEL[identity])}</strong>
         <span>
           {identity === 'user'
-            ? 'Delegated: runs as whoever is signed in, with their own Fabric access.'
+            ? t('inspector.signs.user')
             : identity === 'app'
-              ? `Application: runs as ${whoText(appIdentity)}, the same for everyone.`
-              : 'A key or token the function sends itself, not a Fabric sign-in.'}
+              ? t('inspector.signs.app', { who: whoLabel(appIdentity) })
+              : t('inspector.signs.key')}
         </span>
       </span>
       <Codicon name="chevron-right" className="bp-signs-go" />
@@ -231,10 +242,19 @@ function SignsInAs({
   )
 }
 
+/** Who the app identity is, in English: for prompts. */
 function whoText(identity: AppIdentityInfo): string {
   if (identity.kind === 'service-principal') return `the service principal ${identity.who}`
   if (identity.kind === 'account' && identity.who) return identity.who
   return 'the owner of the Fabric app'
+}
+
+/** Who the app identity is, in the language shown. */
+function whoLabel(identity: AppIdentityInfo): string {
+  const t = translator('blueprint')
+  if (identity.kind === 'service-principal') return t('inspector.who.servicePrincipal', { who: identity.who })
+  if (identity.kind === 'account' && identity.who) return identity.who
+  return t('inspector.who.owner')
 }
 
 function SourceList({ arch, sources, onSelect, grant }: {
@@ -243,6 +263,7 @@ function SourceList({ arch, sources, onSelect, grant }: {
   onSelect: (id: string) => void
   grant?: boolean
 }): JSX.Element {
+  const { t } = useTranslation('blueprint')
   return (
     <ul className="bp-list">
       {sources.map((s) => (
@@ -259,18 +280,21 @@ function SourceList({ arch, sources, onSelect, grant }: {
           </button>
         </li>
       ))}
-      {sources.length === 0 && <li className="bp-list-empty">{arch.sources.length ? 'None' : 'Nothing yet'}</li>}
+      {sources.length === 0 && (
+        <li className="bp-list-empty">{arch.sources.length ? t('status.none') : t('inspector.nothingYet')}</li>
+      )}
     </ul>
   )
 }
 
 function grantFor(s: SourceNode): string {
   if (s.audience) return audienceKind(s.audience).grant
-  return 'A role on its Fabric workspace, or permission on the item.'
+  return translator('blueprint')('inspector.grantFabric')
 }
 
 /** One row that opens the Secrets part. */
 function SecretsLink({ arch, onSelect }: { arch: AppArchitecture; onSelect: (id: string) => void }): JSX.Element {
+  const { t } = useTranslation('blueprint')
   const n = arch.keys.secrets.length
   return (
     <ul className="bp-list">
@@ -280,7 +304,7 @@ function SecretsLink({ arch, onSelect }: { arch: AppArchitecture; onSelect: (id:
             <Codicon name="lock" />
           </span>
           <span className="bp-list-text">
-            <strong>{n === 1 ? '1 secret' : `${n} secrets`}</strong>
+            <strong>{t('inspector.secretCount', { count: n })}</strong>
             <span className="bp-mono">{arch.keys.secrets.map((s) => s.name).join(', ')}</span>
           </span>
           <Codicon name="chevron-right" className="bp-list-go" />
@@ -293,56 +317,60 @@ function SecretsLink({ arch, onSelect }: { arch: AppArchitecture; onSelect: (id:
 /* ------------------------------- kinds ------------------------------- */
 
 function PeopleDetails({ arch, deploy, onClose, onOpenFile }: Props): JSX.Element {
+  const { t } = useTranslation('blueprint')
   const p = arch.people
   return (
     <Panel
-      kicker="Who uses it"
-      title="People"
+      kicker={t('inspector.people.kicker')}
+      title={t('view.people.title')}
       glyph={<Glyph icon="organization" tone="people" />}
       onClose={onClose}
       actions={
         <>
           {deploy.url && (
             <button type="button" className="btn btn--sm btn--ghost" onClick={() => open(deploy.url!)}>
-              <Codicon name="globe" /> Open the app
+              <Codicon name="globe" /> {t('view.openApp')}
             </button>
           )}
           <button type="button" className="btn btn--sm btn--ghost" onClick={() => onOpenFile('rayfin/rayfin.yml')}>
-            Open rayfin.yml
+            {t('tab.openYml')}
           </button>
         </>
       }
     >
       <p className="bp-insp-lead">
-        People open the app at its address or inside Fabric and sign in with their work account. To let
-        someone in, select <strong>Share</strong> in the app bar.
+        <Trans t={t} i18nKey="inspector.people.lead" components={{ strong: <strong /> }} />
       </p>
       <Issues issues={p.issues} />
       <Facts
         rows={[
-          ['Sign-in', p.signIn],
+          [t('inspector.facts.signIn'), p.signIn],
           [
-            'Pages',
+            t('inspector.facts.pages'),
             arch.config.hosting.enabled &&
               (p.access === 'public'
-                ? 'Load before sign-in'
+                ? t('inspector.people.loadBefore')
                 : p.access === 'protected'
-                  ? 'Load after sign-in'
-                  : 'Not set yet')
+                  ? t('inspector.people.loadAfter')
+                  : t('inspector.notSetYet'))
           ],
-          ['Opens', p.embeddedOnly ? 'Only inside the Fabric portal' : 'At its own address and inside Fabric'],
-          ['Address', deploy.url && host(deploy.url)]
+          [
+            t('inspector.facts.opens'),
+            p.embeddedOnly ? t('inspector.people.onlyInPortal') : t('inspector.opensEverywhere')
+          ],
+          [t('inspector.facts.address'), deploy.url && host(deploy.url)]
         ]}
       />
-      <DocLink href={DOCS.signIn}>How people sign in</DocLink>
+      <DocLink href={DOCS.signIn}>{t('inspector.docs.signInPeople')}</DocLink>
     </Panel>
   )
 }
 
 function AppDetails({ arch, project, deploy, workspaceName, onClose, onOpenFile, onSelect }: Props): JSX.Element {
+  const { t } = useTranslation('blueprint')
   return (
     <Panel
-      kicker="Fabric app"
+      kicker={t('view.app.fabricApp')}
       title={arch.name}
       glyph={
         <span className="bp-insp-glyph bp-mark" style={{ '--hue': hueOf(arch.name) } as CSSProperties} aria-hidden="true">
@@ -354,33 +382,32 @@ function AppDetails({ arch, project, deploy, workspaceName, onClose, onOpenFile,
         <>
           {deploy.url && (
             <button type="button" className="btn btn--sm btn--ghost" onClick={() => open(deploy.url!)}>
-              <Codicon name="globe" /> Open the app
+              <Codicon name="globe" /> {t('view.openApp')}
             </button>
           )}
           {deploy.portalUrl && (
             <button type="button" className="btn btn--sm btn--ghost" onClick={() => open(deploy.portalUrl!)}>
-              <Codicon name="link-external" /> Open in Fabric
+              <Codicon name="link-external" /> {t('view.openInFabric')}
             </button>
           )}
           <button type="button" className="btn btn--sm btn--ghost" onClick={() => onOpenFile('rayfin/rayfin.yml')}>
-            Open rayfin.yml
+            {t('tab.openYml')}
           </button>
         </>
       }
     >
       <p className="bp-insp-lead">
-        Rayfin runs the app as one Fabric app item: its pages, sign-in, database and functions, set up from{' '}
-        <code>rayfin/rayfin.yml</code>.
+        <Trans t={t} i18nKey="inspector.app.lead" components={{ code: <code /> }} />
       </p>
       <Facts
         rows={[
-          ['Workspace', workspaceName],
-          ['Address', deploy.url ? host(deploy.url) : 'Not published yet'],
-          ['Last published', project.lastDeploy?.at && relativeTime(project.lastDeploy.at)],
-          ['Project', project.path]
+          [t('inspector.facts.workspace'), workspaceName],
+          [t('inspector.facts.address'), deploy.url ? host(deploy.url) : t('inspector.app.notPublished')],
+          [t('inspector.facts.lastPublished'), project.lastDeploy?.at && relativeTime(project.lastDeploy.at)],
+          [t('inspector.facts.project'), project.path]
         ]}
       />
-      <Section title="Parts">
+      <Section title={t('inspector.app.parts')}>
         <ul className="bp-list">
           {arch.services.map((s) => (
             <li key={s.id}>
@@ -412,14 +439,15 @@ function IdentityDetails({
   onSelect,
   onPrompt
 }: Props & { identity: Identity; via?: ServiceNode }): JSX.Element {
+  const { t } = useTranslation('blueprint')
   // From a part's port: only what that part reaches this way.
   const sources = arch.sources.filter((s) =>
     via
       ? arch.routes.some((r) => r.service === via.id && r.identity === identity && r.source === s.id)
       : s.identity === identity
   )
-  const kicker = via ? via.title : 'Identity'
-  const title = via ? PORT_LABEL[identity] : IDENTITY_LABEL[identity]
+  const kicker = via ? via.title : t('inspector.identity.kicker')
+  const title = t(via ? PORT_LABEL[identity] : IDENTITY_LABEL[identity])
   if (identity === 'key') {
     const keys = arch.keys
     return (
@@ -431,32 +459,32 @@ function IdentityDetails({
         actions={
           keys.hardcoded.length > 0 && (
             <button type="button" className="btn btn--sm btn--primary" onClick={() => onPrompt(moveKeysToSecrets(keys.hardcoded))}>
-              <Codicon name="sparkle" /> Move keys into secrets
+              <Codicon name="sparkle" /> {t('inspector.moveKeys')}
             </button>
           )
         }
       >
-        <p className="bp-insp-lead">
-          These calls don’t use a Fabric sign-in. The function sends its own key or token (or none, for a public
-          API), so anyone who holds that key has the same access, whoever is using the app.
-        </p>
+        <p className="bp-insp-lead">{t('inspector.identity.keyLead')}</p>
         <Issues
           issues={keys.hardcoded.length ? [{ tone: 'danger', text: hardcodedSummary(keys.hardcoded) }] : []}
         />
-        <Section title="Reached with a key">
+        <Section title={t('inspector.identity.reachedWithKey')}>
           <SourceList arch={arch} sources={sources} onSelect={onSelect} />
         </Section>
-        <Section title="Secrets the functions use">
+        <Section title={t('inspector.identity.secretsUsed')}>
           {keys.secrets.length ? (
             <SecretsLink arch={arch} onSelect={onSelect} />
           ) : (
             <p className="bp-insp-note">
-              None. Add keys in Code → <strong>Secrets</strong> and read them from <code>ctx.Secrets</code>, so they
-              never sit in the code.
+              <Trans
+                t={t}
+                i18nKey="inspector.identity.noSecrets"
+                components={{ strong: <strong />, code: <code /> }}
+              />
             </p>
           )}
         </Section>
-        <DocLink href={DOCS.secrets}>Secrets in functions</DocLink>
+        <DocLink href={DOCS.secrets}>{t('inspector.docs.secrets')}</DocLink>
       </Panel>
     )
   }
@@ -464,25 +492,20 @@ function IdentityDetails({
     return (
       <Panel kicker={kicker} title={title} glyph={<Glyph icon={IDENTITY_ICON.user} tone="user" />} onClose={onClose}>
         <p className="bp-insp-lead">
-          These connections are <strong>delegated</strong>: every query runs as the person using the app, through
-          an on-behalf-of token exchange. Fabric checks their own permissions, so each person only sees what
-          they’re allowed to.
+          <Trans t={t} i18nKey="inspector.identity.userLead" components={{ strong: <strong /> }} />
         </p>
-        <Section title="Everyone who uses the app needs access to">
+        <Section title={t('inspector.identity.everyoneNeeds')}>
           <SourceList arch={arch} sources={sources} onSelect={onSelect} />
         </Section>
-        <p className="bp-insp-note">
-          Give people, or a group they’re in, a role on each workspace or permission on each item. Without it they
-          get an authorization error.
-        </p>
-        <DocLink href={DOCS.identities}>Delegated and application access</DocLink>
+        <p className="bp-insp-note">{t('inspector.identity.userNote')}</p>
+        <DocLink href={DOCS.identities}>{t('inspector.docs.identities')}</DocLink>
       </Panel>
     )
   }
   return (
     <Panel
       kicker={via ? kicker : arch.name}
-      title={via ? title : 'App identity'}
+      title={via ? title : t('identity.app')}
       glyph={<Glyph icon={IDENTITY_ICON.app} tone="app" />}
       onClose={onClose}
       actions={
@@ -492,17 +515,19 @@ function IdentityDetails({
             className="btn btn--sm btn--ghost"
             onClick={() => onPrompt(grantAppAccess(whoText(appIdentity), sources.map((s) => s.title)))}
           >
-            <Codicon name="sparkle" /> Ask Copilot what to grant
+            <Codicon name="sparkle" /> {t('inspector.identity.askGrant')}
           </button>
         )
       }
     >
       <p className="bp-insp-lead">
-        {via ? 'These connections use' : 'Connections that use the app identity have'} <strong>application</strong>{' '}
-        access: one shared identity, the owner of the Fabric app item. Everyone sees the same data there, and
-        per-person rules can’t tell people apart.
+        <Trans
+          t={t}
+          i18nKey={via ? 'inspector.identity.appLeadVia' : 'inspector.identity.appLead'}
+          components={{ strong: <strong /> }}
+        />
       </p>
-      <Section title="Whose credentials">
+      <Section title={t('inspector.identity.whose')}>
         <div className="bp-who">
           <span className={`bp-who-avatar${appIdentity.kind === 'service-principal' ? ' bp-who-avatar--sp' : ''}`}>
             <Codicon name={appIdentity.kind === 'service-principal' ? 'server-process' : 'account'} />
@@ -511,47 +536,47 @@ function IdentityDetails({
             <strong>{appIdentityName(appIdentity, Boolean(deploy.url))}</strong>
             <span>
               {appIdentity.kind === 'service-principal'
-                ? 'Service principal that publishes the app'
+                ? t('inspector.identity.whoServicePrincipal')
                 : appIdentity.kind === 'account'
-                  ? 'Your Fabric account, which publishes this app'
-                  : 'Owner of the Fabric app item'}
+                  ? t('inspector.identity.whoAccount')
+                  : t('inspector.identity.whoOwner')}
             </span>
           </div>
         </div>
-        {appIdentity.clientId && <Facts rows={[['Client ID', <Guid value={appIdentity.clientId} />]]} />}
+        {appIdentity.clientId && (
+          <Facts rows={[[t('inspector.facts.clientId'), <Guid value={appIdentity.clientId} />]]} />
+        )}
         {appIdentity.preview && (
           <p className="bp-insp-note">
-            Previews run as <strong>{appIdentity.preview.who}</strong>, which deploys them from pull requests.
+            <Trans
+              t={t}
+              i18nKey="inspector.identity.previews"
+              values={{ who: appIdentity.preview.who }}
+              components={{ strong: <strong /> }}
+            />
           </p>
         )}
-        {appIdentity.kind === 'account' && (
-          <p className="bp-insp-note">
-            The owner is the account that created the app by publishing it first. If someone else published it
-            first, it runs as them.
-          </p>
-        )}
+        {appIdentity.kind === 'account' && <p className="bp-insp-note">{t('inspector.identity.ownerNote')}</p>}
       </Section>
-      <Section title="Grant it access to">
+      <Section title={t('inspector.identity.grantTo')}>
         <SourceList arch={arch} sources={sources} onSelect={onSelect} grant />
       </Section>
       {arch.functions && sources.some((s) => s.audience) && (
-        <p className="bp-insp-note">
-          When the app runs on your computer, functions use your own sign-in instead, so a call that works there can
-          still fail once the app is published.
-        </p>
+        <p className="bp-insp-note">{t('inspector.identity.localNote')}</p>
       )}
-      <DocLink href={DOCS.identities}>Delegated and application access</DocLink>
+      <DocLink href={DOCS.identities}>{t('inspector.docs.identities')}</DocLink>
     </Panel>
   )
 }
 
 function ServiceDetails(props: Props & { svc: ServiceNode }): JSX.Element {
   const { arch, svc, deploy, onClose, onSelect, onOpenFile, onPrompt, onOpenEntity } = props
+  const { t } = useTranslation('blueprint')
   const reached = arch.routes.filter((r) => r.service === svc.id).map((r) => r.source)
   const sources = arch.sources.filter((s) => reached.includes(s.id))
   const yml = (
     <button type="button" className="btn btn--sm btn--ghost" onClick={() => onOpenFile('rayfin/rayfin.yml')}>
-      Open rayfin.yml
+      {t('tab.openYml')}
     </button>
   )
   const glyph = <Glyph icon={svc.icon} tone={svc.tone ?? 'neutral'} />
@@ -566,129 +591,141 @@ function ServiceDetails(props: Props & { svc: ServiceNode }): JSX.Element {
   switch (svc.kind) {
     case 'website':
       return frame(
-        <>The app’s pages: the HTML, JavaScript and CSS built from its code, served from the Fabric app.</>,
+        t('inspector.website.lead'),
         <>
           <Facts
             rows={[
               [
-                'Pages load',
+                t('inspector.website.pagesLoad'),
                 arch.people.access === 'public'
-                  ? 'Before sign-in'
+                  ? t('inspector.website.before')
                   : arch.people.access === 'protected'
-                    ? 'After sign-in'
-                    : 'Not set yet'
+                    ? t('inspector.website.after')
+                    : t('inspector.notSetYet')
               ],
-              ['Setting', <code>assetAccess: {arch.config.hosting.assetAccess ?? 'not set'}</code>],
-              ['Opens', arch.config.hosting.embeddedOnly ? 'Only inside Fabric' : 'At its own address and inside Fabric'],
-              ['Build output', arch.config.hosting.folder && <code>{arch.config.hosting.folder}</code>],
-              ['Address', deploy.url && host(deploy.url)]
+              [
+                t('inspector.facts.setting'),
+                <code>assetAccess: {arch.config.hosting.assetAccess ?? t('inspector.notSet')}</code>
+              ],
+              [
+                t('inspector.facts.opens'),
+                arch.config.hosting.embeddedOnly ? t('inspector.website.onlyInFabric') : t('inspector.opensEverywhere')
+              ],
+              [
+                t('inspector.facts.buildOutput'),
+                arch.config.hosting.folder && <code>{arch.config.hosting.folder}</code>
+              ],
+              [t('inspector.facts.address'), deploy.url && host(deploy.url)]
             ]}
           />
           {arch.people.access === 'public' && (
             <p className="bp-insp-note">
-              Anyone with the link can download the page files, but not the app’s data: that still needs sign-in,
-              and entity rules decide what each person sees. That’s usual for web apps. To load the pages only after
-              a Fabric sign-in, set <code>assetAccess: protected</code>.
+              <Trans t={t} i18nKey="inspector.website.publicNote" components={{ code: <code /> }} />
             </p>
           )}
           {arch.people.access === 'protected' && (
-            <p className="bp-insp-note">The page files only load for people signed in to Fabric.</p>
+            <p className="bp-insp-note">{t('inspector.website.protectedNote')}</p>
           )}
           {sources.length > 0 && (
-            <Section title="Reads in the browser">
+            <Section title={t('inspector.website.readsInBrowser')}>
               <SourceList arch={arch} sources={sources} onSelect={onSelect} />
             </Section>
           )}
-          <DocLink href={DOCS.hosting}>Static hosting</DocLink>
+          <DocLink href={DOCS.hosting}>{t('inspector.docs.hosting')}</DocLink>
         </>
       )
     case 'signin': {
       const uris = arch.config.auth.redirectUris
       return frame(
-        <>People sign in with their Microsoft Entra ID work account. The app gets a session that says who they are.</>,
+        t('inspector.signin.lead'),
         <>
           <Facts
             rows={[
-              ['Provider', arch.people.signIn],
-              ['Entra tokens from other apps', arch.config.auth.enabled && (arch.config.auth.externalEntraExchange ? 'Accepted' : 'Not accepted')]
+              [t('inspector.facts.provider'), arch.people.signIn],
+              [
+                t('inspector.facts.externalTokens'),
+                arch.config.auth.enabled &&
+                  (arch.config.auth.externalEntraExchange
+                    ? t('inspector.signin.accepted')
+                    : t('inspector.signin.notAccepted'))
+              ]
             ]}
           />
           {uris.length > 0 && (
-            <Section title="Sign-in addresses">
+            <Section title={t('inspector.signin.addresses')}>
               <ul className="bp-plain">
                 {uris.slice(0, 6).map((u) => (
                   <li key={u}>
                     <code>{u}</code>
                   </li>
                 ))}
-                {uris.length > 6 && <li className="bp-insp-note">and {uris.length - 6} more</li>}
+                {uris.length > 6 && (
+                  <li className="bp-insp-note">{t('inspector.signin.more', { count: uris.length - 6 })}</li>
+                )}
               </ul>
             </Section>
           )}
-          <DocLink href={DOCS.signIn}>Sign-in</DocLink>
+          <DocLink href={DOCS.signIn}>{t('model.signin.title')}</DocLink>
         </>
       )
     }
     case 'database': {
       const db = arch.database
-      const loose = (db?.tables ?? []).filter((t) => t.tone !== 'ok')
+      const loose = (db?.tables ?? []).filter((table) => table.tone !== 'ok')
       return frame(
+        <Trans t={t} i18nKey="inspector.database.lead" components={{ strong: <strong /> }} />,
         <>
-          The app’s own tables, in its Fabric SQL database. Reads and writes use the <strong>user’s identity</strong>,
-          and each table’s rules decide which rows they can see and change.
-        </>,
-        <>
-          <Section title={`${db?.tables.length ?? 0} tables`}>
+          <Section title={t('inspector.database.tables', { count: db?.tables.length ?? 0 })}>
             <ul className="bp-list">
-              {(db?.tables ?? []).map((t) => (
-                <li key={t.entity}>
-                  <button type="button" className="bp-list-row" onClick={() => onOpenEntity(t.entity)}>
-                    <span className={`bp-dot bp-dot--${t.tone}`} aria-hidden="true" />
+              {(db?.tables ?? []).map((table) => (
+                <li key={table.entity}>
+                  <button type="button" className="bp-list-row" onClick={() => onOpenEntity(table.entity)}>
+                    <span className={`bp-dot bp-dot--${table.tone}`} aria-hidden="true" />
                     <span className="bp-list-text">
-                      <strong>{t.name}</strong>
-                      <span>{t.label}</span>
+                      <strong>{table.name}</strong>
+                      <span>{table.accessLabel}</span>
                     </span>
-                    <span className="bp-list-hint">Data model</span>
+                    <span className="bp-list-hint">{t('tab.dataModel')}</span>
                     <Codicon name="chevron-right" className="bp-list-go" />
                   </button>
                 </li>
               ))}
-              {!db?.tables.length && <li className="bp-list-empty">No tables yet</li>}
+              {!db?.tables.length && <li className="bp-list-empty">{t('model.database.noTables')}</li>}
             </ul>
           </Section>
-          <DocLink href={DOCS.permissions}>Permissions and row-level security</DocLink>
+          <DocLink href={DOCS.permissions}>{t('inspector.docs.permissions')}</DocLink>
         </>,
         <>
           {loose.length > 0 && (
             <button type="button" className="btn btn--sm btn--ghost" onClick={() => onPrompt(hardenTables(loose))}>
-              <Codicon name="shield" /> Harden access
+              <Codicon name="shield" /> {t('inspector.database.harden')}
             </button>
           )}
           {db?.tables.length ? (
             <button type="button" className="btn btn--sm btn--ghost" onClick={() => onOpenEntity('')}>
-              Open the data model
+              {t('inspector.database.openModel')}
             </button>
           ) : null}
         </>
       )
     }
     case 'storage':
-      return frame(
-        <>Blob storage for files people upload. It’s experimental and not available in every Fabric region.</>,
-        <DocLink href={DOCS.storage}>Storage</DocLink>
-      )
+      return frame(t('inspector.storage.lead'), <DocLink href={DOCS.storage}>{t('inspector.docs.storage')}</DocLink>)
     case 'functions': {
       const fns = arch.functions
       // Only a wrong `services.functions.auth.type` is this fix; keys in the code have their own.
       const authIssue =
         arch.config.functions.enabled && arch.config.functions.authType?.toLowerCase() !== 'application'
       return frame(
+        <Trans t={t} i18nKey="inspector.functions.lead" components={{ strong: <strong /> }} />,
         <>
-          Server-side code. Calls to outside services use the <strong>app identity</strong>; reading the app’s own
-          data still uses the identity of the user who called the function.
-        </>,
-        <>
-          <Section title={fns?.functions.length ? `${fns.functions.length} functions` : 'Functions'}>
+          <Section
+            title={
+              fns?.functions.length
+                ? t('inspector.functions.count', { count: fns.functions.length })
+                : t('model.functions.title')
+            }
+          >
             <ul className="bp-plain bp-fns">
               {(fns?.functions ?? []).map((f) => (
                 <li key={`${f.file}:${f.name}`}>
@@ -700,25 +737,25 @@ function ServiceDetails(props: Props & { svc: ServiceNode }): JSX.Element {
                   ))}
                 </li>
               ))}
-              {!fns?.functions.length && <li className="bp-insp-note">No functions found yet.</li>}
+              {!fns?.functions.length && <li className="bp-insp-note">{t('inspector.functions.none')}</li>}
             </ul>
           </Section>
           {sources.length > 0 && (
-            <Section title="Reaches">
+            <Section title={t('inspector.functions.reaches')}>
               <SourceList arch={arch} sources={sources} onSelect={onSelect} />
             </Section>
           )}
           {arch.keys.secrets.length > 0 && (
-            <Section title="Secrets">
+            <Section title={t('model.secrets.title')}>
               <SecretsLink arch={arch} onSelect={onSelect} />
             </Section>
           )}
-          <DocLink href={DOCS.connections}>Function connections</DocLink>
+          <DocLink href={DOCS.connections}>{t('inspector.docs.connections')}</DocLink>
         </>,
         <>
           {authIssue && (
             <button type="button" className="btn btn--sm btn--primary" onClick={() => onPrompt(fixFunctionsAuth())}>
-              <Codicon name="sparkle" /> Fix with Copilot
+              <Codicon name="sparkle" /> {t('inspector.fixWithCopilot')}
             </button>
           )}
           {!authIssue && arch.keys.hardcoded.length > 0 && (
@@ -727,12 +764,12 @@ function ServiceDetails(props: Props & { svc: ServiceNode }): JSX.Element {
               className="btn btn--sm btn--primary"
               onClick={() => onPrompt(moveKeysToSecrets(arch.keys.hardcoded))}
             >
-              <Codicon name="sparkle" /> Move keys into secrets
+              <Codicon name="sparkle" /> {t('inspector.moveKeys')}
             </button>
           )}
           {fns?.files[0] && (
             <button type="button" className="btn btn--sm btn--ghost" onClick={() => onOpenFile(fns.files[0])}>
-              Open the code
+              {t('inspector.functions.openCode')}
             </button>
           )}
           {yml}
@@ -743,15 +780,12 @@ function ServiceDetails(props: Props & { svc: ServiceNode }): JSX.Element {
       return <SecretsDetails {...props} />
     case 'connectors':
       return frame(
+        <Trans t={t} i18nKey="inspector.connectors.lead" components={{ code: <code /> }} />,
         <>
-          Existing Fabric data the app reads and writes through Rayfin connectors. Each one uses the user’s identity
-          or the app identity, set by <code>auth.type</code> in <code>rayfin/rayfin.yml</code>.
-        </>,
-        <>
-          <Section title="Connectors">
+          <Section title={t('model.connectors.title')}>
             <SourceList arch={arch} sources={sources} onSelect={onSelect} />
           </Section>
-          <DocLink href={DOCS.connectorAuth}>Connector authentication</DocLink>
+          <DocLink href={DOCS.connectorAuth}>{t('inspector.docs.connectorAuth')}</DocLink>
         </>
       )
   }
@@ -805,6 +839,7 @@ function SecretsDetails({
   onPrompt,
   onOpenSecrets
 }: Props & { svc: ServiceNode }): JSX.Element {
+  const { t } = useTranslation('blueprint')
   const stored = useStoredSecrets(project.id)
   const known = stored.status === 'ready' || stored.status === 'team'
   const byName = stored.status === 'loading' ? new Map<string, SecretInfo>() : stored.byName
@@ -824,36 +859,34 @@ function SecretsDetails({
   return (
     <Panel
       kicker={arch.name}
-      title="Secrets"
+      title={t('model.secrets.title')}
       glyph={<Glyph icon={svc.icon} tone={svc.tone ?? 'neutral'} />}
       onClose={onClose}
       actions={
         <>
           {hardcoded.length > 0 && (
             <button type="button" className="btn btn--sm btn--primary" onClick={() => onPrompt(moveKeysToSecrets(hardcoded))}>
-              <Codicon name="sparkle" /> Move keys into secrets
+              <Codicon name="sparkle" /> {t('inspector.moveKeys')}
             </button>
           )}
           {onOpenSecrets && (
             <button type="button" className="btn btn--sm btn--ghost" onClick={onOpenSecrets}>
-              <Codicon name="lock" /> Manage secrets
+              <Codicon name="lock" /> {t('inspector.secrets.manage')}
             </button>
           )}
           {legacy.length > 0 && (
             <button type="button" className="btn btn--sm btn--ghost" onClick={() => onPrompt(readTypedSecrets(legacy))}>
-              <Codicon name="sparkle" /> Read as ctx.Secrets
+              <Codicon name="sparkle" /> {t('inspector.secrets.readTyped')}
             </button>
           )}
           <button type="button" className="btn btn--sm btn--ghost" onClick={() => onOpenFile('rayfin/rayfin.yml')}>
-            Open rayfin.yml
+            {t('tab.openYml')}
           </button>
         </>
       }
     >
       <p className="bp-insp-lead">
-        API keys, passwords and connection strings for the functions. Their values stay out of the code: the published
-        app keeps its own, and so does your computer when the app runs there. <code>rayfin.yml</code> keeps only their
-        names and descriptions, and functions read them as <code>ctx.Secrets.NAME</code>.
+        <Trans t={t} i18nKey="inspector.secrets.lead" components={{ code: <code /> }} />
       </p>
       <Issues
         issues={[
@@ -863,21 +896,24 @@ function SecretsDetails({
             ? [
                 {
                   tone: 'warn' as const,
-                  text: `The published app has no value for ${missing.map((s) => `\`${s.name}\``).join(', ')}, so a function that reads ${missing.length === 1 ? 'it' : 'them'} fails there.`
+                  text: t('inspector.secrets.noValue', {
+                    count: missing.length,
+                    names: missing.map((s) => `\`${s.name}\``).join(', ')
+                  })
                 }
               ]
             : [])
         ]}
       />
-      <Section title={arch.keys.secrets.length === 1 ? '1 secret' : `${arch.keys.secrets.length} secrets`}>
+      <Section title={t('inspector.secretCount', { count: arch.keys.secrets.length })}>
         <ul className="bp-list">
           {arch.keys.secrets.map((s) => {
             const info = byName.get(s.name)
             const readBy = s.functions.length
-              ? `Read by ${s.functions.join(', ')}`
+              ? t('inspector.secrets.readBy', { functions: s.functions.join(', ') })
               : s.files.length
-                ? `Read in ${s.files.map((f) => f.split('/').pop()).join(', ')}`
-                : 'No function reads it'
+                ? t('inspector.secrets.readIn', { files: s.files.map((f) => f.split('/').pop()).join(', ') })
+                : t('inspector.secrets.unread')
             const body = (
               <>
                 <span className="bp-tile bp-tile--sm" aria-hidden="true">
@@ -886,7 +922,9 @@ function SecretsDetails({
                 <span className="bp-list-text">
                   <strong className="bp-mono">{s.name}</strong>
                   {s.description && <span>{s.description}</span>}
-                  <span className="bp-list-sub">{s.declared ? readBy : `${readBy} · not in rayfin.yml`}</span>
+                  <span className="bp-list-sub">
+                    {s.declared ? readBy : t('inspector.secrets.undeclared', { readBy })}
+                  </span>
                 </span>
                 {info && <SecretStatus secret={info} />}
               </>
@@ -897,7 +935,7 @@ function SecretsDetails({
                   <button
                     type="button"
                     className="bp-list-row"
-                    title={`Open ${s.files[0]}`}
+                    title={t('actions.openNamed', { name: s.files[0] })}
                     onClick={() => onOpenFile(s.files[0])}
                   >
                     {body}
@@ -917,7 +955,7 @@ function SecretsDetails({
                 </span>
                 <span className="bp-list-text">
                   <strong className="bp-mono">{s.name}</strong>
-                  <span className="bp-list-sub">On the published app only</span>
+                  <span className="bp-list-sub">{t('inspector.secrets.publishedOnly')}</span>
                 </span>
                 <SecretStatus secret={s} />
               </div>
@@ -926,31 +964,29 @@ function SecretsDetails({
         </ul>
         <p className="bp-insp-note">
           {stored.status === 'loading'
-            ? 'Checking which values the published app has…'
+            ? t('inspector.secrets.status.loading')
             : stored.status === 'not-deployed'
-              ? 'Values for the published app can be added once it’s published.'
+              ? t('inspector.secrets.status.notDeployed')
               : stored.status === 'team'
-                ? 'Shows the published app’s values. The published app and each person’s preview keep their own.'
+                ? t('inspector.secrets.status.team')
                 : stored.status === 'update-rayfin'
-                  ? 'Update the app’s Rayfin version to see which values are set.'
+                  ? t('inspector.secrets.status.updateRayfin')
                   : stored.status === 'error'
                     ? stored.signIn
-                      ? 'Couldn’t check the published app’s values. Your Fabric sign-in may have expired.'
-                      : 'Couldn’t check the published app’s values.'
+                      ? t('inspector.secrets.status.errorSignIn')
+                      : t('inspector.secrets.status.error')
                     : stored.status === 'ready'
-                      ? 'Values are write-only: Fabricator shows whether one is set, never what it is.'
+                      ? t('inspector.secrets.status.ready')
                       : null}
         </p>
       </Section>
       {sentTo.length > 0 && (
-        <Section title="Called from the same code">
+        <Section title={t('inspector.secrets.calledFrom')}>
           <SourceList arch={arch} sources={sentTo} onSelect={onSelect} />
         </Section>
       )}
-      <p className="bp-insp-note">
-        When the app runs on your computer, its functions read local values instead of the published app’s.
-      </p>
-      <DocLink href={DOCS.secrets}>Secrets in functions</DocLink>
+      <p className="bp-insp-note">{t('inspector.secrets.localNote')}</p>
+      <DocLink href={DOCS.secrets}>{t('inspector.docs.secrets')}</DocLink>
     </Panel>
   )
 }
@@ -967,6 +1003,7 @@ function SourceDetails({
   onPrompt,
   onOpenFabricData
 }: Props & { src: SourceNode }): JSX.Element {
+  const { t } = useTranslation('blueprint')
   const ws = src.workspaceId ? info?.workspaces.get(src.workspaceId.toLowerCase()) : undefined
   const model = src.itemId ? info?.models.get(src.itemId.toLowerCase()) : undefined
   const connector = src.connectors[0]
@@ -987,7 +1024,7 @@ function SourceDetails({
     <>
       {badAuth && connector && (
         <button type="button" className="btn btn--sm btn--primary" onClick={() => onPrompt(fixConnectorAuth(connector))}>
-          <Codicon name="sparkle" /> Fix with Copilot
+          <Codicon name="sparkle" /> {t('inspector.fixWithCopilot')}
         </button>
       )}
       {src.suggestedAudience && (
@@ -996,22 +1033,22 @@ function SourceDetails({
           className="btn btn--sm btn--ghost"
           onClick={() => onPrompt(reachAsTheApp(src.title, src.suggestedAudience!, src.hosts, src.files))}
         >
-          <Codicon name="sparkle" /> Use app identity
+          <Codicon name="sparkle" /> {t('inspector.source.useApp')}
         </button>
       )}
       {src.semanticKey && (
         <button type="button" className="btn btn--sm btn--ghost" onClick={() => onOpenFabricData(src.semanticKey!)}>
-          <Codicon name="graph" /> View the model
+          <Codicon name="graph" /> {t('inspector.source.viewModel')}
         </button>
       )}
       {src.tablesKey && (
         <button type="button" className="btn btn--sm btn--ghost" onClick={() => onOpenFabricData(src.tablesKey!)}>
-          <Codicon name="table" /> View the tables
+          <Codicon name="table" /> {t('inspector.source.viewTables')}
         </button>
       )}
       {(model?.webUrl || workspaceUrl) && (
         <button type="button" className="btn btn--sm btn--ghost" onClick={() => open(model?.webUrl ?? workspaceUrl!)}>
-          <Codicon name="link-external" /> Open in Fabric
+          <Codicon name="link-external" /> {t('view.openInFabric')}
         </button>
       )}
       {!badAuth && connector && kind?.category === 'A' && (
@@ -1020,12 +1057,13 @@ function SourceDetails({
           className="btn btn--sm btn--ghost"
           onClick={() => onPrompt(src.identity === 'app' ? runAsEachPerson(connector) : runAsTheApp(connector))}
         >
-          <Codicon name="sparkle" /> {src.identity === 'app' ? 'Use user’s identity' : 'Use app identity'}
+          <Codicon name="sparkle" />{' '}
+          {src.identity === 'app' ? t('inspector.source.useUser') : t('inspector.source.useApp')}
         </button>
       )}
       {src.files.map((f) => (
         <button key={f} type="button" className="btn btn--sm btn--ghost" onClick={() => onOpenFile(f)}>
-          Open {f.split('/').pop()}
+          {t('actions.openNamed', { name: f.split('/').pop() })}
         </button>
       ))}
     </>
@@ -1046,44 +1084,49 @@ function SourceDetails({
       <Issues issues={src.issues} />
       {audience && (
         <p className="bp-insp-lead">
-          {audience.detail}, reached from functions through <code>ctx.Tokens.{src.audience}</code>.
+          <Trans
+            t={t}
+            i18nKey="inspector.source.audienceLead"
+            values={{ detail: audience.detail, audience: src.audience }}
+            components={{ code: <code /> }}
+          />
         </p>
       )}
-      {src.kind === 'api' && (
-        <p className="bp-insp-lead">
-          A web API the functions call. Rayfin doesn’t sign these calls in: the code sends its own key or token.
-        </p>
-      )}
+      {src.kind === 'api' && <p className="bp-insp-lead">{t('inspector.source.apiLead')}</p>}
       {src.suggestedAudience && (
         <div className="bp-issue bp-issue--info">
           <Codicon name="lightbulb" />
           <span>
-            Rayfin can reach {src.title} with the app identity through <code>AudienceType.{src.suggestedAudience}</code>, so the
-            functions don’t need a key for it.
+            <Trans
+              t={t}
+              i18nKey="inspector.source.suggested"
+              values={{ title: src.title, audience: src.suggestedAudience }}
+              components={{ code: <code /> }}
+            />
           </span>
         </div>
       )}
-      <Section title="Identity">
+      <Section title={t('inspector.identity.kicker')}>
         <SignsInAs identity={src.identity} appIdentity={appIdentity} target={signsTarget} onSelect={onSelect} />
         {connector && kind?.category === 'B' && (
-          <p className="bp-insp-note">{kind.label} connectors always use the user’s identity.</p>
+          <p className="bp-insp-note">
+            {t('inspector.source.alwaysUser', { kind: connectorTypeLabel(connector.type) })}
+          </p>
         )}
         {connector && kind?.category === 'A' && (
           <p className="bp-insp-note">
-            {src.identity === 'app'
-              ? 'Everyone sees the same rows, so per-person rules on its tables can’t tell people apart.'
-              : 'Each person’s own Fabric access applies, and per-person rules on its tables can use who they are.'}
+            {src.identity === 'app' ? t('inspector.source.sameRows') : t('inspector.source.ownAccess')}
           </p>
         )}
       </Section>
-      <Section title="Details">
+      <Section title={t('inspector.source.details')}>
         <Facts
           rows={[
-            ['Access', src.ability],
-            ['Used by', from.length ? from.join(', ') : undefined],
-            ['Functions', src.functions.length ? src.functions.join(', ') : undefined],
+            [t('inspector.facts.access'), src.ability],
+            [t('inspector.facts.usedBy'), from.length ? from.join(', ') : undefined],
+            [t('model.functions.title'), src.functions.length ? src.functions.join(', ') : undefined],
             [
-              src.hosts.length === 1 ? 'Address' : 'Addresses',
+              t('inspector.facts.addresses', { count: src.hosts.length }),
               src.hosts.length ? (
                 <span className="bp-hosts">
                   {src.hosts.map((h) => (
@@ -1092,26 +1135,30 @@ function SourceDetails({
                 </span>
               ) : undefined
             ],
-            ['Workspace', ws ? ws.displayName : undefined],
-            ['Capacity', ws?.sku ? `${ws.sku}${ws.region ? ` · ${ws.region}` : ''}` : undefined],
-            ['Model', model?.name],
-            ['Model owner', model?.configuredBy],
-            ['Workspace ID', src.workspaceId && <Guid value={src.workspaceId} />],
-            ['Item ID', src.itemId && <Guid value={src.itemId} />],
-            ['Connector', connector && <code>{connector.name}</code>],
-            ['Type', connector && <code>{connector.type}</code>],
-            ['auth.type', connector && <code>{connector.auth ?? 'not set'}</code>],
+            [t('inspector.facts.workspace'), ws ? ws.displayName : undefined],
+            [t('inspector.facts.capacity'), ws?.sku ? `${ws.sku}${ws.region ? ` · ${ws.region}` : ''}` : undefined],
+            [t('inspector.facts.model'), model?.name],
+            [t('inspector.facts.modelOwner'), model?.configuredBy],
+            [t('inspector.facts.workspaceId'), src.workspaceId && <Guid value={src.workspaceId} />],
+            [t('inspector.facts.itemId'), src.itemId && <Guid value={src.itemId} />],
+            [t('inspector.facts.connector'), connector && <code>{connector.name}</code>],
+            [t('inspector.facts.type'), connector && <code>{connector.type}</code>],
+            ['auth.type', connector && <code>{connector.auth ?? t('inspector.notSet')}</code>],
             ['fabric.yaml', src.modelAliases.length ? <code>{src.modelAliases.join(', ')}</code> : undefined]
           ]}
         />
       </Section>
       {audience && (
-        <Section title="Grant the app">
+        <Section title={t('inspector.source.grantApp')}>
           <p className="bp-insp-note">{audience.grant}</p>
         </Section>
       )}
       <DocLink href={audience ? DOCS.connections : src.kind === 'api' ? DOCS.secrets : DOCS.connectorAuth}>
-        {audience ? 'Function connections' : src.kind === 'api' ? 'Secrets in functions' : 'Connector authentication'}
+        {audience
+          ? t('inspector.docs.connections')
+          : src.kind === 'api'
+            ? t('inspector.docs.secrets')
+            : t('inspector.docs.connectorAuth')}
       </DocLink>
     </Panel>
   )

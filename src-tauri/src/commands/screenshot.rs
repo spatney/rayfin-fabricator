@@ -8,15 +8,13 @@ use base64::Engine;
 
 use crate::services::paths;
 
-const PENDING: &str = "Screenshot capture is deferred in the Tauri build.";
-
 /// The most an image read to attach may weigh.
 const MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
 
 /// Persist a PNG data URL to a temp file under Studio's shots dir; returns its path.
 #[tauri::command]
 pub async fn screenshot_save(data_url: String) -> Result<String, String> {
-  let comma = data_url.find(',').ok_or_else(|| PENDING.to_string())?;
+  let comma = data_url.find(',').ok_or_else(|| t!("commands.screenshot.pending"))?;
   let b64 = &data_url[comma + 1..];
   let bytes = base64::engine::general_purpose::STANDARD
     .decode(b64.as_bytes())
@@ -44,13 +42,13 @@ fn read_image(path: &Path) -> Result<String, String> {
     "gif" => "image/gif",
     "webp" => "image/webp",
     "bmp" => "image/bmp",
-    _ => return Err("Only PNG, JPEG, GIF, WebP and BMP images can be attached.".into()),
+    _ => return Err(t!("commands.screenshot.onlyImages")),
   };
-  let size = std::fs::metadata(path).map_err(|e| format!("Couldn't read the image: {e}"))?.len();
+  let size = std::fs::metadata(path).map_err(|e| t!("commands.screenshot.cantRead", error = e))?.len();
   if size > MAX_IMAGE_BYTES {
-    return Err("The image is too large to attach: the limit is 20 MB.".into());
+    return Err(t!("commands.screenshot.tooLarge"));
   }
-  let bytes = std::fs::read(path).map_err(|e| format!("Couldn't read the image: {e}"))?;
+  let bytes = std::fs::read(path).map_err(|e| t!("commands.screenshot.cantRead", error = e))?;
   Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
 }
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ErrorReport } from '@shared/ipc'
+import { setLanguage, translator } from './i18n'
 import { ToastProvider, useToast, type ToastApi } from './toast'
 
 import type { JSX } from 'react'
@@ -62,6 +63,21 @@ describe('what a toast puts in the activity journal', () => {
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({ level: 'info', event: 'preview.notice' })
     )
+  })
+
+  it('records what it said in the interface’s language, under the part of the app its English names', async () => {
+    await setLanguage('de')
+    try {
+      api.error(translator('projects')('removals.cantDeleteApp'))
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          area: 'deploy',
+          message: 'Die veröffentlichte App konnte nicht gelöscht werden.'
+        })
+      )
+    } finally {
+      await setLanguage('en')
+    }
   })
 
   it('stays quiet when the caller already recorded it with more detail', () => {

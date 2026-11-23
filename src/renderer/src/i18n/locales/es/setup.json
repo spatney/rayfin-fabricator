@@ -1,0 +1,172 @@
+{
+  "hero": {
+    "eyebrow": "Te damos la bienvenida a",
+    "tagline": "Crea y publica aplicaciones de Rayfin conversando con un agente de IA."
+  },
+  "progress": {
+    "checking": "Comprobando lo que ya tienes…",
+    "ready": "Todo está listo. Ya puedes empezar a crear.",
+    "start": "Vamos a configurar Fabricator. Normalmente tarda un minuto.",
+    "left_one": "Queda {{count}} elemento por configurar.",
+    "left_other": "Quedan {{count}} elementos por configurar."
+  },
+  "problem": {
+    "askHelp": "Preguntar a Ayuda",
+    "showDetails": "Mostrar detalles",
+    "hideDetails": "Ocultar detalles"
+  },
+  "problems": {
+    "busy": {
+      "title": "Ya hay otra instalación en curso en este dispositivo.",
+      "fix": "Espera a que termine (suele deberse a una actualización de Windows) y vuelve a intentarlo."
+    },
+    "permission": {
+      "title": "Fabricator no tiene permiso para instalar esto.",
+      "fix": "Cierra Fabricator, haz clic con el botón derecho en él, elige “Ejecutar como administrador” y vuelve a intentarlo. Si tu organización administra tu dispositivo, es posible que tu departamento de TI tenga que instalarlo por ti."
+    },
+    "offline": {
+      "title": "Fabricator no pudo conectarse a Internet para descargar esto.",
+      "fix": "Comprueba la conexión y vuelve a intentarlo. Si estás en una red de trabajo o en una VPN, es posible que esté bloqueando la descarga."
+    },
+    "diskFull": {
+      "title": "No hay suficiente espacio libre para instalar esto.",
+      "fix": "Libera espacio en el disco y vuelve a intentarlo."
+    },
+    "noWinget": {
+      "title": "Este dispositivo no tiene el instalador de paquetes de Windows (winget).",
+      "fix": "Instálalo desde Microsoft Store buscando “Instalador de aplicación”, o usa el vínculo de descarga para instalar la herramienta por tu cuenta."
+    },
+    "noHomebrew": {
+      "title": "Este Mac no tiene Homebrew, que Fabricator usa para instalar herramientas.",
+      "fix": "Instala Homebrew desde brew.sh, o usa el vínculo de descarga para instalar la herramienta por tu cuenta."
+    },
+    "cancelled": {
+      "title": "Se canceló la instalación.",
+      "fix": "Vuelve a intentarlo cuando quieras."
+    },
+    "sso": {
+      "title": "Tu organización requiere que primero inicies sesión a través de ella.",
+      "fix": "Completa el inicio de sesión que se abrió en el explorador, incluido cualquier paso adicional de tu organización, y vuelve a intentarlo."
+    },
+    "noCopilot": {
+      "title": "Esta cuenta no tiene GitHub Copilot disponible.",
+      "fix": "Inicia sesión con una cuenta que tenga Copilot, o configúralo en github.com/features/copilot."
+    },
+    "notOnPath": {
+      "title": "La herramienta se instaló, pero este dispositivo aún no la detecta.",
+      "fix": "Reinicia Fabricator para que detecte la nueva herramienta."
+    },
+    "unknownFix": "Si esto sigue ocurriendo, pregunta a Ayuda: puede leer qué salió mal y explicártelo."
+  },
+  "relaunch": {
+    "message": "<strong>Ya casi está.</strong> Reinicia para terminar de configurar las herramientas que se acaban de instalar.",
+    "restartNow": "Reiniciar ahora"
+  },
+  "copilot": {
+    "title": "Conectar GitHub Copilot",
+    "note": "La IA que crea tu aplicación y que responde a tus preguntas mientras configuras el resto",
+    "subtitle": "Inicia sesión para empezar a crear y para desbloquear Ayuda",
+    "helpReady": "Ayuda ya está disponible. Si algo falla más abajo, selecciona <strong>Ayuda</strong> y leerá lo que ocurrió."
+  },
+  "tools": {
+    "title": "Instalar las herramientas",
+    "note": "Herramientas gratuitas que Fabricator usa en segundo plano. Puede instalarlas por ti.",
+    "allInstalled_one": "La herramienta está instalada",
+    "allInstalled_other": "Las {{count}} están instaladas",
+    "requiredInstalled_one": "La herramienta necesaria está instalada",
+    "requiredInstalled_other": "Las {{count}} herramientas necesarias están instaladas",
+    "installAll": "Instalar todo",
+    "installing": "Instalando…",
+    "updating": "Actualizando…",
+    "getIt": "Obtener",
+    "needsInternet": "Para instalar se necesita conexión a Internet",
+    "resolveChecks": "Primero resuelve los errores de comprobación de la CLI",
+    "offline": "No tienes conexión, así que Fabricator aún no puede descargarlas. Vuelve a conectarte y selecciona <strong>Volver a comprobar</strong>.",
+    "purpose": {
+      "node": "Ejecuta tu aplicación en este dispositivo mientras la creas",
+      "npm": "Descarga los componentes con los que se crea tu aplicación",
+      "git": "Guarda un historial de tu aplicación para que siempre puedas volver atrás",
+      "az": "Permite que Fabricator inicie sesión en Azure por ti",
+      "gh": "Permite que Fabricator trabaje con tu código en GitHub",
+      "fallback": "Fabricator la usa en segundo plano"
+    },
+    "versionNeedsMin": "Versión {{version}}: Fabricator necesita la {{min}} o una posterior",
+    "versionNeedsNewer": "Versión {{version}}: Fabricator necesita una versión más reciente",
+    "unknownVersionNeedsMin": "Versión desconocida: Fabricator necesita la {{min}} o una posterior",
+    "unknownVersionNeedsNewer": "Versión desconocida: Fabricator necesita una versión más reciente",
+    "state": {
+      "ready": "Listo",
+      "needsUpdating": "Requiere actualización",
+      "optional": "Opcional",
+      "missing": "Falta"
+    }
+  },
+  "azure": {
+    "title": "Iniciar sesión en Azure",
+    "note": "Opcional. Te permite compartir aplicaciones, agregar datos de Fabric y migrar informes de Power BI. También puedes iniciar sesión más tarde.",
+    "optional": "Opcional",
+    "subtitle": "Accede a tus recursos de Azure",
+    "installCliFirst": "Primero instala la CLI de Azure"
+  },
+  "account": {
+    "signedIn": "Sesión iniciada",
+    "checking": "Comprobando",
+    "connected": "Conectado",
+    "signOutOf": "Cerrar sesión en {{name}}",
+    "signingOut": "Cerrando sesión…",
+    "waiting": "Esperando…"
+  },
+  "finish": {
+    "allSet": "Todo listo",
+    "almostThere": "Ya casi está",
+    "restart": "Reinicia Fabricator para terminar de configurar las herramientas que se acaban de instalar.",
+    "ready": "Tus herramientas están instaladas y tus cuentas, conectadas.",
+    "readyWithoutAzure": "Tus herramientas están instaladas y GitHub Copilot está conectado. Inicia sesión en Azure cuando lo necesites.",
+    "stepsLeft_one": "Completa el paso anterior para continuar.",
+    "stepsLeft_other": "Completa los {{count}} pasos anteriores para continuar.",
+    "enter": "Entrar en Fabricator"
+  },
+  "log": {
+    "empty": "La salida del proceso aparecerá aquí.",
+    "manualInstall": "Completa la instalación en la página que se abrió y, después, haz clic en “Reiniciar”."
+  },
+  "section": {
+    "hide": "Ocultar"
+  },
+  "actionBar": {
+    "help": "Ayuda",
+    "helpTitle": "Pregunta a Ayuda sobre cualquier cosa que no funcione",
+    "helpOfflineTitle": "Obtén ayuda con la configuración inicial, incluida la documentación",
+    "showLog": "Mostrar registro",
+    "hideLog": "Ocultar registro",
+    "checking": "Comprobando…",
+    "signingOut": "Cerrando sesión…",
+    "recheckRequired": "Hay que volver a comprobar",
+    "stepsLeft_one": "Queda {{count}} paso",
+    "stepsLeft_other": "Quedan {{count}} pasos",
+    "back": "Volver a Fabricator"
+  },
+  "recheck": {
+    "button": "Volver a comprobar",
+    "tool": "Volver a comprobar {{name}}"
+  },
+  "signingIn": {
+    "label": "Iniciando sesión",
+    "title": "Iniciando sesión…",
+    "finalizing": "Preparando todo…",
+    "browser": "Termina de iniciar sesión en {{provider}} en el explorador, o sigue las instrucciones del código de dispositivo que aparecen a continuación."
+  },
+  "run": {
+    "copilotSignIn": "Iniciar sesión en GitHub Copilot",
+    "copilotSignOut": "Cerrar sesión en GitHub Copilot",
+    "azureSignIn": "Iniciar sesión en Azure",
+    "azureSignOut": "Cerrar sesión en Azure",
+    "installAll": "Instalar todo",
+    "install": "Instalar {{name}}",
+    "update": "Actualizar {{name}}",
+    "failed": "No se completó “{{action}}”. Vuelve a intentarlo.",
+    "installFailed": "No se completó “{{action}}”. Revisa la salida del proceso.",
+    "verifyFailed": "No se pudo comprobar el estado de la cuenta: {{error}}",
+    "recheckFailed": "No se pudo volver a comprobar el entorno: {{error}}"
+  }
+}

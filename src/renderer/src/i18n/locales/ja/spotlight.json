@@ -1,0 +1,315 @@
+{
+  "groups": {
+    "projects": "プロジェクト",
+    "apps": "Fabric アプリ",
+    "actions": "アクション",
+    "docs": "ドキュメント",
+    "files": "ファイル"
+  },
+  "kinds": {
+    "projects": "プロジェクト",
+    "apps": "Fabric アプリ",
+    "actions": "アクション",
+    "docs": "ドキュメント",
+    "files": "ファイル"
+  },
+  "verbs": {
+    "projects": "プロジェクトを開く",
+    "apps": "アプリを開く",
+    "actions": "アクションを実行",
+    "files": "[コード] で開く",
+    "continue": "会話を続ける"
+  },
+  "views": {
+    "projects": {
+      "title": "プロジェクトを検索",
+      "placeholder": "プロジェクトを検索…"
+    },
+    "apps": {
+      "title": "Fabric アプリを検索",
+      "placeholder": "Fabric で開けるアプリを検索…"
+    },
+    "actions": {
+      "title": "アクションを検索",
+      "placeholder": "アクションを検索…"
+    },
+    "docs": {
+      "title": "ドキュメントを検索",
+      "placeholder": "ドキュメントを検索…"
+    },
+    "files": {
+      "title": "ファイルを検索",
+      "placeholder": "ファイルを検索…"
+    },
+    "help": {
+      "title": "ヘルプに質問",
+      "placeholder": "ヘルプに何でも質問…"
+    }
+  },
+  "ask": {
+    "label": "ヘルプに質問",
+    "signedOut": "ヘルプに質問するには GitHub Copilot にサインインしてください",
+    "quoted": "「{{text}}」",
+    "continue": "ヘルプとの会話を続ける"
+  },
+  "sections": {
+    "suggestions": "提案",
+    "recent": "最近のプロジェクト",
+    "results": "結果",
+    "use": "「{{query}}」で次を実行…"
+  },
+  "placeholder": {
+    "all": "プロジェクト、アクション、ドキュメントを検索…",
+    "followUp": "続けて質問…",
+    "files": "{{name}} のファイルを検索…",
+    "filesHere": "このプロジェクトのファイルを検索…"
+  },
+  "count": {
+    "results_other": "{{count}} 件の結果"
+  },
+  "announce": {
+    "results_other": "{{count}} 件の結果。",
+    "answering": "ヘルプが回答しています。",
+    "answered": "ヘルプが回答しました。"
+  },
+  "notify": {
+    "failed": "[{{title}}] を実行できませんでした。もう一度お試しください。",
+    "copiedAnswer": "回答をコピーしました",
+    "copyFailed": "回答をコピーできませんでした"
+  },
+  "panel": {
+    "title": "アクション",
+    "openInHelp": "ヘルプで開く",
+    "copyAnswer": "回答をコピー",
+    "stop": "回答を停止",
+    "suggests": "ヘルプからの提案",
+    "sources": "出典",
+    "newConversation": "新しい会話",
+    "help": "ヘルプ",
+    "noMatch": "一致するアクションはありません",
+    "search": "アクションを検索",
+    "searchPlaceholder": "アクションを検索…"
+  },
+  "empty": {
+    "listingFiles": "ファイルを一覧表示しています…",
+    "loadingDocs": "ドキュメントを読み込んでいます…",
+    "nothing": "まだ何もありません",
+    "none": {
+      "projects": "プロジェクトはまだありません",
+      "apps": "アプリはまだありません",
+      "actions": "アクションはまだありません",
+      "docs": "ドキュメントはまだありません",
+      "files": "ファイルはまだありません"
+    },
+    "noMatch": {
+      "projects": "「{{text}}」に一致するプロジェクトはありません",
+      "apps": "「{{text}}」に一致するアプリはありません",
+      "actions": "「{{text}}」に一致するアクションはありません",
+      "docs": "「{{text}}」に一致するドキュメントはありません",
+      "files": "「{{text}}」に一致するファイルはありません"
+    },
+    "askInstead": "代わりにヘルプに質問するには <tab/> キーを押してください"
+  },
+  "bar": {
+    "backTitle": "戻る (Esc)"
+  },
+  "foot": {
+    "files": "{{name}} のファイル",
+    "answering": "回答しています…",
+    "followUp": "続けて質問"
+  },
+  "sources": {
+    "team": "チーム",
+    "teamWorkspace": "{{team}} · チーム ワークスペース",
+    "openNow": "開いています",
+    "missing": "見つかりません",
+    "openInVsCode": "VS Code で開く",
+    "copyPath": "パスをコピー",
+    "copied": "{{text}} をコピーしました",
+    "manageProject": "プロジェクトの管理",
+    "workspace": "ワークスペース",
+    "openOverview": "概要を開く",
+    "copyRepository": "リポジトリをコピー",
+    "openInFabric": "Fabric で開く",
+    "openInFabricator": "Fabricator で開く",
+    "copyLink": "リンクをコピー",
+    "copiedLink": "リンクをコピーしました",
+    "onThisComputer": "{{workspace}} · このコンピューター上",
+    "projectFolder": "プロジェクト フォルダー"
+  },
+  "suggest": {
+    "advisor_other": "アドバイザーの問題 {{count}} 件を確認",
+    "advisorOpen": "{{name}} に重要度が高または中の未解決の問題があります",
+    "advisorOpenHere": "このアプリに重要度が高または中の未解決の問題があります",
+    "deployFailed": "公開に失敗した原因を調べる",
+    "couldNotPublish": "{{name}} を公開できませんでした"
+  },
+  "act": {
+    "current": "使用中",
+    "viewBuild": {
+      "title": "作成",
+      "subtitle": "Copilot とチャットして {{name}} をプレビューします"
+    },
+    "viewCode": {
+      "title": "コード",
+      "subtitle": "{{name}} のファイルを参照します"
+    },
+    "viewBlueprint": {
+      "title": "Blueprint",
+      "subtitle": "{{name}} の構成とデータ モデル"
+    },
+    "viewAdvisor": {
+      "title": "アドバイザー",
+      "subtitle": "共有する前に {{name}} に問題がないか確認します"
+    },
+    "history": {
+      "title": "履歴",
+      "subtitle": "{{name}} のすべてのバージョンと変更内容"
+    },
+    "skills": {
+      "title": "スキル",
+      "subtitle": "Copilot がこのアプリを構築するときに従うガイダンス"
+    },
+    "secrets": {
+      "title": "シークレット",
+      "subtitle": "アプリの関数が使用するキーとパスワード"
+    },
+    "terminal": {
+      "title": "ターミナル",
+      "subtitle": "{{name}} のフォルダーでコマンドを実行します",
+      "hide": "ターミナルを非表示",
+      "hideSubtitle": "ターミナルを非表示にします。シェルは実行されたままです"
+    },
+    "newTerminal": {
+      "title": "新しいターミナル",
+      "subtitle": "{{name}} のフォルダーで別のシェルを開始します"
+    },
+    "deploy": {
+      "title": "公開",
+      "changes": "変更を公開",
+      "files_other": "{{count}} 件の変更を公開",
+      "subtitle": "{{name}} をもう一度公開します",
+      "changesSubtitle": "最新の変更はまだ {{name}} に反映されていません",
+      "filesSubtitle_other": "{{name}} の公開後に {{count}} 個のファイルが変更されました"
+    },
+    "share": {
+      "title": "共有",
+      "subtitle": "ほかのユーザーに {{name}} へのアクセス権を付与します"
+    },
+    "autoDeploy": {
+      "on": "[チャットのターンごとに公開] をオンにする",
+      "off": "[チャットのターンごとに公開] をオフにする",
+      "onSubtitle": "チャットの各ターンが終わるたびに、その変更を公開します",
+      "offSubtitle": "公開するまで、チャットでの変更をこのコンピューターに保持します"
+    },
+    "home": {
+      "title": "すべてのプロジェクト",
+      "subtitle": "[ホーム] にすべてのプロジェクトを表示します"
+    },
+    "newProject": {
+      "title": "新しいプロジェクト",
+      "subtitle": "説明するだけで Copilot が作成します"
+    },
+    "openFolder": {
+      "title": "フォルダーを開く",
+      "subtitle": "既存のローカル プロジェクトを使用します"
+    },
+    "clone": {
+      "title": "GitHub からクローン",
+      "subtitle": "リポジトリを Fabricator に取り込みます"
+    },
+    "importProject": {
+      "title": "プロジェクトをインポート",
+      "subtitle": "送られてきた .fabricator ファイルを開きます"
+    },
+    "migrate": {
+      "title": "Power BI レポートを移行",
+      "subtitle": "レポートをアプリに変換します"
+    },
+    "gallery": {
+      "title": "アプリ ギャラリー",
+      "subtitle": "Fabric で開けるすべてのアプリを参照します"
+    },
+    "manageProject": {
+      "title": "{{name}} を管理",
+      "subtitle": "名前の変更、エクスポート、Fabricator からの削除を行います"
+    },
+    "exportProject": {
+      "title": "{{name}} をエクスポート",
+      "subtitle": "ほかの人がインポートできるファイルとして保存します"
+    },
+    "overview": {
+      "title": "ワークスペースの概要",
+      "subtitle": "{{name}} のすべてのアプリ、変更、デプロイ",
+      "subtitleHere": "このチーム ワークスペースのすべてのアプリ、変更、デプロイ"
+    },
+    "theme": {
+      "dark": "ダーク テーマ",
+      "light": "ライト テーマ",
+      "system": "システム テーマ",
+      "appearance": "外観",
+      "systemSubtitle": "コンピューターのライト/ダークの設定に従います"
+    },
+    "textSize": {
+      "title": "文字サイズ {{percent}}%",
+      "subtitle": "インターフェイス全体を拡大縮小します"
+    },
+    "settings": {
+      "title": "設定",
+      "subtitle": "テーマ、文字サイズ、試験的機能など"
+    },
+    "accounts": {
+      "title": "アカウントの管理",
+      "subtitle": "Fabricator が使用するすべてのアカウントを表示して変更します"
+    },
+    "apiKeys": {
+      "title": "API キーの管理",
+      "subtitle": "独自のキーで Anthropic、OpenAI、xAI、Google のモデルを使用します"
+    },
+    "mcpServers": {
+      "title": "MCP サーバーの管理",
+      "subtitle": "チャットの [プラグイン] でオンにできる MCP サーバーを追加します"
+    },
+    "chatDefaults": {
+      "title": "チャットの既定値の管理",
+      "subtitle": "新しいプロジェクトのチャットで最初に使うモデルとプラグイン"
+    },
+    "customInstructions": {
+      "title": "カスタム指示の編集",
+      "subtitle": "作成するすべてのアプリで Copilot が従う指示"
+    },
+    "fabricRefresh": {
+      "title": "Fabric の認証を更新",
+      "subtitle": "共有の Rayfin CLI 資格情報をクリアして、もう一度サインインします"
+    },
+    "fabricSignIn": {
+      "title": "Fabric にサインイン",
+      "subtitle": "公開したアプリは Microsoft Fabric でホストされます"
+    },
+    "setup": {
+      "title": "セットアップを開く",
+      "subtitle": "Fabricator に必要なツールを確認し、足りないものをインストールします"
+    },
+    "help": {
+      "title": "ヘルプを開く",
+      "subtitle": "問題のデバッグ、ドキュメントの参照、問題の報告ができます"
+    },
+    "docs": {
+      "title": "ドキュメント",
+      "subtitle": "ブラウザーで Fabricator のドキュメントを開きます"
+    },
+    "reportIssue": {
+      "title": "問題を報告",
+      "subtitle": "バージョンの詳細を含むバグ レポートを GitHub で開きます"
+    },
+    "exportDiagnostics": {
+      "title": "診断情報をエクスポート",
+      "subtitle": "バグ レポートに添付する診断ファイルを保存します"
+    },
+    "openLogs": {
+      "title": "ログ フォルダーを開く",
+      "subtitle": "このコンピューター上の Fabricator のログ",
+      "verb": "フォルダーを開く"
+    }
+  }
+}

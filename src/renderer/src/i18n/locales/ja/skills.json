@@ -1,0 +1,145 @@
+{
+  "filters": {
+    "all": "すべて",
+    "on": "オン",
+    "off": "オフ"
+  },
+  "groups": {
+    "alwaysOn": "常にオン",
+    "alwaysOnHint": "Rayfin が管理する基本のガイダンスです。",
+    "library": "スキル ライブラリ",
+    "libraryHint": "再利用できるスキルです。オンにすると、このアプリにコピーされます。",
+    "app": "このアプリで追加",
+    "appHint": "このアプリにだけあるスキルです (テンプレートに含まれていたスキルなど)。",
+    "more": "その他"
+  },
+  "skill": {
+    "alwaysOn": "常にオン",
+    "updateAvailable": "更新あり",
+    "on": "オン",
+    "off": "オフ",
+    "managed": "Rayfin が管理しています。常にオンです。",
+    "use": "このアプリで {{title}} を使用",
+    "updating": "更新しています…"
+  },
+  "kicker": {
+    "rayfin": "Rayfin が管理",
+    "library": "ライブラリ",
+    "app": "このアプリ",
+    "builtIn": "組み込み",
+    "builtInCategory": "組み込み · {{category}}"
+  },
+  "toasts": {
+    "turnedOn": "「{{title}}」をオンにしました。このアプリに保存しました。",
+    "turnedOff": "「{{title}}」をオフにしました。このアプリに保存しました。",
+    "updated": "「{{title}}」を更新しました。",
+    "updateFailed": "「{{title}}」を更新できませんでした。",
+    "updatedCount_other": "{{count}} 個のスキルを更新しました。",
+    "saved": "スキルに保存しました。",
+    "savedToLibrary": "「{{title}}」をスキル ライブラリに保存しました。",
+    "deleted": "「{{title}}」をスキル ライブラリから削除しました。",
+    "removed": "「{{title}}」をこのアプリから削除しました。"
+  },
+  "view": {
+    "title": "スキル",
+    "subtitle": "Copilot がこのアプリを構築するときに従うガイダンス",
+    "search": "スキルを検索",
+    "clearSearch": "検索をクリア",
+    "show": "表示",
+    "newSkillTitle": "独自のスキルを作成またはアップロード",
+    "newSkill": "新しいスキル"
+  },
+  "empty": {
+    "noMatch": "「{{query}}」に一致するスキルはありません",
+    "noneOn": "オンのスキルはありません",
+    "allOn": "すべてのスキルがオンです",
+    "showAll": "すべてのスキルを表示"
+  },
+  "deleteDialog": {
+    "title": "カスタム スキルを削除しますか?",
+    "message": "「{{title}}」をスキル ライブラリから削除しますか? すでに使用しているアプリには、そのコピーが残ります。再利用可能なライブラリから削除されるだけです。"
+  },
+  "removeDialog": {
+    "title": "このアプリからスキルを削除しますか?",
+    "message": "Copilot はこのアプリで「{{title}}」を使用しなくなります。このスキルはスキル ライブラリにないため、元に戻すには [履歴] から復元する必要があります。",
+    "messageSaveFirst": "Copilot はこのアプリで「{{title}}」を使用しなくなります。このスキルはスキル ライブラリにないため、元に戻すには [履歴] から復元する必要があります。再利用する場合は、先にライブラリに保存してください。",
+    "removing": "削除しています…"
+  },
+  "inspector": {
+    "readError": "このスキルを読み取れませんでした。",
+    "label": "{{title}} の詳細",
+    "close": "詳細を閉じる",
+    "closeTitle": "閉じる (Esc)",
+    "managedNote": "このスキルは Rayfin が管理しています。常にオンで、Rayfin CLI と一緒に更新されます。",
+    "appNote": "このスキルはこのアプリにだけあります。他のアプリで使うには、ライブラリに保存してください。",
+    "appNoteLocked": "このスキルはこのアプリにだけあります。現在の名前ではライブラリに保存できません。",
+    "use": "このアプリで使用",
+    "useOn": "次のメッセージから Copilot がこのスキルに従います。",
+    "useOff": "このアプリに追加します。すべての変更は [履歴] に保存されます。",
+    "newer": "このスキルの新しいバージョンがあります。",
+    "whenHeading": "Copilot が使用するタイミング",
+    "triggers": "トリガー ワード",
+    "fewer": "表示を減らす",
+    "more_other": "+{{count}} 件",
+    "noTriggers": "Copilot がスキルの指示に基づいて判断します。",
+    "teachesHeading": "スキルの内容",
+    "showAll": "すべて表示",
+    "fileHeading": "ファイル",
+    "notInstalled": "スキルをオンにすると、このアプリに追加されます。",
+    "viewSource": "SKILL.md を表示",
+    "saveToLibrary": "ライブラリに保存"
+  },
+  "overview": {
+    "label": "スキルについて",
+    "howTitle": "スキルのしくみ",
+    "how1": "スキルをオンにします。Fabricator がその指示をこのアプリに追加し、変更を [履歴] に保存します。",
+    "how2": "リクエストがスキルに一致すると、Copilot がスキルを読み、そのガイダンスに従います。",
+    "how3": "いつでもオフにできます。スキルを選択すると、その内容を確認できます。",
+    "inThisApp": "このアプリ",
+    "alwaysOn": "常にオン",
+    "builtIn": "組み込みスキル",
+    "onOf": "{{total}} 個中 {{on}} 個がオン",
+    "library": "ライブラリ",
+    "appOnly": "このアプリで追加",
+    "updates": "更新",
+    "updatesText_other": "このアプリの {{count}} 個の組み込みスキルに新しいバージョンがあります。",
+    "updateAll_other": "{{count}} 個を更新",
+    "ownTitle": "独自のスキル",
+    "ownText": "<strong>新しいスキル</strong> を選択すると、ブランド、データの用語、チームのレビュー チェックリストに合わせたスキルを作成したり、既存のスキルをアップロードしたりできます。",
+    "learnMore": "スキルの詳細"
+  },
+  "custom": {
+    "titleEdit": "カスタム スキルの編集",
+    "titleAdd": "カスタム スキルの追加",
+    "tabs": "スキルの追加方法",
+    "write": "作成",
+    "upload": "アップロード",
+    "libraryTitle": "スキル ライブラリに保存",
+    "libraryHint": "ライブラリにも保存して、他のアプリで再利用できるようにします。",
+    "titleLabel": "タイトル",
+    "titlePlaceholder": "例: ブランド スタイル",
+    "iconLabel": "アイコン",
+    "iconAria": "絵文字アイコン",
+    "descriptionLabel": "簡単な説明",
+    "descriptionPlaceholder": "スキル カードに表示される 1 行の説明",
+    "instructions": "スキルの指示 (SKILL.md)",
+    "hint": "frontmatter の <code>description</code> は、このスキルをいつ使うかをエージェントに伝えます。本文はエージェントが従うガイダンスです。",
+    "references_other": "{{count}} 個の参照ファイルを含みます",
+    "chooseDifferent": "別のものを選択",
+    "previewLabel": "SKILL.md (プレビュー)",
+    "reviewHint": "スキルを確認してから、このアプリに追加してください。",
+    "uploadLead": "既存のスキルをアップロードしてプレビューし、このアプリに追加します。frontmatter に <code>name</code> と <code>description</code> がある <code>SKILL.md</code> が必要です。<code>references/</code> 内のファイルも一緒に追加されます。",
+    "chooseFolder": "フォルダーを選択…",
+    "chooseFile": "ファイルを選択 (.md または .zip)…",
+    "reading": "読み取っています…",
+    "saveChanges": "変更を保存",
+    "addSkill": "スキルを追加"
+  },
+  "editor": {
+    "loading": "エディターを読み込んでいます…"
+  },
+  "preview": {
+    "notInstalled": "まだこのアプリにはありません",
+    "close": "プレビューを閉じる"
+  }
+}

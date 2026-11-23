@@ -1,5 +1,6 @@
 import type { ChatDataRef, FabricDataItemType, FabricWorkspace, WorkspaceDataItem } from '@shared/ipc'
 import type { WorkspaceUse } from './fabric'
+import { translator } from './i18n'
 import { parseRayfinConfig } from './model/architecture'
 
 /** A kind of Fabric data that a Rayfin connector reads. */
@@ -13,57 +14,43 @@ export interface DataKindInfo {
   connector: string
   label: string
   plural: string
-  /** The plural inside a sentence. */
-  nouns: string
   /** Codicon name. */
   icon: string
   /** What the app can do with it. */
   hint: string
 }
 
+/** A kind of data, with its words read in the language shown when they're read. */
+function dataKind(
+  kind: DataKind,
+  itemType: FabricDataItemType,
+  connector: string,
+  icon: string
+): DataKindInfo {
+  return {
+    kind,
+    itemType,
+    connector,
+    get label() {
+      return translator('publish')(`dataKinds.${kind}.label`)
+    },
+    get plural() {
+      return translator('publish')(`dataKinds.${kind}.plural`)
+    },
+    icon,
+    get hint() {
+      return translator('publish')(`dataKinds.${kind}.hint`)
+    }
+  }
+}
+
 /** The data the Add menu offers, as `rayfin connector types` lists it in Rayfin 1.36
  *  (KQL databases can't be added in 1.36, so they aren't offered). */
 export const DATA_KINDS: readonly DataKindInfo[] = [
-  {
-    kind: 'semanticmodel',
-    itemType: 'SemanticModel',
-    connector: 'fabric-semanticmodel',
-    label: 'Semantic model',
-    plural: 'Semantic models',
-    nouns: 'semantic models',
-    icon: 'graph',
-    hint: 'Query Power BI data with DAX'
-  },
-  {
-    kind: 'warehouse',
-    itemType: 'Warehouse',
-    connector: 'fabric-warehouse',
-    label: 'Warehouse',
-    plural: 'Warehouses',
-    nouns: 'warehouses',
-    icon: 'server',
-    hint: 'Read and write its tables'
-  },
-  {
-    kind: 'sqldatabase',
-    itemType: 'SQLDatabase',
-    connector: 'fabric-sqldatabase',
-    label: 'SQL database',
-    plural: 'SQL databases',
-    nouns: 'SQL databases',
-    icon: 'database',
-    hint: 'Read and write its tables'
-  },
-  {
-    kind: 'lakehouse',
-    itemType: 'Lakehouse',
-    connector: 'fabric-sqlanalytics',
-    label: 'Lakehouse',
-    plural: 'Lakehouses',
-    nouns: 'lakehouses',
-    icon: 'layers',
-    hint: 'Read its tables'
-  }
+  dataKind('semanticmodel', 'SemanticModel', 'fabric-semanticmodel', 'graph'),
+  dataKind('warehouse', 'Warehouse', 'fabric-warehouse', 'server'),
+  dataKind('sqldatabase', 'SQLDatabase', 'fabric-sqldatabase', 'database'),
+  dataKind('lakehouse', 'Lakehouse', 'fabric-sqlanalytics', 'layers')
 ]
 
 export function kindOfItem(itemType: string): DataKindInfo | undefined {
@@ -90,7 +77,9 @@ export function connectorAddCommand(source: DataSource): string {
 function describe(source: DataSource): string {
   const kind = kindOfItem(source.item.type)
   const readOnly = kind?.kind === 'lakehouse' ? ' (read-only)' : ''
-  return `${kind?.label ?? 'Item'} "${oneLine(source.item.name)}" from the "${oneLine(source.workspaceName)}" workspace${readOnly}`
+  // Copilot is told in English, whatever language the interface is in.
+  const label = kind ? translator('publish')(`dataKinds.${kind.kind}.label`, { lng: 'en' }) : 'Item'
+  return `${label} "${oneLine(source.item.name)}" from the "${oneLine(source.workspaceName)}" workspace${readOnly}`
 }
 
 /** What Copilot is told about the Fabric data a message carries: connect each one, and how. */

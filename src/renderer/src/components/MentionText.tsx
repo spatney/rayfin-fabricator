@@ -1,4 +1,5 @@
 import { Fragment, type JSX } from 'react'
+import { useTranslation } from '../i18n'
 
 // A file/mockup reference token: "@" followed by a run of non-space, non-"@"
 // characters, or a quoted path with spaces (`@"C:\My files\notes.md"`),
@@ -67,6 +68,7 @@ export function splitMentions(text: string, known?: ReadonlySet<string>): Mentio
  *  `onOpen` is given, each chip in the project is clickable (opens the
  *  referenced file/mockup); one outside the project is a plain chip. */
 export function MentionText({ text, onOpen }: { text: string; onOpen?: (ref: string) => void }): JSX.Element {
+  const { t } = useTranslation()
   const parts = splitMentions(text)
   return (
     <>
@@ -78,7 +80,7 @@ export function MentionText({ text, onOpen }: { text: string; onOpen?: (ref: str
               className="chat-mention chat-mention--link"
               role="button"
               tabIndex={0}
-              title={`Open ${mentionPath(p.text)}`}
+              title={t('actions.openNamed', { name: mentionPath(p.text) })}
               onClick={() => onOpen(`@${mentionPath(p.text)}`)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {

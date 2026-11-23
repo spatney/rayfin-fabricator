@@ -91,9 +91,7 @@ pub async fn install(app: &AppHandle, state: &UpdaterState) -> AppResult<()> {
   let update = state.update.lock().unwrap().clone();
   let bytes = state.bytes.lock().unwrap().take();
   let (Some(update), Some(bytes)) = (update, bytes) else {
-    return Err(AppError::Msg(
-      "No downloaded update to install. Check for updates first.".into(),
-    ));
+    return Err(AppError::Msg(t!("services.updater.nothingDownloaded")));
   };
   // The installer replaces rayfin-local, which a running local backend keeps in
   // use: projects' and installed apps'.

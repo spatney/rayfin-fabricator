@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX } from 'react'
 import { Codicon } from './icons'
 import { authErrorMessage } from '../authErrors'
 import { REGION_AVAILABILITY_URL, refusalFor, refusedRegions, type Refusal } from '../fabric'
+import { Trans, formatList, translator, useTranslation } from '../i18n'
 import type {
   DeployTargetCheck,
   FabricCapacity,
@@ -36,7 +37,7 @@ const RECENT_LIMIT = 5
 
 /** "F-SKU · F2" style label for a workspace's capacity. */
 function skuText(w: FabricWorkspace): string {
-  if (w.capacityKind === 'unknown') return 'Capacity'
+  if (w.capacityKind === 'unknown') return translator('publish')('create.unknownSku')
   const fam = w.capacityKind === 'fabric' ? 'F-SKU' : w.capacityKind === 'premium' ? 'P-SKU' : ''
   return fam + (w.sku ? ` · ${w.sku}` : '')
 }
@@ -44,41 +45,41 @@ function skuText(w: FabricWorkspace): string {
 /** Tooltip for a workspace's capacity chip. */
 function skuTitle(w: FabricWorkspace): string | undefined {
   if (w.capacityKind === 'unknown') {
-    return 'On a dedicated capacity, but its SKU isn’t visible to you (you don’t administer it) — verified when you publish'
+    return translator('publish')('create.unknownSkuTitle')
   }
   return w.capacityName ? `${w.capacityName} (${w.sku})` : w.sku
 }
 
 /** Why a workspace can't host a Rayfin app — shown on greyed-out ineligible rows. */
 function reasonFor(w: FabricWorkspace): string {
+  const t = translator('publish')
   if (w.capacityKind === 'other') {
-    return `Capacity ${w.sku ? `(${w.sku}) ` : ''}isn’t Fabric (F-SKU) or Premium (P-SKU)`
+    return w.sku ? t('create.otherCapacitySku', { sku: w.sku }) : t('create.otherCapacity')
   }
-  return 'No Fabric/Premium capacity assigned'
+  return t('create.noCapacity')
 }
 
 /** Why publishing to `w` will likely fail: Fabric turned down an app in it, on its capacity or in its region. */
 function refusalText(w: FabricWorkspace, { refused, by }: Refusal): string {
-  const when =
-    by === 'workspace'
-      ? `in ${w.displayName} when you published to it`
-      : by === 'capacity'
-        ? 'on this workspace’s capacity when you published'
-        : `in ${refused.region} when you published`
-  return `Fabric apps weren’t available ${when} earlier, so publishing here will likely fail.`
+  const t = translator('publish')
+  return by === 'workspace'
+    ? t('create.refusal.workspace', { workspace: w.displayName })
+    : by === 'capacity'
+      ? t('create.refusal.capacity')
+      : t('create.refusal.region', { region: refused.region })
 }
 
 /** What the picker says about the workspaces Fabric turned apps down in. */
 function refusedNote(refused: readonly UnsupportedWorkspace[]): string {
+  const t = translator('publish')
   const regions = refusedRegions(refused)
   if (regions.length > 1) {
-    const list = `${regions.slice(0, -1).join(', ')} or ${regions[regions.length - 1]}`
-    return `Fabric apps weren’t available in ${list}, so workspaces there are marked. If no region works, your Fabric admin may need to turn on Fabric Apps.`
+    return t('create.refusedNote.regions', { regions: formatList(regions, 'disjunction') })
   }
   if (regions.length === 1) {
-    return `Fabric apps weren’t available in ${regions[0]}, so workspaces there are marked. Choose one on a capacity in another region.`
+    return t('create.refusedNote.region', { region: regions[0] })
   }
-  return 'Fabric apps weren’t available in a workspace you published to, so workspaces on its capacity are marked. Choose one on a capacity in another region.'
+  return t('create.refusedNote.capacity')
 }
 
 interface Props {
@@ -94,11 +95,11 @@ interface Props {
   onSignedIn?: () => Promise<void> | void
   /** True while a `rayfin up` is streaming (disables submit). */
   running?: boolean
-  /** Primary button label (idle). */
+  /** Primary button label (idle); "Publish" when omitted. */
   submitLabel?: string
-  /** Primary button label while `running`. */
+  /** Primary button label while `running`; "Publishing…" when omitted. */
   busyLabel?: string
-  /** Secondary button label. */
+  /** Secondary button label; "Cancel" when omitted. */
   cancelLabel?: string
   /** Secondary action; the Cancel button is hidden when omitted. */
   onCancel?: () => void
@@ -138,9 +139,9 @@ export default function DeploymentCreateForm({
   onReload,
   onSignedIn,
   running = false,
-  submitLabel = 'Publish',
-  busyLabel = 'Publishing…',
-  cancelLabel = 'Cancel',
+  submitLabel,
+  busyLabel,
+  cancelLabel,
   onCancel,
   onSubmit,
   defaultName = '',
@@ -148,6 +149,7 @@ export default function DeploymentCreateForm({
   recentWorkspaces,
   refused = NO_REFUSALS
 }: Props): JSX.Element {
+  const { t } = useTranslation('publish')
   const [name, setName] = useState(defaultName)
   const [wsQuery, setWsQuery] = useState('')
   const [selectedWs, setSelectedWs] = useState<string | null>(null)
@@ -220,13 +222,13 @@ export default function DeploymentCreateForm({
           ''
       )
       if (!res.ok) {
-        setCreateErr(authErrorMessage(res.error, 'Could not load capacities. Please try again.'))
+        setCreateErr(authErrorMessage(res.error, t('create.errors.capacities')))
         if (res.needsLogin) setAuthExpired(true)
       }
     } catch (reason) {
       setCaps([])
       setSelectedCap('')
-      setCreateErr(authErrorMessage(reason, 'Could not load capacities. Please try again.'))
+      setCreateErr(authErrorMessage(reason, t('create.errors.capacities')))
     } finally {
       setLoadingCaps(false)
     }
@@ -247,7 +249,7 @@ export default function DeploymentCreateForm({
     try {
       const res = await window.api.fabric.createWorkspace(newWsName.trim(), selectedCap)
       if (!res.ok) {
-        setCreateErr(res.error || 'Could not create the workspace.')
+        setCreateErr(res.error || t('create.errors.createWorkspace'))
         if (res.needsLogin) setAuthExpired(true)
         return
       }
@@ -256,7 +258,7 @@ export default function DeploymentCreateForm({
       await onReload()
       if (res.workspaceId) setSelectedWs(res.workspaceId)
     } catch (reason) {
-      setCreateErr(authErrorMessage(reason, 'Could not create the workspace. Please try again.'))
+      setCreateErr(authErrorMessage(reason, t('create.errors.createWorkspaceRetry')))
     } finally {
       setCreatingBusy(false)
     }
@@ -285,11 +287,11 @@ export default function DeploymentCreateForm({
         // Surface why sign-in failed instead of silently resetting the button
         // (issue #17). The backend returns the CLI's reason and also logs it to
         // the diagnostics bundle.
-        setSignInErr(authErrorMessage(res.error, 'Fabric sign-in did not complete. Please try again.'))
+        setSignInErr(authErrorMessage(res.error, t('signIn.incomplete')))
       }
     } catch (reason) {
       if (seq === loginSeqRef.current) {
-        setSignInErr(authErrorMessage(reason, 'Fabric sign-in did not complete. Please try again.'))
+        setSignInErr(authErrorMessage(reason, t('signIn.incomplete')))
       }
     } finally {
       if (seq === loginSeqRef.current) {
@@ -371,7 +373,7 @@ export default function DeploymentCreateForm({
           <span className="ws-item-name">{w.displayName}</span>
           {flagged ? (
             <span className="ws-item-sub ws-item-flag">
-              {w.region ? `${w.region} · ` : ''}Fabric apps unavailable
+              {w.region ? t('create.unavailableIn', { region: w.region }) : t('create.unavailable')}
             </span>
           ) : (
             w.region && <span className="ws-item-sub">{w.region}</span>
@@ -388,11 +390,11 @@ export default function DeploymentCreateForm({
     <div className="dep-create">
       <label className="dep-field">
         <span className="dep-field-label">
-          Name <span className="dep-field-opt">optional</span>
+          {t('create.name')} <span className="dep-field-opt">{t('create.optional')}</span>
         </span>
         <input
           className="ws-input"
-          placeholder="e.g. Production"
+          placeholder={t('create.namePlaceholder')}
           value={name}
           autoFocus
           spellCheck={false}
@@ -405,22 +407,22 @@ export default function DeploymentCreateForm({
 
       <div className="dep-field">
         <div className="dep-field-head">
-          <span className="dep-field-label">Publish to workspace</span>
+          <span className="dep-field-label">{t('create.workspace')}</span>
           <div className="dep-field-head-actions">
             <button
               className="ws-create-link"
               type="button"
               onClick={openCreateWs}
               disabled={loadingWs || creatingWs || signingIn || reauthing || authExpired || !wsResult?.ok}
-              title="Create a new Fabric workspace on a capacity you have access to"
+              title={t('create.newWorkspaceTitle')}
             >
-              + New workspace
+              {t('create.newWorkspace')}
             </button>
             <button
               className="ws-refresh"
               type="button"
-              title="Refresh workspaces"
-              aria-label="Refresh workspaces"
+              title={t('create.refresh')}
+              aria-label={t('create.refresh')}
               disabled={loadingWs || signingIn || reauthing}
               onClick={onReload}
             >
@@ -436,10 +438,10 @@ export default function DeploymentCreateForm({
               <button
                 type="button"
                 className="link-btn"
-                title="See which regions have Fabric apps (opens learn.microsoft.com)"
+                title={t('region.availabilityTitle')}
                 onClick={() => void window.api.openExternal(REGION_AVAILABILITY_URL)}
               >
-                Region availability
+                {t('region.availability')}
               </button>
             </span>
           </div>
@@ -448,7 +450,7 @@ export default function DeploymentCreateForm({
           <div className="ws-create">
             <input
               className="ws-input"
-              placeholder="New workspace name"
+              placeholder={t('create.newWorkspaceName')}
               value={newWsName}
               autoFocus
               spellCheck={false}
@@ -465,7 +467,7 @@ export default function DeploymentCreateForm({
             {loadingCaps ? (
               <div className="ws-loading">
                 <span className="ws-spinner" />
-                Loading capacities…
+                {t('create.loadingCapacities')}
               </div>
             ) : caps && caps.length > 0 ? (
               <select
@@ -480,12 +482,12 @@ export default function DeploymentCreateForm({
                   <option key={c.id} value={c.id}>
                     {c.displayName} · {c.sku ?? c.kind}
                     {c.region ? ` · ${c.region}` : ''}
-                    {capacityRefusal(c) ? ' · Fabric apps unavailable' : ''}
+                    {capacityRefusal(c) ? ` · ${t('create.unavailable')}` : ''}
                   </option>
                 ))}
               </select>
             ) : (
-              <p className="ws-empty-sub">No eligible capacities available.</p>
+              <p className="ws-empty-sub">{t('create.noCapacities')}</p>
             )}
             {createErr && <p className="ws-create-err" role="alert">{createErr}</p>}
             <div className="dep-create-actions">
@@ -494,7 +496,7 @@ export default function DeploymentCreateForm({
                 onClick={() => setCreatingWs(false)}
                 disabled={creatingBusy}
               >
-                Cancel
+                {t('actions.cancel')}
               </button>
               <button
                 className="btn btn--xs btn--primary"
@@ -504,7 +506,7 @@ export default function DeploymentCreateForm({
                 }
                 onClick={() => void submitNewWs()}
               >
-                {creatingBusy ? 'Creating…' : 'Create workspace'}
+                {creatingBusy ? t('create.creating') : t('create.createWorkspace')}
               </button>
             </div>
           </div>
@@ -512,7 +514,7 @@ export default function DeploymentCreateForm({
         {loadingWs ? (
           <div className="ws-loading">
             <span className="ws-spinner" />
-            {reauthing ? 'Re-authenticating…' : 'Loading your workspaces…'}
+            {reauthing ? t('create.reauthenticating') : t('create.loading')}
           </div>
         ) : all.length > 0 ? (
           <>
@@ -523,7 +525,7 @@ export default function DeploymentCreateForm({
                 </span>
                 <input
                   className="ws-input ws-search-input"
-                  placeholder={`Search ${all.length} workspaces…`}
+                  placeholder={t('create.search', { total: all.length })}
                   value={wsQuery}
                   spellCheck={false}
                   onChange={(e) => setWsQuery(e.target.value)}
@@ -531,8 +533,8 @@ export default function DeploymentCreateForm({
                 {wsQuery && (
                   <button
                     className="ws-search-clear"
-                    title="Clear search"
-                    aria-label="Clear search"
+                    title={t('create.clearSearch')}
+                    aria-label={t('create.clearSearch')}
                     onClick={() => setWsQuery('')}
                   >
                     ×
@@ -542,35 +544,39 @@ export default function DeploymentCreateForm({
             )}
             {eligible.length === 0 && (
               <div className="ws-empty">
-                <p className="ws-empty-title">No eligible workspaces</p>
+                <p className="ws-empty-title">{t('create.noEligible.title')}</p>
                 <p className="ws-empty-sub">
-                  Rayfin apps need a workspace on a Fabric (<strong>F-SKU</strong>) or Power BI
-                  Premium (<strong>P-SKU</strong>) capacity. None of your {all.length} workspace
-                  {all.length === 1 ? '' : 's'} qualify — they’re listed below so you can see why.
-                  Start a free Fabric trial or add a capacity, then refresh.
+                  <Trans
+                    t={t}
+                    i18nKey="create.noEligible.body"
+                    count={all.length}
+                    components={{ strong: <strong /> }}
+                  />
                 </p>
                 <div className="ws-empty-actions">
                   <button
                     className="btn btn--xs btn--primary"
                     onClick={() => void window.api.openExternal(TRIAL_URL)}
                   >
-                    Start a free trial
+                    {t('create.trial')}
                   </button>
                   <button
                     className="btn btn--xs btn--ghost"
                     onClick={() => void window.api.openExternal(BUY_URL)}
                   >
-                    Buy a capacity
+                    {t('create.buy')}
                   </button>
                 </div>
               </div>
             )}
             {shownEligible.length > 0 && (
               <div className="ws-list" role="listbox">
-                {shownRecent.length > 0 && <div className="ws-group-label">Recent</div>}
+                {shownRecent.length > 0 && (
+                  <div className="ws-group-label">{t('create.recent')}</div>
+                )}
                 {shownRecent.map(eligibleRow)}
                 {shownRecent.length > 0 && shownOthers.length > 0 && (
-                  <div className="ws-group-label">Other workspaces</div>
+                  <div className="ws-group-label">{t('create.others')}</div>
                 )}
                 {shownOthers.map(eligibleRow)}
               </div>
@@ -578,7 +584,7 @@ export default function DeploymentCreateForm({
             {selectedWorkspace && checkingTarget && (
               <p className="ws-target-note" role="status">
                 <span className="ws-spinner" aria-hidden="true" />
-                Checking {selectedWorkspace.displayName} for an app with the same name…
+                {t('create.checking', { workspace: selectedWorkspace.displayName })}
               </p>
             )}
             {selectedWorkspace && replaces && !chosenApp && (
@@ -586,19 +592,25 @@ export default function DeploymentCreateForm({
                 <span className="codicon codicon-warning" aria-hidden="true" />
                 <span className="ws-target-conflict-text">
                   {replaceIn === selectedWorkspace.id
-                    ? `Publishing will replace the app “${replaces}” in ${selectedWorkspace.displayName}.`
-                    : `${selectedWorkspace.displayName} already has an app named “${replaces}”. Publishing here would replace it, so pick another workspace.`}
+                    ? t('create.willReplace', {
+                        app: replaces,
+                        workspace: selectedWorkspace.displayName
+                      })
+                    : t('create.conflict', {
+                        app: replaces,
+                        workspace: selectedWorkspace.displayName
+                      })}
                 </span>
                 {replaceIn !== selectedWorkspace.id && (
                   <button type="button" className="link-btn" onClick={() => setReplaceIn(selectedWorkspace.id)}>
-                    Replace it anyway
+                    {t('create.replaceAnyway')}
                   </button>
                 )}
               </div>
             )}
             {selectedWorkspace && apps.length > 0 && (
               <label className="dep-field ws-app">
-                <span className="dep-field-label">App</span>
+                <span className="dep-field-label">{t('create.app')}</span>
                 <select
                   className="ws-input"
                   value={chosenApp ?? ''}
@@ -612,8 +624,10 @@ export default function DeploymentCreateForm({
                 >
                   <option value="">
                     {replaces
-                      ? `${replaces} (same name as this app)`
-                      : `A new app${targetState?.result?.itemName ? ` named “${targetState.result.itemName}”` : ''}`}
+                      ? t('create.sameName', { app: replaces })
+                      : targetState?.result?.itemName
+                        ? t('create.newAppNamed', { name: targetState.result.itemName })
+                        : t('create.newApp')}
                   </option>
                   {apps
                     .filter((app) => app.toLowerCase() !== replaces?.toLowerCase())
@@ -629,8 +643,10 @@ export default function DeploymentCreateForm({
               <div className="ws-target-conflict" role="alert">
                 <span className="codicon codicon-warning" aria-hidden="true" />
                 <span className="ws-target-conflict-text">
-                  Publishing replaces the app “{chosenApp}” in {selectedWorkspace.displayName} with
-                  this one.
+                  {t('create.replaces', {
+                    app: chosenApp,
+                    workspace: selectedWorkspace.displayName
+                  })}
                 </span>
               </div>
             )}
@@ -646,7 +662,7 @@ export default function DeploymentCreateForm({
                     className="link-btn"
                     onClick={() => setTryIn(selectedWorkspace.id)}
                   >
-                    Publish here anyway
+                    {t('create.publishAnyway')}
                   </button>
                 )}
               </div>
@@ -656,7 +672,9 @@ export default function DeploymentCreateForm({
                 {eligible.length > 0 &&
                   (q ? (
                     <div className="ws-group-toggle ws-group-toggle--static">
-                      <span className="ws-group-label ws-group-label--btn">Not eligible</span>
+                      <span className="ws-group-label ws-group-label--btn">
+                        {t('create.notEligible')}
+                      </span>
                       <span className="ws-group-count">{shownIneligible.length}</span>
                     </div>
                   ) : (
@@ -672,7 +690,9 @@ export default function DeploymentCreateForm({
                       >
                         ›
                       </span>
-                      <span className="ws-group-label ws-group-label--btn">Not eligible</span>
+                      <span className="ws-group-label ws-group-label--btn">
+                        {t('create.notEligible')}
+                      </span>
                       <span className="ws-group-count">{shownIneligible.length}</span>
                     </button>
                   ))}
@@ -680,8 +700,11 @@ export default function DeploymentCreateForm({
                   <>
                     {eligible.length > 0 && (
                       <p className="ws-ineligible-hint">
-                        These need a Fabric (<strong>F-SKU</strong>) or Power BI Premium (
-                        <strong>P-SKU</strong>) capacity.
+                        <Trans
+                          t={t}
+                          i18nKey="create.ineligibleHint"
+                          components={{ strong: <strong /> }}
+                        />
                       </p>
                     )}
                     <div className="ws-list ws-list--muted" role="list">
@@ -712,32 +735,29 @@ export default function DeploymentCreateForm({
             )}
             {q && shownEligible.length === 0 && shownIneligible.length === 0 && (
               <div className="ws-empty">
-                <p className="ws-empty-sub">No workspaces match “{wsQuery.trim()}”.</p>
+                <p className="ws-empty-sub">{t('create.noMatch', { query: wsQuery.trim() })}</p>
                 <button className="btn btn--xs btn--ghost" onClick={() => setWsQuery('')}>
-                  Clear search
+                  {t('create.clearSearch')}
                 </button>
               </div>
             )}
           </>
         ) : wsResult?.ok && !authExpired ? (
           <div className="ws-empty">
-            <p className="ws-empty-title">No workspaces found</p>
-            <p className="ws-empty-sub">
-              We couldn’t find any Fabric workspaces for your account. Start a free Fabric trial or
-              add a capacity, then refresh.
-            </p>
+            <p className="ws-empty-title">{t('create.noWorkspaces.title')}</p>
+            <p className="ws-empty-sub">{t('create.noWorkspaces.body')}</p>
             <div className="ws-empty-actions">
               <button
                 className="btn btn--xs btn--primary"
                 onClick={() => void window.api.openExternal(TRIAL_URL)}
               >
-                Start a free trial
+                {t('create.trial')}
               </button>
               <button
                 className="btn btn--xs btn--ghost"
                 onClick={() => void window.api.openExternal(BUY_URL)}
               >
-                Buy a capacity
+                {t('create.buy')}
               </button>
             </div>
           </div>
@@ -745,15 +765,13 @@ export default function DeploymentCreateForm({
           <div className="ws-empty">
             {wsResult?.needsLogin || authExpired ? (
               <>
-                <p className="ws-empty-sub">
-                  Sign in to Microsoft Fabric to list your workspaces.
-                </p>
+                <p className="ws-empty-sub">{t('create.signInPrompt')}</p>
                 <button
                   className="btn btn--xs btn--primary"
                   disabled={signingIn}
                   onClick={() => void signInToFabric()}
                 >
-                  {signingIn ? 'Signing in…' : 'Sign in to Fabric'}
+                  {signingIn ? t('signIn.busy') : t('signIn.fabric')}
                 </button>
                 {/* Needing to sign in is expected, on a first launch or after a session
                     expires, so why the list needed it isn't shown. A failed sign-in is. */}
@@ -764,10 +782,12 @@ export default function DeploymentCreateForm({
             ) : (
               <>
                 <p className="ws-empty-sub">
-                  Couldn’t load workspaces{wsResult?.error ? `: ${wsResult.error}` : '.'}
+                  {wsResult?.error
+                    ? t('create.loadFailedWith', { error: wsResult.error })
+                    : t('create.loadFailed')}
                 </p>
                 <button className="btn btn--xs btn--ghost" onClick={onReload}>
-                  Retry
+                  {t('actions.retry')}
                 </button>
               </>
             )}
@@ -778,11 +798,11 @@ export default function DeploymentCreateForm({
       <div className="dep-create-actions">
         {onCancel && (
           <button className="btn btn--xs btn--ghost" onClick={onCancel}>
-            {cancelLabel}
+            {cancelLabel ?? t('actions.cancel')}
           </button>
         )}
         <button className="btn btn--xs btn--primary" disabled={!canSubmit} onClick={submit}>
-          {running ? busyLabel : submitLabel}
+          {running ? (busyLabel ?? t('button.publishing')) : (submitLabel ?? t('button.publish'))}
         </button>
       </div>
     </div>

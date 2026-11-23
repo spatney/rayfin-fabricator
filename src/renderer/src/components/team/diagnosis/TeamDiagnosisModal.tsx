@@ -1,4 +1,5 @@
 import { useEffect, useId, type JSX } from 'react'
+import { useTranslation } from '../../../i18n'
 import { useSuppressPreview } from '../../../overlay'
 import { useModalFocus } from '../../../modalFocus'
 import TeamDiagnosis from './TeamDiagnosis'
@@ -14,7 +15,8 @@ interface Props {
 }
 
 /** "Diagnose with Copilot" in its own dialog, for menus and lists. It starts right away. */
-export default function TeamDiagnosisModal({ input, title = 'Diagnose with Copilot', onFixInChat, onClose }: Props): JSX.Element {
+export default function TeamDiagnosisModal({ input, title, onFixInChat, onClose }: Props): JSX.Element {
+  const { t } = useTranslation('team')
   useSuppressPreview()
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
@@ -38,7 +40,7 @@ export default function TeamDiagnosisModal({ input, title = 'Diagnose with Copil
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>{title}</h2>
+          <h2 id={titleId}>{title ?? t('shared.diagnoseWithCopilot')}</h2>
         </div>
         <div className="modal-body team-form">
           <TeamDiagnosis
@@ -55,7 +57,7 @@ export default function TeamDiagnosisModal({ input, title = 'Diagnose with Copil
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn--ghost" onClick={onClose}>
-            Close
+            {t('actions.close')}
           </button>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { FabricatorMark } from './FabricatorMark'
 import { reportError } from '../errorReport'
+import { translator } from '../i18n'
 
 interface Props {
   children: ReactNode
@@ -37,27 +38,25 @@ export default class ErrorBoundary extends Component<Props, State> {
   render(): ReactNode {
     const { error } = this.state
     if (!error) return this.props.children
+    const t = translator('app')
 
     return (
       <div className="crash">
         <FabricatorMark className="brand-mark" />
-        <h1>Something went wrong</h1>
-        <p className="crash-sub">
-          Fabricator hit an unexpected error. Reloading usually fixes it; your projects and
-          chat history are saved.
-        </p>
+        <h1>{t('crash.title')}</h1>
+        <p className="crash-sub">{t('crash.body')}</p>
         {error.message && (
           <details className="crash-details">
-            <summary className="crash-details-summary">Technical details</summary>
+            <summary className="crash-details-summary">{t('crash.details')}</summary>
             <pre className="crash-detail">{error.message}</pre>
           </details>
         )}
         <div className="crash-actions">
           <button className="btn btn--primary" onClick={() => window.location.reload()}>
-            Reload
+            {t('crash.reload')}
           </button>
           <button className="btn btn--ghost" onClick={() => void window.api.openLogs()}>
-            Open logs
+            {t('crash.openLogs')}
           </button>
         </div>
       </div>

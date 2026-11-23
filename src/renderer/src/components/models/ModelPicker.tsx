@@ -20,6 +20,7 @@ import { moveMenuFocus } from '@renderer/menuFocus'
 import { menuLayout, type MenuLayout } from '@renderer/menuLayout'
 import { AUTO_SELECTION, type ModelSelection } from '@renderer/modelSelection'
 import { useSuppressPreview } from '@renderer/overlay'
+import { formatLocale, useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { EFFORT_ORDER } from '../chat/modes'
 import { ModelLogo } from './ModelLogo'
@@ -27,24 +28,23 @@ import './modelPicker.css'
 
 export { AUTO_SELECTION, selectionOf, type ModelSelection } from '@renderer/modelSelection'
 
-/** Names and hints for reasoning efforts. */
-export const EFFORT_LABEL: Record<ReasoningEffort, { label: string; hint: string }> = {
-  none: { label: 'None', hint: 'Answers without extra thinking.' },
-  low: { label: 'Low', hint: 'Quick — fine for small, clear changes.' },
-  medium: { label: 'Medium', hint: 'Balanced speed and care.' },
-  high: { label: 'High', hint: 'Thinks longer — good for tricky changes.' },
-  xhigh: { label: 'Extra high', hint: 'Thinks much longer on hard problems.' },
-  max: { label: 'Max', hint: 'The most thinking — slowest, for the hardest work.' }
-}
-
 /** A token count the way windows are named: 200K, 1M, 1.05M. */
 export function formatTokens(tokens: number): string {
-  if (tokens >= 1_000_000) return `${+(tokens / 1_000_000).toFixed(2)}M`
+  if (tokens >= 1_000_000) {
+    const millions = new Intl.NumberFormat(formatLocale(), {
+      maximumFractionDigits: 2,
+      useGrouping: false
+    })
+    return `${millions.format(tokens / 1_000_000)}M`
+  }
   if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}K`
   return String(tokens)
 }
 
-const CONTEXT_NAME: Record<ContextTier, string> = { default: 'Standard', long_context: 'Long' }
+const CONTEXT_NAME = {
+  default: 'context.standard',
+  long_context: 'context.long'
+} as const satisfies Record<ContextTier, string>
 
 /** Copilot's models listed before "More models", in Copilot's order. */
 const FEATURED = 8
@@ -77,7 +77,7 @@ export function ModelPicker({
   overDialog = false,
   onManageKeys,
   autoHint,
-  label = 'Model'
+  label: labelProp
 }: {
   value: ModelSelection
   disabled: boolean
@@ -95,6 +95,9 @@ export function ModelPicker({
   /** What the picker chooses, e.g. "Design model". */
   label?: string
 }): JSX.Element {
+  const { t } = useTranslation('models')
+  const label = labelProp ?? t('picker.model')
+  const effortName = (e: ReasoningEffort): string => t(`effort.${e}.label` as const)
   const [open, setOpen] = useState(false)
   const [flyout, setFlyout] = useState<Flyout | null>(null)
   // Where the menu opens: beside the trigger, on the side with room. It's drawn
@@ -142,17 +145,17 @@ export function ModelPicker({
   const activeTier = value.autoTier || offered?.defaultTier || ''
   // Where Copilot offers Copilot Fusion, it is Auto: Auto's tiers are Fusion's
   // effort levels, and Copilot's own apps name the switch after it.
-  const fusion = offered?.tiers.some((t) => t.fusion) ?? false
-  const autoName = fusion ? 'Copilot Fusion' : 'Auto'
-  const tiersLabel = fusion ? 'Effort' : 'Optimized for'
+  const fusion = offered?.tiers.some((tier) => tier.fusion) ?? false
+  const autoName = fusion ? 'Copilot Fusion' : t('picker.auto')
+  const tiersLabel = fusion ? t('picker.effort') : t('picker.optimizedFor')
   const chosenTier = value.autoTier
-    ? offered?.tiers.find((t) => t.id === value.autoTier)
+    ? offered?.tiers.find((tier) => tier.id === value.autoTier)
     : undefined
   /** The tier Auto runs on: the one chosen, or Copilot's default. */
   const activeTierName =
     (
-      offered?.tiers.find((t) => t.id === activeTier) ??
-      offered?.tiers.find((t) => t.id === offered.defaultTier)
+      offered?.tiers.find((tier) => tier.id === activeTier) ??
+      offered?.tiers.find((tier) => tier.id === offered.defaultTier)
     )?.name ?? ''
 
   // Copilot Fusion always names its level, as a model names its effort. Auto
@@ -163,7 +166,7 @@ export function ModelPicker({
       : [autoName, chosenTier?.name ?? '']
     : [
         selected?.name ?? missingName(value.model),
-        effort ? EFFORT_LABEL[effort].label : '',
+        effort ? effortName(effort) : '',
         value.contextTier === 'long_context' && activeWindow
           ? formatTokens(activeWindow.tokens)
           : ''
@@ -350,7 +353,7 @@ export function ModelPicker({
           blocked
             ? m.byok?.note
             : m.byok
-              ? `Runs on your ${m.byok.providerName} API key`
+              ? t('picker.runsOnKey', { provider: m.byok.providerName })
               : undefined
         }
         onClick={() => pickModel(m)}
@@ -366,7 +369,7 @@ export function ModelPicker({
             {m.byok.providerName}
           </span>
         ) : (
-          isFastModel(m) && <span className="mp-badge">Fast</span>
+          isFastModel(m) && <span className="mp-badge">{t('picker.fast')}</span>
         )}
         <Codicon name="check" className={`mp-check${on ? '' : ' mp-check--off'}`} />
       </button>
@@ -390,8 +393,8 @@ export function ModelPicker({
           ref={searchRef}
           type="text"
           className="mp-search-input"
-          placeholder="Search models"
-          aria-label="Search models"
+          placeholder={t('picker.search')}
+          aria-label={t('picker.search')}
           autoComplete="off"
           spellCheck={false}
           value={query}
@@ -414,15 +417,15 @@ export function ModelPicker({
                 <Codicon name="warning" className="mp-logo mp-warn" />
                 <span className="mp-item-text">
                   <span className="mp-item-label">{missingName(value.model)}</span>
-                  <span className="mp-item-desc">Not available anymore. Choose another model.</span>
+                  <span className="mp-item-desc">{t('picker.missing')}</span>
                 </span>
               </button>
             )}
             {featured.map(modelRow)}
             {keyModels.length > 0 && (
-              <div className="mp-group" role="group" aria-label="Your API keys">
+              <div className="mp-group" role="group" aria-label={t('picker.yourKeys')}>
                 <div className="mp-heading" aria-hidden="true">
-                  Your API keys
+                  {t('picker.yourKeys')}
                 </div>
                 {keyModels.map(modelRow)}
               </div>
@@ -435,14 +438,19 @@ export function ModelPicker({
                 onClick={manageKeys}
               >
                 <Codicon name="key" className="mp-logo" />
-                <span className="mp-item-label">Add models with your API keys…</span>
+                <span className="mp-item-label">{t('picker.addKeyModels')}</span>
               </button>
             )}
             {more.length > 0 &&
               (showMore ? (
-                <div className="mp-group" role="group" aria-label="More models">
+                <div
+                  className="mp-group"
+                  role="group"
+                  aria-label={t('picker.more')}
+                  data-group="more"
+                >
                   <div className="mp-heading" aria-hidden="true">
-                    More models
+                    {t('picker.more')}
                   </div>
                   {more.map(modelRow)}
                 </div>
@@ -455,14 +463,12 @@ export function ModelPicker({
                     setShowMore(true)
                     requestAnimationFrame(() =>
                       flyRef.current
-                        ?.querySelector<HTMLElement>(
-                          '[aria-label="More models"] [role^="menuitem"]'
-                        )
+                        ?.querySelector<HTMLElement>('[data-group="more"] [role^="menuitem"]')
                         ?.focus()
                     )
                   }}
                 >
-                  <span className="mp-item-label">More models</span>
+                  <span className="mp-item-label">{t('picker.more')}</span>
                   <span className="mp-count">{more.length}</span>
                   <Codicon name="chevron-down" className="mp-caret" />
                 </button>
@@ -470,15 +476,13 @@ export function ModelPicker({
           </>
         )}
         {loading && models.length === 0 && (
-          <div className="mp-empty shimmer-text">Loading models…</div>
+          <div className="mp-empty shimmer-text">{t('picker.loading')}</div>
         )}
         {!loading && models.length === 0 && (
-          <div className="mp-empty">
-            Couldn’t load the models. Close this and open it again to retry.
-          </div>
+          <div className="mp-empty">{t('picker.loadFailed')}</div>
         )}
         {q && results.length === 0 && models.length > 0 && (
-          <div className="mp-empty">No models match “{query.trim()}”</div>
+          <div className="mp-empty">{t('picker.noMatch', { query: query.trim() })}</div>
         )}
       </div>
     </>
@@ -499,10 +503,12 @@ export function ModelPicker({
         >
           <span className="mp-item-text">
             <span className="mp-item-label">
-              {EFFORT_LABEL[e].label}
-              {e === usualEffort && <span className="mp-badge mp-badge--inline">Default</span>}
+              {effortName(e)}
+              {e === usualEffort && (
+                <span className="mp-badge mp-badge--inline">{t('picker.default')}</span>
+              )}
             </span>
-            <span className="mp-item-desc">{EFFORT_LABEL[e].hint}</span>
+            <span className="mp-item-desc">{t(`effort.${e}.hint` as const)}</span>
           </span>
           <Codicon name="check" className={`mp-check${effort === e ? '' : ' mp-check--off'}`} />
         </button>
@@ -514,6 +520,7 @@ export function ModelPicker({
     <div className="mp-fly-items">
       {windows.map((w) => {
         const on = (value.contextTier || 'default') === w.tier
+        const name = CONTEXT_NAME[w.tier]
         return (
           <button
             key={w.tier}
@@ -523,33 +530,35 @@ export function ModelPicker({
             className="mp-item"
             onClick={() => commit({ ...value, contextTier: w.tier === 'default' ? '' : w.tier })}
           >
-            <span className="mp-item-label">{CONTEXT_NAME[w.tier] ?? w.tier}</span>
-            <span className="mp-sub-value">{formatTokens(w.tokens)} tokens</span>
+            <span className="mp-item-label">{name ? t(name) : w.tier}</span>
+            <span className="mp-sub-value">
+              {t('picker.tokens', { tokens: formatTokens(w.tokens) })}
+            </span>
             <Codicon name="check" className={`mp-check${on ? '' : ' mp-check--off'}`} />
           </button>
         )
       })}
-      <p className="mp-note">A long window keeps more of your app and the conversation in view.</p>
+      <p className="mp-note">{t('picker.longWindow')}</p>
     </div>
   )
 
   const tierFlyout = (
     <div className="mp-fly-items">
-      {autoTiers?.tiers.map((t) => {
-        const on = activeTier === t.id
-        const desc = t.enabled ? t.description : t.note || t.description
+      {autoTiers?.tiers.map((tier) => {
+        const on = activeTier === tier.id
+        const desc = tier.enabled ? tier.description : tier.note || tier.description
         return (
           <button
-            key={t.id}
+            key={tier.id}
             type="button"
             role="menuitemradio"
             aria-checked={on}
-            disabled={!t.enabled}
+            disabled={!tier.enabled}
             className="mp-item"
-            onClick={() => commit({ ...AUTO_SELECTION, autoTier: t.id })}
+            onClick={() => commit({ ...AUTO_SELECTION, autoTier: tier.id })}
           >
             <span className="mp-item-text">
-              <span className="mp-item-label">{t.name}</span>
+              <span className="mp-item-label">{tier.name}</span>
               {desc && <span className="mp-item-desc">{desc}</span>}
             </span>
             <Codicon name="check" className={`mp-check${on ? '' : ' mp-check--off'}`} />
@@ -558,10 +567,7 @@ export function ModelPicker({
       })}
       {fusion && (
         <>
-          <p className="mp-note">
-            High and Max can use more than one model, such as one to review another’s work, so a
-            request can take longer and cost more.
-          </p>
+          <p className="mp-note">{t('picker.fusionNote')}</p>
           <button
             type="button"
             role="menuitem"
@@ -571,7 +577,7 @@ export function ModelPicker({
               void window.api.openExternal(FUSION_DOCS)
             }}
           >
-            <span className="mp-item-label">Learn more about Copilot Fusion</span>
+            <span className="mp-item-label">{t('picker.fusionDocs')}</span>
             <Codicon name="link-external" className="mp-caret" />
           </button>
         </>
@@ -597,14 +603,20 @@ export function ModelPicker({
         className={`composer-pill mp-pill${open ? ' is-open' : ''}`}
         title={
           disabled
-            ? 'The model can’t be changed while the assistant is working'
-            : `${label}: ${pillText}${selected?.byok ? ` — on your ${selected.byok.providerName} API key` : ''}`
+            ? t('picker.busy')
+            : selected?.byok
+              ? t('picker.pillOnKey', {
+                  label,
+                  choice: pillText,
+                  provider: selected.byok.providerName
+                })
+              : t('picker.pill', { label, choice: pillText })
         }
         onClick={() => (open ? closeMenu(false) : openMenu())}
         disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`${label}: ${pillText}`}
+        aria-label={t('picker.pill', { label, choice: pillText })}
       >
         {selected && <ModelLogo model={selected} className="mp-pill-logo" />}
         {missing && <Codicon name="warning" className="mp-pill-warn" />}
@@ -647,10 +659,7 @@ export function ModelPicker({
                 <span className="mp-item-text">
                   <span className="mp-item-label">{autoName}</span>
                   <span className="mp-item-desc">
-                    {autoHint ??
-                      (fusion
-                        ? 'Copilot picks the models for each request.'
-                        : 'Copilot picks the model for each request.')}
+                    {autoHint ?? (fusion ? t('picker.autoHintFusion') : t('picker.autoHint'))}
                   </span>
                 </span>
                 <span
@@ -667,7 +676,7 @@ export function ModelPicker({
                 <div className="mp-group">
                   {subRow(
                     'model',
-                    'Model',
+                    t('picker.model'),
                     <>
                       {selected && <ModelLogo model={selected} className="mp-logo" />}
                       <span className="mp-sub-text">
@@ -676,10 +685,14 @@ export function ModelPicker({
                     </>
                   )}
                   {efforts.length > 0 &&
-                    subRow('effort', 'Effort', effort ? EFFORT_LABEL[effort].label : 'Default')}
+                    subRow(
+                      'effort',
+                      t('picker.effort'),
+                      effort ? effortName(effort) : t('picker.default')
+                    )}
                   {windows.length > 1 &&
                     activeWindow &&
-                    subRow('context', 'Context window', formatTokens(activeWindow.tokens))}
+                    subRow('context', t('picker.contextWindow'), formatTokens(activeWindow.tokens))}
                 </div>
               )}
               {onManageKeys && (
@@ -692,7 +705,7 @@ export function ModelPicker({
                     onClick={manageKeys}
                   >
                     <Codicon name="key" className="mp-logo" />
-                    <span className="mp-item-label">Manage API keys…</span>
+                    <span className="mp-item-label">{t('picker.manageKeys')}</span>
                   </button>
                 </>
               )}
@@ -703,12 +716,12 @@ export function ModelPicker({
                 role="menu"
                 aria-label={
                   flyout === 'model'
-                    ? 'Models'
+                    ? t('picker.models')
                     : flyout === 'effort'
-                      ? 'Effort'
+                      ? t('picker.effort')
                       : flyout === 'tier'
                         ? tiersLabel
-                        : 'Context window'
+                        : t('picker.contextWindow')
                 }
                 ref={flyRef}
                 onKeyDown={onFlyKey}

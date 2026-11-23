@@ -1,0 +1,179 @@
+{
+  "common": {
+    "copilotError": "Copilot hat einen Fehler gemeldet."
+  },
+  "security": {
+    "signInRequired": "Du bist nicht bei GitHub Copilot angemeldet. Melde dich in Fabricator bei Copilot an und führe die Prüfung dann erneut aus.",
+    "timedOut": "Copilot ist nicht innerhalb von {{minutes}} Minuten fertig geworden.",
+    "stopped": "Copilot hat angehalten, bevor es fertig war.",
+    "noReport": "Copilot wurde beendet, ohne zu melden, was es gefunden hat.",
+    "summary": {
+      "danger": "Es enthält Code, der diesem Computer oder deinen Daten schaden könnte.",
+      "caution": "Es enthält Dinge, die du dir ansehen solltest, bevor du fortfährst.",
+      "clear": "Nichts darin wirkt riskant."
+    },
+    "cantMakeFolder": "Fabricator konnte keinen Ordner für die Prüfung erstellen: {{error}}",
+    "invalidCheck": "Diese Prüfung kann Fabricator nicht ausführen.",
+    "unsupportedFile": "Fabricator prüft .fabricator-, .rayfin- und .zip-Dateien.",
+    "fileMissing": "Diese Datei ist nicht mehr vorhanden.",
+    "alreadyRunning": "Diese Prüfung läuft bereits.",
+    "clear": {
+      "install": "Keine Installationsskripts.",
+      "agents": "Keine Anweisungen oder Tools für Coding-Agents."
+    },
+    "advice": {
+      "installScripts": "Lies nach, was diese Befehle tun, bevor du fortfährst. Rayfin-Apps brauchen für die Installation keine eigenen Befehle.",
+      "packageSources": "Stelle sicher, dass du weißt, wer diese Pakete veröffentlicht und warum sie nicht von npm stammen.",
+      "packageAliases": "Prüfe, ob jedes davon wirklich das Paket ist, das es ersetzt.",
+      "packageHosts": "Eine firmeneigene Paket-Registry ist in Ordnung. Andernfalls finde heraus, warum nicht die Registry von npm verwendet wird.",
+      "npmSettings": "Fahre nur fort, wenn du weißt, warum es das tut. Projekte brauchen diese Einstellungen nicht.",
+      "gitSettings": "Fahre nur fort, wenn du weißt, warum sie vorhanden sind. Ein Projekt, das mit dir geteilt wurde, braucht sie nicht.",
+      "unreadableSettings": "Fahre nur fort, wenn du sehen kannst, was sie festlegen: npm oder git könnten trotzdem Programme ausführen, die darin genannt werden.",
+      "gitDir": "Fahre nur fort, wenn du weißt, warum es vorhanden ist. Ein Projekt, das mit dir geteilt wurde, braucht es nicht.",
+      "unreadableManifest": "Fahre nur fort, wenn du sehen kannst, was darin steht: npm könnte trotzdem Skripts daraus ausführen oder Pakete daraus herunterladen.",
+      "gitHooks": "Lies nach, was die Hooks ausführen, bevor du fortfährst.",
+      "editorTasks": "Prüfe, was die Aufgabe ausführt, bevor du das Projekt in VS Code öffnest.",
+      "mcpServers": "Prüfe, was diese Programme sind, bevor du sie von einem Coding-Agent starten lässt.",
+      "programs": "Finde heraus, wofür sie da sind, bevor du fortfährst.",
+      "aimedAtAi": "Verlass dich bei diesem Paket nicht auf die Prüfung durch eine KI, auch nicht auf diese. Lies den Code selbst oder frag die Person, die es dir geschickt hat.",
+      "hiddenCode": "Der eigene Code einer App hat keinen Grund zu verbergen, was er tut. Frag die Person, die es dir geschickt hat, was das ist."
+    },
+    "checks": {
+      "list": {
+        "next": "{{items}}, {{next}}",
+        "last": "{{items}} und {{last}}",
+        "more_one": "{{items}} und {{count}} weiteres",
+        "more_other": "{{items}} und {{count}} weitere"
+      },
+      "installScripts": {
+        "title": "Führt bei der Paketinstallation Befehle aus",
+        "script": "{{script}}: {{command}}",
+        "scriptIn": "{{script}} in {{folder}}: {{command}}",
+        "nativeBuild": "{{command}} (zum Kompilieren von nativem Code)",
+        "nativeBuildIn": "{{command}} in {{folder}} (zum Kompilieren von nativem Code)",
+        "detail": "Wenn Fabricator die Pakete installiert, führt npm noch vor dem Öffnen der App Folgendes aus: {{list}}."
+      },
+      "packageSources": {
+        "title": "Bezieht Pakete aus anderen Quellen als npm",
+        "what": "{{name}} stammt aus {{source}}",
+        "detail": "{{list}}. npm prüft keinen Code, der aus git, von einer Website oder aus einem Ordner stammt, und dieser Code kann sich jederzeit ändern."
+      },
+      "packageAliases": {
+        "title": "Installiert Pakete unter anderen Namen",
+        "what": "{{name}} ist in Wirklichkeit {{target}}",
+        "detail": "{{list}}: npm installiert ein Paket unter dem Namen eines anderen."
+      },
+      "packageHosts": {
+        "title": "Lädt Pakete von anderen Servern herunter",
+        "registry": "{{file}} verweist npm auf {{host}}",
+        "lockfile_one": "{{file}} bezieht {{count}} Paket von {{host}}",
+        "lockfile_other": "{{file}} bezieht {{count}} Pakete von {{host}}",
+        "detail": "{{list}}, anstatt die Registry von npm zu verwenden."
+      },
+      "npmSettings": {
+        "title": "Ändert die Programme, die npm ausführt",
+        "what": "{{file}} setzt {{key}} auf {{value}}",
+        "detail": "{{list}}. npm würde diese Werte verwenden, während es Pakete installiert und Skripts ausführt."
+      },
+      "gitSettings": {
+        "title": "Enthält Git-Einstellungen, die Programme ausführen",
+        "detailProject": "In den Git-Einstellungen ist Folgendes festgelegt: {{list}}. Git führt diese Programme aus, wenn es im Ordner arbeitet, und das geschieht jedes Mal, wenn Fabricator eine Version speichert.",
+        "detailApp": "In den Git-Einstellungen ist Folgendes festgelegt: {{list}}. Git führt diese Programme aus, wenn es im Ordner arbeitet."
+      },
+      "unreadableSettings": {
+        "title": "Enthält Einstellungen, die Fabricator nicht lesen kann",
+        "detail_one": "Fabricator kann {{list}} nicht lesen: Die Datei ist zu groß oder kein reiner Text, daher lässt sich nicht erkennen, was npm oder git daraus ausführen würden.",
+        "detail_other": "Fabricator kann {{list}} nicht lesen: Die Dateien sind zu groß oder kein reiner Text, daher lässt sich nicht erkennen, was npm oder git daraus ausführen würden."
+      },
+      "gitDir": {
+        "title": "Verweist git auf einen anderen Ordner",
+        "pointsAt": "{{file}} verweist git auf {{folder}}",
+        "pointsElsewhere": "{{file}} verweist git auf einen anderen Ordner",
+        "detail": "{{list}}. Git übernimmt von dort seine Einstellungen und Hooks, und diese können Programme ausführen, wann immer git im Ordner arbeitet.",
+        "hooks_one": "{{detail}} Der Hook dort ist {{hooks}}.",
+        "hooks_other": "{{detail}} Die Hooks dort sind {{hooks}}."
+      },
+      "unreadableManifest": {
+        "title_one": "Enthält eine npm-Datei, die Fabricator nicht lesen kann",
+        "title_other": "Enthält npm-Dateien, die Fabricator nicht lesen kann",
+        "detail_one": "Fabricator kann {{list}} nicht lesen: Die Datei ist zu groß oder kein gültiges JSON, daher lässt sich nicht erkennen, was npm daraus ausführen oder herunterladen würde.",
+        "detail_other": "Fabricator kann {{list}} nicht lesen: Die Dateien sind zu groß oder kein gültiges JSON, daher lässt sich nicht erkennen, was npm daraus ausführen oder herunterladen würde."
+      },
+      "gitHooks": {
+        "title": "Richtet Git-Hooks ein",
+        "detail": "Sobald die Pakete installiert sind, führt git bei jedem Speichern einer Version Folgendes aus: {{list}}. Fabricator speichert nach jedem Chat-Durchgang eine Version."
+      },
+      "editorTasks": {
+        "title": "Führt eine Aufgabe aus, wenn der Ordner in VS Code geöffnet wird",
+        "detail": "{{file}} startet eine Aufgabe, sobald der Ordner in VS Code geöffnet wird und du das erlaubst."
+      },
+      "mcpServers": {
+        "title": "Fügt MCP-Server für Coding-Agents hinzu",
+        "detail": "{{file}} startet {{list}} für Coding-Agents, die diese Datei verwenden."
+      },
+      "programs": {
+        "title": "Enthält Programme",
+        "detail": "Es enthält {{list}}. Rayfin-Apps brauchen keine eigenen Programme, und Copilot kann sie nicht lesen."
+      },
+      "aimedAtAi": {
+        "title": "Enthält Text, der sich an KI-Tools richtet",
+        "says": "{{file}} enthält „{{text}}“",
+        "named": "{{file}} heißt „{{name}}“",
+        "detail": "{{list}}. Text, der versucht, KI-Prüfer oder Coding-Agents zu beeinflussen, ist ein Warnsignal."
+      },
+      "hiddenCode": {
+        "title": "Enthält versteckten oder codierten Code",
+        "what": "{{file}} ({{how}})",
+        "how": {
+          "obfuscatorNames": "Namen wie {{example}}, typisch für einen Obfuscator",
+          "decodesAndRuns": "führt decodierten Code aus",
+          "charCodes": "erzeugt Code aus Zeichencodes",
+          "escapedBytes": "lange Folgen von Bytes mit Escapezeichen"
+        },
+        "detail": "{{list}}: Code, der so geschrieben ist, dass Menschen ihn nicht lesen können."
+      }
+    }
+  },
+  "advisor": {
+    "projectNotFound": "Projekt nicht gefunden.",
+    "invalidState": "Ungültiger Status des Beraters.",
+    "stateTooLarge": "Der Status des Beraters ist zu groß zum Speichern.",
+    "reviewIncomplete": "Die Prüfung konnte nicht abgeschlossen werden: {{detail}}",
+    "reviewTimedOut": "Die Prüfung konnte nicht abgeschlossen werden: Nach 10 Minuten wurde das Zeitlimit überschritten.",
+    "reviewNoResults": "Die Prüfung konnte nicht abgeschlossen werden: Copilot wurde beendet, ohne Ergebnisse zu melden.",
+    "notEvaluated": "In dieser Prüfung nicht bewertet.",
+    "noIssues": "In den von Copilot geprüften Regeln wurden keine Probleme gefunden.",
+    "foundIssues_one": "Copilot hat {{count}} Problem gefunden.",
+    "foundIssues_other": "Copilot hat {{count}} Probleme gefunden.",
+    "stoppedTimedOut": "{{summary}} Die Prüfung wurde vorzeitig beendet (Zeitlimit überschritten), daher wurden möglicherweise nicht alle Regeln geprüft.",
+    "stoppedError": "{{summary}} Die Prüfung wurde vorzeitig beendet (Copilot hat einen Fehler gemeldet), daher wurden möglicherweise nicht alle Regeln geprüft.",
+    "stoppedClosed": "{{summary}} Die Prüfung wurde vorzeitig beendet (die Sitzung wurde beendet), daher wurden möglicherweise nicht alle Regeln geprüft.",
+    "timedOut": "Das Zeitlimit wurde überschritten.",
+    "cantStartReview": "Die Prüfung konnte nicht gestartet werden. {{error}}",
+    "cantStartExplanation": "Die Erklärung konnte nicht gestartet werden. {{error}}",
+    "noExplanation": "Copilot wurde ohne Erklärung beendet.",
+    "explanationIncomplete": "Die Erklärung konnte nicht abgeschlossen werden. {{detail}}",
+    "cantStartVerification": "Die Verifizierung konnte nicht gestartet werden. {{error}}",
+    "noVerdict": "Copilot wurde beendet, ohne ein Ergebnis zu liefern.",
+    "verificationIncomplete": "Die Verifizierung konnte nicht abgeschlossen werden. {{detail}}",
+    "reviewRunning": "Für dieses Projekt läuft bereits eine Prüfung.",
+    "explanationRunning": "Für dieses Projekt wird bereits eine Erklärung erstellt.",
+    "verificationRunning": "Für dieses Projekt läuft bereits eine Verifizierung."
+  },
+  "help": {
+    "emptyQuestion": "Gib zuerst eine Frage ein.",
+    "questionTooLong": "Die Frage ist zu lang. Hänge die Datei an, statt ihren Inhalt einzufügen.",
+    "tookTooLong": "Das hat zu lange gedauert. Versuche, eine konkretere Frage zu stellen.",
+    "connectionClosed": "Die Verbindung zu Copilot wurde geschlossen, bevor eine Antwort ankam. Versuche es erneut.",
+    "noAnswer": "Es kam keine Antwort zurück. Versuche es erneut.",
+    "signInRequired": "Du musst bei GitHub Copilot angemeldet sein, um die Hilfe zu verwenden. Öffne das Kontomenü in der App-Leiste, melde dich an und frag dann erneut.",
+    "quotaUsed": "Dein Copilot-Kontingent ist derzeit aufgebraucht, daher kann die Hilfe nicht antworten. Versuche es später erneut.",
+    "cantReachCopilot": "Die Hilfe konnte Copilot nicht erreichen: {{error}}",
+    "localOutput": {
+      "all": "Ausgabe des lokalen Back-Ends lesen",
+      "from": "Ausgabe von {{source}} im lokalen Back-End lesen",
+      "problems": "Ausgabe des lokalen Back-Ends lesen (Warnungen und Fehler)",
+      "fromProblems": "Ausgabe von {{source}} im lokalen Back-End lesen (Warnungen und Fehler)"
+    }
+  }
+}

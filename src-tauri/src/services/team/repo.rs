@@ -106,7 +106,7 @@ async fn git_in(dir: &Path, args: &[&str], timeout_ms: u64, on: Option<OnData>) 
 
 fn failure(action: &str, res: &RunResult) -> String {
   if res.not_found {
-    return format!("{action}: git isn't installed.");
+    return t!("team.repo.failure.missingGit", action = action);
   }
   let detail = res
     .stderr
@@ -119,18 +119,18 @@ fn failure(action: &str, res: &RunResult) -> String {
     .join(" ");
   if detail.to_ascii_lowercase().contains("authentication failed") || detail.contains("could not read Username") {
     return match gh::current_account() {
-      Some(login) => format!("{action}: GitHub didn't accept the GitHub CLI's sign-in for {login}. Sign in to GitHub as {login} again, then retry."),
-      None => format!("{action}: GitHub sign-in is required. Sign in to GitHub again, then retry."),
+      Some(login) => t!("team.repo.failure.signInFor", action = action, login = login),
+      None => t!("team.repo.failure.signIn", action = action),
     };
   }
   // A lock held for longer than [`git::run`] waits it out. Git's own wording
   // ("Another git process seems to be running…") means nothing to the people
   // using Fabricator.
   if git::is_lock_failure(&detail) {
-    return format!("{action}: something else on this computer is using this app's folder. Wait a moment, then try again.");
+    return t!("team.repo.failure.busy", action = action);
   }
   if detail.is_empty() {
-    format!("{action} failed.")
+    t!("team.repo.failure.failed", action = action)
   } else {
     format!("{action}: {detail}")
   }
@@ -148,21 +148,21 @@ async fn git_ok(dir: &Path, args: &[&str], action: &str) -> Result<String, Strin
 /// Create the team repo's first commit from `files` and push it to `main`.
 pub async fn seed_repository(full_name: &str, files: &[(String, String)], name: &str, email: &str) -> Result<(), String> {
   let tmp = std::env::temp_dir().join(format!("fabricator-seed-{}", uuid::Uuid::new_v4()));
-  std::fs::create_dir_all(&tmp).map_err(|e| format!("Couldn't prepare the repository: {e}"))?;
+  std::fs::create_dir_all(&tmp).map_err(|e| t!("team.repo.cantPrepare", error = e))?;
   let result = async {
-    git_ok(&tmp, &["init", "-q", "-b", "main"], "Prepare the repository").await?;
+    git_ok(&tmp, &["init", "-q", "-b", "main"], &t!("team.repo.action.prepareRepository")).await?;
     for (rel, content) in files {
       let path = tmp.join(rel);
       if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Couldn't write {rel}: {e}"))?;
+        std::fs::create_dir_all(parent).map_err(|e| t!("team.fs.cantWrite", path = rel, error = e))?;
       }
-      std::fs::write(&path, content).map_err(|e| format!("Couldn't write {rel}: {e}"))?;
+      std::fs::write(&path, content).map_err(|e| t!("team.fs.cantWrite", path = rel, error = e))?;
     }
-    git_ok(&tmp, &["add", "-A"], "Prepare the repository").await?;
+    git_ok(&tmp, &["add", "-A"], &t!("team.repo.action.prepareRepository")).await?;
     git_ok(
       &tmp,
       &["-c", &format!("user.name={name}"), "-c", &format!("user.email={email}"), "commit", "-q", "-m", "Set up Fabricator team workspace"],
-      "Create the first commit",
+      &t!("team.repo.action.firstCommit"),
     )
     .await?;
     let url = remote_url(full_name);
@@ -170,7 +170,7 @@ pub async fn seed_repository(full_name: &str, files: &[(String, String)], name: 
     if res.ok {
       Ok(())
     } else {
-      Err(failure("Push the workspace to GitHub", &res))
+      Err(failure(&t!("team.repo.action.pushWorkspace"), &res))
     }
   }
   .await;
@@ -182,14 +182,14 @@ pub async fn seed_repository(full_name: &str, files: &[(String, String)], name: 
 pub async fn ensure_clone(workspace: &TeamWorkspace, on: Option<OnData>) -> Result<(), String> {
   let dir = clone_dir(workspace);
   if !dir.join(".git").exists() {
-    std::fs::create_dir_all(&workspace.dir).map_err(|e| format!("Couldn't create {}: {e}", workspace.dir))?;
+    std::fs::create_dir_all(&workspace.dir).map_err(|e| t!("team.fs.cantCreate", path = workspace.dir, error = e))?;
     let _ = std::fs::remove_dir_all(&dir);
     let target = dir.to_string_lossy().to_string();
     let url = remote_url(&workspace.repo);
     let res = git_in(Path::new(&workspace.dir), &["clone", "--no-checkout", "--quiet", &url, &target], 600_000, on).await;
     if !res.ok {
       let _ = std::fs::remove_dir_all(&dir);
-      return Err(failure("Download the team workspace", &res));
+      return Err(failure(&t!("team.repo.action.download"), &res));
     }
   }
   fetch(workspace).await
@@ -200,15 +200,15 @@ pub async fn fetch(workspace: &TeamWorkspace) -> Result<(), String> {
   if res.ok {
     Ok(())
   } else {
-    Err(failure("Get the team's latest changes", &res))
+    Err(failure(&t!("team.repo.action.fetch"), &res))
   }
 }
 
 /// Attribute commits in this workspace to the GitHub user.
 pub async fn set_identity(workspace: &TeamWorkspace, name: &str, email: &str) -> Result<(), String> {
   let dir = clone_dir(workspace);
-  git_ok(&dir, &["config", "user.name", name], "Set your git name").await?;
-  git_ok(&dir, &["config", "user.email", email], "Set your git email").await?;
+  git_ok(&dir, &["config", "user.name", name], &t!("team.repo.action.setName")).await?;
+  git_ok(&dir, &["config", "user.email", email], &t!("team.repo.action.setEmail")).await?;
   Ok(())
 }
 
@@ -221,13 +221,13 @@ pub async fn read_main_file(workspace: &TeamWorkspace, path: &str) -> Result<Opt
   } else if res.stderr.contains("does not exist") || res.stderr.contains("exists on disk, but not in") || res.stderr.contains("invalid object name") {
     Ok(None)
   } else {
-    Err(failure("Read the team workspace", &res))
+    Err(failure(&t!("team.repo.action.readWorkspace"), &res))
   }
 }
 
 /// Project folders on `main` (folders with `rayfin/rayfin.yml`): (folder, name).
 pub async fn list_projects(workspace: &TeamWorkspace) -> Result<Vec<(String, String)>, String> {
-  let out = git_ok(&clone_dir(workspace), &["ls-tree", "-r", "--name-only", "origin/main"], "List the team's apps").await?;
+  let out = git_ok(&clone_dir(workspace), &["ls-tree", "-r", "--name-only", "origin/main"], &t!("team.repo.action.listApps")).await?;
   let mut projects = Vec::new();
   for folder in project_folders(&out) {
     let yml = read_main_file(workspace, &format!("{folder}/rayfin/rayfin.yml")).await?.unwrap_or_default();
@@ -315,7 +315,7 @@ pub async fn read_app_config(workspace: &TeamWorkspace, tree: &str, folder: &str
   if res.ok || (res.exit_code == Some(1) && res.stderr.trim().is_empty()) {
     Ok(config_from_grep(&res.stdout, tree, folder, &layout))
   } else {
-    Err(failure("Read the app's settings", &res))
+    Err(failure(&t!("team.repo.action.readSettings"), &res))
   }
 }
 
@@ -409,15 +409,15 @@ pub async fn add_worktree(workspace: &TeamWorkspace, folder: &str, branch: &str,
     args.push("--no-track");
   }
   args.extend(["-B", branch, &target, &start]);
-  git_ok(&clone, &args, "Prepare the project folder").await?;
-  git_ok(&wt, &["sparse-checkout", "set", "--cone", folder], "Limit the checkout to this app").await?;
-  git_ok(&wt, &["checkout", "--quiet"], "Check out the app").await?;
+  git_ok(&clone, &args, &t!("team.repo.action.prepareFolder")).await?;
+  git_ok(&wt, &["sparse-checkout", "set", "--cone", folder], &t!("team.repo.action.limitCheckout")).await?;
+  git_ok(&wt, &["checkout", "--quiet"], &t!("team.repo.action.checkOut")).await?;
   Ok(wt)
 }
 
 /// Start a new working branch from the published `main` in an existing worktree.
 pub async fn start_branch(worktree: &Path, branch: &str) -> Result<(), String> {
-  git_ok(worktree, &["switch", "--quiet", "--no-track", "-C", branch, "origin/main"], "Start a new working branch").await.map(|_| ())
+  git_ok(worktree, &["switch", "--quiet", "--no-track", "-C", branch, "origin/main"], &t!("team.repo.action.startBranch")).await.map(|_| ())
 }
 
 pub async fn current_branch(worktree: &Path) -> Option<String> {
@@ -437,13 +437,13 @@ pub async fn commit_folder(worktree: &Path, folder: &str, message: &str) -> Resu
   let conflicted = if merging { conflicted_files(worktree).await } else { Vec::new() };
   let mut add = vec!["add", "-A", "--", folder];
   add.extend(conflicted.iter().map(String::as_str));
-  git_ok(worktree, &add, "Save your changes").await?;
+  git_ok(worktree, &add, &t!("team.repo.action.saveChanges")).await?;
   let staged = git_in(worktree, &["diff", "--cached", "--quiet"], 60_000, None).await;
   // A pending merge commit still needs concluding even without new edits.
   if staged.ok && !merging {
     return Ok(false);
   }
-  git_ok(worktree, &["commit", "--quiet", "--no-verify", "-m", message], "Save your changes").await?;
+  git_ok(worktree, &["commit", "--quiet", "--no-verify", "-m", message], &t!("team.repo.action.saveChanges")).await?;
   Ok(true)
 }
 
@@ -453,7 +453,7 @@ pub async fn push(worktree: &Path, branch: &str) -> Result<(), String> {
   if res.ok {
     Ok(())
   } else {
-    Err(failure("Save your work to GitHub", &res))
+    Err(failure(&t!("team.repo.action.push"), &res))
   }
 }
 
@@ -603,7 +603,7 @@ pub async fn merge_main(worktree: &Path, keep_conflicts: bool, name: &str, email
   let files = conflicted_files(worktree).await;
   if files.is_empty() {
     let _ = git_in(worktree, &["merge", "--abort"], 60_000, None).await;
-    return Err(failure("Bring in your teammates' changes", &res));
+    return Err(failure(&t!("team.repo.action.merge"), &res));
   }
   if !keep_conflicts {
     let _ = git_in(worktree, &["merge", "--abort"], 60_000, None).await;
@@ -636,15 +636,15 @@ pub async fn removal_branch(workspace: &TeamWorkspace, folder: &str, branch: &st
   let target = wt.to_string_lossy().to_string();
   let clone = clone_dir(workspace);
   let _ = git_in(&clone, &["worktree", "prune"], 30_000, None).await;
-  git_ok(&clone, &["worktree", "add", "--no-checkout", "--no-track", "-B", branch, &target, "origin/main"], "Prepare the removal").await?;
+  git_ok(&clone, &["worktree", "add", "--no-checkout", "--no-track", "-B", branch, &target, "origin/main"], &t!("team.repo.action.prepareRemoval")).await?;
   let result = async {
-    git_ok(&wt, &["sparse-checkout", "set", "--cone", folder], "Prepare the removal").await?;
-    git_ok(&wt, &["checkout", "--quiet"], "Prepare the removal").await?;
-    git_ok(&wt, &["rm", "-r", "-q", "--", folder], "Remove the app").await?;
+    git_ok(&wt, &["sparse-checkout", "set", "--cone", folder], &t!("team.repo.action.prepareRemoval")).await?;
+    git_ok(&wt, &["checkout", "--quiet"], &t!("team.repo.action.prepareRemoval")).await?;
+    git_ok(&wt, &["rm", "-r", "-q", "--", folder], &t!("team.repo.action.removeApp")).await?;
     git_ok(
       &wt,
       &["-c", &format!("user.name={name}"), "-c", &format!("user.email={email}"), "commit", "--quiet", "--no-verify", "-m", &format!("Remove {folder}")],
-      "Remove the app",
+      &t!("team.repo.action.removeApp"),
     )
     .await?;
     push(&wt, branch).await
@@ -662,8 +662,8 @@ pub async fn abort_merge(worktree: &Path) {
 /// Throw away uncommitted edits in the project folder.
 pub async fn discard_changes(worktree: &Path, folder: &str) -> Result<(), String> {
   abort_merge(worktree).await;
-  git_ok(worktree, &["reset", "--quiet", "--hard"], "Discard your changes").await?;
-  git_ok(worktree, &["clean", "-fdq", "--", folder], "Discard your changes").await?;
+  git_ok(worktree, &["reset", "--quiet", "--hard"], &t!("team.repo.action.discard")).await?;
+  git_ok(worktree, &["clean", "-fdq", "--", folder], &t!("team.repo.action.discard")).await?;
   Ok(())
 }
 
@@ -677,7 +677,7 @@ pub async fn remove_worktree(workspace: &TeamWorkspace, folder: &str) -> Result<
   let target = wt.to_string_lossy().to_string();
   let res = git_in(&clone_dir(workspace), &["worktree", "remove", "--force", &target], 120_000, None).await;
   if !res.ok && wt.exists() {
-    std::fs::remove_dir_all(&wt).map_err(|e| format!("Couldn't remove {}: {e}", wt.display()))?;
+    std::fs::remove_dir_all(&wt).map_err(|e| t!("team.fs.cantRemove", path = wt.display(), error = e))?;
     let _ = git_in(&clone_dir(workspace), &["worktree", "prune"], 30_000, None).await;
   }
   Ok(())
@@ -707,7 +707,7 @@ pub fn copy_project(src: &Path, dst: &Path) -> Result<usize, String> {
   let mut copied = 0usize;
   let mut stack = vec![src.to_path_buf()];
   while let Some(dir) = stack.pop() {
-    let entries = std::fs::read_dir(&dir).map_err(|e| format!("Couldn't read {}: {e}", dir.display()))?;
+    let entries = std::fs::read_dir(&dir).map_err(|e| t!("team.fs.cantRead", path = dir.display(), error = e))?;
     for entry in entries.flatten() {
       let path = entry.path();
       let rel = path.strip_prefix(src).map_err(|e| e.to_string())?.to_path_buf();
@@ -720,9 +720,9 @@ pub fn copy_project(src: &Path, dst: &Path) -> Result<usize, String> {
       } else if kind.is_file() {
         let out = dst.join(&rel);
         if let Some(parent) = out.parent() {
-          std::fs::create_dir_all(parent).map_err(|e| format!("Couldn't create {}: {e}", parent.display()))?;
+          std::fs::create_dir_all(parent).map_err(|e| t!("team.fs.cantCreate", path = parent.display(), error = e))?;
         }
-        std::fs::copy(&path, &out).map_err(|e| format!("Couldn't copy {}: {e}", rel.display()))?;
+        std::fs::copy(&path, &out).map_err(|e| t!("team.fs.cantCopy", path = rel.display(), error = e))?;
         copied += 1;
       }
     }

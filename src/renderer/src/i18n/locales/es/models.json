@@ -1,0 +1,126 @@
+{
+  "effort": {
+    "none": {
+      "label": "Ninguno",
+      "hint": "Responde sin razonamiento adicional."
+    },
+    "low": {
+      "label": "Bajo",
+      "hint": "Rápido: adecuado para cambios pequeños y claros."
+    },
+    "medium": {
+      "label": "Medio",
+      "hint": "Equilibrio entre velocidad y cuidado."
+    },
+    "high": {
+      "label": "Alto",
+      "hint": "Piensa más: bueno para cambios complicados."
+    },
+    "xhigh": {
+      "label": "Muy alto",
+      "hint": "Piensa mucho más en problemas difíciles."
+    },
+    "max": {
+      "label": "Máximo",
+      "hint": "El máximo razonamiento: el más lento, para el trabajo más difícil."
+    }
+  },
+  "context": {
+    "standard": "Estándar",
+    "long": "Largo"
+  },
+  "picker": {
+    "model": "Modelo",
+    "auto": "Automático",
+    "autoHint": "Copilot elige el modelo para cada solicitud.",
+    "autoHintFusion": "Copilot elige los modelos para cada solicitud.",
+    "effort": "Esfuerzo",
+    "optimizedFor": "Optimizado para",
+    "contextWindow": "Ventana de contexto",
+    "default": "Predeterminado",
+    "models": "Modelos",
+    "search": "Buscar modelos",
+    "missing": "Ya no está disponible. Elige otro modelo.",
+    "runsOnKey": "Se ejecuta con tu clave de API de {{provider}}",
+    "fast": "Rápido",
+    "yourKeys": "Tus claves de API",
+    "addKeyModels": "Agregar modelos con tus claves de API…",
+    "more": "Más modelos",
+    "loading": "Cargando modelos…",
+    "loadFailed": "No se pudieron cargar los modelos. Cierra esto y vuelve a abrirlo para reintentarlo.",
+    "noMatch": "Ningún modelo coincide con “{{query}}”",
+    "tokens": "{{tokens}} tokens",
+    "longWindow": "Una ventana larga mantiene a la vista más contenido de tu aplicación y de la conversación.",
+    "fusionNote": "High y Max pueden usar más de un modelo, por ejemplo uno que revise el trabajo de otro, así que una solicitud puede tardar más y costar más.",
+    "fusionDocs": "Más información sobre Copilot Fusion",
+    "busy": "No se puede cambiar el modelo mientras el asistente está trabajando",
+    "pill": "{{label}}: {{choice}}",
+    "pillOnKey": "{{label}}: {{choice}} — con tu clave de API de {{provider}}",
+    "manageKeys": "Administrar claves de API…"
+  },
+  "providers": {
+    "state": {
+      "ok": "Clave guardada",
+      "off": "Sin clave",
+      "error": "Requiere atención"
+    },
+    "errors": {
+      "read": "No se pudieron leer tus proveedores de modelos.",
+      "generic": "No funcionó. Inténtalo de nuevo.",
+      "saveModels": "No se pudo guardar tu selección de modelos."
+    },
+    "title": "Proveedores de modelos",
+    "sub": "Usa modelos de estos proveedores con tus propias claves de API en el chat de Crear, el Asesor y Diseño. El proveedor te los factura. Copilot sigue dirigiendo la conversación, así que mantén la sesión iniciada en GitHub Copilot.",
+    "unsupported": "Fabricator todavía no puede guardar claves de API de forma segura en este sistema operativo.",
+    "purpose": "{{description}}, facturados a tu cuenta de {{name}}.",
+    "addKeyLabel": "Agregar tu clave de API de {{name}}",
+    "addKey": "Agregar clave",
+    "apiKey": "Clave de API",
+    "savedIn": "Guardada en {{store}}",
+    "confirmRemove": "¿Quitar tu clave de {{name}}?",
+    "checkTitle": "Volver a comprobar la clave con {{name}} y actualizar sus modelos",
+    "checkAgain": "Volver a comprobar",
+    "replace": "Reemplazar",
+    "removeLabel": "Quitar tu clave de API de {{name}}",
+    "removing": "Quitando…",
+    "inPickers": "En los selectores de modelos",
+    "enabledCount": "{{enabled}} de {{total}}",
+    "pickerList": "Modelos de {{name}} en los selectores de modelos",
+    "images": "imágenes",
+    "recommended": "Recomendado",
+    "retiringTitle": "{{name}} va a retirar este modelo",
+    "retiring": "Se retirará",
+    "showAll": "Mostrar los {{total}} modelos",
+    "keyLabel": "Clave de API de {{name}}",
+    "newKeyLabel": "Nueva clave de API de {{name}}",
+    "keyHint": "Fabricator la comprueba con {{name}} y luego la guarda en {{store}} en este dispositivo.",
+    "getKey": "Obtener una clave",
+    "replaceKey": "Reemplazar clave",
+    "saveKey": "Guardar clave"
+  },
+  "chatDefaults": {
+    "title": "Valores predeterminados del chat",
+    "close": "Cerrar valores predeterminados del chat",
+    "sub": "El chat de un proyecto nuevo empieza con estos valores. Después, el chat de cada proyecto conserva los suyos, que cambias en el propio chat.",
+    "model": "Modelo",
+    "modelHint": "Con Automático, Copilot elige un modelo para cada solicitud.",
+    "defaultModel": "Modelo predeterminado",
+    "plugins": "Complementos",
+    "mcpServers": "Servidores MCP",
+    "noServers": "Aún no hay servidores MCP",
+    "noServersHint": "Agrega los servidores MCP que puede usar el chat y luego elige con cuáles empiezan los chats nuevos.",
+    "manageServers": "Administrar servidores MCP"
+  },
+  "instructions": {
+    "title": "Instrucciones personalizadas",
+    "close": "Cerrar instrucciones personalizadas",
+    "sub": "Indica a Copilot lo que quieres en todas las aplicaciones que crees, como un tema, una forma de redactar o un diseño. El chat de cada aplicación las sigue desde su siguiente mensaje, y lo que pidas en el chat tiene prioridad. Se quedan en Fabricator: no se guardan en tus aplicaciones.",
+    "label": "Instrucciones",
+    "hint": "Que sean breves: Copilot las lee con cada mensaje.",
+    "examples": {
+      "theme": "Usa de forma predeterminada el tema claro u oscuro del sistema.",
+      "case": "Usa mayúscula inicial solo en la primera palabra de títulos, etiquetas y botones.",
+      "dates": "Muestra las fechas así: 5 mar 2026."
+    }
+  }
+}

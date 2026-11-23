@@ -1,26 +1,18 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { Codicon } from '../icons'
+import { useTranslation } from '../../i18n'
 import { Ray, RAY_EYES, RAY_MOUTH, RAY_VIEWBOX, type RayMood } from './Ray'
 import { SpeechBubble, TYPE_MS } from './SpeechBubble'
 import { Particles, useParticles } from './Particles'
 import { Wake, WAKE_LIFE } from './wake'
 import { useReducedMotion } from './context'
 import {
-  BYE_LINE,
-  DIZZY_LINES,
-  DROP_LINES,
   FactDeck,
-  HOVER_LINES,
-  LIFT_LINE,
-  PET_LINES,
-  RESUME_LINE,
-  RETRY_LINE,
-  SLOW_LINE,
-  WAKE_LINES,
+  chatLine,
   errorLine,
   firstMeeting,
   greeting,
-  pickLine,
+  playLine,
   rememberMeeting,
   successLine,
   type MascotLine,
@@ -101,6 +93,7 @@ export function MascotRoamer({
   const reduced = useReducedMotion()
   const { particles, burst } = useParticles()
   const sayId = useId()
+  const { t } = useTranslation('mascot')
 
   const layerRef = useRef<HTMLDivElement>(null)
   const wakeRef = useRef<HTMLCanvasElement>(null)
@@ -375,7 +368,7 @@ export function MascotRoamer({
       if (s.phase !== 'running' || s.asleep || s.mode === 'drag') return
       const slow = !s.slowSaid && performance.now() - s.started > SLOW_AFTER
       if (slow) s.slowSaid = true
-      say(slow ? SLOW_LINE : sharedDeck().next())
+      say(slow ? chatLine('slow') : sharedDeck().next())
     }
     const roll = Math.random()
     if (!s.reduced && roll < 0.5) {
@@ -406,7 +399,7 @@ export function MascotRoamer({
     s.asleep = false
     setAsleep(false)
     flash('surprised', 700)
-    later(() => quip(pickLine(WAKE_LINES), 2200), 600)
+    later(() => quip(playLine('wake'), 2200), 600)
   }
 
   /* ----------------------------- touching ----------------------------- */
@@ -423,7 +416,7 @@ export function MascotRoamer({
       wake()
       return
     }
-    s.pets = s.pets.filter((t) => now - t < 2600)
+    s.pets = s.pets.filter((at) => now - at < 2600)
     s.pets.push(now)
     animate(
       squishRef.current,
@@ -442,12 +435,12 @@ export function MascotRoamer({
       if (!s.reduced) {
         animate(bobRef.current, [{ transform: 'rotate(0)' }, { transform: 'rotate(-360deg)' }], 650)
       }
-      quip(pickLine(DIZZY_LINES), 1600)
+      quip(playLine('dizzy'), 1600)
       return
     }
     flash('love', 1500)
     if (!s.reduced) burst('heart', 3, head())
-    if (!s.line && Math.random() < 0.55) quip(pickLine(PET_LINES), 1100)
+    if (!s.line && Math.random() < 0.55) quip(playLine('pet'), 1100)
   }
 
   function hover(): void {
@@ -455,7 +448,7 @@ export function MascotRoamer({
     if (s.mode !== 'rest' || s.line || s.asleep || now - s.lastHover < 30_000) return
     s.lastHover = now
     flash('happy', 900)
-    if (Math.random() < 0.6) quip(pickLine(HOVER_LINES), 1300)
+    if (Math.random() < 0.6) quip(playLine('hover'), 1300)
   }
 
   function startDrag(): void {
@@ -468,7 +461,7 @@ export function MascotRoamer({
       setAsleep(false)
     }
     flash('surprised', 60_000)
-    quip(LIFT_LINE, 900)
+    quip(playLine('lift'), 900)
   }
 
   function drop(): void {
@@ -490,7 +483,7 @@ export function MascotRoamer({
         leave()
         return
       }
-      if (Math.random() < 0.7) quip(pickLine(DROP_LINES), 1500)
+      if (Math.random() < 0.7) quip(playLine('drop'), 1500)
       s.nextBeat = performance.now() + 3200
     }
     s.m.vx = fling.x
@@ -645,7 +638,7 @@ export function MascotRoamer({
           s.mode = 'rest'
           swimTo(spot())
         }
-        say(prev.phase === 'error' ? RETRY_LINE : RESUME_LINE)
+        say(prev.phase === 'error' ? chatLine('retry') : chatLine('resume'))
         break
       case 'success':
         setBase('happy')
@@ -664,7 +657,7 @@ export function MascotRoamer({
         break
       case 'bye':
         setBase('happy')
-        say(BYE_LINE, { linger: 1600, after: leave })
+        say(chatLine('bye'), { linger: 1600, after: leave })
         break
     }
   }, [phase, phaseKey])
@@ -764,7 +757,7 @@ export function MascotRoamer({
         <button
           type="button"
           className="mascot-roamer-hit"
-          aria-label="Ray, the Fabricator stingray. Select to pet him."
+          aria-label={t('ui.ray')}
           aria-describedby={sayId}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -776,8 +769,8 @@ export function MascotRoamer({
         <button
           type="button"
           className="mascot-roamer-close"
-          aria-label="Send Ray away for now"
-          title="Send Ray away for now"
+          aria-label={t('ui.sendAway')}
+          title={t('ui.sendAway')}
           onClick={() => props.current.onDismiss()}
         >
           <Codicon name="close" />

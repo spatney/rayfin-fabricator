@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MigrationState, StudioProject } from '@shared/ipc'
 import { isFresh, materialReady, migrationTurn, needsDrawing, nextPage, type MigrationTurn } from './turns'
+import { translator } from '../i18n'
 
 /** How long a chained page waits after the previous turn, for a publish it starts to begin. */
 const CHAIN_DELAY_MS = 1500
@@ -103,7 +104,7 @@ export function useMigration(options: Options): MigrationControl {
         put(projectId, state)
       } catch (reason) {
         loaded.current.delete(projectId)
-        latest.current.onError(message(reason, 'Could not load the report migration.'))
+        latest.current.onError(message(reason, translator('migrate')('errors.load')))
       }
     })()
   }, [enabled, projectId, put])
@@ -133,7 +134,7 @@ export function useMigration(options: Options): MigrationControl {
       try {
         put(id, await window.api.migration.setPageStatus(id, index, 'running'))
       } catch (reason) {
-        latest.current.onError(message(reason, 'Could not save the migration.'))
+        latest.current.onError(message(reason, translator('migrate')('errors.save')))
       }
       latest.current.send(id, turn)
     },
@@ -179,7 +180,9 @@ export function useMigration(options: Options): MigrationControl {
       void window.api.migration
         .setPageStatus(id, index, ok ? 'done' : 'failed')
         .then((next) => put(id, next))
-        .catch((reason) => latest.current.onError(message(reason, 'Could not save the migration.')))
+        .catch((reason) =>
+          latest.current.onError(message(reason, translator('migrate')('errors.save')))
+        )
     },
     [put, setChain]
   )
@@ -216,7 +219,9 @@ export function useMigration(options: Options): MigrationControl {
       void window.api.migration
         .dismiss(projectId, true)
         .then((next) => put(projectId, next))
-        .catch((reason) => latest.current.onError(message(reason, 'Could not close the migration card.')))
+        .catch((reason) =>
+          latest.current.onError(message(reason, translator('migrate')('errors.dismiss')))
+        )
     },
     onTurnComplete,
     onTurnSettled

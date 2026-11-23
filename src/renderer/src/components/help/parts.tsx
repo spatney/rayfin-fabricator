@@ -1,17 +1,34 @@
 import { Codicon } from '../icons'
+import { LOCAL_QUESTION } from '../local/problems'
+import { translator } from '../../i18n'
 
 import type { JSX } from 'react'
 
 /** What Help is asked when a failed publish's **Find out why** opens it. */
 export const DEPLOY_QUESTION = 'Why did my last publish fail?'
 
+/**
+ * The starter questions and their catalog keys. The English text stays each
+ * question's id, so callers can match on it whatever the language.
+ */
+const STARTERS = [
+  [DEPLOY_QUESTION, 'prompts.deploy'],
+  ['What\u2019s new in this release?', 'prompts.whatsNew'],
+  ['The preview won\u2019t start', 'prompts.previewWontStart'],
+  ['How do I share my app with someone?', 'prompts.share']
+] as const
+
 /** Starter questions shown on an empty Help screen. */
-export const PROMPTS = [
-  DEPLOY_QUESTION,
-  'What&apos;s new in this release?',
-  'The preview won&apos;t start',
-  'How do I share my app with someone?'
-].map((text) => text.replace(/&apos;/g, '\u2019'))
+export const PROMPTS: string[] = STARTERS.map(([text]) => text)
+
+/** Questions other screens open Help with, keyed the same way. */
+const KNOWN = [...STARTERS, [LOCAL_QUESTION, 'prompts.localStart']] as const
+
+/** A known question as the user reads and asks it; any other question as it is. */
+export function promptText(question: string): string {
+  const key = KNOWN.find(([text]) => text === question)?.[1]
+  return key ? translator('help')(key) : question
+}
 
 /**
  * The working indicator: three dots that cycle. Plain CSS so it costs nothing

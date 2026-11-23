@@ -172,12 +172,13 @@ pub fn error(code: &str, message: impl Into<String>, hint: Option<&str>) -> Loca
 impl ControlClient {
   /// `api_url` must be on this computer: the token is never sent anywhere else.
   pub fn new(api_url: &str, token: ControlToken) -> Result<Self, LocalCommandError> {
-    let base = Url::parse(api_url).map_err(|e| error("invalid", format!("The backend address {api_url:?} isn't valid: {e}"), None))?;
+    let base = Url::parse(api_url)
+      .map_err(|e| error("invalid", t!("services.localBackend.badAddress", address = format!("{api_url:?}"), error = e), None))?;
     let host = base.host_str().unwrap_or_default();
     let loopback = host.eq_ignore_ascii_case("localhost")
       || host.trim_start_matches('[').trim_end_matches(']').parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback());
     if base.scheme() != "http" || !loopback {
-      return Err(error("invalid", format!("The backend address {api_url} isn't on this computer."), None));
+      return Err(error("invalid", t!("services.localBackend.remoteAddress", address = api_url), None));
     }
     Ok(Self { base, token })
   }
@@ -397,14 +398,14 @@ impl ControlClient {
       .as_str()
       .filter(|key| !key.is_empty())
       .map(String::from)
-      .ok_or_else(|| error("bad-response", "The app's rayfin.config.json has no publishable key.", None))
+      .ok_or_else(|| error("bad-response", t!("services.localBackend.noPublishableKey"), None))
   }
 
   /// Call the app's own backend as `call.call_as`, the way its frontend does:
   /// with the publishable key, and a bearer token unless anonymous.
   pub async fn call_app(&self, call: AppCall) -> Result<AppResponse, LocalCommandError> {
     if !call.path.starts_with('/') || call.path.starts_with("//") || call.path.starts_with("/.rayfin-local") {
-      return Err(error("invalid", format!("{} isn't one of the app's routes.", call.path), None));
+      return Err(error("invalid", t!("services.localBackend.notARoute", path = call.path), None));
     }
     let url = self.base.join(&call.path).map_err(|e| error("invalid", e.to_string(), None))?;
     let key = self.publishable_key().await?;
@@ -431,14 +432,14 @@ impl ControlClient {
 
 fn transport(e: reqwest::Error) -> LocalCommandError {
   if e.is_timeout() {
-    error("timeout", "The local backend didn't answer in time.", Some("It may be busy rebuilding. Try again in a moment."))
+    error("timeout", t!("services.localBackend.timeout"), Some(&t!("services.localBackend.timeoutHint")))
   } else {
-    error("unreachable", "Fabricator couldn't reach the local backend. It may have stopped.", Some("Check its status, and start it again if it stopped."))
+    error("unreachable", t!("services.localBackend.unreachable"), Some(&t!("services.localBackend.unreachableHint")))
   }
 }
 
 fn unreadable(e: serde_json::Error) -> LocalCommandError {
-  error("bad-response", format!("The local backend sent an answer Fabricator couldn't read: {e}"), None)
+  error("bad-response", t!("services.localBackend.unreadable", error = e), None)
 }
 
 /// `{"error":{"code","message","hint"}}`, else a message for the status.
@@ -466,15 +467,15 @@ fn api_error(status: StatusCode, body: &str) -> LocalCommandError {
     _ => match status {
       StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => error(
         "unauthorized",
-        "The local backend refused Fabricator's control token.",
-        Some("Restart the local backend."),
+        t!("services.localBackend.tokenRefused"),
+        Some(&t!("services.localBackend.tokenRefusedHint")),
       ),
       StatusCode::NOT_FOUND => error(
         "not-found",
-        "The local backend doesn't know that.",
-        Some("It may be an older rayfin-local without this part of the control API."),
+        t!("services.localBackend.unknownRequest"),
+        Some(&t!("services.localBackend.unknownRequestHint")),
       ),
-      _ => error(&format!("http-{}", status.as_u16()), format!("The local backend answered {status}."), None),
+      _ => error(&format!("http-{}", status.as_u16()), t!("services.localBackend.httpStatus", status = status), None),
     },
   };
   result.status = Some(status.as_u16());

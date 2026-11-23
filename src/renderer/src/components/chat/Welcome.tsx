@@ -1,4 +1,5 @@
 import type { Suggestion } from '@shared/ipc'
+import { Trans, useTranslation } from '../../i18n'
 import { FabricatorMark } from '../FabricatorMark'
 import { Codicon } from '../icons'
 
@@ -22,29 +23,27 @@ export function Welcome({
   onPick: (text: string) => void
   onRefresh: () => void
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   return (
     <div className="chat-welcome">
       <div className="chat-welcome-mark" aria-hidden="true">
         <FabricatorMark />
       </div>
-      <h2 className="chat-welcome-title">Let’s build {projectName}</h2>
-      <p className="chat-welcome-sub">
-        Describe what you want in plain language. I’ll write the code and show it running in the
-        preview — no coding required.
-      </p>
+      <h2 className="chat-welcome-title">{t('welcome.title', { name: projectName })}</h2>
+      <p className="chat-welcome-sub">{t('welcome.sub')}</p>
       <div className="chat-ideas">
         <div className="chat-ideas-head">
           <span className={`chat-ideas-label${tailoring ? ' shimmer-text' : ''}`}>
-            {tailoring ? 'Tailoring ideas to your app…' : 'Ideas to start with'}
+            {tailoring ? t('welcome.tailoring') : t('welcome.ideas')}
           </span>
           {generated && !tailoring && (
             <button
               type="button"
               className="chat-ideas-refresh"
               onClick={onRefresh}
-              title="Generate fresh ideas from your app's code"
+              title={t('welcome.refreshTitle')}
             >
-              <Codicon name="refresh" /> Refresh
+              <Codicon name="refresh" /> {t('actions.refresh')}
             </button>
           )}
         </div>
@@ -65,15 +64,17 @@ export function Welcome({
           ))}
         </div>
       </div>
-      <ul className="chat-welcome-tips" aria-label="Tips">
+      <ul className="chat-welcome-tips" aria-label={t('welcome.tips')}>
         <li>
-          <Codicon name="device-camera" /> Paste or drop a screenshot
+          <Codicon name="device-camera" /> {t('welcome.tipScreenshot')}
         </li>
         <li>
-          <Codicon name="mention" /> Type <kbd>@</kbd> to reference a file
+          <Codicon name="mention" />{' '}
+          <Trans t={t} i18nKey="welcome.tipMention" components={{ kbd: <kbd /> }} />
         </li>
         <li>
-          <Codicon name="add" /> Use <kbd>+</kbd> to connect data
+          <Codicon name="add" />{' '}
+          <Trans t={t} i18nKey="welcome.tipData" components={{ kbd: <kbd /> }} />
         </li>
       </ul>
     </div>

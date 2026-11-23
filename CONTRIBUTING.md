@@ -71,12 +71,14 @@ rayfin-fabricator/
 ├─ src-tauri/                 Rust Tauri backend, IPC commands, services, resources, packaging
 │  ├─ src/commands/           IPC handlers: advisor, auth, chat, deploy (publishing), design, doctor, fabric, files, git, local, projects, settings, team, …
 │  ├─ src/services/           exec, local_backend (the rayfin-local supervisor), preview, store, telemetry, history, crashlog, emit, paths, team, …
+│  ├─ locales/                The core's text in each language: one catalog per area (see Translations)
 │  ├─ binaries/               The rayfin-local sidecar, downloaded by scripts/rayfin-local (not committed)
 │  ├─ windows/                NSIS installer hooks that stop the sidecar before an update or uninstall
 │  ├─ vendor/wry/             Vendored wry: upstream crate + the patches in vendor/wry-patches
 │  └─ vendor/wry-patches/     WebView2 device-compliance SSO + macOS preview-positioning fix
 ├─ src/renderer/              React 19 + TypeScript UI built with Vite
 │  ├─ screens/                SetupScreen onboarding and Workbench shell
+│  ├─ i18n/                   The interface's languages: i18next setup and the catalogs in locales/
 │  └─ components/             ChatPanel, PreviewPane, CodeViewer, DeploymentsControl, AdvisorView, GitControl, SettingsModal, …
 ├─ src/shared/ipc.ts          Shared TypeScript IPC types
 ├─ src/shared/advisor/        Advisor rule catalog (rules.json), shared by the renderer and the Rust core
@@ -186,6 +188,25 @@ npm run check:docs   # content lint
 - Run `npm run format` for formatting.
 - Rust code uses 2-space indentation.
 - Do not include secrets in source code.
+
+## Translations
+
+Fabricator comes in English, Spanish (`es`), German (`de`) and Japanese (`ja`). English is the source: when you add or change text people read, update its translations in the same pull request.
+
+- **Renderer.** The interface's text lives in i18next catalogs, `src/renderer/src/i18n/locales/<language>/<namespace>.json`: one namespace for each part of the app (`chat`, `publish`, `settings`, …), and `common` for words many parts use, such as **Cancel**. Components call `useTranslation('<namespace>')` from `src/renderer/src/i18n`; other code calls `translator('<namespace>')` when it needs the text, never when its module loads. Keys are typed, so `npm run typecheck` catches a key the English catalog doesn't have. A new namespace goes in `src/renderer/src/i18n/resources.ts` and gets a file in every language.
+- **Plurals, numbers, dates and lists.** Pass a `count` and write the `_one` and `_other` forms (Japanese has only `_other`); `{{count, number}}` formats the number for the language. Format dates with `formatLocale()` and lists with `formatList()`.
+- **Rust core.** The core's messages (errors, progress, the titles of its dialogs) live in `src-tauri/locales/<language>/<area>.json`, compiled into the app, and are read with `t!("area.key", name = value)` from `src-tauri/src/i18n.rs`. The areas are `team`, `commands`, `assist` and `services`.
+- **Advisor rules.** `src/shared/advisor/rules.json` stays in English, because the core builds the deep review's prompt from it. Each translation's `advisorRules.json` translates it by rule id.
+- **What stays in English.** Prompts, tool descriptions and tool results for Copilot; logs, telemetry and diagnostics; bug reports; text written into projects, repositories and commits; and any text that code matches or parses, such as CLI output. Product names such as Fabricator, Rayfin, Microsoft Fabric and GitHub Copilot are never translated.
+- **Checks.** `npm test` checks that every language has the same keys, plural forms, placeholders, tags and code spans as English (`src/renderer/src/i18n/i18n.test.ts`). `cargo test --lib i18n` does the same for the core's catalogs, and checks that every `t!` key is in the English catalog.
+
+### Add a language
+
+1. Add its code to `Language` in `src/shared/ipc.ts`, and to `LANGUAGES` and `LANGUAGE_NAMES` (its name in itself) in `src/renderer/src/i18n/languages.ts`.
+2. Copy `src/renderer/src/i18n/locales/en/` to a folder named for the code and translate every catalog. English's `advisorRules.json` is empty because English reads `rules.json`: copy another language's for its shape. Copy `locales/de.ts` to `locales/<code>.ts`, which bundles the new catalogs.
+3. In `src-tauri/src/i18n.rs`, add the code to `LANGUAGES` and a line for it to the `area!` macro, then add its catalogs to `src-tauri/locales/<code>/`.
+4. Add it to `CFBundleLocalizations` in `src-tauri/Info.plist`, so the parts of the app macOS draws, such as file dialogs, can follow it.
+5. If its script needs other fonts, add a rule like Japanese's `html:lang(ja)` in `src/renderer/src/assets/main.css`.
 
 ## Commit and PR conventions
 

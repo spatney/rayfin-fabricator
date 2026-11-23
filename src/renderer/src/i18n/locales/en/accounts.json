@@ -1,0 +1,164 @@
+{
+  "tenantShort": "Tenant {{id}}…",
+  "fabricNeedsProject": "Fabric sign-in uses a project’s Rayfin CLI, so create or open a project first.",
+  "azureSignInFailed": "Azure sign-in did not complete. Please try again.",
+  "copilotSignInFailed": "Copilot sign-in did not complete. Please try again.",
+  "signingIn": "Signing in…",
+  "signingOut": "Signing out…",
+  "switching": "Switching…",
+  "addAccount": "Add account",
+  "installFromSetup": "Install from setup",
+  "stopWaiting": "Stop waiting",
+  "githubSignIn": "Sign in to GitHub",
+  "state": {
+    "ok": "Signed in",
+    "off": "Not signed in",
+    "error": "Needs attention"
+  },
+  "host": {
+    "label": "GitHub host",
+    "placeholder": "github.com or company.ghe.com",
+    "hint": "Use github.com or your Enterprise Cloud host (company.ghe.com). An https:// URL is also accepted."
+  },
+  "copilotNotice": {
+    "title": "Copilot needs your attention",
+    "signInHere": "Sign in to GitHub Copilot here, then retry your message.",
+    "signingIn": "Signing in to Copilot...",
+    "signIn": "Sign in to Copilot",
+    "help": "Sign-in help",
+    "inBrowser": "Complete sign-in in your browser, or follow the device-code instructions below."
+  },
+  "menu": {
+    "refreshTitle": "Clear the shared Rayfin CLI credentials and sign in again",
+    "refreshing": "Refreshing authentication…",
+    "refresh": "Refresh Fabric authentication",
+    "accountChecking": "Account: checking sign-in",
+    "accountUser": "Account: {{user}}",
+    "account": "Account",
+    "checkingTitle": "Checking your Microsoft Fabric sign-in…",
+    "signedInAs": "Signed in to Fabric as {{user}}",
+    "signedIn": "Signed in to Fabric",
+    "unconfirmed": "Couldn’t confirm it just now",
+    "signIn": "Sign in to Fabric",
+    "settingsAndAccounts": "Settings and accounts",
+    "checkingFabric": "Checking your Fabric sign-in…",
+    "notSignedIn": "Not signed in to Fabric",
+    "refreshHint": "Refresh clears stale credentials, then signs you in again.",
+    "fabricAccount": "Fabric account",
+    "manageTitle": "See and change every account Fabricator uses",
+    "manage": "Manage accounts…",
+    "settingsTitle": "Theme, text size, experiments and more",
+    "settings": "Settings"
+  },
+  "modal": {
+    "title": "Accounts",
+    "close": "Close accounts",
+    "lead": "The accounts Fabricator uses on this computer. Changes apply to all your projects.",
+    "errors": {
+      "listFabric": "Could not list your Fabric accounts.",
+      "listAzure": "Could not list your Azure accounts. Please retry.",
+      "listGithub": "Could not list your GitHub accounts. Please retry.",
+      "generic": "That didn’t work. Please try again.",
+      "copilotSignOut": "Copilot sign-out did not complete. Please try again.",
+      "fabricSignIn": "Fabric sign-in did not complete. Please try again.",
+      "fabricSwitch": "Could not switch Fabric accounts.",
+      "fabricSignOut": "Fabric sign-out did not complete. Please try again.",
+      "azureSwitch": "Could not switch Azure accounts.",
+      "azureSignOut": "Azure sign-out did not complete. Please try again.",
+      "githubSwitch": "Could not switch to {{login}}.",
+      "githubSignOut": "Could not sign out of {{login}}.",
+      "githubSignIn": "Could not start GitHub sign-in."
+    },
+    "fabricNote": {
+      "browser": "Finish signing in in the browser window that opened.",
+      "shared": "On this Mac, signing out of one Fabric account signs all of them out until you sign in again."
+    },
+    "mismatch": {
+      "title": "Fabric and the Azure CLI are in different organizations",
+      "text": "Fabric uses <b>{{fabricTenant}}</b> and the Azure CLI uses <b>{{azureTenant}}</b>. Sharing an app and connecting data look people up through the Azure CLI, so use one organization for both.",
+      "useAzure": "Use {{user}} in the Azure CLI",
+      "signInOrg": "Sign in to {{org}} in the Azure CLI",
+      "signInFabricOrg": "Sign in to Fabric’s organization in the Azure CLI"
+    },
+    "inUse": "In use",
+    "copilot": {
+      "purpose": "Writes and edits your app’s code.",
+      "signIn": "Sign in to GitHub Copilot",
+      "waiting": "Waiting for GitHub…",
+      "signOut": "Sign out of GitHub Copilot",
+      "signOutTitle": "To use a different GitHub account, sign out, then sign in with that account."
+    },
+    "fabric": {
+      "purpose": "Publishes, hosts, and shares your apps.",
+      "unconfirmed": "Couldn’t confirm",
+      "signIn": "Sign in to Microsoft Fabric",
+      "inUseTitle": "Publishing, workspace lists, sharing, and secrets use this account.",
+      "refresh": "Refresh sign-in",
+      "signOut": "Sign out of Microsoft Fabric",
+      "others": "Other Fabric accounts",
+      "add": "Add a Fabric account"
+    },
+    "azure": {
+      "purpose": "Optional. Finds people when you share an app, reads the Power BI reports you migrate, sets up team workspaces, and lets your app read Fabric data while you build it. Shared with your terminal.",
+      "signIn": "Sign in to the Azure CLI",
+      "inUseTitle": "The Azure CLI uses this account now.",
+      "signOut": "Sign out of the Azure CLI",
+      "others": "Other Azure accounts",
+      "add": "Add an Azure CLI account"
+    },
+    "github": {
+      "purpose": "Clones repositories and runs team workspaces. Optional, and shared with your terminal.",
+      "list": "GitHub accounts",
+      "default": "Default",
+      "defaultTitle": "Clone from GitHub and your terminal use this account. Team workspaces remember their own.",
+      "expired": "Sign-in expired",
+      "makeDefault": "Make default",
+      "signOutTitle": "Also signs the GitHub CLI out in your terminal.",
+      "missing": "The GitHub CLI isn’t installed. You only need it to clone repositories or use team workspaces.",
+      "waiting": "Finish signing in in the terminal window that opened. Your default account stays the same."
+    },
+    "help": "Accounts help",
+    "recheck": "Re-check"
+  },
+  "row": {
+    "use": "Use",
+    "confirmSignOut": "Sign out of {{name}}?",
+    "useAccount": "{{action}}: {{name}}",
+    "signOut": "Sign out of {{name}}"
+  },
+  "addForm": {
+    "organization": "Organization (optional)",
+    "placeholder": "contoso.onmicrosoft.com or a tenant ID",
+    "hint": "Leave it empty to use your account’s own organization, or enter one you’re a guest in.",
+    "waiting": "Waiting for Microsoft…"
+  },
+  "progress": {
+    "enterCode": "Enter this code on {{service}}:",
+    "copyCode": "Copy code",
+    "open": "Open {{service}}",
+    "inBrowser": "Finish signing in to {{service}} in your browser."
+  },
+  "githubRepo": {
+    "errors": {
+      "listAccounts": "Couldn’t list your GitHub accounts.",
+      "listOwners": "Couldn’t list where you can create repositories.",
+      "signIn": "Couldn’t start GitHub sign-in."
+    },
+    "finishInTerminal": "Finish signing in in the terminal window that opened. This updates by itself.",
+    "checking": "Checking your GitHub accounts…",
+    "noCli": "Fabricator creates the repository with the GitHub CLI, which isn’t installed.",
+    "signInFirst": "Sign in to GitHub to create the repository.",
+    "waiting": "Waiting…",
+    "account": "GitHub account",
+    "owner": "Owner",
+    "you": "{{login}} (you)",
+    "visibility": "Visibility",
+    "private": "Private",
+    "public": "Public",
+    "privateBlocked": "{{owner}} doesn’t let you create private repositories. Choose Public, or another owner.",
+    "name": "Repository name",
+    "invalidName": "Use only letters, numbers, hyphens, underscores and periods in the repository name.",
+    "noName": "Enter a name for the repository.",
+    "taken": "That name is taken."
+  }
+}

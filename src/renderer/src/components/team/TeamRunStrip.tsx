@@ -1,4 +1,5 @@
 import type { TeamRunStatus } from '@shared/ipc'
+import { useTranslation } from '../../i18n'
 import { elapsed, friendlyStep, runProgress, useNow, waitingStep } from './runProgress'
 import './team.css'
 
@@ -12,11 +13,15 @@ interface Props {
 
 /** A slim live progress bar for the pipeline deploying this team app. */
 export default function TeamRunStrip({ run, onOpenMap }: Props): JSX.Element {
+  const { t } = useTranslation('team')
   const now = useNow(true)
   const progress = runProgress(run.steps)
-  const label = run.kind === 'production' ? 'Publishing for everyone' : 'Deploying your preview'
-  const step = waitingStep(run, now) ?? (progress.current ? friendlyStep(progress.current.name) : 'Getting ready')
-  const position = progress.total > 0 ? ` · step ${Math.min(progress.done + 1, progress.total)} of ${progress.total}` : ''
+  const label = run.kind === 'production' ? t('run.publishing') : t('run.deploying')
+  const step = waitingStep(run, now) ?? (progress.current ? friendlyStep(progress.current.name) : t('run.gettingReady'))
+  const position =
+    progress.total > 0
+      ? ` · ${t('run.position', { step: Math.min(progress.done + 1, progress.total), total: progress.total })}`
+      : ''
   return (
     <div className={`team-run-strip team-run-strip--${run.kind}`} role="status" aria-live="polite">
       <span className="team-run-strip-orb" aria-hidden="true" />
@@ -30,7 +35,7 @@ export default function TeamRunStrip({ run, onOpenMap }: Props): JSX.Element {
       <span
         className="team-run-strip-bar"
         role="progressbar"
-        aria-label="Pipeline progress"
+        aria-label={t('run.progress')}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(progress.fraction * 100)}
@@ -40,11 +45,11 @@ export default function TeamRunStrip({ run, onOpenMap }: Props): JSX.Element {
       <span className="team-run-strip-time">{elapsed(run.startedAt, now)}</span>
       {onOpenMap && (
         <button type="button" className="btn btn--xs btn--ghost" onClick={onOpenMap}>
-          Watch
+          {t('run.watch')}
         </button>
       )}
       <button type="button" className="btn btn--xs btn--ghost" onClick={() => void window.api.openExternal(run.url)}>
-        Logs
+        {t('run.logs')}
       </button>
     </div>
   )

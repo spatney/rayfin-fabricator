@@ -1,6 +1,6 @@
 import { isUnder } from '../../model/projectLayout'
 import type { QuickHit, QuickRuleImpl } from '../quick'
-import { listLabels } from '../quick'
+import { listLabels, say } from '../quick'
 import { dynamicImports, importsOf, lineOf, yamlKeyLine } from '../source'
 import { CODE_FILE, code, regexHits } from './util'
 
@@ -16,18 +16,26 @@ export const accessRules: QuickRuleImpl[] = [
           file: e.file,
           line: e.line,
           label: e.name,
-          message: `${code(e.name)} has no permission decorator, so every signed-in user can create, read, update, and delete all of its rows.`
+          ...say((w) => w.t('access/entity-missing-permission.hit', { entity: code(e.name) }))
         })),
     summarize: (hits) =>
-      `${hits.length} entities have no permission decorator, so every signed-in user gets full access to their rows: ${listLabels(hits)}.`
+      say((w) =>
+        w.t('access/entity-missing-permission.summary', {
+          count: hits.length,
+          entities: listLabels(hits, w)
+        })
+      )
   },
   {
     id: 'access/on-auth-state-change',
     run: (ctx) =>
-      regexHits(
-        ctx.frontend,
-        /\bonAuthStateChange\b/,
-        (src) => `${code(src.path)} calls ${code('onAuthStateChange')}, which doesn't exist on the Rayfin auth client.`
+      regexHits(ctx.frontend, /\bonAuthStateChange\b/, (src) =>
+        say((w) =>
+          w.t('access/on-auth-state-change.hit', {
+            file: code(src.path),
+            method: code('onAuthStateChange')
+          })
+        )
       )
   },
   {
@@ -41,7 +49,12 @@ export const accessRules: QuickRuleImpl[] = [
           file: ctx.yml.path,
           line: yamlKeyLine(ctx.yml.text, ['services', 'auth', 'fabric']),
           label: 'package.json',
-          message: `${code('services.auth.fabric.enabled')} is true, but ${code(FABRIC_PROVIDER)} isn't a dependency in package.json.`
+          ...say((w) =>
+            w.t('access/fabric-provider-missing.hit', {
+              setting: code('services.auth.fabric.enabled'),
+              package: code(FABRIC_PROVIDER)
+            })
+          )
         }
       ]
     }
@@ -61,7 +74,12 @@ export const accessRules: QuickRuleImpl[] = [
             file: src.path,
             line,
             label: `${src.path}:${line}`,
-            message: `${code(src.path)} loads the Fabric auth provider with ${code('import()')}, and no module imports it statically.`
+            ...say((w) =>
+              w.t('access/fabric-provider-dynamic-import.hit', {
+                file: code(src.path),
+                dynamicImport: code('import()')
+              })
+            )
           })
         }
       }
@@ -83,7 +101,7 @@ export const accessRules: QuickRuleImpl[] = [
           file: src.path,
           line,
           label: src.path,
-          message: `${code(src.path)} signs in with a hard-coded email and password, and the app still selects it when no backend URL is configured.`
+          ...say((w) => w.t('access/mock-auth-credentials.hit', { file: code(src.path) }))
         })
       }
       return hits
@@ -100,7 +118,13 @@ export const accessRules: QuickRuleImpl[] = [
         ),
         /\b(signInWithEntraToken|fetchRayfinLocalSessionToken)\s*\(/,
         (src, m) =>
-          `${code(src.path)} calls ${code(`${m[1]}()`)}, but rayfin.yml doesn't set ${code('services.auth.fabric.externalEntraExchange: true')}.`
+          say((w) =>
+            w.t('access/entra-exchange-not-enabled.hit', {
+              file: code(src.path),
+              call: code(`${m[1]}()`),
+              setting: code('services.auth.fabric.externalEntraExchange: true')
+            })
+          )
       )
     }
   }

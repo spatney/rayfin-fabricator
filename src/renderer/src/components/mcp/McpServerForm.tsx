@@ -1,11 +1,9 @@
 import { useId, useState, type FormEvent, type JSX } from 'react'
 import type { McpServer, McpServerInput, McpValueInput } from '@shared/ipc'
+import { useTranslation } from '../../i18n'
 import { isMac } from '../../platform'
 import { Codicon } from '../icons'
 import { joinCommandLine, parseConfig, splitCommandLine, type ParsedServer } from './mcpConfig'
-
-/** Where a server's values are kept, as people know it. */
-export const SECRET_STORE = isMac() ? 'your Keychain' : 'Windows Credential Manager'
 
 /** An environment variable or header in the form. */
 interface ValueRow {
@@ -103,27 +101,26 @@ function inputFrom(draft: Draft, id?: string): McpServerInput {
 
 /** A server's environment variables or headers: a name and a value each. */
 function ValueRows({
-  title,
-  noun,
+  kind,
   rows,
   namePlaceholder,
   valuePlaceholder,
   disabled,
   onChange
 }: {
-  title: string
-  noun: string
+  kind: 'env' | 'header'
   rows: ValueRow[]
   namePlaceholder: string
   valuePlaceholder: string
   disabled: boolean
   onChange: (rows: ValueRow[]) => void
 }): JSX.Element {
+  const { t } = useTranslation('mcp')
   const update = (key: number, patch: Partial<ValueRow>): void =>
     onChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)))
   return (
     <fieldset className="mcp-values" disabled={disabled}>
-      <legend className="field-label">{title}</legend>
+      <legend className="field-label">{t(`form.values.${kind}.title` as const)}</legend>
       {rows.map((r) => (
         <div className="mcp-value" key={r.key}>
           {r.saved ? (
@@ -133,7 +130,7 @@ function ValueRows({
           ) : (
             <input
               className="field-input mcp-mono"
-              aria-label={`${noun} name`}
+              aria-label={t(`form.values.${kind}.nameLabel` as const)}
               value={r.name}
               placeholder={namePlaceholder}
               autoCapitalize="none"
@@ -144,23 +141,27 @@ function ValueRows({
           )}
           {r.saved && r.value === null ? (
             <span className="mcp-value-saved">
-              Saved
+              {t('form.values.saved')}
               <button
                 type="button"
                 className="btn btn--xs btn--ghost"
-                aria-label={`Change the value of ${r.name}`}
+                aria-label={t('form.values.changeLabel', { name: r.name })}
                 onClick={() => update(r.key, { value: '' })}
               >
-                Change
+                {t('form.values.change')}
               </button>
             </span>
           ) : (
             <input
               className="field-input mcp-mono"
               type="password"
-              aria-label={`Value of ${r.name || noun}`}
+              aria-label={
+                r.name
+                  ? t('form.values.valueOf', { name: r.name })
+                  : t(`form.values.${kind}.valueLabel` as const)
+              }
               value={r.value ?? ''}
-              placeholder={r.saved ? 'New value' : valuePlaceholder}
+              placeholder={r.saved ? t('form.values.newValue') : valuePlaceholder}
               autoComplete="off"
               spellCheck={false}
               autoFocus={r.saved}
@@ -170,8 +171,12 @@ function ValueRows({
           <button
             type="button"
             className="btn btn--xs btn--ghost acct-quiet mcp-value-remove"
-            aria-label={`Remove ${r.name || noun}`}
-            title="Remove"
+            aria-label={
+              r.name
+                ? t('form.values.remove', { name: r.name })
+                : t(`form.values.${kind}.removeLabel` as const)
+            }
+            title={t('actions.remove')}
             onClick={() => onChange(rows.filter((x) => x.key !== r.key))}
           >
             <Codicon name="close" />
@@ -184,7 +189,7 @@ function ValueRows({
         onClick={() => onChange([...rows, row('', '')])}
       >
         <Codicon name="add" />
-        Add {noun}
+        {t(`form.values.${kind}.add` as const)}
       </button>
     </fieldset>
   )
@@ -214,6 +219,7 @@ export function McpServerForm({
   error?: string
   onSubmit: (input: McpServerInput) => void
 }): JSX.Element {
+  const { t } = useTranslation('mcp')
   const [draft, setDraft] = useState<Draft>(() =>
     initial ? draftFromParsed(initial) : draftFrom(server)
   )
@@ -257,7 +263,7 @@ export function McpServerForm({
     <form
       id={id}
       className="mcp-form"
-      aria-label={server ? `Edit ${server.name}` : 'Add an MCP server'}
+      aria-label={server ? t('editServer', { name: server.name }) : t('addServer')}
       onSubmit={submit}
     >
       {!server && (
@@ -265,7 +271,7 @@ export function McpServerForm({
           {pasting ? (
             <>
               <label className="field-label" htmlFor={pasteId}>
-                Configuration
+                {t('form.configuration')}
               </label>
               <textarea
                 id={pasteId}
@@ -279,20 +285,15 @@ export function McpServerForm({
                 }
                 onChange={(event) => setPasted(event.target.value)}
               />
-              <span className="field-hint">
-                Paste the JSON from the server’s instructions, its command or its URL. Fabricator
-                fills in the form for you to check.
-              </span>
+              <span className="field-hint">{t('form.pasteHint')}</span>
               {pasteError && (
                 <p className="acct-error" role="alert">
                   {pasteError}
                 </p>
               )}
               {choices.length > 1 && (
-                <div className="mcp-choices" role="group" aria-label="Servers in the configuration">
-                  <span className="field-hint">
-                    It has {choices.length} servers. Choose the one to add:
-                  </span>
+                <div className="mcp-choices" role="group" aria-label={t('form.choicesLabel')}>
+                  <span className="field-hint">{t('form.choose', { total: choices.length })}</span>
                   {choices.map((choice, i) => (
                     <button
                       key={i}
@@ -312,7 +313,7 @@ export function McpServerForm({
                   disabled={!pasted.trim()}
                   onClick={fillIn}
                 >
-                  Fill in
+                  {t('form.fillIn')}
                 </button>
                 <button
                   type="button"
@@ -323,7 +324,7 @@ export function McpServerForm({
                     setChoices([])
                   }}
                 >
-                  {choices.length > 1 ? 'Done' : 'Cancel'}
+                  {choices.length > 1 ? t('actions.done') : t('actions.cancel')}
                 </button>
               </div>
             </>
@@ -334,7 +335,7 @@ export function McpServerForm({
               onClick={() => setPasting(true)}
             >
               <Codicon name="json" />
-              Paste a configuration…
+              {t('form.paste')}
             </button>
           )}
         </div>
@@ -342,14 +343,14 @@ export function McpServerForm({
 
       <div className="field">
         <label className="field-label" htmlFor={nameId}>
-          Name
+          {t('form.name')}
         </label>
         <input
           id={nameId}
           className="field-input"
           value={draft.name}
           maxLength={60}
-          placeholder="Charts"
+          placeholder={t('form.namePlaceholder')}
           autoFocus={!server && !initial}
           onChange={(event) => set({ name: event.target.value })}
         />
@@ -357,7 +358,7 @@ export function McpServerForm({
 
       <div className="field">
         <span className="field-label" id={kindId}>
-          Starts with
+          {t('form.startsWith')}
         </span>
         <div className="seg mcp-kind" role="group" aria-labelledby={kindId}>
           <button
@@ -366,7 +367,7 @@ export function McpServerForm({
             aria-pressed={command}
             onClick={() => set({ kind: 'command' })}
           >
-            A command
+            {t('form.kind.command')}
           </button>
           <button
             type="button"
@@ -374,7 +375,7 @@ export function McpServerForm({
             aria-pressed={!command}
             onClick={() => set({ kind: 'url' })}
           >
-            A URL
+            {t('form.kind.url')}
           </button>
         </div>
       </div>
@@ -382,7 +383,7 @@ export function McpServerForm({
       {command ? (
         <div className="field">
           <label className="field-label" htmlFor={commandId}>
-            Command
+            {t('form.command')}
           </label>
           <input
             id={commandId}
@@ -394,15 +395,12 @@ export function McpServerForm({
             spellCheck={false}
             onChange={(event) => set({ commandLine: event.target.value })}
           />
-          <span className="field-hint">
-            The command that starts the server, with its arguments, as you’d type it in a terminal.
-            Fabricator runs it on this computer, in the app’s folder.
-          </span>
+          <span className="field-hint">{t('form.commandHint')}</span>
         </div>
       ) : (
         <div className="field">
           <label className="field-label" htmlFor={urlId}>
-            URL
+            {t('form.url')}
           </label>
           <input
             id={urlId}
@@ -424,7 +422,7 @@ export function McpServerForm({
               checked={draft.sse}
               onChange={(event) => set({ sse: event.target.checked, sseChosen: true })}
             />
-            It uses Server-Sent Events (SSE), as some older servers do
+            {t('form.sse')}
           </label>
         </div>
       )}
@@ -432,18 +430,16 @@ export function McpServerForm({
       <div className="field">
         {command ? (
           <ValueRows
-            title="Environment variables"
-            noun="variable"
+            kind="env"
             rows={draft.env}
             namePlaceholder="API_KEY"
-            valuePlaceholder="Value"
+            valuePlaceholder={t('form.values.value')}
             disabled={busy}
             onChange={(env) => set({ env })}
           />
         ) : (
           <ValueRows
-            title="Headers"
-            noun="header"
+            kind="header"
             rows={draft.headers}
             namePlaceholder="Authorization"
             valuePlaceholder="Bearer …"
@@ -452,8 +448,7 @@ export function McpServerForm({
           />
         )}
         <span className="field-hint">
-          For keys and tokens. Fabricator keeps their values in {SECRET_STORE}, not in its settings,
-          and never shows them again.
+          {isMac() ? t('form.secrets.mac') : t('form.secrets.windows')}
         </span>
       </div>
 
@@ -465,20 +460,14 @@ export function McpServerForm({
           onChange={(event) => set({ readOnly: event.target.checked })}
         />
         <span>
-          <span className="mcp-check-title">Only tools that read</span>
-          <span className="field-hint">
-            Chat can call only the tools the server marks as read-only, so it can’t change anything
-            with the server. In a team app, that’s always the case.
-          </span>
+          <span className="mcp-check-title">{t('form.readOnly')}</span>
+          <span className="field-hint">{t('form.readOnlyHint')}</span>
         </span>
       </label>
 
       <p className="mcp-trust">
         <Codicon name="shield" />
-        <span>
-          A server runs with your access to this computer and your accounts, and what chat sends it
-          leaves Fabricator. Add only servers you trust.
-        </span>
+        <span>{t('form.trust')}</span>
       </p>
 
       {error && (

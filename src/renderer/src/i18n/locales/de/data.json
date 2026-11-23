@@ -1,0 +1,255 @@
+{
+  "view": {
+    "title": "Daten-Explorer",
+    "localData": "Lokale Daten",
+    "summary": "{{entities}} · {{rows}}",
+    "backend": "Lokales Back-End",
+    "reading": "Lokale Daten werden gelesen…",
+    "readError": "Die lokalen Daten konnten nicht gelesen werden",
+    "oldBackend": "Diese Version des lokalen Back-Ends teilt ihre Daten nicht mit Fabricator.",
+    "oldBackendHint": "Aktualisiere Fabricator und versuche es dann erneut.",
+    "noEntitiesTitle": "Noch keine Entitäten",
+    "noEntitiesSub": "Sobald das Datenmodell der App Entitäten enthält, werden ihre Zeilen hier angezeigt."
+  },
+  "backend": {
+    "unreachable": "Das lokale Back-End ist nicht erreichbar",
+    "unsupported": "Diese Version von Fabricator kann keine lokalen Daten lesen.",
+    "checking": "Das lokale Back-End wird geprüft…",
+    "stoppedTitle": "Das lokale Back-End wird nicht ausgeführt",
+    "stoppedMessage": "Starte es, um die lokalen Daten der App zu sehen.",
+    "starting": "Das lokale Back-End wird gestartet",
+    "restarting": "Das lokale Back-End wird neu gestartet",
+    "startingMessage": "Die lokalen Daten der App werden hier angezeigt, sobald es läuft.",
+    "start": "Starten",
+    "startBusy": "Wird gestartet…"
+  },
+  "side": {
+    "entities": "Entitäten",
+    "noEntities": "Keine Entitäten",
+    "entityItem_one": "{{name}}, {{count, number}} Zeile",
+    "entityItem_other": "{{name}}, {{count, number}} Zeilen",
+    "storage": "Speicher",
+    "storageError": "Die gespeicherten Dateien konnten nicht gelesen werden",
+    "noFolders": "Keine Speicherordner",
+    "folderItem_one": "{{name}}, {{count, number}} Datei",
+    "folderItem_other": "{{name}}, {{count, number}} Dateien"
+  },
+  "toolbar": {
+    "note": "Lokale Daten auf diesem Computer. Beim Veröffentlichen werden sie nicht nach Fabric kopiert.",
+    "notePublished": "Lokale Daten auf diesem Computer, getrennt von den Daten der veröffentlichten App.",
+    "refreshTitle": "Lokale Daten erneut lesen",
+    "loadSeedTitle": "Lokale Daten durch die Seed-Daten in rayfin/seed ersetzen",
+    "noSeedTitle": "Diese App hat noch keine Seed-Daten in rayfin/seed. Speichere die lokalen Daten als Seed-Daten, oder bitte Copilot, welche hinzuzufügen.",
+    "saveSeedTitle": "Lokale Daten in rayfin/seed speichern, damit alle, die das Projekt öffnen, sie laden können",
+    "reset": "Lokale Daten zurücksetzen"
+  },
+  "seed": {
+    "load": "Seed-Daten laden",
+    "save": "Als Seed-Daten speichern",
+    "loaded": "Seed-Daten geladen: {{amount}}.",
+    "saved": "In rayfin/seed gespeichert: {{amount}}.",
+    "savedSkipped_one": "In rayfin/seed gespeichert: {{amount}}. {{count, number}} Datei aus dem Speicher konnte nicht gespeichert werden: {{files}}",
+    "savedSkipped_other": "In rayfin/seed gespeichert: {{amount}}. {{count, number}} Dateien aus dem Speicher konnten nicht gespeichert werden: {{files}}",
+    "rowsIn_one": "{{count, number}} Zeile in {{entities}}",
+    "rowsIn_other": "{{count, number}} Zeilen in {{entities}}",
+    "nothing": "keine Zeilen oder Dateien"
+  },
+  "notices": {
+    "fallback": "{{reason}} Der Daten-Explorer zeigt nur lokale Daten an.",
+    "unreadLabel": "Datenmodelländerung nicht gelesen",
+    "unread": "Die letzte Änderung am Datenmodell der App konnte nicht gelesen werden. Das lokale Back-End der App verwendet daher weiterhin das vorherige Datenmodell.",
+    "unreadNoEntities": "Es werden keine Entitäten angezeigt, weil die letzte Änderung am Datenmodell der App nicht gelesen werden konnte. Das lokale Back-End der App verwendet weiterhin das vorherige Datenmodell, das keine Entitäten hat."
+  },
+  "seedProblems": {
+    "title_one": "Die Seed-Daten haben {{count, number}} Problem",
+    "title_other": "Die Seed-Daten haben {{count, number}} Probleme",
+    "intro": "Es wurde nichts geladen, die lokalen Daten sind also unverändert. Behebe diese Probleme und lade sie dann erneut:",
+    "fix": "Mit Copilot beheben",
+    "fixRequest": "Probleme in den Seed-Daten beheben"
+  },
+  "rows": {
+    "reading": "Zeilen werden gelesen…",
+    "readError": "Die Zeilen konnten nicht gelesen werden",
+    "clearSorting": "Sortierung aufheben",
+    "emptyTitle": "Noch keine Zeilen",
+    "emptySub": "Daten werden über die Seiten der App selbst hinzugefügt. Verwende die App in der Vorschau und aktualisiere dann.",
+    "sortBy": "Nach {{column}} sortieren",
+    "keyType": "{{type}} · Schlüssel",
+    "clear": "Zeilen löschen"
+  },
+  "users": {
+    "title": "Lokale Benutzer",
+    "readError": "Die lokalen Benutzer konnten nicht gelesen werden",
+    "notListed": "Das lokale Back-End hat sie nicht aufgelistet.",
+    "emptyTitle": "Noch keine lokalen Benutzer",
+    "emptySub": "Lokale Benutzer werden hier angezeigt, sobald sich jemand auf diesem Computer bei der App anmeldet.",
+    "username": "Benutzername",
+    "email": "E-Mail",
+    "signsInWith": "Anmeldung mit",
+    "created": "Erstellt",
+    "developer": "Entwickler",
+    "password": "Kennwort",
+    "fabricatorOnly": "Nur Fabricator",
+    "deleteLabel": "{{username}} löschen"
+  },
+  "files": {
+    "reading": "Dateien werden gelesen…",
+    "readError": "Die Dateien konnten nicht gelesen werden",
+    "emptyTitle": "Noch keine Dateien",
+    "emptySub": "Dateien, die die App in diesem Ordner speichert, werden hier angezeigt. Verwende die App in der Vorschau und aktualisiere dann.",
+    "regionLabel": "Dateien in {{folder}}",
+    "folderNameTitle": "Name des Ordners im Code der App",
+    "orphan": "Nicht in der App",
+    "orphanTitle": "Die App hat diesen Speicherordner nicht mehr. Seine Dateien bleiben hier, bis du sie löschst.",
+    "meta_one": "{{count, number}} Datei · {{size}}",
+    "meta_other": "{{count, number}} Dateien · {{size}}",
+    "clear": "Dateien löschen",
+    "previewLabel": "Vorschau von {{path}} anzeigen",
+    "deleteLabel": "{{path}} löschen",
+    "signedOutUpload": "Ohne Anmeldung hochgeladen",
+    "anonymous": "Anonym"
+  },
+  "fields": {
+    "name": "Name",
+    "path": "Pfad",
+    "type": "Typ",
+    "size": "Größe",
+    "owner": "Besitzer",
+    "uploaded": "Hochgeladen",
+    "updated": "Aktualisiert",
+    "actions": "Aktionen"
+  },
+  "preview": {
+    "label": "Vorschau von {{path}}",
+    "save": "Kopie speichern",
+    "saveTitle": "Eine Kopie der Datei auf diesem Computer speichern",
+    "saved": "Eine Kopie von {{name}} wurde unter {{where}} gespeichert.",
+    "saveError": "Die Kopie konnte nicht gespeichert werden",
+    "close": "Vorschau schließen",
+    "error": "Für die Datei kann keine Vorschau angezeigt werden",
+    "pdfError": "Dieses PDF konnte nicht dargestellt werden: {{reason}}",
+    "noneTitle": "Keine Vorschau",
+    "noneSub": "Fabricator kann keine Dateien vom Typ {{type}} anzeigen. Speichere eine Kopie, um sie in einer anderen App zu öffnen.",
+    "drawingPdf": "PDF wird dargestellt…",
+    "reading": "Datei wird gelesen…",
+    "textClipped": "Die ersten {{size}} werden angezeigt. Speichere eine Kopie, um alles zu sehen.",
+    "pdfClipped": "Die ersten {{shown}} von {{total}} Seiten werden angezeigt. Speichere eine Kopie, um alle zu sehen.",
+    "page": "Seite {{page}} von {{name}}",
+    "fieldTitle": "Ein Feld, das die App mit der Datei speichert"
+  },
+  "confirm": {
+    "cantUndo": "Dies kann nicht rückgängig gemacht werden.",
+    "cantUndoPublished": "Die Daten der veröffentlichten App sind nicht betroffen. Dies kann nicht rückgängig gemacht werden.",
+    "clearing": "Wird gelöscht…",
+    "resetting": "Wird zurückgesetzt…",
+    "refused": "Andere Zeilen verweisen noch auf diese Zeilen, daher können sie nicht allein gelöscht werden. Lösche zuerst diese anderen Zeilen oder setze alle lokalen Daten zurück.",
+    "refusedNamed": "Zeilen von {{names}} verweisen noch auf diese Zeilen, daher können sie nicht allein gelöscht werden. Lösche zuerst {{names}} oder setze alle lokalen Daten zurück.",
+    "clear": {
+      "title": "Alle Zeilen von {{entity}} löschen?",
+      "message_one": "Dadurch wird die einzige Zeile von {{entity}} aus den lokalen Daten der App auf diesem Computer gelöscht. Andere Entitäten, die lokalen Benutzer und gespeicherte Dateien bleiben erhalten.",
+      "message_other": "Dadurch werden alle {{count, number}} Zeilen von {{entity}} aus den lokalen Daten der App auf diesem Computer gelöscht. Andere Entitäten, die lokalen Benutzer und gespeicherte Dateien bleiben erhalten."
+    },
+    "reset": {
+      "title": "Lokale Daten zurücksetzen?",
+      "intro": "Dadurch werden die lokalen Daten der App auf diesem Computer gelöscht:",
+      "allRows_one": "Die einzige Zeile {{entities}}",
+      "allRows_other": "Alle {{count, number}} Zeilen {{entities}}",
+      "itsEntities_one": "ihrer einzigen Entität",
+      "itsEntities_other": "ihrer {{count, number}} Entitäten",
+      "everyRowOf": "Jede Zeile {{entities}}",
+      "everyRow": "Jede Zeile jeder Entität",
+      "users_one": "Der einzige lokale Benutzer und seine Sitzungen",
+      "users_other": "Alle {{count, number}} lokalen Benutzer und ihre Sitzungen",
+      "usersAny": "Die lokalen Benutzer und ihre Sitzungen",
+      "files_one": "Die einzige gespeicherte Datei",
+      "files_other": "Alle {{count, number}} gespeicherten Dateien",
+      "filesAny": "Die gespeicherten Dateien",
+      "schemaWaiting": "Danach wird die Datenmodelländerung angewendet, die auf deine Entscheidung wartet."
+    },
+    "clearFiles": {
+      "title": "Alle Dateien in {{folder}} löschen?",
+      "message_one": "Dadurch wird die einzige Datei im Speicherordner {{folder}} aus den lokalen Daten der App auf diesem Computer gelöscht. Die Zeilen der Entitäten, die lokalen Benutzer und die Dateien anderer Ordner bleiben erhalten.",
+      "message_other": "Dadurch werden alle {{count, number}} Dateien im Speicherordner {{folder}} aus den lokalen Daten der App auf diesem Computer gelöscht. Die Zeilen der Entitäten, die lokalen Benutzer und die Dateien anderer Ordner bleiben erhalten."
+    },
+    "deleteFile": {
+      "title": "{{name}} löschen?",
+      "message": "Dadurch wird {{path}} aus dem Speicherordner {{folder}} der lokalen Daten der App auf diesem Computer gelöscht.",
+      "action": "Datei löschen"
+    },
+    "loadSeed": {
+      "title": "Seed-Daten laden?",
+      "intro": "Dadurch werden die lokalen Daten der App auf diesem Computer durch die Seed-Daten in rayfin/seed ersetzt:",
+      "noRows": "Keine Zeilen",
+      "deletesAll": "Die aktuellen Zeilen und gespeicherten Dateien der App werden gelöscht. Die lokalen Benutzer bleiben erhalten, und die in den Seed-Daten genannten Benutzer werden hinzugefügt.",
+      "deletesRows": "Die aktuellen Zeilen der App werden gelöscht. Die lokalen Benutzer bleiben erhalten, und die in den Seed-Daten genannten Benutzer werden hinzugefügt."
+    },
+    "saveSeed": {
+      "title": "Lokale Daten als Seed-Daten speichern?",
+      "intro": "Dadurch werden die lokalen Daten der App in rayfin/seed im Projekt gespeichert und ersetzen die dortigen Seed-Daten:",
+      "rows_one": "{{count, number}} Zeile aus {{entities}}, in rayfin/seed/data",
+      "rows_other": "{{count, number}} Zeilen aus {{entities}}, in rayfin/seed/data",
+      "files_one": "{{count, number}} gespeicherte Datei, in rayfin/seed/storage",
+      "files_other": "{{count, number}} gespeicherte Dateien, in rayfin/seed/storage",
+      "ids": "Alle, die das Projekt öffnen, können sie laden. Benutzer-IDs werden zu <code>{{developer}}</code> (du) und <code>{{user}}</code> (die lokalen Benutzer). Fabricator speichert die Änderung als Version unter „Verlauf“."
+    },
+    "deleteUser": {
+      "title": "{{username}} löschen?",
+      "message": "Dadurch wird {{username}} aus den lokalen Benutzern der App gelöscht und auf diesem Computer von der App abgemeldet.",
+      "action": "Benutzer löschen"
+    }
+  },
+  "pager": {
+    "range": "{{first, number}}–{{last, number}} von {{total, number}}",
+    "previous": "Zurück",
+    "previousPage": "Vorherige Seite",
+    "nextPage": "Nächste Seite"
+  },
+  "cell": {
+    "emptyText": "Leerer Text"
+  },
+  "size": {
+    "bytes_one": "{{count, number}} Byte",
+    "bytes_other": "{{count, number}} Bytes",
+    "kilobytes": "{{size}} KB",
+    "megabytes": "{{size}} MB",
+    "gigabytes": "{{size}} GB"
+  },
+  "counts": {
+    "rows_one": "{{count, number}} Zeile",
+    "rows_other": "{{count, number}} Zeilen",
+    "entities_one": "{{count, number}} Entität",
+    "entities_other": "{{count, number}} Entitäten",
+    "files_one": "{{count, number}} Datei",
+    "files_other": "{{count, number}} Dateien",
+    "storedFiles_one": "{{count, number}} gespeicherte Datei",
+    "storedFiles_other": "{{count, number}} gespeicherte Dateien",
+    "users_one": "{{count, number}} Benutzer",
+    "users_other": "{{count, number}} Benutzer"
+  },
+  "access": {
+    "anySignedIn": "Jeder angemeldete Benutzer",
+    "public": "Öffentlich",
+    "scoped": "Zeilenbezogene Richtlinie",
+    "mixed": "Gemischte Richtlinie",
+    "defaultDetail": "Kein Zugriffs-Decorator vorhanden, daher gilt für diese Entität der Rayfin-Standard `authenticated: *` – jeder angemeldete Benutzer kann jede Zeile lesen und schreiben.",
+    "publicDetail": "Eine `@anonymous`-Berechtigung macht Zeilen für nicht authentifizierte Aufrufer zugänglich (Aktionen: {{actions}}).",
+    "scopedDetail": "Für angemeldete Benutzer wird der Zugriff durch einen `policy`-Callback auf Zeilenebene eingeschränkt.",
+    "mixedDetail": "Einige Berechtigungen für angemeldete Benutzer sind durch eine Richtlinie auf Zeilen beschränkt, andere nicht.",
+    "authenticatedDetail": "Jeder angemeldete Benutzer kann auf jede Zeile zugreifen (keine `policy` auf Zeilenebene).",
+    "customDetail": "Benutzerdefinierte Rollenberechtigungen: {{grants}}."
+  },
+  "schema": {
+    "noImport": "Die Entität „{{name}}“ ist in {{schema}} aufgeführt, hat aber keinen Import.",
+    "notAFile": "Die Entität „{{name}}“ wird aus „{{module}}“ importiert, aber das ist keine Datei in dieser App.",
+    "unreadable": "Die Entitätsdatei {{file}} für „{{name}}“ konnte nicht gelesen werden.",
+    "noEntityClass": "In {{file}} wurde keine @entity-Klasse für „{{name}}“ gefunden.",
+    "noEntities": "{{schema}} deklariert noch keine Entitäten."
+  },
+  "sqlSource": {
+    "notDiscovered": "{{file}} liest die Tabelle {{table}}, die nicht zu den erkannten Tabellen gehört.",
+    "notDiscoveredAny": "{{file}} liest eine Tabelle, die nicht zu den erkannten Tabellen gehört.",
+    "unreadable": "{{name}} konnte nicht gelesen werden.",
+    "wrongShape": "{{name}} hat nicht das Format, das Rayfin schreibt, und wurde daher übersprungen.",
+    "grantWithPolicy": "{{role}}: {{actions}} (Zeilenrichtlinie)"
+  }
+}

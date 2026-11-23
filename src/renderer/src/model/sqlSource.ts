@@ -15,6 +15,7 @@
  * relationships are never guessed from column names.
  */
 import type { SemanticRelationship } from '@shared/ipc'
+import { translator } from '../i18n'
 import { sqlSourceKey, type ConnectorConfig } from './architecture'
 import {
   parseEntityClasses,
@@ -205,9 +206,12 @@ function entityInfo(entity: DeclaredEntity): EntityInfo {
     table: source ? stringOption(source, 'table') : undefined,
     primaryKey: source ? listOption(source, 'primaryKey') : [],
     columns,
-    grants: entity.permissions.map(
-      (p) => `${p.role}: ${p.actions.join(', ')}${p.hasPolicy ? ' (row policy)' : ''}`
-    )
+    grants: entity.permissions.map((p) => {
+      const actions = p.actions.join(', ')
+      return p.hasPolicy
+        ? translator('data')('sqlSource.grantWithPolicy', { role: p.role, actions })
+        : `${p.role}: ${actions}`
+    })
   }
 }
 
@@ -257,8 +261,13 @@ function fromMetadata(
       match = meta.tables.find((t) => names.includes(pascalCase(t.name)))
     }
     if (!match) {
-      const where = info.table ? `the table ${info.schema ? `${info.schema}.` : ''}${info.table}` : 'a table'
-      warnings.push(`${info.entity.file.split('/').pop()} reads ${where}, which isn’t in the discovered tables.`)
+      const file = info.entity.file.split('/').pop()
+      const table = info.table && `${info.schema ? `${info.schema}.` : ''}${info.table}`
+      warnings.push(
+        table
+          ? translator('data')('sqlSource.notDiscovered', { file, table })
+          : translator('data')('sqlSource.notDiscoveredAny', { file })
+      )
       continue
     }
     const k = key(match.schema, match.name)
@@ -407,7 +416,9 @@ export function buildSqlSource(input: SqlSourceFiles): SqlSourceModel {
     const name = metadata.path.split('/').pop()
     warnings.push(
       metadata.problem ??
-        (metadata.text == null ? `Couldn’t read ${name}.` : `${name} isn’t in the shape Rayfin writes, so it was skipped.`)
+        (metadata.text == null
+          ? translator('data')('sqlSource.unreadable', { name })
+          : translator('data')('sqlSource.wrongShape', { name }))
     )
   }
   if (meta && metadata) {

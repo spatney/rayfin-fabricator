@@ -19,6 +19,7 @@ import {
   publishedItem
 } from '../fabric'
 import { clockLabel, meterStepLabel, useDeployMeter } from '../deployMeter'
+import { Trans, useTranslation } from '../i18n'
 import { Codicon } from './icons'
 import DeploymentCreateForm, { checkActiveDeployTarget } from './DeploymentCreateForm'
 import ShareDeploymentModal from './ShareDeploymentModal'
@@ -126,10 +127,6 @@ function hostOf(url: string): string {
   }
 }
 
-function plural(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`
-}
-
 /** Most recently deployed first. */
 function byDeployedAt(a: FabricDeployment, b: FabricDeployment): number {
   return (Date.parse(b.deployedAt ?? '') || 0) - (Date.parse(a.deployedAt ?? '') || 0)
@@ -175,6 +172,7 @@ export default function DeploymentsControl({
   onShowChanges,
   onOpen
 }: Props): JSX.Element {
+  const { t } = useTranslation('publish')
   const [open, setOpen] = useState(false)
   const toast = useToast()
   const [creating, setCreating] = useState(false)
@@ -230,8 +228,8 @@ export default function DeploymentsControl({
       if (seq === depsSeqRef.current) setRecorded({ projectId, list })
     } catch (reason) {
       if (seq === depsSeqRef.current) {
-        toast.error(authErrorMessage(reason, 'Could not load your published apps. Please retry.'), {
-          title: 'Published app check failed'
+        toast.error(authErrorMessage(reason, t('control.errors.loadApps')), {
+          title: t('control.errors.appCheck')
         })
       }
     }
@@ -263,9 +261,9 @@ export default function DeploymentsControl({
           if (seq !== wsSeqRef.current) return
           res = await window.api.fabric.listWorkspaces()
         } else {
-          const error = authErrorMessage(login.error, 'Fabric sign-in did not complete. Please try again.')
+          const error = authErrorMessage(login.error, t('signIn.incomplete'))
           res = { ...res, error }
-          toast.error(error, { title: 'Sign-in failed' })
+          toast.error(error, { title: t('signIn.failed') })
         }
       }
       if (seq === wsSeqRef.current) {
@@ -274,9 +272,13 @@ export default function DeploymentsControl({
       }
     } catch (reason) {
       if (seq === wsSeqRef.current) {
-        const error = authErrorMessage(reason, 'Could not load workspaces. Please retry.')
+        const error = authErrorMessage(reason, t('control.errors.loadWorkspaces'))
         setWsResult({ ok: false, needsLogin, error })
-        if (signIn) toast.error(error, { title: needsLogin ? 'Sign-in failed' : 'Workspace check failed' })
+        if (signIn) {
+          toast.error(error, {
+            title: needsLogin ? t('signIn.failed') : t('control.errors.workspaceCheck')
+          })
+        }
       }
     } finally {
       if (seq === wsSeqRef.current) {
@@ -368,10 +370,11 @@ export default function DeploymentsControl({
 
   /** Publishing to a new workspace: the control is named for that one until it's done. */
   const toNew = running && deployingTo ? deployingTo : undefined
-  const name = toNew ?? (activeLabel || 'your app')
+  const name = toNew ?? (activeLabel || t('control.yourApp'))
   const status: Status =
     running || (reconciling && !hasDeployment) ? 'busy' : !hasDeployment ? 'none' : failed ? 'err' : 'ok'
-  const label = toNew ?? (activeLabel || (reconciling ? 'Checking…' : 'Not published'))
+  const label =
+    toNew ?? (activeLabel || (reconciling ? t('status.checking') : t('control.notPublished')))
   const deployedAt = activeDep?.deployedAt
   const workspaceId =
     activeDep?.workspaceId ?? (fabricWorkspaceUrl(project.workspace) ? project.workspace : undefined)
@@ -404,57 +407,73 @@ export default function DeploymentsControl({
 
   /** A chat turn holds the project's source, so a publish started now could only fail. */
   const held = chatBusy && !running
-  const heldTitle = 'Copilot is working on this app. Publishing waits until the turn finishes.'
-  const deletingTitle = 'Deleting a published app. Publishing waits until it’s done.'
+  const heldTitle = t('control.held.publish')
+  const deletingTitle = t('control.held.deleting')
   /** Why a published app can't be deleted just now: publishing and chat turns hold the project. */
   const deleteWait = running
-    ? 'Publishing. Deleting waits until it’s done.'
+    ? t('control.held.deleteWhilePublishing')
     : held
-      ? 'Copilot is working on this app. Deleting waits until the turn finishes.'
+      ? t('control.held.delete')
       : undefined
 
   /** What the button beside the state does now. */
-  const nextAction: { label: string; title: string; primary: boolean; disabled?: boolean; run: () => void } =
-    running
+  const nextAction: {
+    label: string
+    title: string
+    primary: boolean
+    disabled?: boolean
+    run: () => void
+  } = running
+    ? {
+        label:
+          percent === null
+            ? t('button.publishing')
+            : t('control.next.publishingPercent', { percent }),
+        title: t('control.next.publishingTitle'),
+        primary: false,
+        run: () => setOpen(true)
+      }
+    : !hasDeployment
       ? {
-          label: percent === null ? 'Publishing…' : `Publishing… ${percent}%`,
-          title: 'See how publishing is going',
-          primary: false,
-          run: () => setOpen(true)
+          label: t('button.publish'),
+          title: t('control.next.publishTitle'),
+          primary: true,
+          disabled: reconciling,
+          run: openCreate
         }
-      : !hasDeployment
-        ? {
-            label: 'Publish',
-            title: 'Publish this app to a Fabric workspace',
-            primary: true,
-            disabled: reconciling,
-            run: openCreate
-          }
-        : failed
-          ? turnedDown
-            ? {
-                label: 'Choose workspace',
-                title:
-                  'Fabric apps aren’t available in this workspace. Choose another workspace to publish to.',
-                primary: true,
-                run: openCreate
-              }
-            : { label: 'Try again', title: `Publish ${name} again`, primary: true, run: onRedeploy }
-          : waiting
-            ? {
-                label: files ? `Publish ${plural(files, 'change')}` : 'Publish changes',
-                title: files
-                  ? `${plural(files, 'file')} changed since ${name} was published`
-                  : `Your latest changes aren't on ${name} yet`,
-                primary: true,
-                run: onRedeploy
-              }
-            : {
-                label: 'Publish',
-                title: pending ? `${name} is up to date. Publish it again anyway.` : `Publish ${name} again`,
-                primary: false,
-                run: onRedeploy
-              }
+      : failed
+        ? turnedDown
+          ? {
+              label: t('control.next.chooseWorkspace'),
+              title: t('control.next.chooseWorkspaceTitle'),
+              primary: true,
+              run: openCreate
+            }
+          : {
+              label: t('actions.tryAgain'),
+              title: t('control.next.again', { name }),
+              primary: true,
+              run: onRedeploy
+            }
+        : waiting
+          ? {
+              label: files
+                ? t('control.next.publishChanges', { count: files })
+                : t('control.next.publishSomeChanges'),
+              title: files
+                ? t('control.next.filesChanged', { count: files, name })
+                : t('control.next.changesWaiting', { name }),
+              primary: true,
+              run: onRedeploy
+            }
+          : {
+              label: t('button.publish'),
+              title: pending
+                ? t('control.next.upToDate', { name })
+                : t('control.next.again', { name }),
+              primary: false,
+              run: onRedeploy
+            }
   const action = held
     ? { ...nextAction, disabled: true, title: heldTitle }
     : deleting && !running
@@ -462,34 +481,36 @@ export default function DeploymentsControl({
       : nextAction
 
   const chipState = running
-    ? `Publishing to ${name}…`
+    ? t('control.chip.publishing', { name })
     : !hasDeployment
       ? reconciling
-        ? 'Checking for a published app…'
-        : 'Not published yet. Click to choose a workspace.'
+        ? t('control.checkingForApp')
+        : t('control.chip.none')
       : failed
-        ? `Couldn't publish to ${name}. Click for details.`
-        : `${name} is live${workspaceName && workspaceName !== name ? ` in ${workspaceName}` : ''}. Click for details, or to switch or add a published app.`
+        ? t('control.chip.failed', { name })
+        : workspaceName && workspaceName !== name
+          ? t('control.chip.liveIn', { name, workspace: workspaceName })
+          : t('control.chip.live', { name })
   // When chat turns publish, the chip says so without opening the panel: "· Auto".
   // Off, the default, goes unsaid.
-  const modeNote = autoDeploy && hasDeployment && autoDeploy.on ? 'Auto' : null
+  const modeNote = autoDeploy && hasDeployment && autoDeploy.on ? t('control.chip.auto') : null
   const chipTitle = autoDeploy
-    ? `${chipState}\n${autoDeploy.on ? 'Publish after each chat turn is on: chat changes publish as each turn finishes.' : 'Publish after each chat turn is off: chat changes wait for you to publish them.'}`
+    ? `${chipState}\n${autoDeploy.on ? t('control.chip.autoOn') : t('control.chip.autoOff')}`
     : chipState
 
   const statusText = running
     ? meter
-      ? `Publishing · step ${meter.step} of ${meter.steps} · ${clockLabel(meter.elapsed)}`
-      : 'Publishing…'
+      ? `${t('progress.publishing')} · ${t('progress.position', { step: meter.step, steps: meter.steps })} · ${clockLabel(meter.elapsed)}`
+      : t('button.publishing')
     : !hasDeployment
       ? reconciling
-        ? 'Checking for a published app…'
-        : 'Not published yet'
+        ? t('control.checkingForApp')
+        : t('control.notPublishedYet')
       : failed
-        ? `Couldn't publish${project.lastDeploy?.at ? ` · ${timeAgo(project.lastDeploy.at, now)}` : ''}`
+        ? `${t('control.status.failed')}${project.lastDeploy?.at ? ` · ${timeAgo(project.lastDeploy.at, now)}` : ''}`
         : deployedAt
-          ? `Published ${timeAgo(deployedAt, now)}`
-          : 'Published'
+          ? t('control.status.publishedWhen', { when: timeAgo(deployedAt, now) })
+          : t('control.status.published')
   const failure = (deploy?.result?.error ?? project.lastDeploy?.error ?? '')
     .trim()
     .split('\n')[0]
@@ -505,18 +526,21 @@ export default function DeploymentsControl({
     try {
       const result = await onSwitch(target, byId)
       if (!result.ok) {
-        toast.error(authErrorMessage(
-          result.error,
-          result.outcome === 'not-signed-in'
-            ? 'Sign in to Fabric before switching published apps.'
-            : 'Could not switch published apps. Please retry.'
-        ), { title: 'Switch failed' })
+        toast.error(
+          authErrorMessage(
+            result.error,
+            result.outcome === 'not-signed-in'
+              ? t('control.switchError.signIn')
+              : t('control.switchError.failed')
+          ),
+          { title: t('control.switchError.title') }
+        )
         return
       }
       await loadDeployments()
     } catch (reason) {
-      toast.error(authErrorMessage(reason, 'Could not switch published apps. Please retry.'), {
-        title: 'Switch failed'
+      toast.error(authErrorMessage(reason, t('control.switchError.failed')), {
+        title: t('control.switchError.title')
       })
     } finally {
       setSwitching(null)
@@ -537,8 +561,8 @@ export default function DeploymentsControl({
     if (!key || deleteWait || deleting) return
     const shown = d.name || d.workspaceName
     const failed = (reason: unknown): void => {
-      toast.error(authErrorMessage(reason, `Couldn’t delete ${shown}. Please try again.`), {
-        title: 'Delete failed'
+      toast.error(authErrorMessage(reason, t('control.delete.failed', { name: shown })), {
+        title: t('control.delete.failedTitle')
       })
     }
     setDeleting(key)
@@ -547,12 +571,9 @@ export default function DeploymentsControl({
       if (!result.ok && result.needsLogin) {
         const login = await window.api.auth.loginRayfin()
         if (!login.ok) {
-          toast.error(
-            authErrorMessage(login.error, 'Fabric sign-in did not complete. Please try again.'),
-            {
-              title: 'Sign-in failed'
-            }
-          )
+          toast.error(authErrorMessage(login.error, t('signIn.incomplete')), {
+            title: t('signIn.failed')
+          })
           return
         }
         await onSignedIn?.()
@@ -563,7 +584,7 @@ export default function DeploymentsControl({
         return
       }
       setConfirmDelete(null)
-      toast.success(`Deleted ${shown} and its data in Fabric.`)
+      toast.success(t('control.delete.done', { name: shown }))
       onChanged()
       await loadDeployments()
     } catch (reason) {
@@ -583,17 +604,20 @@ export default function DeploymentsControl({
     const removing = deleting === (d.workspaceId ?? d.workspaceName)
     const after =
       then === undefined
-        ? 'Your app on this computer stays as it is.'
+        ? t('control.delete.keep')
         : then
-          ? `Your app on this computer stays, and publishes to ${then.name || then.workspaceName} from then on.`
-          : 'Your app on this computer stays, unpublished.'
+          ? t('control.delete.keepThen', { name: then.name || then.workspaceName })
+          : t('control.delete.keepUnpublished')
     return (
       <div className="dep-callout" role="alert">
         <span className="dep-callout-text">
-          Delete <strong>{shown}</strong> and all its data in {inWorkspace}?
-          <span className="dep-callout-detail">
-            It’s gone for everyone who uses it, and this can’t be undone. {after}
-          </span>
+          <Trans
+            t={t}
+            i18nKey="control.delete.confirm"
+            values={{ name: shown, workspace: inWorkspace }}
+            components={{ strong: <strong /> }}
+          />
+          <span className="dep-callout-detail">{t('control.delete.detail', { after })}</span>
         </span>
         <div className="dep-actions">
           <button
@@ -603,7 +627,7 @@ export default function DeploymentsControl({
             title={deleteWait}
             onClick={() => void doDelete(d)}
           >
-            {removing ? 'Deleting…' : 'Delete'}
+            {removing ? t('status.deleting') : t('actions.delete')}
           </button>
           <button
             type="button"
@@ -611,7 +635,7 @@ export default function DeploymentsControl({
             disabled={removing}
             onClick={() => setConfirmDelete(null)}
           >
-            Cancel
+            {t('actions.cancel')}
           </button>
         </div>
       </div>
@@ -639,8 +663,8 @@ export default function DeploymentsControl({
       window.clearTimeout(copiedTimer.current)
       copiedTimer.current = window.setTimeout(() => setCopied(null), 1200)
     } catch {
-      toast.error(what === 'link' ? 'Could not copy the link.' : 'Could not copy the item ID.', {
-        title: 'Copy failed'
+      toast.error(what === 'link' ? t('copy.linkFailed') : t('copy.itemFailed'), {
+        title: t('copy.failed')
       })
     }
   }
@@ -664,8 +688,8 @@ export default function DeploymentsControl({
       const target =
         deps.find((d) => d.active && d.workspaceId) ?? deps.find((d) => d.workspaceId) ?? null
       if (!target) {
-        toast.error('Publish this app to a workspace before sharing.', {
-          title: 'Nothing to share yet'
+        toast.error(t('control.share.nothing'), {
+          title: t('control.share.nothingTitle')
         })
         return
       }
@@ -673,10 +697,9 @@ export default function DeploymentsControl({
       setSharing(target)
     } catch (reason) {
       if (projectIdRef.current !== projectId) return
-      toast.error(
-        authErrorMessage(reason, 'Could not load the published app to share. Please retry.'),
-        { title: 'Published app check failed' }
-      )
+      toast.error(authErrorMessage(reason, t('control.share.loadFailed')), {
+        title: t('control.errors.appCheck')
+      })
     } finally {
       openingShareRef.current = false
       setOpeningShare(false)
@@ -731,7 +754,7 @@ export default function DeploymentsControl({
     return (
       <input
         className="ws-input dep-rename"
-        aria-label="Published app name"
+        aria-label={t('control.renameLabel')}
         autoFocus
         spellCheck={false}
         value={renameValue}
@@ -751,9 +774,7 @@ export default function DeploymentsControl({
 
   const activeKey = activeDep ? (activeDep.workspaceId ?? activeDep.workspaceName) : null
   /** The first publish picks a workspace; later ones add another. */
-  const createTitle = hasDeployment
-    ? 'Publish to another workspace'
-    : 'Publish to a Fabric workspace'
+  const createTitle = hasDeployment ? t('control.create.another') : t('control.create.first')
 
   return (
     <div className="dep-control" onClick={(e) => e.stopPropagation()}>
@@ -767,10 +788,10 @@ export default function DeploymentsControl({
           onClick={() => setOpen((o) => !o)}
         >
           <StatusDot status={status} />
-          <span className="sr-only">Published app:</span>
+          <span className="sr-only">{t('control.chip.label')}</span>
           <span className="dep-chip-label">{label}</span>
           {status === 'err' ? (
-            <span className="dep-chip-note">· Failed</span>
+            <span className="dep-chip-note">· {t('control.chip.failedNote')}</span>
           ) : (
             modeNote && <span className="dep-chip-note">· {modeNote}</span>
           )}
@@ -799,7 +820,7 @@ export default function DeploymentsControl({
             className={`seg-btn dep-share-btn${openingShare ? ' is-busy' : ''}`}
             disabled={reconciling}
             aria-busy={openingShare || undefined}
-            title={openingShare ? 'Opening the share dialog…' : 'Share this app with people in your tenant'}
+            title={openingShare ? t('control.share.opening') : t('control.share.title')}
             onClick={() => void openShareForActive()}
           >
             {openingShare ? (
@@ -807,7 +828,7 @@ export default function DeploymentsControl({
             ) : (
               <Codicon name="person-add" />
             )}
-            <span className="dep-share-label">Share</span>
+            <span className="dep-share-label">{t('share.share')}</span>
           </button>
         </div>
       )}
@@ -816,7 +837,7 @@ export default function DeploymentsControl({
         <div
           className="dep-pop"
           role="dialog"
-          aria-label={creating ? createTitle : 'Published apps'}
+          aria-label={creating ? createTitle : t('control.panel')}
         >
           {creating ? (
             <div className="dep-sec">
@@ -827,12 +848,17 @@ export default function DeploymentsControl({
                     className="dep-account-text"
                     title={[account.user, account.tenant].filter(Boolean).join(' · ')}
                   >
-                    Publishes as <strong>{account.user ?? 'your Fabric account'}</strong>
+                    <Trans
+                      t={t}
+                      i18nKey="control.publishesAs"
+                      values={{ user: account.user ?? t('control.yourAccountInSentence') }}
+                      components={{ strong: <strong /> }}
+                    />
                     {account.tenant ? ` · ${account.tenant}` : ''}
                   </span>
                   {onManageAccounts && (
                     <button type="button" className="link-btn dep-account-change" onClick={leave(onManageAccounts)}>
-                      Change
+                      {t('control.change')}
                     </button>
                   )}
                 </div>
@@ -863,7 +889,9 @@ export default function DeploymentsControl({
                     renameInput()
                   ) : (
                     <span className="dep-title" title={toNew ?? activeLabel}>
-                      {toNew ?? (activeLabel || (reconciling ? 'Checking…' : 'Not published yet'))}
+                      {toNew ??
+                        (activeLabel ||
+                          (reconciling ? t('status.checking') : t('control.notPublishedYet')))}
                     </span>
                   )}
                   {activeDep && !toNew && renamingKey !== activeKey && (
@@ -871,8 +899,8 @@ export default function DeploymentsControl({
                       <button
                         type="button"
                         className="dep-ico"
-                        title="Rename this published app"
-                        aria-label="Rename this published app"
+                        title={t('control.rename')}
+                        aria-label={t('control.rename')}
                         onClick={() => startRename(activeDep)}
                       >
                         <Codicon name="edit" />
@@ -880,8 +908,8 @@ export default function DeploymentsControl({
                       <button
                         type="button"
                         className="dep-ico"
-                        title={deleteWait ?? 'Delete this published app'}
-                        aria-label="Delete this published app"
+                        title={deleteWait ?? t('control.delete.title')}
+                        aria-label={t('control.delete.title')}
                         disabled={Boolean(deleting || deleteWait)}
                         onClick={() => setConfirmDelete(activeKey)}
                       >
@@ -904,7 +932,7 @@ export default function DeploymentsControl({
                     <div
                       className="dep-bar"
                       role="progressbar"
-                      aria-label="Publish progress"
+                      aria-label={t('progress.label')}
                       aria-valuemin={0}
                       aria-valuemax={100}
                       aria-valuenow={percent ?? 0}
@@ -915,7 +943,7 @@ export default function DeploymentsControl({
                     {onWatch && (
                       <div className="dep-actions">
                         <button type="button" className="btn btn--sm" onClick={leave(onWatch)}>
-                          Watch
+                          {t('progress.watch')}
                         </button>
                       </div>
                     )}
@@ -925,13 +953,13 @@ export default function DeploymentsControl({
                 {turnedDown ? (
                   <div className="dep-callout">
                     <span className="dep-callout-text">
-                      Couldn&apos;t publish to{' '}
-                      {turnedDownIn?.name ? `“${turnedDownIn.name}”` : 'that workspace'}.
+                      {turnedDownIn?.name
+                        ? t('control.turnedDown.named', { name: turnedDownIn.name })
+                        : t('control.turnedDown.unnamed')}
                       <span className="dep-callout-detail">
                         {turnedDownIn?.region
-                          ? `Fabric apps aren’t available in ${turnedDownIn.region}, where its capacity is. `
-                          : 'Fabric apps aren’t available in its region. '}
-                        Choose a workspace on a capacity in another region.
+                          ? t('control.turnedDown.region', { region: turnedDownIn.region })
+                          : t('control.turnedDown.noRegion')}
                       </span>
                     </span>
                     <div className="dep-actions">
@@ -942,16 +970,16 @@ export default function DeploymentsControl({
                         title={held ? heldTitle : undefined}
                         onClick={startCreate}
                       >
-                        Choose another workspace
+                        {t('region.chooseAnother')}
                       </button>
                       <button
                         type="button"
                         className="btn btn--sm btn--ghost"
-                        title="See which regions have Fabric apps (opens learn.microsoft.com)"
+                        title={t('region.availabilityTitle')}
                         onClick={() => void window.api.openExternal(REGION_AVAILABILITY_URL)}
                       >
                         <Codicon name="link-external" />
-                        Region availability
+                        {t('region.availability')}
                       </button>
                     </div>
                   </div>
@@ -959,7 +987,7 @@ export default function DeploymentsControl({
                   status === 'err' && (
                     <div className="dep-callout">
                       <span className="dep-callout-text">
-                        Publishing didn&apos;t finish.
+                        {t('control.failedCallout')}
                         {failure && <span className="dep-callout-detail">{failure}</span>}
                       </span>
                       {onDiagnose && (
@@ -970,7 +998,7 @@ export default function DeploymentsControl({
                             onClick={leave(onDiagnose)}
                           >
                             <Codicon name="comment-discussion" />
-                            Find out why
+                            {t('findOutWhy')}
                           </button>
                         </div>
                       )}
@@ -982,12 +1010,15 @@ export default function DeploymentsControl({
                   <div className="dep-callout">
                     <span className="dep-callout-text">
                       {files ? (
-                        <>
-                          <strong>{plural(files, 'file')}</strong> changed since {name} was
-                          published.
-                        </>
+                        <Trans
+                          t={t}
+                          i18nKey="control.waiting.files"
+                          count={files}
+                          values={{ name }}
+                          components={{ strong: <strong /> }}
+                        />
                       ) : (
-                        <>Your latest changes aren&apos;t on {name} yet.</>
+                        t('control.waiting.changes', { name })
                       )}
                     </span>
                     <div className="dep-actions">
@@ -1002,7 +1033,7 @@ export default function DeploymentsControl({
                       </button>
                       {onShowChanges && (
                         <button type="button" className="btn btn--sm btn--ghost" onClick={leave(onShowChanges)}>
-                          See what changed
+                          {t('control.seeChanges')}
                         </button>
                       )}
                     </div>
@@ -1014,7 +1045,7 @@ export default function DeploymentsControl({
                 <dl className="dep-facts">
                   {appUrl && (
                     <>
-                      <dt>App</dt>
+                      <dt>{t('control.facts.app')}</dt>
                       <dd>
                         <span className="dep-url" title={appUrl}>
                           {hostOf(appUrl)}
@@ -1022,8 +1053,8 @@ export default function DeploymentsControl({
                         <button
                           type="button"
                           className="dep-ico"
-                          title={copied === 'link' ? 'Copied' : 'Copy link'}
-                          aria-label={copied === 'link' ? 'Copied' : 'Copy link'}
+                          title={copied === 'link' ? t('actions.copied') : t('copy.link')}
+                          aria-label={copied === 'link' ? t('actions.copied') : t('copy.link')}
                           onClick={() => void copyText(appUrl, 'link')}
                         >
                           <Codicon name={copied === 'link' ? 'check' : 'copy'} />
@@ -1031,8 +1062,8 @@ export default function DeploymentsControl({
                         <button
                           type="button"
                           className="dep-ico"
-                          title="Open in your browser"
-                          aria-label="Open in your browser"
+                          title={t('control.openInBrowser')}
+                          aria-label={t('control.openInBrowser')}
                           onClick={() => void window.api.openExternal(appUrl)}
                         >
                           <Codicon name="link-external" />
@@ -1042,7 +1073,7 @@ export default function DeploymentsControl({
                   )}
                   {itemLink && itemId && (
                     <>
-                      <dt>Item</dt>
+                      <dt>{t('control.facts.item')}</dt>
                       <dd>
                         <span className="dep-val dep-id" title={itemId}>
                           {itemId}
@@ -1050,8 +1081,8 @@ export default function DeploymentsControl({
                         <button
                           type="button"
                           className="dep-ico"
-                          title={copied === 'item' ? 'Copied' : 'Copy item ID'}
-                          aria-label={copied === 'item' ? 'Copied' : 'Copy item ID'}
+                          title={copied === 'item' ? t('actions.copied') : t('copy.itemId')}
+                          aria-label={copied === 'item' ? t('actions.copied') : t('copy.itemId')}
                           onClick={() => void copyText(itemId, 'item')}
                         >
                           <Codicon name={copied === 'item' ? 'check' : 'copy'} />
@@ -1059,8 +1090,8 @@ export default function DeploymentsControl({
                         <button
                           type="button"
                           className="dep-ico"
-                          title="Open in Fabric"
-                          aria-label="Open in Fabric"
+                          title={t('control.openInFabric')}
+                          aria-label={t('control.openInFabric')}
                           onClick={() => void window.api.openExternal(itemLink)}
                         >
                           <Codicon name="link-external" />
@@ -1070,7 +1101,7 @@ export default function DeploymentsControl({
                   )}
                   {shownWorkspace && (
                     <>
-                      <dt>Workspace</dt>
+                      <dt>{t('control.facts.workspace')}</dt>
                       <dd>
                         <span className="dep-val" title={shownWorkspace}>
                           {shownWorkspace}
@@ -1080,8 +1111,8 @@ export default function DeploymentsControl({
                           <button
                             type="button"
                             className="dep-ico"
-                            title="Open the workspace in Fabric"
-                            aria-label="Open the workspace in Fabric"
+                            title={t('control.openWorkspace')}
+                            aria-label={t('control.openWorkspace')}
                             onClick={() => void window.api.openExternal(workspaceLink)}
                           >
                             <Codicon name="link-external" />
@@ -1090,26 +1121,26 @@ export default function DeploymentsControl({
                       </dd>
                     </>
                   )}
-                  <dt>Account</dt>
+                  <dt>{t('control.facts.account')}</dt>
                   <dd>
                     {account ? (
                       <>
                         <span className="dep-val" title={[account.user, account.tenant].filter(Boolean).join(' · ')}>
-                          {account.user ?? 'Your Fabric account'}
+                          {account.user ?? t('control.yourAccount')}
                           {account.tenant && <span className="dep-dim"> · {account.tenant}</span>}
                         </span>
                         {onManageAccounts && (
                           <button type="button" className="link-btn dep-link-btn" onClick={leave(onManageAccounts)}>
-                            Change
+                            {t('control.change')}
                           </button>
                         )}
                       </>
                     ) : (
                       <>
-                        <span className="dep-val dep-dim">Not signed in to Fabric</span>
+                        <span className="dep-val dep-dim">{t('control.notSignedIn')}</span>
                         {onSignIn && (
                           <button type="button" className="link-btn dep-link-btn" onClick={leave(onSignIn)}>
-                            Sign in
+                            {t('actions.signIn')}
                           </button>
                         )}
                       </>
@@ -1120,14 +1151,16 @@ export default function DeploymentsControl({
 
               {others.length > 0 && (
                 <div className="dep-sec">
-                  <span className="dep-sec-title">Other published apps</span>
+                  <span className="dep-sec-title">{t('control.others')}</span>
                   <ul className="dep-list">
                     {others.map((d) => {
                       const key = d.workspaceId ?? d.workspaceName
                       const meta = [
                         d.workspaceName,
                         workspaceById(d.workspaceId)?.sku,
-                        d.deployedAt ? `published ${timeAgo(d.deployedAt, now)}` : undefined
+                        d.deployedAt
+                          ? t('control.publishedAgo', { when: timeAgo(d.deployedAt, now) })
+                          : undefined
                       ]
                         .filter(Boolean)
                         .join(' · ')
@@ -1149,8 +1182,10 @@ export default function DeploymentsControl({
                               <button
                                 type="button"
                                 className="dep-ico dep-row-edit"
-                                title="Rename this published app"
-                                aria-label={`Rename ${d.name || d.workspaceName}`}
+                                title={t('control.rename')}
+                                aria-label={t('control.renameNamed', {
+                                  name: d.name || d.workspaceName
+                                })}
                                 onClick={() => startRename(d)}
                               >
                                 <Codicon name="edit" />
@@ -1160,8 +1195,10 @@ export default function DeploymentsControl({
                               <button
                                 type="button"
                                 className="dep-ico dep-row-edit"
-                                title={deleteWait ?? 'Delete this published app'}
-                                aria-label={`Delete ${d.name || d.workspaceName}`}
+                                title={deleteWait ?? t('control.delete.title')}
+                                aria-label={t('control.delete.named', {
+                                  name: d.name || d.workspaceName
+                                })}
                                 disabled={Boolean(deleting || deleteWait)}
                                 onClick={() => setConfirmDelete(key)}
                               >
@@ -1175,11 +1212,11 @@ export default function DeploymentsControl({
                               title={
                                 held
                                   ? heldTitle
-                                  : `Preview and publish to ${d.name || d.workspaceName}`
+                                  : t('control.switchTitle', { name: d.name || d.workspaceName })
                               }
                               onClick={() => void doSwitch(d)}
                             >
-                              {switching === key ? 'Switching…' : 'Switch'}
+                              {switching === key ? t('control.switching') : t('control.switch')}
                             </button>
                           </div>
                           {confirmDelete === key && deleteConfirm(d)}
@@ -1194,11 +1231,9 @@ export default function DeploymentsControl({
                 <div className="dep-sec">
                   <label className="dep-toggle">
                     <span className="dep-toggle-text">
-                      <span className="dep-toggle-title">Publish after each chat turn</span>
+                      <span className="dep-toggle-title">{t('control.auto.title')}</span>
                       <span className="dep-toggle-hint">
-                        {autoDeploy.on
-                          ? 'When a turn changes your app, it publishes as the turn finishes.'
-                          : 'Changes stay on this computer, showing in the preview, until you publish them.'}
+                        {autoDeploy.on ? t('control.auto.on') : t('control.auto.off')}
                       </span>
                     </span>
                     <span className={`switch${autoDeploy.on ? ' switch--on' : ''}`}>
@@ -1222,7 +1257,9 @@ export default function DeploymentsControl({
                   title={held ? heldTitle : deleting ? deletingTitle : undefined}
                 >
                   <Codicon name="add" />
-                  {createTitle}…
+                  {hasDeployment
+                    ? t('control.create.anotherButton')
+                    : t('control.create.firstButton')}
                 </button>
               </div>
             </>

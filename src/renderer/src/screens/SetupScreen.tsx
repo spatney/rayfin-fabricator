@@ -33,6 +33,7 @@ import { reportIssue } from './reportIssue'
 import { progressLine, toolLine, toolState } from './setupCopy'
 import { setupProblem } from './setupProblems'
 import { setupReady } from '../startup'
+import { Trans, useTranslation } from '../i18n'
 
 /** Official product logo (as an <img> src) for each tool, keyed by the doctor's tool id. */
 const TOOL_LOGOS: Record<string, string> = {
@@ -44,6 +45,12 @@ const TOOL_LOGOS: Record<string, string> = {
 
 /** The optional Azure step's actions: a failure is shown, but never blocks entry. */
 const OPTIONAL_ACTIONS = new Set(['install:az', 'login:az', 'logout:az'])
+
+/** An action's name: `text` is shown to the user, `event` (English) goes to telemetry. */
+interface ActionLabel {
+  text: string
+  event: string
+}
 
 interface Props {
   doctor: DoctorReport | null
@@ -65,6 +72,7 @@ export default function SetupScreen({
   onEnter,
   onBack
 }: Props): JSX.Element {
+  const { t } = useTranslation('setup')
   const [copilotHost, setCopilotHost] = useState(() => auth?.copilot.host ?? getCopilotHost())
   const [log, setLog] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
@@ -111,21 +119,25 @@ export default function SetupScreen({
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [log])
 
-  async function runAction(key: string, label: string, fn: () => Promise<ProcResult>): Promise<void> {
+  async function runAction(
+    key: string,
+    label: ActionLabel,
+    fn: () => Promise<ProcResult>
+  ): Promise<void> {
     if (activeProc.current || refreshing) return
     activeProc.current = key
     setBusy(key)
     setFailure(null)
     setShowLog(true)
-    setLog(`\u203a ${label}\n`)
+    setLog(`\u203a ${label.text}\n`)
     try {
       const result = await fn()
       if (!result.ok) {
-        const detail = result.error ?? `${label} did not complete. Please try again.`
+        const detail = result.error ?? t('run.failed', { action: label.text })
         setFailure({ message: detail, optional: OPTIONAL_ACTIONS.has(key) })
         setLog((p) => `${p}\n[error] ${detail}\n`)
       } else {
-        reportEvent('auth', 'auth.signed_in', `${label}: done.`, { operation: key })
+        reportEvent('auth', 'auth.signed_in', `${label.event}: done.`, { operation: key })
       }
     } catch (err) {
       setFailure({ message: String(err), optional: OPTIONAL_ACTIONS.has(key) })
@@ -138,7 +150,7 @@ export default function SetupScreen({
       try {
         await onRefresh()
       } catch (err) {
-        setFailure({ message: `Could not verify account status: ${String(err)}`, optional: false })
+        setFailure({ message: t('run.verifyFailed', { error: String(err) }), optional: false })
       } finally {
         activeProc.current = null
         setBusy(null)
@@ -150,26 +162,26 @@ export default function SetupScreen({
   /** Run an install action and react to whether a relaunch is required. */
   async function runInstall(
     key: string,
-    label: string,
+    label: ActionLabel,
     fn: () => Promise<InstallResult>
   ): Promise<void> {
     activeProc.current = key
     setBusy(key)
     setFailure(null)
     setShowLog(true)
-    setLog((p) => `${p}\n\u203a ${label}\n`)
+    setLog((p) => `${p}\n\u203a ${label.text}\n`)
     try {
       const res = await fn()
       if (!res.ok && !res.manual) {
-        const detail = res.error ?? `${label} did not complete. Check the process output.`
+        const detail = res.error ?? t('run.installFailed', { action: label.text })
         setFailure({ message: detail, optional: OPTIONAL_ACTIONS.has(key) })
         setLog((p) => `${p}\n[error] ${detail}\n`)
       } else if (res.ok) {
-        reportEvent('setup', 'tool.installed', `${label}: done.`, { operation: key })
+        reportEvent('setup', 'tool.installed', `${label.event}: done.`, { operation: key })
       }
       if (res?.requiresRelaunch) setNeedsRelaunch(true)
       if (res?.manual) {
-        setLog((p) => `${p}\nFinish the install in the page that opened, then click “Restart”.\n`)
+        setLog((p) => `${p}\n${t('log.manualInstall')}\n`)
       }
     } catch (err) {
       setFailure({ message: String(err), optional: OPTIONAL_ACTIONS.has(key) })
@@ -181,7 +193,7 @@ export default function SetupScreen({
         await onRefresh()
       } catch (err) {
         setFailure({
-          message: `Could not re-check the environment: ${String(err)}`,
+          message: t('run.recheckFailed', { error: String(err) }),
           optional: false
         })
       }
@@ -189,9 +201,22 @@ export default function SetupScreen({
   }
 
   /** Install or update one tool. */
-  function install(t: ToolStatus): void {
-    void runInstall(`install:${t.id}`, `${t.found ? 'Update' : 'Install'} ${t.name}`, () =>
-      window.api.doctor.install(t.id)
+  function install(tool: ToolStatus): void {
+    const label: ActionLabel = {
+      text: tool.found
+        ? t('run.update', { name: tool.name })
+        : t('run.install', { name: tool.name }),
+      event: `${tool.found ? 'Update' : 'Install'} ${tool.name}`
+    }
+    void runInstall(`install:${tool.id}`, label, () => window.api.doctor.install(tool.id))
+  }
+
+  /** Signing in to Copilot is offered in three places; they all log and report it alike. */
+  function signInCopilot(): Promise<void> {
+    return runAction(
+      'login:copilot',
+      { text: t('run.copilotSignIn'), event: 'Sign in to GitHub Copilot' },
+      () => signInToCopilot(copilotHost)
     )
   }
 
@@ -201,7 +226,7 @@ export default function SetupScreen({
       await onRefresh()
     } catch (error) {
       setFailure({
-        message: `Could not re-check the environment: ${String(error)}`,
+        message: t('run.recheckFailed', { error: String(error) }),
         optional: false
       })
     }
@@ -223,9 +248,7 @@ export default function SetupScreen({
         break
       case 'sign-in-copilot':
         setShowHelp(false)
-        void runAction('login:copilot', 'Sign in to GitHub Copilot', () =>
-          signInToCopilot(copilotHost)
-        )
+        void signInCopilot()
         break
       case 'open-logs':
         void window.api.openLogs()
@@ -306,11 +329,9 @@ export default function SetupScreen({
               <FabricatorMark />
             </div>
             <div className="setup-hero-copy">
-              <span className="setup-eyebrow">Welcome to</span>
+              <span className="setup-eyebrow">{t('hero.eyebrow')}</span>
               <h1 className="setup-hero-title">Fabricator</h1>
-              <p className="setup-hero-tagline">
-                Build and ship Rayfin apps by chatting with an AI agent.
-              </p>
+              <p className="setup-hero-tagline">{t('hero.tagline')}</p>
             </div>
           </header>
 
@@ -338,11 +359,11 @@ export default function SetupScreen({
               <div className="setup-problem-actions">
                 {copilotReady && (
                   <button className="btn btn--sm" onClick={() => setShowHelp(true)}>
-                    Ask Help
+                    {t('problem.askHelp')}
                   </button>
                 )}
                 <button className="btn btn--ghost btn--sm" onClick={() => setShowLog((s) => !s)}>
-                  {showLog ? 'Hide details' : 'Show details'}
+                  {showLog ? t('problem.hideDetails') : t('problem.showDetails')}
                 </button>
               </div>
             </div>
@@ -351,11 +372,10 @@ export default function SetupScreen({
           {needsRelaunch && (
             <div className="setup-relaunch">
               <div className="setup-relaunch-text">
-                <strong>Almost there.</strong> Restart to finish setting up the tools that were
-                just installed.
+                <Trans t={t} i18nKey="relaunch.message" components={{ strong: <strong /> }} />
               </div>
               <button className="btn btn--primary btn--sm" onClick={() => window.api.relaunch()}>
-                Restart now
+                {t('relaunch.restartNow')}
               </button>
             </div>
           )}
@@ -363,15 +383,15 @@ export default function SetupScreen({
           <ol className="setup-steps">
             <SetupSection
               n={1}
-              title="Connect GitHub Copilot"
-              note="The AI that builds your app — and that answers your questions while you set the rest up"
+              title={t('copilot.title')}
+              note={t('copilot.note')}
               done={copilotReady}
               summary={
                 auth?.copilot.user
                   ? `${auth.copilot.user}${
                       auth.copilot.host ? ` · ${auth.copilot.host.replace(/^https:\/\//, '')}` : ''
                     }`
-                  : 'Signed in'
+                  : t('account.signedIn')
               }
               count={copilotReady ? '1/1' : '0/1'}
               open={open.copilot}
@@ -381,7 +401,7 @@ export default function SetupScreen({
                 <AuthRow
                   icon={<CopilotLogo />}
                   title="GitHub Copilot"
-                  subtitle="Sign in to start building, and to unlock Help"
+                  subtitle={t('copilot.subtitle')}
                   signedIn={auth?.copilot.signedIn ?? false}
                   detail={auth?.copilot.user}
                   extra={auth?.copilot.host?.replace(/^https:\/\//, '')}
@@ -390,11 +410,13 @@ export default function SetupScreen({
                   disabled={busy !== null || refreshing}
                   busy={busy === 'login:copilot'}
                   signingOut={busy === 'logout:copilot'}
-                  onSignIn={() =>
-                    runAction('login:copilot', 'Sign in to GitHub Copilot', () => signInToCopilot(copilotHost))
-                  }
+                  onSignIn={() => signInCopilot()}
                   onSignOut={() =>
-                    runAction('logout:copilot', 'Sign out of GitHub Copilot', signOutOfCopilot)
+                    runAction(
+                      'logout:copilot',
+                      { text: t('run.copilotSignOut'), event: 'Sign out of GitHub Copilot' },
+                      signOutOfCopilot
+                    )
                   }
                   signInOptions={
                     <CopilotHostInput
@@ -410,8 +432,7 @@ export default function SetupScreen({
                 <p className="setup-sec-aside">
                   <CheckIcon className="setup-sec-aside-ico" />
                   <span>
-                    Help is available now. If anything below goes wrong, select{' '}
-                    <strong>Help</strong> and it will read what happened.
+                    <Trans t={t} i18nKey="copilot.helpReady" components={{ strong: <strong /> }} />
                   </span>
                 </p>
               )}
@@ -419,13 +440,13 @@ export default function SetupScreen({
 
             <SetupSection
               n={2}
-              title="Install the tools"
-              note="Free tools Fabricator uses behind the scenes. It can install them for you."
+              title={t('tools.title')}
+              note={t('tools.note')}
               done={doctor !== null && requiredReady === required.length}
               summary={
                 allToolsReady
-                  ? `All ${setupTools.length} installed`
-                  : `All ${required.length} required tools installed`
+                  ? t('tools.allInstalled', { count: setupTools.length })
+                  : t('tools.requiredInstalled', { count: required.length })
               }
               count={toolsCount}
               open={open.tools}
@@ -437,38 +458,39 @@ export default function SetupScreen({
                     disabled={busy !== null || refreshing || hasToolCheckErrors || !online}
                     title={
                       !online
-                        ? 'Installing needs an internet connection'
+                        ? t('tools.needsInternet')
                         : hasToolCheckErrors
-                          ? 'Resolve the CLI check errors first'
+                          ? t('tools.resolveChecks')
                           : undefined
                     }
                     onClick={() =>
-                      runInstall('install:all', 'Install everything', () =>
-                        window.api.doctor.installAll()
+                      runInstall(
+                        'install:all',
+                        { text: t('run.installAll'), event: 'Install everything' },
+                        () => window.api.doctor.installAll()
                       )
                     }
                   >
-                    {busy === 'install:all' ? 'Installing…' : 'Install all'}
+                    {busy === 'install:all' ? t('tools.installing') : t('tools.installAll')}
                   </button>
                 ) : undefined
               }
             >
               {!online && needsAuto.length > 0 && (
                 <p className="setup-sec-aside is-warn">
-                  You&apos;re offline, so Fabricator can&apos;t download these yet. Reconnect and
-                  select <strong>Re-check</strong>.
+                  <Trans t={t} i18nKey="tools.offline" components={{ strong: <strong /> }} />
                 </p>
               )}
 
               <ul className="setup-rows">
-                {setupTools.map((t) => (
+                {setupTools.map((tool) => (
                   <ToolRow
-                    key={t.id}
-                    tool={t}
+                    key={tool.id}
+                    tool={tool}
                     busy={busy}
                     refreshing={refreshing}
                     online={online}
-                    onInstall={() => install(t)}
+                    onInstall={() => install(tool)}
                     onRecheck={() => void recheck()}
                   />
                 ))}
@@ -477,11 +499,11 @@ export default function SetupScreen({
 
             <SetupSection
               n={3}
-              title="Sign in to Azure"
-              note="Optional. Lets you share apps, add Fabric data and migrate Power BI reports. You can also sign in later."
+              title={t('azure.title')}
+              note={t('azure.note')}
               done={azSignedIn}
-              summary={auth?.az.user ?? 'Signed in'}
-              count={azSignedIn ? '1/1' : 'Optional'}
+              summary={auth?.az.user ?? t('account.signedIn')}
+              count={azSignedIn ? '1/1' : t('azure.optional')}
               open={open.azure}
               onToggle={() => toggle('azure')}
             >
@@ -499,7 +521,7 @@ export default function SetupScreen({
                   <AuthRow
                     icon={<img className="brand-glyph" src={azureSvg} alt="" />}
                     title="Azure CLI"
-                    subtitle="Access your Azure resources"
+                    subtitle={t('azure.subtitle')}
                     optional
                     signedIn={azSignedIn}
                     detail={auth?.az.user}
@@ -507,14 +529,22 @@ export default function SetupScreen({
                     error={auth?.az.error}
                     checking={refreshing}
                     disabled={busy !== null || refreshing || !azReady}
-                    disabledReason={!azReady && doctor ? 'Install the Azure CLI first' : undefined}
+                    disabledReason={!azReady && doctor ? t('azure.installCliFirst') : undefined}
                     busy={busy === 'login:az'}
                     signingOut={busy === 'logout:az'}
                     onSignIn={() =>
-                      runAction('login:az', 'Sign in to Azure', () => window.api.auth.loginAz())
+                      runAction(
+                        'login:az',
+                        { text: t('run.azureSignIn'), event: 'Sign in to Azure' },
+                        () => window.api.auth.loginAz()
+                      )
                     }
                     onSignOut={() =>
-                      runAction('logout:az', 'Sign out of Azure', () => window.api.auth.logoutAz())
+                      runAction(
+                        'logout:az',
+                        { text: t('run.azureSignOut'), event: 'Sign out of Azure' },
+                        () => window.api.auth.logoutAz()
+                      )
                     }
                   />
                 )}
@@ -529,16 +559,16 @@ export default function SetupScreen({
           <div className="setup-finish">
             <div className="setup-finish-copy">
               <p className="setup-finish-title">
-                {allReady ? "You're all set" : 'Almost there'}
+                {allReady ? t('finish.allSet') : t('finish.almostThere')}
               </p>
               <p className="setup-finish-note">
                 {needsRelaunch
-                  ? 'Restart Fabricator to finish setting up the tools that were just installed.'
+                  ? t('finish.restart')
                   : allReady
                     ? azSignedIn
-                      ? 'Your tools are installed and your accounts are connected.'
-                      : 'Your tools are installed and GitHub Copilot is connected. Sign in to Azure whenever you need it.'
-                    : `Finish the ${remaining === 1 ? 'step' : `${remaining} steps`} above to continue.`}
+                      ? t('finish.ready')
+                      : t('finish.readyWithoutAzure')
+                    : t('finish.stepsLeft', { count: remaining })}
               </p>
             </div>
             <button
@@ -546,7 +576,7 @@ export default function SetupScreen({
               disabled={!allReady || busy !== null || needsRelaunch}
               onClick={() => onEnter()}
             >
-              Enter Fabricator
+              {t('finish.enter')}
               <span className="setup-enter-arrow" aria-hidden="true">
                 <ArrowRightIcon className="setup-enter-arrow-ico" />
                 <ArrowRightIcon className="setup-enter-arrow-ico setup-enter-arrow-next" />
@@ -560,7 +590,7 @@ export default function SetupScreen({
         <div className="setup-logwrap">
           <div className="setup-logwrap-inner">
             <pre ref={logRef} className="setup-log">
-              {log.trim() || 'Process output will appear here.'}
+              {log.trim() || t('log.empty')}
             </pre>
           </div>
         </div>
@@ -573,17 +603,13 @@ export default function SetupScreen({
             <button
               className="btn btn--ghost btn--sm"
               onClick={() => (copilotReady ? setShowHelp(true) : setShowHelpOffline(true))}
-              title={
-                copilotReady
-                  ? 'Ask Help about anything that is not working'
-                  : 'Get help with setup — including the documentation'
-              }
+              title={copilotReady ? t('actionBar.helpTitle') : t('actionBar.helpOfflineTitle')}
             >
               <Codicon name="comment-discussion" />
-              Help
+              {t('actionBar.help')}
             </button>
             <button className="btn btn--ghost btn--sm" onClick={() => setShowLog((s) => !s)}>
-              {showLog ? 'Hide log' : 'Show log'}
+              {showLog ? t('actionBar.hideLog') : t('actionBar.showLog')}
             </button>
           </div>
           <div className="setup-actionbar-right">
@@ -593,12 +619,12 @@ export default function SetupScreen({
             {!allReady && (
               <span className="setup-actionbar-status">
                 {refreshing
-                  ? 'Checking...'
+                  ? t('actionBar.checking')
                   : busy?.startsWith('logout:')
-                    ? 'Signing out...'
+                    ? t('actionBar.signingOut')
                     : blocked
-                      ? 'Re-check required'
-                      : `${remaining} ${remaining === 1 ? 'step' : 'steps'} left`}
+                      ? t('actionBar.recheckRequired')
+                      : t('actionBar.stepsLeft', { count: remaining })}
               </span>
             )}
             <button
@@ -607,11 +633,11 @@ export default function SetupScreen({
               onClick={() => void recheck()}
             >
               <ReloadIcon className={`btn-ico ${refreshing ? 'icon-spin' : ''}`} />
-              {refreshing ? 'Checking…' : 'Re-check'}
+              {refreshing ? t('status.checking') : t('recheck.button')}
             </button>
             {onBack && !allReady && (
               <button className="btn btn--ghost btn--sm" disabled={busy !== null} onClick={onBack}>
-                Back to Fabricator
+                {t('actionBar.back')}
               </button>
             )}
           </div>
@@ -622,9 +648,7 @@ export default function SetupScreen({
         <HelpUnavailableModal
           onSignIn={() => {
             setShowHelpOffline(false)
-            void runAction('login:copilot', 'Sign in to GitHub Copilot', () =>
-              signInToCopilot(copilotHost)
-            )
+            void signInCopilot()
           }}
           onDocs={() => openDocs('setup')}
           onReportIssue={() => void reportIssue(window.api, null)}
@@ -644,18 +668,23 @@ export default function SetupScreen({
       )}
 
       {loginProvider && (
-        <div className="signin-overlay" role="alertdialog" aria-busy="true" aria-label="Signing in">
+        <div
+          className="signin-overlay"
+          role="alertdialog"
+          aria-busy="true"
+          aria-label={t('signingIn.label')}
+        >
           <div className="signin-card">
             <div className="signin-mark">
               <FabricatorMark />
               <span className="signin-ring" />
             </div>
             <div className="signin-text">
-              <strong>Signing you in…</strong>
+              <strong>{t('signingIn.title')}</strong>
               <span>
                 {finalizing
-                  ? 'Getting things ready…'
-                  : `Finish signing in to ${loginProvider} in your browser, or follow the device-code instructions below.`}
+                  ? t('signingIn.finalizing')
+                  : t('signingIn.browser', { provider: loginProvider })}
               </span>
             </div>
             {logTail && <pre className="signin-log">{logTail}</pre>}
@@ -701,6 +730,7 @@ function SetupSection({
 }): JSX.Element {
   // A step that still needs something is always open: there is no sense in
   // hiding work the user has to do.
+  const { t } = useTranslation('setup')
   const expanded = !done || open
   return (
     <li className={`setup-sec ${done ? 'is-done' : ''} ${expanded ? 'is-open' : ''}`}>
@@ -718,7 +748,7 @@ function SetupSection({
             aria-expanded={expanded}
             onClick={onToggle}
           >
-            {expanded ? 'Hide' : 'Details'}
+            {expanded ? t('section.hide') : t('actions.details')}
           </button>
         )}
       </div>
@@ -729,7 +759,7 @@ function SetupSection({
 
 /** One tool: what it's for (or what's wrong with it), and how to get it. */
 function ToolRow({
-  tool: t,
+  tool,
   busy,
   refreshing,
   online,
@@ -744,63 +774,64 @@ function ToolRow({
   onInstall: () => void
   onRecheck: () => void
 }): JSX.Element {
-  const logoSrc = TOOL_LOGOS[t.id]
-  const state = t.satisfied ? 'ok' : t.found ? 'warn' : 'bad'
-  const status = toolState(t)
+  const { t } = useTranslation('setup')
+  const logoSrc = TOOL_LOGOS[tool.id]
+  const state = tool.satisfied ? 'ok' : tool.found ? 'warn' : 'bad'
+  const status = toolState(tool)
   return (
     <li className="setup-row" data-state={state}>
       <span className="setup-row-ico">
         {logoSrc ? <img className="brand-glyph" src={logoSrc} alt="" /> : <TerminalIcon />}
       </span>
       <div className="setup-row-main">
-        <span className="setup-row-name">{t.name}</span>
+        <span className="setup-row-name">{tool.name}</span>
         <span
           className="setup-row-meta"
-          role={t.checkError ? 'alert' : undefined}
-          title={t.checkError}
+          role={tool.checkError ? 'alert' : undefined}
+          title={tool.checkError}
         >
-          {t.checkError ? t.checkError : toolLine(t)}
+          {tool.checkError ? tool.checkError : toolLine(tool)}
         </span>
       </div>
       <div className="setup-row-action">
-        {t.satisfied ? (
+        {tool.satisfied ? (
           <span className="setup-state is-ok">
             <span className="setup-state-dot" aria-hidden="true" />
             {status.word}
           </span>
-        ) : t.checkError ? (
+        ) : tool.checkError ? (
           <button
             className="btn btn--sm"
             disabled={busy !== null || refreshing}
-            aria-label={`Re-check ${t.name}`}
+            aria-label={t('recheck.tool', { name: tool.name })}
             onClick={onRecheck}
           >
             <ReloadIcon className={`btn-ico ${refreshing ? 'icon-spin' : ''}`} />
-            Re-check
+            {t('recheck.button')}
           </button>
-        ) : t.autoInstallable ? (
+        ) : tool.autoInstallable ? (
           <button
             className="btn btn--sm"
             disabled={busy !== null || !online}
-            title={!online ? 'Installing needs an internet connection' : undefined}
+            title={!online ? t('tools.needsInternet') : undefined}
             onClick={onInstall}
           >
-            {busy === `install:${t.id}` ? (
-              t.found ? (
-                'Updating…'
+            {busy === `install:${tool.id}` ? (
+              tool.found ? (
+                t('tools.updating')
               ) : (
-                'Installing…'
+                t('tools.installing')
               )
             ) : (
               <>
                 <DownloadIcon className="btn-ico" />
-                {t.found ? 'Update' : 'Install'}
+                {tool.found ? t('actions.update') : t('actions.install')}
               </>
             )}
           </button>
         ) : (
-          <a className="btn btn--sm" href={t.installUrl} target="_blank" rel="noreferrer">
-            Get it
+          <a className="btn btn--sm" href={tool.installUrl} target="_blank" rel="noreferrer">
+            {t('tools.getIt')}
           </a>
         )}
       </div>
@@ -828,19 +859,20 @@ interface AuthRowProps {  icon: JSX.Element
 }
 
 function AuthRow(props: AuthRowProps): JSX.Element {
+  const { t } = useTranslation('setup')
   return (
     <li className="setup-row" data-state={props.signedIn ? 'ok' : 'bad'}>
       <span className="setup-row-ico">{props.icon}</span>
       <div className="setup-row-main">
         <span className="setup-row-name">{props.title}</span>
         {props.checking ? (
-          <span className="setup-row-meta">Checking…</span>
+          <span className="setup-row-meta">{t('status.checking')}</span>
         ) : props.signedIn ? (
           <span
             className="setup-row-meta"
-            title={[props.detail ?? 'Signed in', props.extra].filter(Boolean).join(' · ')}
+            title={[props.detail ?? t('account.signedIn'), props.extra].filter(Boolean).join(' · ')}
           >
-            {props.detail ?? 'Signed in'}
+            {props.detail ?? t('account.signedIn')}
             {props.extra ? ` · ${props.extra}` : ''}
           </span>
         ) : props.disabledReason ? (
@@ -855,21 +887,21 @@ function AuthRow(props: AuthRowProps): JSX.Element {
         {props.checking ? (
           <span className="setup-state">
             <span className="setup-state-dot" aria-hidden="true" />
-            Checking
+            {t('account.checking')}
           </span>
         ) : props.signedIn ? (
           <>
             <span className="setup-state is-ok">
               <span className="setup-state-dot" aria-hidden="true" />
-              Connected
+              {t('account.connected')}
             </span>
             <button
               className="btn btn--ghost btn--sm"
-              aria-label={`Sign out of ${props.title}`}
+              aria-label={t('account.signOutOf', { name: props.title })}
               disabled={props.disabled}
               onClick={props.onSignOut}
             >
-              {props.signingOut ? 'Signing out…' : 'Sign out'}
+              {props.signingOut ? t('account.signingOut') : t('actions.signOut')}
             </button>
           </>
         ) : (
@@ -878,7 +910,7 @@ function AuthRow(props: AuthRowProps): JSX.Element {
             disabled={props.disabled}
             onClick={props.onSignIn}
           >
-            {props.busy ? 'Waiting…' : 'Sign in'}
+            {props.busy ? t('account.waiting') : t('actions.signIn')}
           </button>
         )}
       </div>

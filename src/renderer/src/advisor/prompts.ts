@@ -3,8 +3,10 @@
  */
 import type { AdvisorFinding, ChatAdvisorFix, ChatAdvisorSummary } from '@shared/ipc'
 import { categoryById, ruleById, severityLabel, severityRank } from '@shared/advisor/catalog'
+import { translator } from '../i18n'
 import { langFromPath } from '../syntax'
 import { recordOf } from './lifecycle'
+import { findingTitle } from './ruleText'
 
 const GUIDANCE =
   'Before changing Rayfin APIs, confirm them in the version-matched docs — ' +
@@ -52,7 +54,7 @@ function fixOf(f: AdvisorFinding): ChatAdvisorFix {
 }
 
 export interface FixHandOff {
-  /** The user-bubble text (also what Copy copies). */
+  /** The user-bubble text (also what Copy copies), in the interface's language. */
   display: string
   /** What Copilot receives. */
   prompt: string
@@ -62,6 +64,7 @@ export interface FixHandOff {
 
 /** A chat hand-off for one or more findings, most severe first. */
 export function fixPrompt(findings: AdvisorFinding[]): FixHandOff {
+  const t = translator('advisor')
   const sorted = [...findings].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
   const summary: ChatAdvisorSummary = { fixes: sorted.map(fixOf) }
   if (sorted.length === 1) {
@@ -75,7 +78,7 @@ export function fixPrompt(findings: AdvisorFinding[]): FixHandOff {
       '',
       GUIDANCE
     ].join('\n')
-    return { display: `Fix: ${f.title}`, prompt, summary }
+    return { display: t('prompts.fixOne', { title: findingTitle(f) }), prompt, summary }
   }
   const blocks = sorted.map((f, i) =>
     describe(f)
@@ -91,7 +94,7 @@ export function fixPrompt(findings: AdvisorFinding[]): FixHandOff {
     '',
     GUIDANCE
   ].join('\n')
-  return { display: `Fix ${sorted.length} Advisor issues`, prompt, summary }
+  return { display: t('prompts.fixMany', { count: sorted.length }), prompt, summary }
 }
 
 /** Version findings go through the dedicated Rayfin upgrade hand-off instead. */

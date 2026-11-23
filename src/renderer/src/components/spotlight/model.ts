@@ -59,6 +59,8 @@ export interface SearchItem extends Searchable {
   verb?: string
   /** A quiet word before its kind, such as "Open now". */
   hint?: string
+  /** It's open right now: its hint shows as live. */
+  live?: boolean
   /** A shortcut that does the same thing, shown as keycaps: `['Ctrl', 'J']`. */
   keys?: string[]
   /** Nudges its rank: a docs section ranks a little below its page, say. */
@@ -77,61 +79,56 @@ export interface AskSuggestion {
   subtitle?: string
 }
 
-export const GROUP_LABELS: Record<SearchGroup, string> = {
-  projects: 'Projects',
-  apps: 'Fabric apps',
-  actions: 'Actions',
-  docs: 'Documentation',
-  files: 'Files'
-}
+/** Each group's name, as its key in `spotlight`. */
+export const GROUP_LABELS = {
+  projects: 'groups.projects',
+  apps: 'groups.apps',
+  actions: 'groups.actions',
+  docs: 'groups.docs',
+  files: 'groups.files'
+} as const satisfies Record<SearchGroup, string>
 
-/** Each kind of thing, as a sentence names it: "No docs match". */
-export const GROUP_NOUNS: Record<SearchGroup, string> = {
-  projects: 'projects',
-  apps: 'apps',
-  actions: 'actions',
-  docs: 'docs',
-  files: 'files'
-}
+/** What each group's results are, and what Enter does with one (keys in `spotlight`). */
+export const GROUP_DEFAULTS = {
+  projects: { kind: 'kinds.projects', verb: 'verbs.projects' },
+  apps: { kind: 'kinds.apps', verb: 'verbs.apps' },
+  actions: { kind: 'kinds.actions', verb: 'verbs.actions' },
+  docs: { kind: 'kinds.docs', verb: 'actions.openInBrowser' },
+  files: { kind: 'kinds.files', verb: 'verbs.files' }
+} as const satisfies Record<SearchGroup, { kind: string; verb: string }>
 
-/** What each group's results are, and what Enter does with one. */
-export const GROUP_DEFAULTS: Record<SearchGroup, { kind: string; verb: string }> = {
-  projects: { kind: 'Project', verb: 'Open project' },
-  apps: { kind: 'Fabric app', verb: 'Open app' },
-  actions: { kind: 'Action', verb: 'Run action' },
-  docs: { kind: 'Docs', verb: 'Open in browser' },
-  files: { kind: 'File', verb: 'Open in Code' }
-}
-
-/** Each view: its row and title, and what its search box asks for. */
-export const VIEWS: Record<SearchView, { title: string; icon: ItemIcon; placeholder: string }> = {
+/**
+ * Each view: its row and title, and what its search box asks for. Its title and
+ * placeholder are keys in `spotlight`.
+ */
+export const VIEWS = {
   projects: {
-    title: 'Search projects',
+    title: 'views.projects.title',
     icon: { kind: 'codicon', name: 'folder-library', hue: HUE.violet },
-    placeholder: 'Search projects…'
+    placeholder: 'views.projects.placeholder'
   },
   apps: {
-    title: 'Search Fabric apps',
+    title: 'views.apps.title',
     icon: { kind: 'codicon', name: 'library', hue: HUE.green },
-    placeholder: 'Search the apps you can open in Fabric…'
+    placeholder: 'views.apps.placeholder'
   },
   actions: {
-    title: 'Search actions',
+    title: 'views.actions.title',
     icon: { kind: 'codicon', name: 'zap', hue: HUE.amber },
-    placeholder: 'Search actions…'
+    placeholder: 'views.actions.placeholder'
   },
   docs: {
-    title: 'Search the docs',
+    title: 'views.docs.title',
     icon: { kind: 'codicon', name: 'book', hue: HUE.blue },
-    placeholder: 'Search the docs…'
+    placeholder: 'views.docs.placeholder'
   },
   files: {
-    title: 'Search files',
+    title: 'views.files.title',
     icon: { kind: 'codicon', name: 'files', hue: HUE.teal },
-    placeholder: 'Search files…'
+    placeholder: 'views.files.placeholder'
   },
-  help: { title: 'Ask Help', icon: { kind: 'ray' }, placeholder: 'Ask Help anything…' }
-}
+  help: { title: 'views.help.title', icon: { kind: 'ray' }, placeholder: 'views.help.placeholder' }
+} as const satisfies Record<SearchView, { title: string; icon: ItemIcon; placeholder: string }>
 
 /**
  * The views in the order Ctrl+1…6 (⌘1…6) opens them. Fabric apps came later,

@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import { Trans, useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import './local.css'
 
@@ -26,8 +27,9 @@ export function markLocalNoticeSeen(projectId: string): void {
 
 /** Why the preview uses the published app's backend instead of this computer's. */
 export function FallbackNote({ reason }: { reason: string }): JSX.Element {
+  const { t } = useTranslation('preview')
   return (
-    <section className="local-note" aria-label="Preview backend">
+    <section className="local-note" aria-label={t('notes.backend')}>
       <Codicon name="cloud" className="local-note-icon" />
       <p className="local-note-text">{reason}</p>
     </section>
@@ -39,8 +41,9 @@ export function FallbackNote({ reason }: { reason: string }): JSX.Element {
  * implement, such as a newer one: some things might not work as expected.
  */
 export function SdkWarningNote({ warning }: { warning: string }): JSX.Element {
+  const { t } = useTranslation('preview')
   return (
-    <section className="local-note" aria-label="Rayfin version">
+    <section className="local-note" aria-label={t('notes.rayfinVersion')}>
       <Codicon name="warning" className="local-note-icon local-note-icon--warn" />
       <p className="local-note-text">{warning}</p>
     </section>
@@ -52,15 +55,15 @@ export function SdkWarningNote({ warning }: { warning: string }): JSX.Element {
  * local data: the app keeps the previous data model until the user decides.
  */
 export function SchemaWaitingNote({ onReview }: { onReview: () => void }): JSX.Element {
+  const { t } = useTranslation('preview')
   return (
-    <section className="local-note" aria-label="Data model change waiting">
+    <section className="local-note" aria-label={t('notes.schemaWaiting')}>
       <span className="local-note-dot" aria-hidden="true" />
       <p className="local-note-text">
-        <strong>A data model change is waiting.</strong> It would delete data stored on this
-        computer, so your app still uses the previous data model.
+        <Trans t={t} i18nKey="notes.schemaWaitingText" components={{ b: <strong /> }} />
       </p>
       <button type="button" className="btn btn--sm" onClick={onReview}>
-        Review the change
+        {t('schema.review')}
       </button>
     </section>
   )

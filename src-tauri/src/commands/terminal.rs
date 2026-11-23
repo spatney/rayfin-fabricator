@@ -18,7 +18,7 @@ fn ours(webview: &Webview) -> Result<(), String> {
   if webview.label() == MAIN {
     Ok(())
   } else {
-    Err("Terminals are only available in Fabricator's window.".into())
+    Err(t!("commands.terminal.notHere"))
   }
 }
 
@@ -52,17 +52,17 @@ pub fn terminal_spawn(
 ) -> Result<TerminalInfo, String> {
   ours(&webview)?;
   if !valid_id(&id) {
-    return Err("That isn't a terminal id.".into());
+    return Err(t!("commands.terminal.badId"));
   }
-  let project = store::find_project(&project_id).ok_or("That project isn't in Fabricator anymore.")?;
+  let project = store::find_project(&project_id).ok_or_else(|| t!("commands.shared.projectGone"))?;
   let cwd = PathBuf::from(&project.path);
   if !cwd.is_dir() {
-    return Err("The project's folder isn't there anymore.".into());
+    return Err(t!("commands.shared.projectFolderGone"));
   }
   // Tools installed since Fabricator started, as checking for tools finds them.
   #[cfg(windows)]
   crate::services::env_path::repair();
-  let shell = shells::resolve(shell.as_deref()).ok_or("Fabricator couldn't find a shell on this computer.")?;
+  let shell = shells::resolve(shell.as_deref()).ok_or_else(|| t!("commands.terminal.noShell"))?;
   let mut restore = npm_env::for_user_shell();
   restore.push(rayfin_telemetry::for_user_shell());
   let version = app.package_info().version.to_string();

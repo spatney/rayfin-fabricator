@@ -1,5 +1,6 @@
 import { useMemo, type JSX } from 'react'
 import type { ChatPlanQuestion, ChatSegment } from '@shared/ipc'
+import { useTranslation } from '../../i18n'
 import Markdown from '../Markdown'
 import PlanQuestionCard from '../PlanQuestionCard'
 import { Codicon } from '../icons'
@@ -26,12 +27,13 @@ export function AgentQuestionBlock({
   error?: string
   onAnswer: (requestId: string, answer: string, wasFreeform: boolean) => void
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   const waiting = questions.some((q) => q.state === 'pending')
   return (
     <div className={`chat-agent-questions${waiting ? '' : ' chat-agent-questions--done'}`}>
       {waiting && (
         <div className="chat-agent-questions-head">
-          <Codicon name="comment-discussion" /> Fabricator needs your input
+          <Codicon name="comment-discussion" /> {t('assistant.needsInput')}
         </div>
       )}
       {questions.map((q) => (
@@ -52,10 +54,11 @@ function Interjection({
 }: {
   seg: Extract<ChatSegment, { kind: 'interjection' }>
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   const { open, viewer } = useImageViewer(seg.thumbs)
   return (
     <div className="turn-interject">
-      <span className="turn-interject-tag">You added</span>
+      <span className="turn-interject-tag">{t('assistant.youAdded')}</span>
       <div className="turn-interject-text">
         <Markdown>{seg.text}</Markdown>
         {seg.thumbs && seg.thumbs.length > 0 && <ShotStrip images={seg.thumbs} onOpen={open} />}

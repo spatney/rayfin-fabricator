@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react'
 import type { GalleryApp, GalleryStatus } from '@shared/ipc'
+import { translator, useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { ago, HEALTH, initials, markHue, type HealthIssue } from './model'
 import { WorkspaceName, workspaceIcon } from './WorkspacePicker'
@@ -89,7 +90,10 @@ export function AppCover({
 
 /** The words for a health issue; an update says which version. */
 export function healthLabel(issue: HealthIssue, update?: string | null): string {
-  return issue === 'outdated' && update ? `Rayfin ${update} available` : HEALTH[issue].label
+  const t = translator('gallery')
+  return issue === 'outdated' && update
+    ? t('health.outdatedVersion', { version: update })
+    : t(HEALTH[issue].label)
 }
 
 /** A health issue as a small dot and a word. */
@@ -100,6 +104,8 @@ export function HealthTag({
   issue: HealthIssue
   update?: string | null
 }): JSX.Element {
+  // Rerenders in a new language.
+  useTranslation('gallery')
   return (
     <span className={`gtag gtag--${HEALTH[issue].tone}`}>
       <span className={`gdot gdot--${HEALTH[issue].tone}`} aria-hidden="true" />
@@ -128,28 +134,30 @@ export function quickLookKeys(
 /** "Published 3 days ago", "Not published yet", or nothing while Fabric hasn't said. */
 export function publishedText(status: GalleryStatus | undefined): string | undefined {
   if (!status || status.unknown) return undefined
+  const t = translator('gallery')
   const when = ago(status.publishedAt)
-  return when ? `Published ${when}` : 'Not published yet'
+  return when ? t('published.when', { when }) : t('published.never')
 }
 
 /** Small dots and words: where the app lives besides Fabric. */
 export function AppTags({ app }: { app: GalleryApp }): JSX.Element | null {
+  const { t } = useTranslation('gallery')
   if (!app.local && !app.team) return null
   return (
     <>
       {app.local && (
         <span className="gtag">
           <span className="gdot gdot--local" aria-hidden="true" />
-          On this computer
+          {t('app.onThisComputer')}
         </span>
       )}
       {app.team && (
-        <span className="gtag" title={`Team workspace ${app.team.name}`}>
+        <span className="gtag" title={t('app.teamWorkspace', { name: app.team.name })}>
           <span
             className={`gdot ${app.team.preview ? 'gdot--preview' : 'gdot--team'}`}
             aria-hidden="true"
           />
-          {app.team.preview ? 'Team preview' : app.team.name}
+          {app.team.preview ? t('app.teamPreview') : app.team.name}
         </span>
       )}
     </>
@@ -191,6 +199,7 @@ export default function AppCard({
   /** Look at the live app (Space), when it has an address. */
   onQuickLook?: (app: GalleryApp) => void
 }): JSX.Element {
+  const { t } = useTranslation('gallery')
   const published = publishedText(status)
   const descId = `gcard-desc-${app.id}`
   // "Not published yet" is already its time line.
@@ -200,7 +209,7 @@ export default function AppCard({
       <button
         type="button"
         className={`gcard${selected ? ' gcard--selected' : ''}`}
-        aria-label={`${app.name}, in ${app.workspaceName}`}
+        aria-label={t('app.label', { name: app.name, workspace: app.workspaceName })}
         aria-describedby={descId}
         aria-pressed={selected}
         aria-keyshortcuts={onQuickLook ? 'Space' : undefined}
@@ -242,9 +251,9 @@ export default function AppCard({
         type="button"
         className="icon-btn gcard-pin"
         data-pin-for={app.id}
-        aria-label={`Pin ${app.name}`}
+        aria-label={t('app.pin', { name: app.name })}
         aria-pressed={pinned}
-        title={pinned ? 'Unpin' : 'Pin to the top'}
+        title={pinned ? t('app.unpin') : t('app.pinToTop')}
         onClick={(event) => {
           event.stopPropagation()
           onPin(app, event.detail === 0)

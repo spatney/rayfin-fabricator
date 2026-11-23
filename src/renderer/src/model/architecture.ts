@@ -18,8 +18,9 @@
  */
 import { parse as parseYaml } from 'yaml'
 import type { SemanticModelRef, TeamManifest } from '@shared/ipc'
+import { formatList, translator } from '../i18n'
 import type { FabricConfig } from './fabricConfig'
-import { maskComments, type AccessLevel, type DataModel } from './parseSchema'
+import { accessText, maskComments, type AccessLevel, type DataModel } from './parseSchema'
 import { deriveRelationEdges } from './relationships'
 
 /** Who a connection signs in as: each signed-in person, the app itself, or a key the code sends. */
@@ -313,7 +314,19 @@ export interface WebService {
   audience?: string
 }
 
-const KNOWN_HOSTS: { suffix: string; service: Omit<WebService, 'key'> }[] = [
+/** What kind of service a known host is: keys into the `blueprint` catalog. */
+const HOST_TYPE = {
+  'Web API': 'model.hostTypes.webApi',
+  Storage: 'model.hostTypes.storage',
+  SQL: 'model.hostTypes.sql',
+  'AI service': 'model.hostTypes.aiService',
+  Database: 'model.hostTypes.database'
+} as const
+
+const KNOWN_HOSTS: {
+  suffix: string
+  service: Omit<WebService, 'key' | 'typeLabel'> & { typeLabel: keyof typeof HOST_TYPE }
+}[] = [
   { suffix: 'api.fabric.microsoft.com', service: { label: 'Fabric REST APIs', typeLabel: 'Web API', icon: 'layers', vendor: 'fabric', audience: 'Fabric' } },
   { suffix: 'onelake.dfs.fabric.microsoft.com', service: { label: 'OneLake', typeLabel: 'Storage', icon: 'cloud', vendor: 'fabric', audience: 'Storage' } },
   { suffix: 'onelake.blob.fabric.microsoft.com', service: { label: 'OneLake', typeLabel: 'Storage', icon: 'cloud', vendor: 'fabric', audience: 'Storage' } },
@@ -362,7 +375,10 @@ const endsWith = (host: string, suffix: string): boolean => host === suffix || h
 export function classifyHost(host: string): WebService | null {
   const h = host.toLowerCase()
   const known = KNOWN_HOSTS.find((k) => endsWith(h, k.suffix))
-  if (known) return { key: `web:${known.service.label.toLowerCase()}`, ...known.service }
+  if (known) {
+    const typeLabel = translator('blueprint')(HOST_TYPE[known.service.typeLabel])
+    return { key: `web:${known.service.label.toLowerCase()}`, ...known.service, typeLabel }
+  }
   if (IGNORED_HOST.test(h)) return null
   for (const [suffix, platform] of Object.entries(HOSTED_ON)) {
     if (endsWith(h, suffix)) {
@@ -386,8 +402,8 @@ export interface ConnectorKind {
   allowed: Identity[]
   /** What the source does when `operations` lists none (all allowed). */
   defaultOps: string[]
-  /** "Runs DAX queries" and friends, for query-only sources. */
-  queryLabel?: string
+  /** "Runs DAX queries" and friends, for query-only sources: a key into the `blueprint` catalog. */
+  queryLabel?: 'model.abilities.daxQueries' | 'model.abilities.kqlQueries'
 }
 
 const CONNECTOR_KINDS: Record<string, ConnectorKind> = {
@@ -418,7 +434,7 @@ const CONNECTOR_KINDS: Record<string, ConnectorKind> = {
     category: 'B',
     allowed: ['user'],
     defaultOps: ['executeQuery'],
-    queryLabel: 'Runs DAX queries'
+    queryLabel: 'model.abilities.daxQueries'
   },
   kusto: {
     label: 'KQL database',
@@ -426,11 +442,14 @@ const CONNECTOR_KINDS: Record<string, ConnectorKind> = {
     category: 'B',
     allowed: ['user'],
     defaultOps: ['executeQuery', 'executeCommand'],
-    queryLabel: 'Runs KQL queries'
+    queryLabel: 'model.abilities.kqlQueries'
   }
 }
 
-/** A connector type in plain words; unknown types keep their name. */
+/**
+ * A connector type in plain words; unknown types keep their name. Its `label`
+ * is English, for prompts: show {@link connectorTypeLabel}.
+ */
 export function connectorKind(type: string): ConnectorKind {
   return (
     CONNECTOR_KINDS[type] ?? {
@@ -441,6 +460,30 @@ export function connectorKind(type: string): ConnectorKind {
       defaultOps: []
     }
   )
+}
+
+/** A known connector type's name, and how it reads inside a list, in the language shown. */
+function kindNames(type: string): { label: string; inList: string } | undefined {
+  const t = translator('blueprint')
+  switch (type) {
+    case 'fabric-warehouse':
+      return { label: t('model.kinds.warehouse'), inList: t('model.kindsInList.warehouse') }
+    case 'fabric-sqldatabase':
+      return { label: t('model.kinds.sqlDatabase'), inList: t('model.kindsInList.sqlDatabase') }
+    case 'fabric-sqlanalytics':
+      return { label: t('model.kinds.sqlEndpoint'), inList: t('model.kindsInList.sqlEndpoint') }
+    case 'fabric-semanticmodel':
+      return { label: t('model.kinds.semanticModel'), inList: t('model.kindsInList.semanticModel') }
+    case 'kusto':
+      return { label: t('model.kinds.kqlDatabase'), inList: t('model.kindsInList.kqlDatabase') }
+    default:
+      return undefined
+  }
+}
+
+/** A connector type's name to show ("Warehouse"); unknown types keep their name. */
+export function connectorTypeLabel(type: string): string {
+  return kindNames(type)?.label ?? connectorKind(type).label
 }
 
 /** Connector types whose tables Rayfin discovers into `rayfin/connectors/<name>/metadata.json`. */
@@ -454,6 +497,7 @@ export const SQL_CONNECTOR_TYPES: ReadonlySet<string> = new Set([
 export const sqlSourceKey = (connectorName: string): string => `sql:${connectorName}`
 
 export interface AudienceKind {
+  /** English, for prompts and titles: a product name. */
   label: string
   icon: string
   vendor: 'fabric' | 'azure'
@@ -465,47 +509,24 @@ export interface AudienceKind {
   supported: boolean
 }
 
-const AUDIENCES: Record<string, AudienceKind> = {
-  Sql: {
-    label: 'Fabric SQL & Azure SQL',
-    icon: 'server',
-    vendor: 'fabric',
-    detail: 'Lakehouses, warehouses, SQL databases and Azure SQL',
-    grant: 'Access to each database it queries, such as a workspace role or a SQL role.',
-    supported: true
-  },
-  Storage: {
-    label: 'OneLake & Azure Storage',
-    icon: 'cloud',
-    vendor: 'azure',
-    detail: 'OneLake files and Azure Blob, Table or Queue storage',
-    grant: 'A workspace role for OneLake, or a Storage data role such as Storage Blob Data Reader.',
-    supported: true
-  },
-  Fabric: {
-    label: 'Fabric REST APIs',
-    icon: 'layers',
-    vendor: 'fabric',
-    detail: 'Microsoft Fabric REST APIs',
-    grant: 'A role on the workspaces and items it calls. Check that each API supports app identities.',
-    supported: true
-  },
-  AzureAI: {
-    label: 'Azure AI Foundry',
-    icon: 'sparkle',
-    vendor: 'azure',
-    detail: 'Azure AI Foundry and Azure OpenAI endpoints',
-    grant: 'The role the Azure AI resource requires, such as Cognitive Services User.',
-    supported: true
-  },
-  ADO: {
-    label: 'Azure DevOps',
-    icon: 'azure-devops',
-    vendor: 'azure',
-    detail: 'Azure DevOps REST APIs',
-    grant: 'Access to the Azure DevOps organization and project it calls.',
-    supported: true
-  }
+/** What reaching an audience means, and what the app identity needs there: keys into the `blueprint` catalog. */
+const AUDIENCE_TEXT = {
+  sql: { detail: 'model.audiences.sql.detail', grant: 'model.audiences.sql.grant' },
+  storage: { detail: 'model.audiences.storage.detail', grant: 'model.audiences.storage.grant' },
+  fabric: { detail: 'model.audiences.fabric.detail', grant: 'model.audiences.fabric.grant' },
+  azureAi: { detail: 'model.audiences.azureAi.detail', grant: 'model.audiences.azureAi.grant' },
+  ado: { detail: 'model.audiences.ado.detail', grant: 'model.audiences.ado.grant' },
+  other: { detail: 'model.audiences.other.detail', grant: 'model.audiences.other.grant' }
+} as const
+
+type AudienceEntry = Pick<AudienceKind, 'label' | 'icon' | 'vendor'> & { text: keyof typeof AUDIENCE_TEXT }
+
+const AUDIENCES: Record<string, AudienceEntry> = {
+  Sql: { label: 'Fabric SQL & Azure SQL', icon: 'server', vendor: 'fabric', text: 'sql' },
+  Storage: { label: 'OneLake & Azure Storage', icon: 'cloud', vendor: 'azure', text: 'storage' },
+  Fabric: { label: 'Fabric REST APIs', icon: 'layers', vendor: 'fabric', text: 'fabric' },
+  AzureAI: { label: 'Azure AI Foundry', icon: 'sparkle', vendor: 'azure', text: 'azureAi' },
+  ADO: { label: 'Azure DevOps', icon: 'azure-devops', vendor: 'azure', text: 'ado' }
 }
 
 const UNSUPPORTED_AUDIENCES: Record<string, string> = {
@@ -518,16 +539,17 @@ const UNSUPPORTED_AUDIENCES: Record<string, string> = {
 
 /** A function audience in plain words. */
 export function audienceKind(audience: string): AudienceKind {
-  return (
-    AUDIENCES[audience] ?? {
-      label: UNSUPPORTED_AUDIENCES[audience] ?? audience,
-      icon: 'cloud',
-      vendor: 'azure',
-      detail: 'Reached from functions',
-      grant: 'Access to the resource it calls.',
-      supported: false
-    }
-  )
+  const t = translator('blueprint')
+  const known: AudienceEntry | undefined = AUDIENCES[audience]
+  const text = AUDIENCE_TEXT[known?.text ?? 'other'] ?? AUDIENCE_TEXT.other
+  return {
+    label: known?.label ?? UNSUPPORTED_AUDIENCES[audience] ?? audience,
+    icon: known?.icon ?? 'cloud',
+    vendor: known?.vendor ?? 'azure',
+    detail: t(text.detail),
+    grant: t(text.grant),
+    supported: text !== AUDIENCE_TEXT.other
+  }
 }
 
 /* ------------------------------ the view-model ------------------------------ */
@@ -595,7 +617,10 @@ export interface TableInfo {
   entity: string
   access: AccessLevel
   tone: Tone
+  /** Its access badge in English, as prompts quote it. */
   label: string
+  /** Its access badge in the interface's language. */
+  accessLabel: string
   file: string
 }
 
@@ -685,51 +710,41 @@ export function parsePort(nodeId: string): { service: string; identity: Identity
 const keyOf = (workspaceId: string, itemId: string): string =>
   `${workspaceId.toLowerCase()}:${itemId.toLowerCase()}`
 
-function plural(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`
-}
-
-function listOf(names: string[]): string {
-  if (names.length <= 2) return names.join(' and ')
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
-}
-
 /** What a connector does, from its operations (all allowed when none are listed). */
 export function connectorAbility(c: ConnectorConfig): string {
+  const t = translator('blueprint')
   const kind = connectorKind(c.type)
   const ops = (c.operations.length ? c.operations : kind.defaultOps).map((o) => o.toLowerCase())
-  if (ops.some((o) => o === 'create' || o === 'update' || o === 'delete')) return 'Reads and writes'
-  if (ops.includes('executecommand')) return 'Runs KQL queries and commands'
-  if (ops.includes('executequery')) return kind.queryLabel ?? 'Runs queries'
-  if (ops.includes('read')) return 'Read only'
-  return c.operations.join(', ') || 'Connected'
+  if (ops.some((o) => o === 'create' || o === 'update' || o === 'delete')) return t('model.abilities.readsAndWrites')
+  if (ops.includes('executecommand')) return t('model.abilities.kqlCommands')
+  if (ops.includes('executequery')) return t(kind.queryLabel ?? 'model.abilities.queries')
+  if (ops.includes('read')) return t('model.abilities.readOnly')
+  return c.operations.join(', ') || t('model.abilities.connected')
 }
 
 /** Which identity a connector runs as, and what's wrong with its `auth` block. */
 export function connectorIdentity(c: ConnectorConfig): { identity: Identity; issues: Issue[] } {
+  const t = translator('blueprint')
   const kind = connectorKind(c.type)
   const issues: Issue[] = []
   const raw = c.auth
   if (!raw) {
-    issues.push({
-      tone: 'danger',
-      text: 'It has no `auth.type`. Rayfin 1.36 requires `delegated` or `application`.'
-    })
+    issues.push({ tone: 'danger', text: t('model.auth.missing') })
     return { identity: 'user', issues }
   }
   const lower = raw.toLowerCase()
   if (lower !== 'delegated' && lower !== 'application') {
-    issues.push({ tone: 'danger', text: `\`auth.type: ${raw}\` isn’t valid. Use \`delegated\` or \`application\`.` })
+    issues.push({ tone: 'danger', text: t('model.auth.invalid', { value: raw }) })
     return { identity: 'user', issues }
   }
   if (raw !== lower) {
-    issues.push({ tone: 'danger', text: `\`auth.type\` must be lowercase \`${lower}\`; \`rayfin up\` rejects \`${raw}\`.` })
+    issues.push({ tone: 'danger', text: t('model.auth.lowercase', { lower, raw }) })
   }
   const identity: Identity = lower === 'application' ? 'app' : 'user'
   if (!kind.allowed.includes(identity)) {
     issues.push({
       tone: 'danger',
-      text: `${kind.label} connectors only allow \`delegated\`; \`rayfin up\` rejects \`application\`.`
+      text: t('model.auth.delegatedOnly', { kind: connectorTypeLabel(c.type) })
     })
   }
   return { identity, issues }
@@ -740,9 +755,10 @@ export function connectorIdentity(c: ConnectorConfig): { identity: Identity; iss
  * `rayfin.yml` can't be read; everything else degrades to "not used".
  */
 export function buildArchitecture(input: ArchitectureInput): AppArchitecture | { error: string } {
-  if (input.rayfinYml == null) return { error: 'Fabricator couldn’t read rayfin/rayfin.yml.' }
+  const t = translator('blueprint')
+  if (input.rayfinYml == null) return { error: t('model.cantRead') }
   const config = parseRayfinConfig(input.rayfinYml)
-  if (!config) return { error: 'rayfin/rayfin.yml isn’t valid YAML, so the app’s parts can’t be shown.' }
+  if (!config) return { error: t('model.invalidYaml') }
 
   const services: ServiceNode[] = []
   const sources = new Map<string, SourceNode>()
@@ -760,20 +776,17 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
     assetAccess === 'public' ? 'public' : assetAccess === 'protected' ? 'protected' : 'unset'
   const peopleIssues: Issue[] = []
   if (!config.auth.enabled) {
-    peopleIssues.push({ tone: 'danger', text: 'Sign-in is off, so the app can’t tell people apart.' })
+    peopleIssues.push({ tone: 'danger', text: t('model.people.signInOff') })
   }
   if (access === 'public') {
-    peopleIssues.push({
-      tone: 'info',
-      text: 'The app’s pages load before sign-in, so anyone with the link can download their HTML, JavaScript and CSS. Its data still needs sign-in.'
-    })
+    peopleIssues.push({ tone: 'info', text: t('model.people.publicPages') })
   }
   const people: AppArchitecture['people'] = {
     signIn: config.auth.enabled
       ? config.auth.fabric
-        ? 'Microsoft Entra ID, through Fabric'
-        : 'Microsoft Entra ID'
-      : 'No sign-in',
+        ? t('model.people.entraThroughFabric')
+        : t('model.people.entra')
+      : t('model.people.noSignIn'),
     access,
     embeddedOnly: config.hosting.embeddedOnly,
     tone: config.auth.enabled ? 'ok' : 'danger',
@@ -784,25 +797,22 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
   if (config.hosting.enabled) {
     const issues: Issue[] = []
     if (access === 'unset') {
-      issues.push({
-        tone: 'info',
-        text: '`assetAccess` isn’t set. Choose `protected` or `public` before publishing.'
-      })
+      issues.push({ tone: 'info', text: t('model.website.assetAccessUnset') })
     }
     services.push({
       id: ids.service('website'),
       kind: 'website',
-      title: 'Website',
+      title: t('model.website.title'),
       icon: 'browser',
-      summary: 'Hosted on Fabric',
+      summary: t('model.website.summary'),
       // Public pages are common: only the page files load before sign-in, not the data.
       status:
         access === 'public'
-          ? { tone: 'off', icon: 'globe', text: 'Pages load before sign-in' }
+          ? { tone: 'off', icon: 'globe', text: t('model.website.public') }
           : access === 'protected'
-            ? { tone: 'off', icon: 'lock', text: 'Pages load after sign-in' }
-            : { tone: 'off', icon: 'info', text: 'Page access not set' },
-      meta: config.hosting.embeddedOnly ? 'Opens only inside Fabric' : undefined,
+            ? { tone: 'off', icon: 'lock', text: t('model.website.protected') }
+            : { tone: 'off', icon: 'info', text: t('model.website.unset') },
+      meta: config.hosting.embeddedOnly ? t('model.website.embeddedOnly') : undefined,
       issues
     })
   }
@@ -811,18 +821,18 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
   services.push({
     id: ids.service('signin'),
     kind: 'signin',
-    title: 'Sign-in',
+    title: t('model.signin.title'),
     icon: config.auth.enabled ? 'shield' : 'unlock',
-    summary: config.auth.enabled ? people.signIn : 'Off',
+    summary: config.auth.enabled ? people.signIn : t('status.off'),
     meta: config.auth.enabled
       ? config.auth.externalEntraExchange
-        ? 'Also accepts Entra tokens from other apps'
+        ? t('model.signin.externalEntra')
         : config.auth.redirectUris.length
-          ? `Allows sign-in from ${plural(config.auth.redirectUris.length, 'address', 'addresses')}`
+          ? t('model.signin.addresses', { count: config.auth.redirectUris.length })
           : undefined
       : undefined,
     tone: config.auth.enabled ? undefined : 'danger',
-    issues: config.auth.enabled ? [] : [{ tone: 'danger', text: 'Sign-in is off.' }]
+    issues: config.auth.enabled ? [] : [{ tone: 'danger', text: t('model.signin.off') }]
   })
 
   /* Database */
@@ -835,30 +845,34 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
       access: e.access.level,
       tone: TONE_OF[e.access.level],
       label: e.access.label,
+      accessLabel: accessText(e).label,
       file: e.file
     }))
     const counts: Record<Tone, number> = { ok: 0, warn: 0, danger: 0 }
-    for (const t of tables) counts[t.tone]++
+    for (const table of tables) counts[table.tone]++
     const derived = deriveRelationEdges(input.dataModel?.relations ?? [])
     const relationships = derived.pairs.length + derived.selfs.length
     database = { tables, relationships, counts }
     const parts = [
-      counts.ok && `${counts.ok} row-scoped`,
-      counts.warn && `${counts.warn} any signed-in`,
-      counts.danger && `${counts.danger} public`
+      counts.ok && t('model.database.scoped', { count: counts.ok }),
+      counts.warn && t('model.database.signedIn', { count: counts.warn }),
+      counts.danger && t('model.database.public', { count: counts.danger })
     ].filter(Boolean)
+    const relationshipCount = relationships
+      ? ` · ${t('model.database.relationships', { count: relationships })}`
+      : ''
     services.push({
       id: ids.service('database'),
       kind: 'database',
-      title: 'Database',
+      title: t('model.database.title'),
       icon: 'database',
       summary: tables.length
-        ? `${plural(tables.length, 'table')}${relationships ? ` · ${plural(relationships, 'relationship')}` : ''}`
-        : 'No tables yet',
+        ? `${t('model.database.tables', { count: tables.length })}${relationshipCount}`
+        : t('model.database.noTables'),
       meta: parts.length ? parts.join(' · ') : undefined,
       tone: counts.danger ? 'danger' : counts.warn ? 'warn' : tables.length ? 'ok' : undefined,
       issues: counts.danger
-        ? [{ tone: 'warn', text: `${plural(counts.danger, 'table is', 'tables are')} readable without signing in.` }]
+        ? [{ tone: 'warn', text: t('model.database.readable', { count: counts.danger }) }]
         : []
     })
   }
@@ -868,12 +882,12 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
     services.push({
       id: ids.service('storage'),
       kind: 'storage',
-      title: 'File storage',
+      title: t('model.storage.title'),
       icon: 'file-media',
-      summary: 'Files people upload · experimental',
+      summary: t('model.storage.summary'),
       issues: config.data.enabled
         ? []
-        : [{ tone: 'warn', text: 'Storage depends on the database, which is off.' }]
+        : [{ tone: 'warn', text: t('model.storage.needsDatabase') }]
     })
   }
 
@@ -887,12 +901,12 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
       issues.push({
         tone: 'danger',
         text: config.functions.authType
-          ? `\`services.functions.auth.type\` is \`${config.functions.authType}\`; Rayfin 1.36 requires \`application\`.`
-          : 'Functions are on but don’t set `services.functions.auth.type: application`, which Rayfin 1.36 requires.'
+          ? t('model.functions.authType', { authType: config.functions.authType })
+          : t('model.functions.noAuthType')
       })
     }
     if (!config.functions.enabled && scan.functions.length > 0) {
-      issues.push({ tone: 'info', text: 'Functions are written but turned off in rayfin.yml.' })
+      issues.push({ tone: 'info', text: t('model.functions.turnedOff') })
     }
     for (const h of scan.hardcoded.length ? [hardcodedSummary(scan.hardcoded)] : []) {
       issues.push({ tone: 'danger', text: h })
@@ -904,7 +918,7 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
         id,
         kind: 'audience',
         title: kind.label,
-        typeLabel: 'Function connection',
+        typeLabel: t('model.functionConnection'),
         icon: kind.icon,
         vendor: kind.vendor,
         identity: 'app',
@@ -916,7 +930,7 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
         files: functions.files,
         issues: kind.supported
           ? []
-          : [{ tone: 'warn', text: `\`AudienceType.${audience}\` isn’t a public audience in Rayfin 1.36.2.` }]
+          : [{ tone: 'warn', text: t('model.functions.unsupportedAudience', { audience }) }]
       })
       route('functions', 'app', id)
     }
@@ -961,10 +975,12 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
     services.push({
       id: ids.service('functions'),
       kind: 'functions',
-      title: 'Functions',
+      title: t('model.functions.title'),
       icon: 'symbol-method',
-      summary: scan.functions.length ? plural(scan.functions.length, 'server-side function') : 'No functions yet',
-      meta: reach.length ? `Reaches ${listOf(reach)}` : undefined,
+      summary: scan.functions.length
+        ? t('model.functions.count', { count: scan.functions.length })
+        : t('model.functions.none'),
+      meta: reach.length ? t('model.functions.reaches', { list: formatList(reach) }) : undefined,
       tone: issues.some((i) => i.tone === 'danger') ? 'danger' : undefined,
       issues
     })
@@ -995,25 +1011,25 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
     if (undeclared.length) {
       issues.push({
         tone: 'danger',
-        text: `${listOf(undeclared)} ${undeclared.length === 1 ? 'is' : 'are'} read as \`ctx.Secrets\` but not declared in rayfin.yml, which is a TypeScript error. Add ${undeclared.length === 1 ? 'it' : 'them'} in Code → Secrets, which declares ${undeclared.length === 1 ? 'it' : 'them'} in rayfin.yml.`
+        text: t('model.secrets.undeclared', { count: undeclared.length, names: formatList(undeclared) })
       })
     }
     const legacy = secrets.filter((s) => s.legacy).map((s) => `\`${s.name}\``)
     if (legacy.length) {
       issues.push({
         tone: 'info',
-        text: `${listOf(legacy)} ${legacy.length === 1 ? 'is' : 'are'} read with \`ctx.getSecret()\`, deprecated in Rayfin 1.36. Read \`ctx.Secrets.<NAME>\` instead.`
+        text: t('model.secrets.legacy', { count: legacy.length, names: formatList(legacy) })
       })
     }
     if (!config.functions.enabled) {
-      issues.push({ tone: 'info', text: 'Only functions read secrets, and functions are off in rayfin.yml.' })
+      issues.push({ tone: 'info', text: t('model.secrets.functionsOff') })
     }
     services.push({
       id: ids.service('secrets'),
       kind: 'secrets',
-      title: 'Secrets',
+      title: t('model.secrets.title'),
       icon: 'lock',
-      summary: `${plural(secrets.length, 'secret')}, stored with the app`,
+      summary: t('model.secrets.summary', { count: secrets.length }),
       meta: secrets.map((s) => s.name).join(', '),
       tone: undeclared.length ? 'danger' : undefined,
       issues
@@ -1056,11 +1072,11 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
         id,
         kind: 'model',
         title: humanize(m.alias),
-        typeLabel: 'Semantic model',
+        typeLabel: connectorTypeLabel('fabric-semanticmodel'),
         icon: 'graph',
         vendor: 'fabric',
         identity: 'user',
-        ability: 'Runs DAX queries',
+        ability: t('model.abilities.daxQueries'),
         workspaceId: m.workspaceId,
         itemId: m.itemId,
         connectors: [],
@@ -1085,7 +1101,7 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
     if (existing) {
       existing.connectors.push(c)
       existing.kind = 'connector'
-      existing.typeLabel = kind.label
+      existing.typeLabel = connectorTypeLabel(c.type)
       existing.ability = connectorAbility(c)
       existing.files = [...new Set([...existing.files, 'rayfin/rayfin.yml'])]
       existing.issues.push(...issues)
@@ -1097,7 +1113,7 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
         id,
         kind: 'connector',
         title: humanize(c.name),
-        typeLabel: kind.label,
+        typeLabel: connectorTypeLabel(c.type),
         icon: kind.icon,
         vendor: 'fabric',
         identity,
@@ -1117,15 +1133,22 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
     route('connectors', identity, id)
   }
   if (config.connectors.length) {
-    const kinds = [...new Set(config.connectors.map((c) => connectorKind(c.type).label.toLowerCase()))]
+    const kinds = [
+      ...new Set(
+        config.connectors.map((c) => kindNames(c.type)?.inList ?? connectorKind(c.type).label.toLowerCase())
+      )
+    ]
     const bad = config.connectors.some((c) => connectorIdentity(c).issues.some((i) => i.tone === 'danger'))
     services.push({
       id: ids.service('connectors'),
       kind: 'connectors',
-      title: 'Connectors',
+      title: t('model.connectors.title'),
       icon: 'plug',
-      summary: `${plural(config.connectors.length, 'connector')} to Fabric data`,
-      meta: kinds.length <= 2 ? capitalize(listOf(kinds)) : `${kinds.length} kinds of source`,
+      summary: t('model.connectors.summary', { count: config.connectors.length }),
+      meta:
+        kinds.length <= 2
+          ? capitalize(formatList(kinds))
+          : t('model.connectors.kinds', { count: kinds.length }),
       tone: bad ? 'danger' : undefined,
       issues: []
     })
@@ -1158,17 +1181,15 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
 
 /** One sentence about keys written into the code, grouped by file. */
 export function hardcodedSummary(keys: { file: string; name: string }[]): string {
+  const t = translator('blueprint')
   const byFile = new Map<string, string[]>()
   for (const k of keys) byFile.set(k.file, [...(byFile.get(k.file) ?? []), k.name])
   const where = [...byFile]
-    .map(([file, names]) => `${names.map((n) => `\`${n}\``).join(', ')} in \`${file.split('/').pop()}\``)
+    .map(([file, names]) =>
+      t('model.hardcodedIn', { names: names.map((n) => `\`${n}\``).join(', '), file: file.split('/').pop() })
+    )
     .join('; ')
-  const one = keys.length === 1
-  return (
-    `${one ? 'A key looks' : `${keys.length} keys look`} written into the code: ${where}. Anyone who can read the ` +
-    `code can use ${one ? 'it' : 'them'}. Store ${one ? 'it' : 'them'} as ${one ? 'a secret' : 'secrets'} in ` +
-    `Code → Secrets and read ${one ? 'it' : 'them'} from \`ctx.Secrets\`.`
-  )
+  return t('model.hardcoded', { count: keys.length, where })
 }
 
 /** `coffee-shop-sales` → "Coffee shop sales". */

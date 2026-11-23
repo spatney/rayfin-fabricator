@@ -99,13 +99,21 @@ fn has_line_break(text: &str) -> bool {
   text.contains(['\0', '\r', '\n'])
 }
 
+/// What [`values_for`] reads: a command server's environment variables, or a
+/// remote server's headers.
+#[derive(Clone, Copy)]
+enum Named {
+  Env,
+  Header,
+}
+
 /// The names and values of a server's environment variables or headers being
 /// saved: each with its new value, or the one `saved` under its name.
 fn values_for(
   inputs: &[McpValueInput],
   saved: &BTreeMap<String, String>,
   valid: fn(&str) -> bool,
-  what: &str,
+  what: Named,
 ) -> Result<(Vec<String>, BTreeMap<String, String>), String> {
   let mut names: Vec<String> = Vec::new();
   let mut values = BTreeMap::new();
@@ -116,34 +124,32 @@ fn values_for(
       if input.value.as_deref().unwrap_or_default().is_empty() {
         continue;
       }
-      return Err(format!("Give each {what} a name."));
+      return Err(match what {
+        Named::Env => t!("services.mcp.nameEachEnv"),
+        Named::Header => t!("services.mcp.nameEachHeader"),
+      });
     }
     if name.chars().count() > MAX_VALUE_NAME || !valid(name) {
-      return Err(format!("{name} can't be the name of {}.", with_article(what)));
+      return Err(match what {
+        Named::Env => t!("services.mcp.badEnvName", name = name),
+        Named::Header => t!("services.mcp.badHeaderName", name = name),
+      });
     }
     if names.iter().any(|n| n.eq_ignore_ascii_case(name)) {
-      return Err(format!("{name} is there twice."));
+      return Err(t!("services.mcp.nameTwice", name = name));
     }
     let value = match &input.value {
-      Some(value) if value.is_empty() => return Err(format!("Enter a value for {name}.")),
+      Some(value) if value.is_empty() => return Err(t!("services.mcp.enterValue", name = name)),
       Some(value) => value.clone(),
-      None => saved.get(name).cloned().ok_or_else(|| format!("Enter a value for {name}."))?,
+      None => saved.get(name).cloned().ok_or_else(|| t!("services.mcp.enterValue", name = name))?,
     };
     if has_line_break(&value) {
-      return Err(format!("The value of {name} can't contain line breaks."));
+      return Err(t!("services.mcp.valueLineBreaks", name = name));
     }
     names.push(name.to_string());
     values.insert(name.to_string(), value);
   }
   Ok((names, values))
-}
-
-fn with_article(what: &str) -> String {
-  if what.starts_with(['a', 'e', 'i', 'o', 'u']) {
-    format!("an {what}")
-  } else {
-    format!("a {what}")
-  }
 }
 
 /// Whether `host` (as a URL gives it) is this computer.
@@ -159,16 +165,15 @@ fn is_loopback(host: &str) -> bool {
 fn check_url(raw: &str) -> Result<String, String> {
   let raw = raw.trim();
   if raw.is_empty() {
-    return Err("Enter the server's URL.".into());
+    return Err(t!("services.mcp.enterUrl"));
   }
-  let url = reqwest::Url::parse(raw)
-    .map_err(|_| format!("{raw} isn't a web address. Enter the server's URL, such as https://example.com/mcp."))?;
+  let url = reqwest::Url::parse(raw).map_err(|_| t!("services.mcp.notWebAddress", url = raw))?;
   let host = url.host_str().unwrap_or_default();
   match url.scheme() {
     "https" if !host.is_empty() => Ok(raw.to_string()),
     "http" if is_loopback(host) => Ok(raw.to_string()),
-    "http" if !host.is_empty() => Err("Use an https:// URL. Only a server on this computer can use http://.".into()),
-    _ => Err("Enter an https:// URL, such as https://example.com/mcp.".into()),
+    "http" if !host.is_empty() => Err(t!("services.mcp.useHttps")),
+    _ => Err(t!("services.mcp.enterHttpsUrl")),
   }
 }
 
@@ -183,17 +188,17 @@ pub fn entry_from(
 ) -> Result<(McpServerEntry, Values), String> {
   let name = input.name.split_whitespace().collect::<Vec<_>>().join(" ");
   if name.is_empty() {
-    return Err("Give the server a name.".into());
+    return Err(t!("services.mcp.nameServer"));
   }
   if name.chars().count() > MAX_NAME {
-    return Err(format!("Use a name of up to {MAX_NAME} characters."));
+    return Err(t!("services.mcp.nameTooLong", max = MAX_NAME));
   }
   let previous = match &input.id {
-    Some(id) => Some(existing.iter().find(|s| &s.id == id).ok_or("That server isn't in Fabricator anymore.")?),
+    Some(id) => Some(existing.iter().find(|s| &s.id == id).ok_or_else(|| t!("services.mcp.serverGone"))?),
     None => None,
   };
   if existing.iter().any(|s| Some(&s.id) != input.id.as_ref() && s.name.eq_ignore_ascii_case(&name)) {
-    return Err(format!("You already have a server named {name}. Choose another name."));
+    return Err(t!("services.mcp.nameTaken", name = name));
   }
   let id = match previous {
     Some(server) => server.id.clone(),
@@ -212,18 +217,18 @@ pub fn entry_from(
     McpTransport::Stdio => {
       let command = input.command.trim();
       if command.is_empty() {
-        return Err("Enter the command that starts the server, such as npx.".into());
+        return Err(t!("services.mcp.enterCommand"));
       }
       if has_line_break(command) || input.args.iter().any(|a| has_line_break(a)) {
-        return Err("The command can't contain line breaks.".into());
+        return Err(t!("services.mcp.commandLineBreaks"));
       }
       entry.command = command.to_string();
       entry.args = input.args.clone();
-      (entry.env, values.env) = values_for(&input.env, &saved.env, is_env_name, "environment variable")?;
+      (entry.env, values.env) = values_for(&input.env, &saved.env, is_env_name, Named::Env)?;
     }
     McpTransport::Http | McpTransport::Sse => {
       entry.url = check_url(&input.url)?;
-      (entry.headers, values.headers) = values_for(&input.headers, &saved.headers, is_header_name, "header")?;
+      (entry.headers, values.headers) = values_for(&input.headers, &saved.headers, is_header_name, Named::Header)?;
     }
   }
   Ok((entry, values))
@@ -238,7 +243,7 @@ pub fn save(input: &McpServerInput) -> Result<Vec<McpServerEntry>, String> {
   let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
   let (entry, values) = entry_from(input, &existing, &saved, &now)?;
   if !values.is_empty() && !keychain::supported() {
-    return Err("Fabricator can't keep the values of environment variables or headers safely on this operating system yet.".into());
+    return Err(t!("services.mcp.valuesUnsupported"));
   }
   secrets::save(&entry.id, &values)?;
   let id = entry.id.clone();

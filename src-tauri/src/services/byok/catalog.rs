@@ -27,7 +27,7 @@ pub struct ProviderSpec {
   pub id: &'static str,
   pub name: &'static str,
   /// What its models are, for Accounts.
-  pub description: &'static str,
+  pub description: fn() -> String,
   /// The Copilot runtime's provider type: `"anthropic"` or `"openai"`.
   pub kind: &'static str,
   /// The base URL the Copilot runtime calls.
@@ -55,7 +55,7 @@ pub const PROVIDERS: [ProviderSpec; 4] = [
   ProviderSpec {
     id: "anthropic",
     name: "Anthropic",
-    description: "Claude models",
+    description: || t!("services.byok.models.anthropic"),
     kind: "anthropic",
     base_url: "https://api.anthropic.com",
     wire_api: None,
@@ -70,7 +70,7 @@ pub const PROVIDERS: [ProviderSpec; 4] = [
   ProviderSpec {
     id: "openai",
     name: "OpenAI",
-    description: "GPT models",
+    description: || t!("services.byok.models.openai"),
     kind: "openai",
     base_url: "https://api.openai.com/v1",
     wire_api: Some("responses"),
@@ -85,7 +85,7 @@ pub const PROVIDERS: [ProviderSpec; 4] = [
   ProviderSpec {
     id: "xai",
     name: "xAI",
-    description: "Grok models",
+    description: || t!("services.byok.models.xai"),
     kind: "openai",
     base_url: "https://api.x.ai/v1",
     wire_api: Some("responses"),
@@ -100,7 +100,7 @@ pub const PROVIDERS: [ProviderSpec; 4] = [
   ProviderSpec {
     id: "google",
     name: "Google",
-    description: "Gemini and Gemma models",
+    description: || t!("services.byok.models.google"),
     kind: "openai",
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
     wire_api: Some("completions"),

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type JSX } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from '../../i18n'
 import { useModalFocus } from '../../modalFocus'
 import { useSuppressPreview } from '../../overlay'
 import { Codicon } from '../icons'
@@ -19,6 +20,7 @@ export function ImageViewer({
   start?: number
   onClose: () => void
 }): JSX.Element {
+  const { t } = useTranslation('chat')
   useSuppressPreview()
   const dialogRef = useModalFocus<HTMLDivElement>()
   const [index, setIndex] = useState(() => Math.min(Math.max(0, start), images.length - 1))
@@ -58,7 +60,11 @@ export function ImageViewer({
         className="image-viewer-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label={many ? `Picture ${index + 1} of ${images.length}` : 'Picture'}
+        aria-label={
+          many
+            ? t('imageViewer.pictureOf', { index: index + 1, total: images.length })
+            : t('imageViewer.picture')
+        }
         tabIndex={-1}
         ref={dialogRef}
       >
@@ -86,8 +92,8 @@ export function ImageViewer({
             event.stopPropagation()
             onClose()
           }}
-          aria-label="Close"
-          title="Close (Esc)"
+          aria-label={t('actions.close')}
+          title={t('imageViewer.closeTitle')}
         >
           <Codicon name="close" />
         </button>
@@ -100,8 +106,8 @@ export function ImageViewer({
                 event.stopPropagation()
                 step(-1)
               }}
-              aria-label="Previous picture"
-              title="Previous (←)"
+              aria-label={t('imageViewer.previous')}
+              title={t('imageViewer.previousTitle')}
             >
               <Codicon name="chevron-left" />
             </button>
@@ -112,8 +118,8 @@ export function ImageViewer({
                 event.stopPropagation()
                 step(1)
               }}
-              aria-label="Next picture"
-              title="Next (→)"
+              aria-label={t('imageViewer.next')}
+              title={t('imageViewer.nextTitle')}
             >
               <Codicon name="chevron-right" />
             </button>
@@ -142,6 +148,7 @@ export function ShotStrip({
   indexes?: readonly number[]
   onOpen: (index: number) => void
 }): JSX.Element | null {
+  const { t } = useTranslation('chat')
   const shown = indexes ?? images.map((_, i) => i)
   if (shown.length === 0) return null
   return (
@@ -152,9 +159,14 @@ export function ShotStrip({
           type="button"
           className="msg-shot-open"
           onClick={() => onOpen(i)}
-          title="Show it larger"
+          title={t('imageViewer.showLarger')}
         >
-          <img className="msg-shot" src={images[i]} alt="Screenshot attachment" draggable={false} />
+          <img
+            className="msg-shot"
+            src={images[i]}
+            alt={t('imageViewer.attachment')}
+            draggable={false}
+          />
         </button>
       ))}
     </div>

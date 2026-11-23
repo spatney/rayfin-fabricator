@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type JSX } from 'react'
 import type { LocalSeed, LocalSeedProblem } from '@shared/ipc'
 import { reportEvent } from '../../errorReport'
+import { Trans, useTranslation } from '../../i18n'
 import { toLocalBackendError } from '../../localBackend'
 import { plural } from '../blueprint/localData'
 import { Codicon } from '../icons'
@@ -51,6 +52,7 @@ interface Props {
  * the Data explorer loads it any time.
  */
 export default function SeedOffer({ projectId, stamp, onLoaded, onSendToChat }: Props): JSX.Element | null {
+  const { t } = useTranslation('preview')
   const [hidden, setHidden] = useState(() => dismissed(projectId))
   const [offer, setOffer] = useState<LocalSeed | null>(null)
   const [problems, setProblems] = useState<LocalSeedProblem[] | null>(null)
@@ -122,12 +124,10 @@ export default function SeedOffer({ projectId, stamp, onLoaded, onSendToChat }: 
   if (problems) {
     const first = problems[0]
     return (
-      <section className="local-note" aria-label="Seed data">
+      <section className="local-note" aria-label={t('seed.label')}>
         <Codicon name="warning" className="local-note-icon local-note-icon--warn" />
         <p className="local-note-text">
-          <strong>
-            The seed data has {plural(problems.length, 'problem')}, so it wasn’t loaded.
-          </strong>{' '}
+          <strong>{t('seed.problems', { count: problems.length })}</strong>{' '}
           {first && `${seedPlace(first)}: ${first.message}`}
         </p>
         {onSendToChat && (
@@ -135,14 +135,19 @@ export default function SeedOffer({ projectId, stamp, onLoaded, onSendToChat }: 
             type="button"
             className="btn btn--sm"
             onClick={() => {
-              onSendToChat('Fix the seed data’s problems', seedFixPrompt(problems))
+              onSendToChat(t('seed.fixRequest'), seedFixPrompt(problems))
               setProblems(null)
             }}
           >
-            Fix with Copilot
+            {t('seed.fix')}
           </button>
         )}
-        <button type="button" className="local-note-close" aria-label="Dismiss" onClick={close}>
+        <button
+          type="button"
+          className="local-note-close"
+          aria-label={t('actions.dismiss')}
+          onClick={close}
+        >
           <Codicon name="close" />
         </button>
       </section>
@@ -151,22 +156,32 @@ export default function SeedOffer({ projectId, stamp, onLoaded, onSendToChat }: 
   const seed = offer as LocalSeed
   const rows = seed.entities.reduce((sum, e) => sum + e.rows, 0)
   const files = seed.storage.reduce((sum, f) => sum + f.files, 0)
-  const amount = [rows > 0 ? plural(rows, 'row') : null, files > 0 ? plural(files, 'file') : null]
-    .filter(Boolean)
-    .join(' and ')
+  const rowsText = rows > 0 ? t('seed.rows', { count: rows }) : null
+  const filesText = files > 0 ? t('seed.files', { count: files }) : null
+  const amount =
+    rowsText && filesText
+      ? t('seed.rowsAndFiles', { rows: rowsText, files: filesText })
+      : (rowsText ?? filesText)
   return (
-    <section className="local-note" aria-label="Seed data">
+    <section className="local-note" aria-label={t('seed.label')}>
       <Codicon name="database" className="local-note-icon" />
       <p className="local-note-text">
-        <strong>This app comes with seed data</strong>
-        {amount ? ` (${amount})` : ''}. Its local data is empty: load the seed data to start with
-        it.
+        {amount ? (
+          <Trans t={t} i18nKey="seed.offer" values={{ amount }} components={{ b: <strong /> }} />
+        ) : (
+          <Trans t={t} i18nKey="seed.offerEmpty" components={{ b: <strong /> }} />
+        )}
         {error && <span className="local-note-error"> {error}</span>}
       </p>
       <button type="button" className="btn btn--sm btn--primary" onClick={() => void load()} disabled={busy}>
-        {busy ? 'Loading…' : 'Load seed data'}
+        {busy ? t('status.loading') : t('seed.load')}
       </button>
-      <button type="button" className="local-note-close" aria-label="Dismiss" onClick={close}>
+      <button
+        type="button"
+        className="local-note-close"
+        aria-label={t('actions.dismiss')}
+        onClick={close}
+      >
         <Codicon name="close" />
       </button>
     </section>

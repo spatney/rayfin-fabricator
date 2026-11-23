@@ -1,0 +1,362 @@
+{
+  "button": {
+    "publish": "公開",
+    "publishing": "公開しています…"
+  },
+  "progress": {
+    "label": "公開の進行状況",
+    "publishing": "公開しています",
+    "position": "ステップ {{step}}/{{steps}}",
+    "starting": "公開を開始しています…",
+    "watch": "表示",
+    "waitingForSignIn": "ブラウザーで Fabric にサインインするのを待っています",
+    "retrying": "Fabric がビジー状態のため、再試行しています"
+  },
+  "logs": {
+    "show": "ログを表示",
+    "hide": "ログを非表示",
+    "short": "ログ"
+  },
+  "findOutWhy": "原因を確認",
+  "region": {
+    "chooseAnother": "別のワークスペースを選択",
+    "availability": "リージョン別の提供状況",
+    "availabilityTitle": "Fabric アプリを利用できるリージョンを確認します (learn.microsoft.com が開きます)"
+  },
+  "signIn": {
+    "fabric": "Fabric にサインイン",
+    "busy": "サインインしています…",
+    "failed": "サインインに失敗しました",
+    "incomplete": "Fabric へのサインインが完了しませんでした。もう一度お試しください。",
+    "notCompleted": "サインインが完了しませんでした。もう一度お試しください。"
+  },
+  "copy": {
+    "link": "リンクをコピー",
+    "itemId": "アイテム ID をコピー",
+    "failed": "コピーに失敗しました",
+    "linkFailed": "リンクをコピーできませんでした。",
+    "itemFailed": "アイテム ID をコピーできませんでした。"
+  },
+  "deploySteps": {
+    "packages": "パッケージをインストールしています",
+    "connect": "Fabric に接続しています",
+    "capacity": "Fabric 容量を準備しています",
+    "workspace": "ワークスペースを探しています",
+    "item": "Fabric でアプリを設定しています",
+    "settings": "設定を適用しています",
+    "data": "データベースを更新しています",
+    "storage": "ファイル ストレージを設定しています",
+    "connectors": "データ ソースを接続しています",
+    "build": "アプリをビルドしてアップロードしています",
+    "functions": "関数を公開しています",
+    "live": "アプリをオンラインにしています",
+    "prepare": "公開を準備しています",
+    "buildOnly": "アプリをビルドしています",
+    "package": "アセットをパッケージ化しています",
+    "upload": "Fabric にアップロードしています"
+  },
+  "dataKinds": {
+    "semanticmodel": {
+      "label": "セマンティック モデル",
+      "plural": "セマンティック モデル",
+      "hint": "DAX で Power BI のデータを照会"
+    },
+    "warehouse": {
+      "label": "ウェアハウス",
+      "plural": "ウェアハウス",
+      "hint": "テーブルの読み取りと書き込み"
+    },
+    "sqldatabase": {
+      "label": "SQL データベース",
+      "plural": "SQL データベース",
+      "hint": "テーブルの読み取りと書き込み"
+    },
+    "lakehouse": {
+      "label": "レイクハウス",
+      "plural": "レイクハウス",
+      "hint": "テーブルの読み取り"
+    }
+  },
+  "workspaceStatus": {
+    "title": "Fabric ワークスペース",
+    "openItem": "公開済みアプリを Fabric ポータルのワークスペース「{{name}}」で開きます",
+    "openWorkspace": "ワークスペース「{{name}}」を Fabric ポータルで開きます"
+  },
+  "strip": {
+    "publishingTo": "{{target}} に公開しています",
+    "starting": "公開を開始しています",
+    "watchTitle": "公開画面を表示"
+  },
+  "stage": {
+    "unnamed": "アプリ",
+    "unnamedPublishing": "アプリ",
+    "published": "公開済み",
+    "fabricating": "製作中",
+    "live": "<b>{{app}}</b> が公開されました",
+    "publishing": "<b>{{app}}</b> を公開しています",
+    "steps": "公開の手順",
+    "back": "アプリに戻る"
+  },
+  "failedNotice": {
+    "label": "公開できませんでした",
+    "ray": "Fabricator のエイ、Ray です。選択すると、公開に失敗した理由を確認できます。",
+    "plain": {
+      "failed": "このアプリを公開できませんでした。ヘルプで原因を確認できます。",
+      "signin": "このアプリを公開するには、Fabric に再度サインインする必要があります。",
+      "stopped": "公開は完了前に停止されました。",
+      "unsupported": "このワークスペースのリージョンでは Fabric アプリを利用できません。別のリージョンのワークスペースを選択してください。",
+      "unsupportedRegion": "このワークスペースの容量は {{region}} にありますが、このリージョンではまだ Fabric アプリを利用できません。別のリージョンのワークスペースを選択してください。"
+    },
+    "refreshAuth": "Fabric の認証を更新",
+    "diagnoseTitle": "ヘルプを開きます。何が起きたかを読み取って説明します",
+    "showDetails": "詳細を表示",
+    "hideDetails": "詳細を非表示",
+    "dismissTitle": "閉じる (公開が再び失敗すると、もう一度表示されます)"
+  },
+  "rayfinVersion": {
+    "updateTitle": "Rayfin {{version}} ({{latest}} への更新を利用できます)",
+    "newerTitle": "Rayfin {{version}} (Rayfin {{newer}} を利用できます)",
+    "updateAvailable": "更新プログラムを利用できます",
+    "newerReady": "Rayfin の新しいバージョンを利用できます。",
+    "updateWithCopilot": "Copilot で更新",
+    "newerAvailable": "Rayfin {{version}} を利用できます",
+    "newerAvailableToo": "Rayfin {{version}} も利用できます",
+    "current": "このアプリは Rayfin {{version}} を使用しています。",
+    "updateToNewer": "Copilot で {{version}} に更新",
+    "notePublishes": "Copilot がパッケージを更新し、変更点に合わせて修正します。修正内容は、ターンの終了後に Fabricator がアプリを公開したときに Fabric に反映されます。",
+    "note": "Copilot がパッケージを更新し、変更点に合わせて修正します。修正内容は、次回の公開時に Fabric に反映されます。"
+  },
+  "create": {
+    "unknownSku": "容量",
+    "unknownSkuTitle": "専用の容量上にありますが、その SKU は表示されません (この容量の管理者ではないため)。公開時に確認されます",
+    "otherCapacitySku": "容量 ({{sku}}) は Fabric (F-SKU) でも Premium (P-SKU) でもありません",
+    "otherCapacity": "容量が Fabric (F-SKU) でも Premium (P-SKU) でもありません",
+    "noCapacity": "Fabric/Premium 容量が割り当てられていません",
+    "refusal": {
+      "workspace": "以前に {{workspace}} に公開したときは Fabric アプリを利用できなかったため、ここへの公開は失敗する可能性があります。",
+      "capacity": "以前に公開したときは、このワークスペースの容量で Fabric アプリを利用できなかったため、ここへの公開は失敗する可能性があります。",
+      "region": "以前に公開したときは {{region}} で Fabric アプリを利用できなかったため、ここへの公開は失敗する可能性があります。"
+    },
+    "refusedNote": {
+      "regions": "{{regions}} では Fabric アプリを利用できなかったため、そのリージョンのワークスペースにはマークが付いています。どのリージョンでもうまくいかない場合は、Fabric 管理者が Fabric Apps を有効にする必要がある可能性があります。",
+      "region": "{{region}} では Fabric アプリを利用できなかったため、そのリージョンのワークスペースにはマークが付いています。別のリージョンの容量にあるワークスペースを選択してください。",
+      "capacity": "公開先のワークスペースで Fabric アプリを利用できなかったため、その容量にあるワークスペースにはマークが付いています。別のリージョンの容量にあるワークスペースを選択してください。"
+    },
+    "errors": {
+      "capacities": "容量を読み込めませんでした。もう一度お試しください。",
+      "createWorkspace": "ワークスペースを作成できませんでした。",
+      "createWorkspaceRetry": "ワークスペースを作成できませんでした。もう一度お試しください。"
+    },
+    "unavailableIn": "{{region}} · Fabric アプリは利用不可",
+    "unavailable": "Fabric アプリは利用不可",
+    "name": "名前",
+    "optional": "省略可能",
+    "namePlaceholder": "例: 本番",
+    "workspace": "公開先のワークスペース",
+    "newWorkspace": "+ 新しいワークスペース",
+    "newWorkspaceTitle": "アクセス権のある容量に新しい Fabric ワークスペースを作成します",
+    "refresh": "ワークスペースを最新の情報に更新",
+    "newWorkspaceName": "新しいワークスペースの名前",
+    "loadingCapacities": "容量を読み込んでいます…",
+    "noCapacities": "利用できる対象の容量がありません。",
+    "creating": "作成しています…",
+    "createWorkspace": "ワークスペースの作成",
+    "reauthenticating": "再認証しています…",
+    "loading": "ワークスペースを読み込んでいます…",
+    "search": "{{total}} 個のワークスペースを検索…",
+    "clearSearch": "検索をクリア",
+    "noEligible": {
+      "title": "対象となるワークスペースがありません",
+      "body_other": "Rayfin アプリには、Fabric (<strong>F-SKU</strong>) または Power BI Premium (<strong>P-SKU</strong>) の容量上にあるワークスペースが必要です。{{count}} 個のワークスペースのうち、条件を満たすものはありません。理由を確認できるよう、下に一覧表示しています。Fabric の無料試用版を開始するか容量を追加してから、最新の情報に更新してください。"
+    },
+    "trial": "無料試用版を開始",
+    "buy": "容量を購入",
+    "recent": "最近",
+    "others": "その他のワークスペース",
+    "checking": "{{workspace}} に同じ名前のアプリがあるかどうかを確認しています…",
+    "willReplace": "公開すると、{{workspace}} のアプリ「{{app}}」が置き換えられます。",
+    "conflict": "{{workspace}} には「{{app}}」という名前のアプリが既にあります。ここに公開すると置き換えられるため、別のワークスペースを選択してください。",
+    "replaceAnyway": "置き換えを続行",
+    "app": "アプリ",
+    "sameName": "{{app}} (このアプリと同じ名前)",
+    "newAppNamed": "新しいアプリ「{{name}}」",
+    "newApp": "新しいアプリ",
+    "replaces": "公開すると、{{workspace}} のアプリ「{{app}}」がこのアプリに置き換えられます。",
+    "publishAnyway": "ここへの公開を続行",
+    "notEligible": "対象外",
+    "ineligibleHint": "これらには Fabric (<strong>F-SKU</strong>) または Power BI Premium (<strong>P-SKU</strong>) の容量が必要です。",
+    "noMatch": "「{{query}}」に一致するワークスペースはありません。",
+    "noWorkspaces": {
+      "title": "ワークスペースが見つかりません",
+      "body": "お使いのアカウントの Fabric ワークスペースが見つかりませんでした。Fabric の無料試用版を開始するか容量を追加してから、最新の情報に更新してください。"
+    },
+    "signInPrompt": "ワークスペースを一覧表示するには、Microsoft Fabric にサインインしてください。",
+    "loadFailedWith": "ワークスペースを読み込めませんでした: {{error}}",
+    "loadFailed": "ワークスペースを読み込めませんでした。"
+  },
+  "share": {
+    "title": "アプリの共有",
+    "intro": "テナント内のユーザーに <strong>{{app}}</strong> へのアクセス権を付与します。各受信者には、アプリのワークスペースに対する<strong>共同作成者</strong>ロールが付与されます。",
+    "introBuild_other": "テナント内のユーザーに <strong>{{app}}</strong> へのアクセス権を付与します。各受信者には、アプリのワークスペースに対する<strong>共同作成者</strong>ロールと、アプリが使用するセマンティック モデルに対する<strong>ビルド</strong>アクセス許可が付与されます。",
+    "people": "ユーザーまたはグループ",
+    "placeholder": "名前またはメール アドレスで検索",
+    "remove": "{{name}} を削除",
+    "searching": "検索しています…",
+    "add": "「{{email}}」を追加",
+    "noMatches": "一致するものはありません",
+    "invalid": "無効なメール アドレス: {{emails}}",
+    "searchSignIn": {
+      "azure": "検索するには Azure にサインインしてください",
+      "fabric": "検索するには Fabric にサインインしてください"
+    },
+    "directory": {
+      "signInAzure": "ディレクトリを検索するには、Azure にサインインしてください。",
+      "signInFabric": "ディレクトリを検索するには、Fabric にサインインしてください。",
+      "failed": "ディレクトリを検索できませんでした。メール アドレスは引き続き入力できます。"
+    },
+    "contributor": "共同作成者",
+    "build": "ビルド",
+    "covered": "ワークスペースの権限で付与済み",
+    "checkingModels": "セマンティック モデルを確認しています…",
+    "modelCheck": {
+      "failed": "アプリのセマンティック モデルを確認できませんでした。",
+      "title": "モデルの確認に失敗しました"
+    },
+    "expired": "Fabric のセッションの有効期限が切れました。共有を完了するにはサインインしてください。",
+    "signInRetry": "サインインして再試行",
+    "azRequired": "ディレクトリで受信者を検索するには、Azure CLI へのサインインが必要です。",
+    "azRetry": "Azure にサインインして再試行",
+    "app": "アプリ",
+    "model": "モデル",
+    "status": {
+      "failed": "失敗",
+      "skipped": "既にアクセス権あり",
+      "shared": "共有済み"
+    },
+    "share": "共有",
+    "sharing": "共有しています…",
+    "again": "もう一度共有",
+    "shared_other": "{{count}} 人の受信者と共有しました。",
+    "sharedTitle": "アプリを共有しました",
+    "failed": "アプリを共有できませんでした。もう一度お試しください。",
+    "linkCopied": "アプリのリンクをクリップボードにコピーしました。"
+  },
+  "control": {
+    "panel": "公開済みアプリ",
+    "yourApp": "アプリ",
+    "notPublished": "未公開",
+    "notPublishedYet": "まだ公開されていません",
+    "checkingForApp": "公開済みアプリを確認しています…",
+    "errors": {
+      "loadApps": "公開済みアプリを読み込めませんでした。もう一度お試しください。",
+      "appCheck": "公開済みアプリの確認に失敗しました",
+      "loadWorkspaces": "ワークスペースを読み込めませんでした。もう一度お試しください。",
+      "workspaceCheck": "ワークスペースの確認に失敗しました"
+    },
+    "held": {
+      "publish": "Copilot がこのアプリで作業中です。公開はターンが終わるまで待機します。",
+      "deleting": "公開済みアプリを削除しています。公開は削除が終わるまで待機します。",
+      "deleteWhilePublishing": "公開しています。削除は公開が終わるまで待機します。",
+      "delete": "Copilot がこのアプリで作業中です。削除はターンが終わるまで待機します。"
+    },
+    "next": {
+      "publishingPercent": "公開しています… {{percent}}%",
+      "publishingTitle": "公開の進行状況を表示",
+      "publishTitle": "このアプリを Fabric ワークスペースに公開",
+      "chooseWorkspace": "ワークスペースの選択",
+      "chooseWorkspaceTitle": "このワークスペースでは Fabric アプリを利用できません。公開先として別のワークスペースを選択してください。",
+      "again": "{{name}} をもう一度公開",
+      "publishChanges_other": "{{count}} 件の変更を公開",
+      "publishSomeChanges": "変更を公開",
+      "filesChanged_other": "{{name}} の公開後に {{count}} 個のファイルが変更されました",
+      "changesWaiting": "最新の変更はまだ {{name}} に反映されていません",
+      "upToDate": "{{name}} は最新の状態ですが、もう一度公開できます。"
+    },
+    "chip": {
+      "label": "公開済みアプリ:",
+      "failedNote": "失敗",
+      "auto": "自動",
+      "publishing": "{{name}} に公開しています…",
+      "none": "まだ公開されていません。クリックしてワークスペースを選択してください。",
+      "failed": "{{name}} に公開できませんでした。クリックすると詳細が表示されます。",
+      "liveIn": "{{name}} は {{workspace}} で公開中です。クリックすると、詳細の表示や、公開済みアプリの切り替えまたは追加ができます。",
+      "live": "{{name}} は公開中です。クリックすると、詳細の表示や、公開済みアプリの切り替えまたは追加ができます。",
+      "autoOn": "[チャットのターンごとに公開] がオンです: チャットでの変更は、各ターンの終了時に公開されます。",
+      "autoOff": "[チャットのターンごとに公開] がオフです: チャットでの変更は、公開するまで保留されます。"
+    },
+    "status": {
+      "failed": "公開できませんでした",
+      "published": "公開済み",
+      "publishedWhen": "公開済み ({{when}})"
+    },
+    "switchError": {
+      "signIn": "公開済みアプリを切り替える前に、Fabric にサインインしてください。",
+      "failed": "公開済みアプリを切り替えられませんでした。もう一度お試しください。",
+      "title": "切り替えに失敗しました"
+    },
+    "delete": {
+      "title": "この公開済みアプリを削除",
+      "named": "{{name}} を削除",
+      "confirm": "{{workspace}} の <strong>{{name}}</strong> とそのすべてのデータを削除しますか?",
+      "detail": "このアプリを使用しているすべてのユーザーが利用できなくなり、元に戻すことはできません。{{after}}",
+      "keep": "このコンピューター上のアプリはそのまま残ります。",
+      "keepThen": "このコンピューター上のアプリは残り、以降は {{name}} に公開されます。",
+      "keepUnpublished": "このコンピューター上のアプリは、未公開の状態で残ります。",
+      "done": "{{name}} と Fabric 内のそのデータを削除しました。",
+      "failed": "{{name}} を削除できませんでした。もう一度お試しください。",
+      "failedTitle": "削除に失敗しました"
+    },
+    "share": {
+      "title": "このアプリをテナント内のユーザーと共有",
+      "opening": "共有ダイアログを開いています…",
+      "nothing": "共有する前に、このアプリをワークスペースに公開してください。",
+      "nothingTitle": "共有できるものはまだありません",
+      "loadFailed": "共有する公開済みアプリを読み込めませんでした。もう一度お試しください。"
+    },
+    "rename": "この公開済みアプリの名前を変更",
+    "renameNamed": "{{name}} の名前を変更",
+    "renameLabel": "公開済みアプリの名前",
+    "create": {
+      "first": "Fabric ワークスペースに公開",
+      "another": "別のワークスペースに公開",
+      "firstButton": "Fabric ワークスペースに公開…",
+      "anotherButton": "別のワークスペースに公開…"
+    },
+    "publishesAs": "<strong>{{user}}</strong> として公開",
+    "yourAccountInSentence": "Fabric アカウント",
+    "change": "変更",
+    "turnedDown": {
+      "named": "「{{name}}」に公開できませんでした。",
+      "unnamed": "そのワークスペースに公開できませんでした。",
+      "region": "このワークスペースの容量がある {{region}} では、Fabric アプリを利用できません。別のリージョンの容量にあるワークスペースを選択してください。",
+      "noRegion": "このワークスペースのリージョンでは Fabric アプリを利用できません。別のリージョンの容量にあるワークスペースを選択してください。"
+    },
+    "failedCallout": "公開が完了しませんでした。",
+    "waiting": {
+      "files_other": "{{name}} の公開後に <strong>{{count}} 個のファイル</strong>が変更されました。",
+      "changes": "最新の変更はまだ {{name}} に反映されていません。"
+    },
+    "seeChanges": "変更内容を表示",
+    "facts": {
+      "app": "アプリ",
+      "item": "アイテム",
+      "workspace": "ワークスペース",
+      "account": "アカウント"
+    },
+    "openInBrowser": "ブラウザーで開く",
+    "openInFabric": "Fabric で開く",
+    "openWorkspace": "Fabric でワークスペースを開く",
+    "yourAccount": "Fabric アカウント",
+    "notSignedIn": "Fabric にサインインしていません",
+    "others": "その他の公開済みアプリ",
+    "publishedAgo": "公開済み ({{when}})",
+    "switchTitle": "プレビューと公開の対象を {{name}} に切り替え",
+    "switch": "切り替え",
+    "switching": "切り替えています…",
+    "auto": {
+      "title": "チャットのターンごとに公開",
+      "on": "ターンでアプリが変更されると、ターンの終了時に公開されます。",
+      "off": "変更は公開するまでこのコンピューター上に残り、プレビューに表示されます。"
+    }
+  }
+}

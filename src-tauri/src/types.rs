@@ -819,6 +819,11 @@ pub struct AppSettings {
   /// on large/high-DPI monitors. Clamped to 0.8–2.0 when applied.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub ui_scale: Option<f64>,
+  /// The interface's language (Settings → Appearance → Language): one of
+  /// `i18n::LANGUAGES`, or unset for the computer's. The core's own text
+  /// follows it too.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub language: Option<String>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub experiments: Option<ExperimentFlags>,
   /// Capture full chat diagnostics (prompt/response text + tool I/O) for bug

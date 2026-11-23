@@ -1,13 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { ChatPlanArtifact } from '@shared/ipc'
 import {
   buildRecoveredPlanPrompt,
   createPlanArtifact,
+  planActionLabel,
+  planErrorText,
   planForStorage,
   planFromStorage,
   reducePlanEvent,
   setPlanSubmitting
 } from './chatPlan'
+import { setLanguage } from './i18n'
 
 describe('Plan lifecycle reducer', () => {
   it('does not fabricate a Plan artifact from ordinary Agent todo or plan-file events', () => {
@@ -196,5 +199,29 @@ describe('Plan persistence and recovery', () => {
     expect(prompt).toContain('done: Finished migration')
     expect(prompt).toContain('do not redo')
     expect(prompt).toContain('parallel task agents')
+  })
+})
+
+describe('Plan text in other languages', () => {
+  afterEach(async () => {
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('keeps its own errors stored in English and shows them in the interface language', async () => {
+    const failed = reducePlanEvent(
+      createPlanArtifact('p1'),
+      { type: 'result', ok: false, filesModified: [], ranDeploy: false },
+      'fallback'
+    )!
+    expect(failed.error).toBe('Planning did not complete.')
+    expect(planErrorText(failed.error!)).toBe('Planning did not complete.')
+
+    await setLanguage('de')
+    expect(failed.error).toBe('Planning did not complete.')
+    expect(planErrorText(failed.error!)).toBe('Die Planung wurde nicht abgeschlossen.')
+    expect(planErrorText('Permission denied')).toBe('Permission denied')
+    expect(planActionLabel('autopilot_fleet')).toBe('Mit Flotte ausführen')
+    expect(planActionLabel('keep_planning')).toBe('keep planning')
   })
 })

@@ -1,0 +1,167 @@
+{
+  "preview": {
+    "title": "Lokale Vorschau",
+    "updateFailed": "Die lokale Vorschau konnte nicht aktualisiert werden.",
+    "stopped": "Die lokale Vorschau wurde beendet.",
+    "stoppedTitle": "Lokale Vorschau beendet",
+    "startFailed": "Der lokale Vite-Server konnte nicht gestartet werden.",
+    "startFailedTitle": "Lokale Vorschau fehlgeschlagen"
+  },
+  "remove": {
+    "trashedAndAppDeleted": "Der Ordner befindet sich im Papierkorb deines Systems, und die veröffentlichte App wurde gelöscht.",
+    "trashed": "Der Ordner befindet sich im Papierkorb deines Systems. Du kannst ihn von dort wiederherstellen.",
+    "removed": "{{name}} wurde entfernt",
+    "failed": "{{name}} konnte nicht entfernt werden"
+  },
+  "publish": {
+    "closedBeforeStart": "Die Arbeitsumgebung wurde geschlossen, bevor die Veröffentlichung gestartet wurde.",
+    "waitForAuth": "Warte, bis die Fabric-Authentifizierung abgeschlossen ist, und veröffentliche dann erneut.",
+    "paused": "Veröffentlichung angehalten",
+    "didNotFinishRetry": "Die Veröffentlichung wurde nicht abgeschlossen. Versuche es erneut.",
+    "signInFirst": "Melde dich bei Fabric an, bevor du erneut veröffentlichst.",
+    "didNotFinish": "Die Veröffentlichung wurde nicht abgeschlossen.",
+    "failedTitle": "Veröffentlichen nicht möglich",
+    "refreshFailed": "Das Projekt konnte nach dem Veröffentlichen nicht aktualisiert werden.",
+    "waitForTurn": "Copilot arbeitet noch an dieser App. Veröffentliche sie, sobald der Durchgang abgeschlossen ist.",
+    "waitForTurnTitle": "Veröffentlichung wartet auf Copilot"
+  },
+  "team": {
+    "unpublished": "{{name}} hat unveröffentlichte Änderungen. Sie sind auf GitHub gespeichert. Veröffentliche sie, wenn du so weit bist.",
+    "notPublished": "Noch nicht veröffentlicht",
+    "notOnGitHub": "Noch nicht auf GitHub",
+    "savingToGitHub": "Wird in GitHub gespeichert – das Senden wird gleich fortgesetzt",
+    "moveFailed": "Das Projekt konnte nicht verschoben werden.",
+    "moved": "{{name}} befindet sich jetzt im Team-Arbeitsbereich.",
+    "movedTitle": "Verschoben"
+  },
+  "auth": {
+    "verifyFailedTitle": "Anmeldeprüfung fehlgeschlagen",
+    "fabricSignInFailed": "Die Anmeldung bei Fabric wurde nicht abgeschlossen. Versuche es erneut.",
+    "fabricSignOutFailed": "Die Abmeldung von Fabric wurde nicht abgeschlossen. Bitte versuche es erneut.",
+    "signOutFailedTitle": "Abmeldung fehlgeschlagen",
+    "signInFailedTitle": "Anmeldung fehlgeschlagen"
+  },
+  "project": {
+    "refreshFailedTitle": "Projektaktualisierung fehlgeschlagen",
+    "beingRemoved": "{{name}} wird gerade entfernt.",
+    "pinFailed": "{{name}} konnte nicht angeheftet werden.",
+    "unpinFailed": "{{name}} konnte nicht gelöst werden.",
+    "revealFailed": "Der Ordner von {{name}} konnte nicht angezeigt werden.",
+    "openFolderFailed": "Dieser Ordner konnte nicht geöffnet werden.",
+    "openFileFailed": "Diese Datei konnte nicht geöffnet werden.",
+    "importedWhere": "Es befindet sich in {{path}}.",
+    "imported": "{{name}} importiert",
+    "renameFailed": "Das Projekt konnte nicht umbenannt werden.",
+    "renameFailedRetry": "Das Projekt konnte nicht umbenannt werden. Bitte versuche es erneut.",
+    "gone": "Dieses Projekt ist nicht mehr in Fabricator."
+  },
+  "port": {
+    "skipped": "localhost:{{port}} wird bereits verwendet, daher zeigt dieser Durchgang deine veröffentlichte App. Fabricator fragt bei deiner nächsten Nachricht erneut.",
+    "skippedTitle": "Live-Vorschau übersprungen",
+    "registerFailed": "Der Port konnte nicht registriert werden.",
+    "stillInUse": "localhost:{{port}} wird noch verwendet. Versuche es erneut, oder verwende eine andere Adresse.",
+    "stopFailed": "Das konnte nicht beendet werden."
+  },
+  "packages": {
+    "installing": "Sie werden installiert, und deine App wird neu gestartet…",
+    "changedTitle": "Die Pakete deiner App wurden geändert",
+    "installed": "Deine App läuft jetzt mit den neuen Paketen.",
+    "installedTitle": "Pakete installiert",
+    "failedTitle": "Die Pakete deiner App konnten nicht installiert werden"
+  },
+  "turn": {
+    "refreshFailed": "Das Projekt konnte nach dem Programmieren nicht aktualisiert werden.",
+    "saveChatFailed": "Die Unterhaltung konnte nicht gespeichert werden.",
+    "saveChatFailedTitle": "Speichern des Chatverlaufs fehlgeschlagen",
+    "versionCheckFailed": "Die Rayfin-Version konnte nicht aktualisiert werden.",
+    "versionCheckFailedTitle": "Versionsprüfung fehlgeschlagen",
+    "changesCheckFailed": "Es konnte nicht geprüft werden, ob es Änderungen zum Veröffentlichen gibt.",
+    "autoPublishCheckFailed": "{{error}} Wähle „Veröffentlichen“ aus, um deine Änderungen zu veröffentlichen.",
+    "autoPublishFailedTitle": "Automatisches Veröffentlichen nicht möglich"
+  },
+  "rayfin": {
+    "updateTo": "Rayfin auf {{version}} aktualisieren",
+    "noUpdate": "Fabricator hat gerade kein Rayfin-Update für {{name}} gefunden."
+  },
+  "authRefresh": {
+    "busy": "Warte, bis die Veröffentlichung oder die laufende Anmeldung abgeschlossen ist, und versuche es dann erneut.",
+    "failed": "Die Fabric-Authentifizierung konnte nicht aktualisiert werden. Bitte versuche es erneut.",
+    "verified": "Die Fabric-Authentifizierung ist bestätigt. Veröffentliche erneut, um es noch einmal zu versuchen.",
+    "verifiedTitle": "Fabric-Authentifizierung aktualisiert",
+    "title": "Fabric-Authentifizierung aktualisieren",
+    "confirm": "Anmeldeinformationen löschen und anmelden",
+    "busyLabel": "Authentifizierung wird aktualisiert…",
+    "message": "Führe <code>rayfin logout</code> und <code>rayfin login</code> mit der CLI von <strong>{{name}}</strong> aus, und bestätige dann die neuen Fabric-Anmeldeinformationen. So kann Rayfin veraltete Sperren im Tokencache aufheben und abgelaufene Anmeldeinformationen ersetzen.",
+    "shared": "Die Anmeldeinformationen der Rayfin-CLI gelten für alle Projekte. Dadurch wirst du weder von Copilot noch von der Azure CLI oder dem Vorschaubrowser abgemeldet, und deine App wird nicht erneut veröffentlicht. Aktualisiere ältere Projekte über die Rayfin-Versionssteuerung auf Rayfin 1.35.1 oder höher.",
+    "log": "Protokoll der Authentifizierungsaktualisierung"
+  },
+  "diagnostics": {
+    "savedForReport": "Eine Diagnosedatei wurde gespeichert und der Protokollordner geöffnet – hänge sie an deinen Fehlerbericht an.",
+    "saved": "Eine Diagnosedatei wurde gespeichert und der Protokollordner geöffnet.",
+    "exportedTitle": "Diagnose exportiert",
+    "writeFailed": "Die Diagnosedatei konnte nicht geschrieben werden.",
+    "exportFailedTitle": "Diagnose konnte nicht exportiert werden"
+  },
+  "migration": {
+    "title": "Berichtsmigration",
+    "waitPublish": "Warten, bis die Veröffentlichung abgeschlossen ist.",
+    "waitSave": "Warten auf das Speichern in GitHub.",
+    "waitCopilot": "Warten, bis Copilot fertig ist.",
+    "waitDependencies": "Warten auf die Abhängigkeiten der App.",
+    "modelFailed": "Das Copilot-Modell der Migration konnte nicht festgelegt werden.",
+    "startFailed": "Die Migration des Berichts konnte nicht gestartet werden.",
+    "fromPowerBi": "Aus Power BI"
+  },
+  "editor": {
+    "openedFolderInstead": "VS Code ist nicht installiert, daher haben wir stattdessen den Projektordner geöffnet.",
+    "openFailed": "Fabricator konnte VS Code nicht öffnen.",
+    "loading": "Editor wird geladen…"
+  },
+  "appBar": {
+    "returnTo": "Zurück zu {{name}}",
+    "returnToProjects": "Zurück zu deinen Projekten",
+    "searchTitle": "Projekte, Aktionen und Dokumentation durchsuchen oder die Hilfe fragen ({{shortcut}})"
+  },
+  "divider": {
+    "label": "Größe von Chat und Vorschau ändern",
+    "title": "Zum Ändern der Größe ziehen · zum Zurücksetzen doppelklicken"
+  },
+  "loading": {
+    "label": "Projekt wird geladen",
+    "project": "{{name}} wird geladen…"
+  },
+  "statusBar": {
+    "teamRepoBranch": "Team-Arbeitsbereich {{repo}}. Arbeits-Branch: {{branch}}",
+    "teamRepoNoBranch": "Team-Arbeitsbereich {{repo}}. Arbeits-Branch: keiner",
+    "teamBranch": "Team-Arbeitsbereich. Arbeits-Branch: {{branch}}",
+    "teamNoBranch": "Team-Arbeitsbereich. Arbeits-Branch: keiner",
+    "team": "Team",
+    "zoomTitle": "Zoom der Oberfläche – skaliert die gesamte Benutzeroberfläche (und Point & Edit in der Vorschau)",
+    "zoom": "Zoom der Oberfläche",
+    "version": "Version von Rayfin Fabricator",
+    "terminalTitle": "Terminal – Befehle im Ordner von {{name}} ausführen ({{shortcut}})",
+    "terminal": "Terminal",
+    "running_one": "{{count}} wird ausgeführt",
+    "running_other": "{{count}} werden ausgeführt",
+    "helpTitle": "Hilfe fragen – ein Problem untersuchen, die Dokumentation durchsuchen oder einen Fehler melden ({{shortcut}})",
+    "help": "Hilfe"
+  },
+  "export": {
+    "waitForTurn": "Copilot arbeitet noch an {{name}}. Exportiere es, sobald der Durchgang abgeschlossen ist.",
+    "waitForPublish": "{{name}} wird gerade veröffentlicht. Exportiere es, sobald das abgeschlossen ist."
+  },
+  "deployGuard": {
+    "title": "Du musst zuerst Änderungen abrufen",
+    "getLatest": "Zuerst neuesten Stand abrufen",
+    "gettingLatest": "Neuester Stand wird abgerufen…",
+    "publishAnyway": "Trotzdem veröffentlichen",
+    "pullFailed": "Die neuesten Änderungen konnten nicht abgerufen werden.",
+    "message_one": "Das Remote-Repository hat <strong>{{count}} Änderung</strong>, die du noch nicht heruntergeladen hast. Wenn du jetzt veröffentlichst, wird deine aktuelle Version ohne sie gesendet.",
+    "message_other": "Das Remote-Repository hat <strong>{{count}} Änderungen</strong>, die du noch nicht heruntergeladen hast. Wenn du jetzt veröffentlichst, wird deine aktuelle Version ohne sie gesendet."
+  },
+  "signOut": {
+    "label": "Abmeldung",
+    "title": "Du wirst abgemeldet…",
+    "detail": "Deine Fabric-Sitzung wird sicher beendet"
+  }
+}

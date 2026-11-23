@@ -1,4 +1,5 @@
 import type { ChatFusion } from '@shared/ipc'
+import { formatList, translator } from '../../i18n'
 
 /** How Copilot Fusion ran a request, by Copilot's names for its patterns. */
 const PATTERN: Record<string, string> = {
@@ -9,22 +10,23 @@ const PATTERN: Record<string, string> = {
 }
 
 /** What a model did in a phase, said when more than one model worked on the turn. */
-const DID: Record<string, string> = {
-  primary: 'answered',
-  draft: 'drafted',
-  critic: 'reviewed',
-  revision: 'revised',
-  judge: 'checked',
-  repair: 'repaired',
-  follow_up: 'continued'
-}
+const DID = {
+  primary: 'fusion.did.primary',
+  draft: 'fusion.did.draft',
+  critic: 'fusion.did.critic',
+  revision: 'fusion.did.revision',
+  judge: 'fusion.did.judge',
+  repair: 'fusion.did.repair',
+  follow_up: 'fusion.did.followUp'
+} as const
 
 const spoken = (id: string): string => id.replace(/_/g, ' ')
 
-/** "a", "a and b", "a, b and c". */
-function joinAnd(items: string[]): string {
-  if (items.length < 2) return items[0] ?? ''
-  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+/** What a model did in a phase, in words. */
+function phaseDid(phase: string): string {
+  return Object.prototype.hasOwnProperty.call(DID, phase)
+    ? translator('chat')(DID[phase as keyof typeof DID])
+    : spoken(phase)
 }
 
 /**
@@ -38,12 +40,13 @@ export function describeFusion(
   modelName: (id: string) => string,
   level?: string
 ): string {
+  const t = translator('chat')
   const how = fusion.patterns.map((p) => PATTERN[p] ?? spoken(p)).join(' + ')
   const several = fusion.models.length > 1
   const models = fusion.models
     .map((m) => {
-      const did = several ? joinAnd(m.phases.map((p) => DID[p] ?? spoken(p))) : ''
-      return did ? `${modelName(m.id)} ${did}` : modelName(m.id)
+      const did = several ? formatList(m.phases.map(phaseDid)) : ''
+      return did ? t('fusion.modelDid', { model: modelName(m.id), did }) : modelName(m.id)
     })
     .join(', ')
   return [level ? `Fusion ${level}` : 'Copilot Fusion', how, models].filter(Boolean).join(' · ')

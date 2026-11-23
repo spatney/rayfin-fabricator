@@ -1,0 +1,236 @@
+{
+  "verbs": {
+    "read": {
+      "running": "Wird gelesen",
+      "done": "Gelesen"
+    },
+    "edit": {
+      "running": "Wird bearbeitet",
+      "done": "Bearbeitet"
+    },
+    "create": {
+      "running": "Wird erstellt",
+      "done": "Erstellt"
+    },
+    "delete": {
+      "running": "Wird entfernt",
+      "done": "Entfernt"
+    },
+    "search": {
+      "running": "Wird gesucht",
+      "done": "Gesucht"
+    },
+    "find": {
+      "running": "Passende Dateien werden gesucht",
+      "done": "Passende Dateien gefunden"
+    },
+    "run": {
+      "running": "Wird ausgeführt",
+      "done": "Ausgeführt"
+    },
+    "shellIo": {
+      "running": "Befehl wird überprüft",
+      "done": "Befehl überprüft"
+    },
+    "web": {
+      "running": "Wird gelesen",
+      "done": "Gelesen"
+    },
+    "webSearch": {
+      "running": "Web wird durchsucht",
+      "done": "Web durchsucht"
+    },
+    "skill": {
+      "running": "Skill wird geladen",
+      "done": "Skill verwendet"
+    },
+    "todo": {
+      "running": "Aufgabenliste wird aktualisiert",
+      "done": "Aufgabenliste aktualisiert"
+    },
+    "agent": {
+      "running": "Wird delegiert",
+      "done": "Delegiert"
+    },
+    "deploy": {
+      "running": "App wird veröffentlicht",
+      "done": "App veröffentlicht"
+    },
+    "navigate": {
+      "running": "Wird in der Vorschau geöffnet",
+      "done": "In der Vorschau geöffnet"
+    },
+    "screenshot": {
+      "running": "Screenshot wird erstellt",
+      "done": "Screenshot erstellt"
+    },
+    "console": {
+      "running": "Vorschaukonsole wird gelesen",
+      "done": "Vorschaukonsole gelesen"
+    },
+    "scroll": {
+      "running": "Vorschau wird gescrollt",
+      "done": "Vorschau gescrollt"
+    },
+    "model": {
+      "running": "Semantisches Modell wird nachgeschlagen",
+      "done": "Semantisches Modell nachgeschlagen"
+    },
+    "localStatus": {
+      "running": "Lokales Back-End wird überprüft",
+      "done": "Lokales Back-End überprüft"
+    },
+    "localCall": {
+      "running": "Wird aufgerufen",
+      "done": "Aufgerufen"
+    },
+    "localSeed": {
+      "running": "Seed-Daten werden überprüft",
+      "done": "Seed-Daten überprüft"
+    },
+    "fabricIq": {
+      "running": "Fabric IQ wird abgefragt",
+      "done": "Fabric IQ abgefragt"
+    },
+    "workIq": {
+      "running": "Work IQ wird abgefragt",
+      "done": "Work IQ abgefragt"
+    },
+    "mcp": {
+      "running": "Wird verwendet",
+      "done": "Verwendet"
+    },
+    "other": {
+      "running": "Wird verwendet",
+      "done": "Verwendet"
+    }
+  },
+  "bareVerbs": {
+    "read": {
+      "running": "Datei wird gelesen",
+      "done": "Datei gelesen"
+    },
+    "edit": {
+      "running": "Dateien werden bearbeitet",
+      "done": "Dateien bearbeitet"
+    },
+    "create": {
+      "running": "Datei wird erstellt",
+      "done": "Datei erstellt"
+    },
+    "delete": {
+      "running": "Datei wird entfernt",
+      "done": "Datei entfernt"
+    },
+    "search": {
+      "running": "Projekt wird durchsucht",
+      "done": "Projekt durchsucht"
+    },
+    "find": {
+      "running": "Dateien werden gesucht",
+      "done": "Dateien gefunden"
+    },
+    "run": {
+      "running": "Befehl wird ausgeführt",
+      "done": "Befehl ausgeführt"
+    },
+    "web": {
+      "running": "Webseite wird gelesen",
+      "done": "Webseite gelesen"
+    },
+    "webSearch": {
+      "running": "Web wird durchsucht",
+      "done": "Web durchsucht"
+    },
+    "skill": {
+      "running": "Skill wird geladen",
+      "done": "Skill verwendet"
+    },
+    "agent": {
+      "running": "Aufgabe wird delegiert",
+      "done": "Aufgabe delegiert"
+    },
+    "localCall": {
+      "running": "App wird aufgerufen",
+      "done": "App aufgerufen"
+    }
+  },
+  "shellIoVerbs": {
+    "write": {
+      "running": "Eingabe wird an Befehl gesendet",
+      "done": "Eingabe an Befehl gesendet"
+    },
+    "stop": {
+      "running": "Befehl wird beendet",
+      "done": "Befehl beendet"
+    },
+    "list": {
+      "running": "Laufende Befehle werden aufgelistet",
+      "done": "Laufende Befehle aufgelistet"
+    }
+  },
+  "agentIoVerbs": {
+    "read": {
+      "running": "Warten auf einen Agenten",
+      "done": "Agent überprüft"
+    },
+    "write": {
+      "running": "Nachricht an einen Agenten wird gesendet",
+      "done": "Nachricht an einen Agenten gesendet"
+    },
+    "list": {
+      "running": "Agenten werden aufgelistet",
+      "done": "Agenten aufgelistet"
+    }
+  },
+  "seedLoad": {
+    "running": "Seed-Daten werden geladen",
+    "done": "Seed-Daten geladen"
+  },
+  "phases": {
+    "read": "Dateien werden gelesen",
+    "edit": "Code wird bearbeitet",
+    "create": "Dateien werden erstellt",
+    "delete": "Dateien werden entfernt",
+    "search": "Projekt wird durchsucht",
+    "run": "Befehl wird ausgeführt",
+    "web": "Webinhalte werden gelesen",
+    "webSearch": "Web wird durchsucht",
+    "skill": "Skill wird geladen",
+    "todo": "Aufgabenliste wird aktualisiert",
+    "agent": "Aufgabe wird delegiert",
+    "deploy": "App wird veröffentlicht",
+    "navigate": "Vorschau wird geöffnet",
+    "screenshot": "Screenshot wird erstellt",
+    "console": "Vorschaukonsole wird gelesen",
+    "scroll": "Vorschau wird gescrollt",
+    "model": "Semantisches Modell wird nachgeschlagen",
+    "localStatus": "Lokales Back-End wird überprüft",
+    "localCall": "App wird aufgerufen",
+    "localSeed": "Seed-Daten werden überprüft",
+    "fabricIq": "Power BI-Daten werden abgefragt",
+    "workIq": "Microsoft 365 wird abgefragt",
+    "mcp": "MCP-Server wird verwendet",
+    "other": "Wird ausgeführt",
+    "server": "{{server}} wird verwendet"
+  },
+  "label": {
+    "withTarget": "{{verb}}: {{target}}",
+    "quoted": "„{{text}}“",
+    "fromServer": "{{tool}} von {{server}}"
+  },
+  "summary": {
+    "read_one": "{{count}} Datei gelesen",
+    "read_other": "{{count}} Dateien gelesen",
+    "edit_one": "{{count}} Änderung vorgenommen",
+    "edit_other": "{{count}} Änderungen vorgenommen",
+    "create_one": "{{count}} Datei erstellt",
+    "create_other": "{{count}} Dateien erstellt",
+    "run_one": "{{count}} Befehl ausgeführt",
+    "run_other": "{{count}} Befehle ausgeführt",
+    "search_one": "{{count}} Suche ausgeführt",
+    "search_other": "{{count}} Suchen ausgeführt",
+    "web_one": "{{count}} Webseite gelesen",
+    "web_other": "{{count}} Webseiten gelesen"
+  }
+}

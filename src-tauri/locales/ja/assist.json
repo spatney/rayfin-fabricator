@@ -1,0 +1,172 @@
+{
+  "common": {
+    "copilotError": "Copilot からエラーが報告されました。"
+  },
+  "security": {
+    "signInRequired": "GitHub Copilot にサインインしていません。Fabricator で Copilot にサインインしてから、もう一度チェックしてください。",
+    "timedOut": "Copilot は {{minutes}} 分以内に完了しませんでした。",
+    "stopped": "Copilot は完了前に停止しました。",
+    "noReport": "Copilot は見つけた内容を報告せずに終了しました。",
+    "summary": {
+      "danger": "このコンピューターやデータに害を及ぼす可能性のあるコードが含まれています。",
+      "caution": "続行する前に確認しておくべき点があります。",
+      "clear": "危険そうなものは含まれていません。"
+    },
+    "cantMakeFolder": "Fabricator はチェック用のフォルダーを作成できませんでした: {{error}}",
+    "invalidCheck": "Fabricator で実行できるチェックではありません。",
+    "unsupportedFile": "Fabricator でチェックできるのは .fabricator、.rayfin、.zip ファイルです。",
+    "fileMissing": "そのファイルはもう存在しません。",
+    "alreadyRunning": "このチェックは既に実行中です。",
+    "clear": {
+      "install": "インストール スクリプトはありません。",
+      "agents": "コーディング エージェント向けの指示やツールはありません。"
+    },
+    "advice": {
+      "installScripts": "続行する前に、これらのコマンドの内容を確認してください。Rayfin アプリのインストールに独自のコマンドは必要ありません。",
+      "packageSources": "これらのパッケージの発行元と、npm から取得しない理由を確認してください。",
+      "packageAliases": "それぞれが本来のパッケージの代わりとして適切か確認してください。",
+      "packageHosts": "企業独自のパッケージ レジストリであれば問題ありません。そうでない場合は、npm のレジストリを使わない理由を確認してください。",
+      "npmSettings": "理由がわからない限り、続行しないでください。プロジェクトにこれらの設定は必要ありません。",
+      "gitSettings": "これらがある理由がわからない限り、続行しないでください。共有されたプロジェクトにこれらは必要ありません。",
+      "unreadableSettings": "設定内容を確認できない限り、続行しないでください。npm や git が、そこで指定されたプログラムを実行する可能性があります。",
+      "gitDir": "これがある理由がわからない限り、続行しないでください。共有されたプロジェクトにこれは必要ありません。",
+      "unreadableManifest": "内容を確認できない限り、続行しないでください。npm がそこからスクリプトを実行したり、パッケージをダウンロードしたりする可能性があります。",
+      "gitHooks": "続行する前に、フックが実行する内容を確認してください。",
+      "editorTasks": "VS Code でプロジェクトを開く前に、タスクが実行する内容を確認してください。",
+      "mcpServers": "コーディング エージェントに起動させる前に、これらのプログラムが何かを確認してください。",
+      "programs": "続行する前に、それらの用途を確認してください。",
+      "aimedAtAi": "このパッケージについては、このレビューも含め、AI によるレビューを当てにしないでください。自分でコードを読むか、送信者に確認してください。",
+      "hiddenCode": "アプリ自体のコードに、その動作を隠す理由はありません。これが何なのか送信者に確認してください。"
+    },
+    "checks": {
+      "list": {
+        "next": "{{items}}、{{next}}",
+        "last": "{{items}}、{{last}}",
+        "more_other": "{{items}} (ほか {{count}} 件)"
+      },
+      "installScripts": {
+        "title": "パッケージのインストール時にコマンドを実行します",
+        "script": "{{script}}: {{command}}",
+        "scriptIn": "{{folder}} の {{script}}: {{command}}",
+        "nativeBuild": "{{command}} (ネイティブ コードのビルド用)",
+        "nativeBuildIn": "{{folder}} の {{command}} (ネイティブ コードのビルド用)",
+        "detail": "Fabricator がパッケージをインストールすると、アプリが開く前に npm が {{list}} を実行します。"
+      },
+      "packageSources": {
+        "title": "npm 以外からパッケージを取得します",
+        "what": "{{name}} (入手元: {{source}})",
+        "detail": "{{list}} は npm 以外から取得されます。npm は、git、Web サイト、フォルダーから取得したコードをチェックしません。また、そのコードはいつでも変更される可能性があります。"
+      },
+      "packageAliases": {
+        "title": "別の名前でパッケージをインストールします",
+        "what": "{{name}} (実体は {{target}})",
+        "detail": "{{list}} のように、npm はあるパッケージを別のパッケージの名前でインストールします。"
+      },
+      "packageHosts": {
+        "title": "他のサーバーからパッケージをダウンロードします",
+        "registry": "{{file}} で npm の取得先に指定された {{host}}",
+        "lockfile_other": "{{file}} で {{count}} 個のパッケージの取得先になっている {{host}}",
+        "detail": "{{list}} は、npm のレジストリではありません。"
+      },
+      "npmSettings": {
+        "title": "npm が実行するプログラムを変更します",
+        "what": "{{file}} の {{key}} 設定 ({{value}})",
+        "detail": "{{list}} があります。npm は、パッケージのインストール時やスクリプトの実行時に、これらの設定を使用します。"
+      },
+      "gitSettings": {
+        "title": "プログラムを実行する git 設定が含まれています",
+        "detailProject": "git の設定で {{list}} が指定されています。git は、このフォルダーで動作するときにこれらのプログラムを実行します。Fabricator は、バージョンを保存するたびに、このフォルダーで git を動作させます。",
+        "detailApp": "git の設定で {{list}} が指定されています。git は、このフォルダーで動作するときにこれらのプログラムを実行します。"
+      },
+      "unreadableSettings": {
+        "title": "Fabricator が読み取れない設定が含まれています",
+        "detail_other": "Fabricator は {{list}} を読み取れません。サイズが大きすぎるか、プレーン テキストではないため、npm や git がそこから何を実行するかを判断できません。"
+      },
+      "gitDir": {
+        "title": "git に別のフォルダーを参照させます",
+        "pointsAt": "{{file}} (参照先: {{folder}})",
+        "pointsElsewhere": "{{file}} (参照先: 別のフォルダー)",
+        "detail": "{{list}} は、git に別のフォルダーを参照させます。git はそこから設定とフックを読み込みます。これらは、git がこのフォルダーで動作するたびにプログラムを実行できます。",
+        "hooks_other": "{{detail}}そこにあるフックは {{hooks}} です。"
+      },
+      "unreadableManifest": {
+        "title_other": "Fabricator が読み取れない npm ファイルが含まれています",
+        "detail_other": "Fabricator は {{list}} を読み取れません。サイズが大きすぎるか、有効な JSON ではないため、npm がそこから何を実行またはダウンロードするかを判断できません。"
+      },
+      "gitHooks": {
+        "title": "git フックを設定します",
+        "detail": "パッケージのインストール後は、バージョンが保存されるたびに git が {{list}} を実行します。Fabricator はチャットのターンごとにバージョンを保存します。"
+      },
+      "editorTasks": {
+        "title": "VS Code でフォルダーを開くとタスクを実行します",
+        "detail": "{{file}} は、VS Code でフォルダーを開くとすぐにタスクを開始します (許可した場合)。"
+      },
+      "mcpServers": {
+        "title": "コーディング エージェント用の MCP サーバーを追加します",
+        "detail": "{{file}} は、これを使用するコーディング エージェントに対して {{list}} を起動します。"
+      },
+      "programs": {
+        "title": "プログラムが含まれています",
+        "detail": "{{list}} が含まれています。Rayfin アプリに独自のプログラムは必要ありません。また、Copilot はこれらを読み取れません。"
+      },
+      "aimedAtAi": {
+        "title": "AI ツールに向けたテキストが含まれています",
+        "says": "{{file}} の「{{text}}」という記述",
+        "named": "「{{name}}」という名前の {{file}}",
+        "detail": "{{list}} があります。AI によるレビューやコーディング エージェントを誘導しようとするテキストは、危険信号です。"
+      },
+      "hiddenCode": {
+        "title": "隠されたコードまたはエンコードされたコードが含まれています",
+        "what": "{{file}} ({{how}})",
+        "how": {
+          "obfuscatorNames": "難読化ツールが付ける {{example}} のような名前",
+          "decodesAndRuns": "デコードしたコードを実行",
+          "charCodes": "文字コードからコードを生成",
+          "escapedBytes": "エスケープされたバイトの長い連続"
+        },
+        "detail": "{{list}} には、人が読めないように書かれたコードがあります。"
+      }
+    }
+  },
+  "advisor": {
+    "projectNotFound": "プロジェクトが見つかりません。",
+    "invalidState": "アドバイザーの状態が無効です。",
+    "stateTooLarge": "アドバイザーの状態が大きすぎるため保存できません。",
+    "reviewIncomplete": "レビューを完了できませんでした: {{detail}}",
+    "reviewTimedOut": "レビューを完了できませんでした: 10 分後にタイムアウトしました。",
+    "reviewNoResults": "レビューを完了できませんでした: Copilot が結果を報告せずに終了しました。",
+    "notEvaluated": "このレビューでは評価されていません。",
+    "noIssues": "Copilot がレビューしたルールに問題は見つかりませんでした。",
+    "foundIssues_other": "Copilot が {{count}} 件の問題を見つけました。",
+    "stoppedTimedOut": "{{summary}} レビューが途中で停止したため (タイムアウト)、一部のルールはチェックされていない可能性があります。",
+    "stoppedError": "{{summary}} レビューが途中で停止したため (Copilot がエラーを報告)、一部のルールはチェックされていない可能性があります。",
+    "stoppedClosed": "{{summary}} レビューが途中で停止したため (セッションが終了)、一部のルールはチェックされていない可能性があります。",
+    "timedOut": "タイムアウトしました。",
+    "cantStartReview": "レビューを開始できませんでした。{{error}}",
+    "cantStartExplanation": "説明を開始できませんでした。{{error}}",
+    "noExplanation": "Copilot は説明を返さずに終了しました。",
+    "explanationIncomplete": "説明を完了できませんでした。{{detail}}",
+    "cantStartVerification": "検証を開始できませんでした。{{error}}",
+    "noVerdict": "Copilot は判定を返さずに終了しました。",
+    "verificationIncomplete": "検証を完了できませんでした。{{detail}}",
+    "reviewRunning": "このプロジェクトでは既にレビューが実行中です。",
+    "explanationRunning": "このプロジェクトでは既に説明を生成中です。",
+    "verificationRunning": "このプロジェクトでは既に検証が実行中です。"
+  },
+  "help": {
+    "emptyQuestion": "まず質問を入力してください。",
+    "questionTooLong": "質問が長すぎます。内容を貼り付けるのではなく、ファイルを添付してください。",
+    "tookTooLong": "時間がかかりすぎました。もっと具体的に質問してみてください。",
+    "connectionClosed": "回答が届く前に Copilot との接続が閉じられました。もう一度お試しください。",
+    "noAnswer": "回答が返されませんでした。もう一度お試しください。",
+    "signInRequired": "ヘルプを使用するには GitHub Copilot にサインインする必要があります。アプリ バーのアカウント メニューを開いてサインインしてから、もう一度質問してください。",
+    "quotaUsed": "現在 Copilot のクォータを使い切っているため、ヘルプは回答できません。後でもう一度お試しください。",
+    "cantReachCopilot": "ヘルプから Copilot に接続できませんでした: {{error}}",
+    "localOutput": {
+      "all": "ローカル バックエンドの出力を読み取る",
+      "from": "ローカル バックエンドの {{source}} の出力を読み取る",
+      "problems": "ローカル バックエンドの出力を読み取る (警告とエラー)",
+      "fromProblems": "ローカル バックエンドの {{source}} の出力を読み取る (警告とエラー)"
+    }
+  }
+}

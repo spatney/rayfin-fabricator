@@ -1,0 +1,96 @@
+{
+  "title": "ヘルプ",
+  "view": {
+    "refreshed": "ヘルプのドキュメントとソースのコピーを更新しました。",
+    "refreshFailed": "更新できませんでした",
+    "projectTitle": "{{project}} についての質問に回答します",
+    "new": "新規",
+    "newTitle": "新しい会話を始め、この会話は破棄します",
+    "docs": "ドキュメント",
+    "docsTitle": "Fabricator のドキュメントをブラウザーで開く",
+    "close": "ヘルプを閉じる (Esc)",
+    "resumed": "{{when}}の続きから再開します",
+    "now": "現在"
+  },
+  "grounding": {
+    "reading": "ドキュメントを読み込み中",
+    "ready": "準備完了",
+    "docsOnly": "ドキュメントのみ",
+    "logsOnly": "ログのみ",
+    "pinnedTitle": "ヘルプは、このビルドに対応する {{reference}} のドキュメントとソースを読んでいます。",
+    "latestTitle": "ヘルプは、ドキュメントと最新のソースを読んでいます。",
+    "docsOnlyTitle": "ヘルプにはドキュメントがありますが、ソースがないため、エラーの原因まではたどれません。",
+    "logsOnlyTitle": "ヘルプはこのコンピューターのログだけを使っています。選択するとドキュメントをダウンロードします。"
+  },
+  "welcome": {
+    "lead": "うまくいかないことは何でも聞いてください。このコンピューターでの動作の記録、ドキュメント、プロジェクトを読むことができます。",
+    "meta": "v{{version}} · 読み取り専用"
+  },
+  "prompts": {
+    "deploy": "前回の公開が失敗したのはなぜですか?",
+    "whatsNew": "このリリースの新機能は何ですか?",
+    "previewWontStart": "プレビューが起動しません",
+    "share": "アプリを他のユーザーと共有するにはどうすればよいですか?",
+    "localStart": "このコンピューターでアプリが起動しなかったのはなぜですか?"
+  },
+  "composer": {
+    "attachFilesTitle": "ヘルプに読み込ませるファイルを添付",
+    "attachFolderTitle": "ヘルプに読み込ませるフォルダーを添付",
+    "attachFailed": "添付できませんでした",
+    "imageFailed": "画像を添付できませんでした",
+    "removeFile": "{{path}} を削除",
+    "placeholder": "問題の内容を説明するか、スクリーンショットを貼り付けてください",
+    "label": "ヘルプに質問",
+    "attachFiles": "ファイルを添付",
+    "attachFolder": "フォルダーを添付",
+    "stop": "停止 (Esc)",
+    "ask": "質問 (Enter)",
+    "hintIdle": "<kbd>Enter</kbd> で質問 · <kbd>Shift</kbd>+<kbd>Enter</kbd> で改行 · <kbd>Esc</kbd> で閉じる",
+    "hintBusy": "<kbd>Enter</kbd> で質問 · <kbd>Shift</kbd>+<kbd>Enter</kbd> で改行 · <kbd>Esc</kbd> で停止"
+  },
+  "answer": {
+    "failed": "ヘルプは回答できませんでした。",
+    "stopped": "停止しました。"
+  },
+  "elapsed": {
+    "ms": "{{ms}} ミリ秒",
+    "seconds": "{{seconds}} 秒",
+    "minutes": "{{minutes}} 分 {{seconds}} 秒"
+  },
+  "issue": {
+    "featureReady": "機能リクエストの準備完了",
+    "bugReady": "バグ レポートの準備完了",
+    "featureNote": "送信する前に GitHub で内容を確認してください。",
+    "bugNote": "報告すると、Fabricator のバージョン、システムの詳細、診断ファイルが追加されます。送信する前に GitHub ですべて確認してください。",
+    "suggest": "GitHub で提案",
+    "report": "GitHub で報告",
+    "hide": "非表示",
+    "review": "先に確認"
+  },
+  "workLog": {
+    "looking_other": "{{count}} 件を確認中",
+    "checkedFailed_other": "{{count}} 件を確認済み · {{failed}} 件は読み取れません",
+    "checked_other": "{{count}} 件を確認済み",
+    "unreadable": "読み取れませんでした"
+  },
+  "ray": {
+    "label": "Fabricator のエイ、Ray です。選択するとなでることができます。"
+  },
+  "when": {
+    "earlier": "以前",
+    "momentAgo": "少し前",
+    "minutesAgo_other": "{{count}} 分前",
+    "anHourAgo": "1 時間前",
+    "hoursAgo_other": "{{count}} 時間前",
+    "yesterday": "昨日"
+  },
+  "unavailable": {
+    "lead": "ヘルプは、エラー履歴をもとに、何が問題だったのかについての質問に回答します。GitHub Copilot が必要ですが、現在サインインしていません。",
+    "signIn": "GitHub Copilot にサインイン",
+    "signInSub": "サインインすると、ヘルプが代わりに調べます",
+    "docs": "ドキュメントを参照",
+    "docsSub": "セットアップ、公開、トラブルシューティング",
+    "report": "問題を報告",
+    "reportSub": "バージョンと診断ファイルを含むバグ レポートを開きます"
+  }
+}

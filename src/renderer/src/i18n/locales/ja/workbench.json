@@ -1,0 +1,165 @@
+{
+  "preview": {
+    "title": "ローカル プレビュー",
+    "updateFailed": "ローカル プレビューを更新できませんでした。",
+    "stopped": "ローカル プレビューが停止しました。",
+    "stoppedTitle": "ローカル プレビューが停止しました",
+    "startFailed": "ローカルの Vite サーバーを起動できませんでした。",
+    "startFailedTitle": "ローカル プレビューに失敗しました"
+  },
+  "remove": {
+    "trashedAndAppDeleted": "フォルダーはシステムのごみ箱に移動され、公開済みのアプリは削除されました。",
+    "trashed": "フォルダーはシステムのごみ箱に移動されました。そこから復元できます。",
+    "removed": "{{name}} を削除しました",
+    "failed": "{{name}} を削除できませんでした"
+  },
+  "publish": {
+    "closedBeforeStart": "公開が始まる前にワークベンチが閉じられました。",
+    "waitForAuth": "Fabric の認証が完了するまで待ってから、もう一度公開してください。",
+    "paused": "公開を一時停止しました",
+    "didNotFinishRetry": "公開が完了しませんでした。もう一度お試しください。",
+    "signInFirst": "もう一度公開する前に、Fabric にサインインしてください。",
+    "didNotFinish": "公開が完了しませんでした。",
+    "failedTitle": "公開できませんでした",
+    "refreshFailed": "公開後にプロジェクトを最新の状態に更新できませんでした。",
+    "waitForTurn": "Copilot がまだこのアプリで作業中です。ターンが終わってから公開してください。",
+    "waitForTurnTitle": "公開は Copilot の完了を待っています"
+  },
+  "team": {
+    "unpublished": "{{name}} には未公開の変更があります。変更は GitHub に保存されています。準備ができたら公開してください。",
+    "notPublished": "まだ公開されていません",
+    "notOnGitHub": "まだ GitHub にありません",
+    "savingToGitHub": "GitHub に保存しています。まもなく送信を再開します",
+    "moveFailed": "プロジェクトを移動できませんでした。",
+    "moved": "{{name}} はチーム ワークスペースに移動しました。",
+    "movedTitle": "移動しました"
+  },
+  "auth": {
+    "verifyFailedTitle": "サインインの確認に失敗しました",
+    "fabricSignInFailed": "Fabric へのサインインが完了しませんでした。もう一度お試しください。",
+    "fabricSignOutFailed": "Fabric からのサインアウトが完了しませんでした。もう一度お試しください。",
+    "signOutFailedTitle": "サインアウトに失敗しました",
+    "signInFailedTitle": "サインインに失敗しました"
+  },
+  "project": {
+    "refreshFailedTitle": "プロジェクトの更新に失敗しました",
+    "beingRemoved": "{{name}} を削除しています。",
+    "pinFailed": "{{name}} をピン留めできませんでした。",
+    "unpinFailed": "{{name}} のピン留めを外せませんでした。",
+    "revealFailed": "{{name}} のフォルダーを表示できませんでした。",
+    "openFolderFailed": "そのフォルダーを開けませんでした。",
+    "openFileFailed": "そのファイルを開けませんでした。",
+    "importedWhere": "{{path}} にあります。",
+    "imported": "{{name}} をインポートしました",
+    "renameFailed": "プロジェクトの名前を変更できませんでした。",
+    "renameFailedRetry": "プロジェクトの名前を変更できませんでした。もう一度お試しください。",
+    "gone": "そのプロジェクトはもう Fabricator にありません。"
+  },
+  "port": {
+    "skipped": "localhost:{{port}} は使用中のため、このターンでは公開済みのアプリを表示します。次のメッセージで Fabricator がもう一度確認します。",
+    "skippedTitle": "ライブ プレビューをスキップしました",
+    "registerFailed": "ポートを登録できませんでした。",
+    "stillInUse": "localhost:{{port}} はまだ使用中です。もう一度試すか、別のアドレスを使用してください。",
+    "stopFailed": "停止できませんでした。"
+  },
+  "packages": {
+    "installing": "パッケージをインストールして、アプリを再起動しています…",
+    "changedTitle": "アプリのパッケージが変更されました",
+    "installed": "アプリは新しいパッケージで実行されています。",
+    "installedTitle": "パッケージをインストールしました",
+    "failedTitle": "アプリのパッケージをインストールできませんでした"
+  },
+  "turn": {
+    "refreshFailed": "コーディング後にプロジェクトを最新の状態に更新できませんでした。",
+    "saveChatFailed": "会話を保存できませんでした。",
+    "saveChatFailedTitle": "チャット履歴の保存に失敗しました",
+    "versionCheckFailed": "Rayfin のバージョンを最新の状態に更新できませんでした。",
+    "versionCheckFailedTitle": "バージョンの確認に失敗しました",
+    "changesCheckFailed": "公開する変更があるかどうかを確認できませんでした。",
+    "autoPublishCheckFailed": "{{error}} 変更を公開するには、[公開] を選択してください。",
+    "autoPublishFailedTitle": "自動で公開できませんでした"
+  },
+  "rayfin": {
+    "updateTo": "Rayfin を {{version}} に更新",
+    "noUpdate": "現在、{{name}} の Rayfin の更新は見つかりませんでした。"
+  },
+  "authRefresh": {
+    "busy": "公開または現在のサインインが終わるまで待ってから、もう一度お試しください。",
+    "failed": "Fabric の認証を更新できませんでした。もう一度お試しください。",
+    "verified": "Fabric の認証を確認しました。もう一度公開してやり直してください。",
+    "verifiedTitle": "Fabric の認証を更新しました",
+    "title": "Fabric の認証を更新",
+    "confirm": "資格情報をクリアしてサインイン",
+    "busyLabel": "認証を更新しています…",
+    "message": "<strong>{{name}}</strong> の CLI で <code>rayfin logout</code> と <code>rayfin login</code> を実行してから、新しい Fabric の資格情報を確認します。これにより、Rayfin はトークン キャッシュの古いロックを解除し、期限切れの資格情報を置き換えることができます。",
+    "shared": "Rayfin CLI の資格情報はプロジェクト間で共有されます。この操作で Copilot、Azure CLI、プレビュー ブラウザーからサインアウトされることはなく、アプリが再度公開されることもありません。古いプロジェクトは、Rayfin のバージョン コントロールで Rayfin 1.35.1 以降に更新してください。",
+    "log": "認証の更新ログ"
+  },
+  "diagnostics": {
+    "savedForReport": "診断ファイルを保存し、ログ フォルダーを開きました。バグ レポートに添付してください。",
+    "saved": "診断ファイルを保存し、ログ フォルダーを開きました。",
+    "exportedTitle": "診断をエクスポートしました",
+    "writeFailed": "診断ファイルを書き込めませんでした。",
+    "exportFailedTitle": "診断をエクスポートできませんでした"
+  },
+  "migration": {
+    "title": "レポートの移行",
+    "waitPublish": "公開が終わるのを待っています。",
+    "waitSave": "GitHub への保存を待っています。",
+    "waitCopilot": "Copilot が終わるのを待っています。",
+    "waitDependencies": "アプリの依存関係を待っています。",
+    "modelFailed": "移行に使う Copilot のモデルを設定できませんでした。",
+    "startFailed": "レポートの移行を開始できませんでした。",
+    "fromPowerBi": "Power BI から"
+  },
+  "editor": {
+    "openedFolderInstead": "VS Code がインストールされていないため、代わりにプロジェクト フォルダーを開きました。",
+    "openFailed": "Fabricator で VS Code を開けませんでした。",
+    "loading": "エディターを読み込んでいます…"
+  },
+  "appBar": {
+    "returnTo": "{{name}} に戻る",
+    "returnToProjects": "プロジェクト一覧に戻る",
+    "searchTitle": "プロジェクト、アクション、ドキュメントを検索するか、ヘルプに質問します ({{shortcut}})"
+  },
+  "divider": {
+    "label": "チャットとプレビューのサイズを変更",
+    "title": "ドラッグしてサイズを変更 · ダブルクリックしてリセット"
+  },
+  "loading": {
+    "label": "プロジェクトを読み込んでいます",
+    "project": "{{name}} を読み込んでいます…"
+  },
+  "statusBar": {
+    "teamRepoBranch": "チーム ワークスペース {{repo}}。作業ブランチ: {{branch}}",
+    "teamRepoNoBranch": "チーム ワークスペース {{repo}}。作業ブランチ: なし",
+    "teamBranch": "チーム ワークスペース。作業ブランチ: {{branch}}",
+    "teamNoBranch": "チーム ワークスペース。作業ブランチ: なし",
+    "team": "チーム",
+    "zoomTitle": "インターフェイスのズーム: UI 全体 (およびプレビューの Point & Edit) を拡大・縮小します",
+    "zoom": "インターフェイスのズーム",
+    "version": "Rayfin Fabricator のバージョン",
+    "terminalTitle": "ターミナル: {{name}} のフォルダーでコマンドを実行します ({{shortcut}})",
+    "terminal": "ターミナル",
+    "running_other": "{{count}} 個を実行中",
+    "helpTitle": "ヘルプに質問: 問題のデバッグ、ドキュメントの参照、問題の報告ができます ({{shortcut}})",
+    "help": "ヘルプ"
+  },
+  "export": {
+    "waitForTurn": "Copilot はまだ {{name}} で作業しています。ターンが終わってからエクスポートしてください。",
+    "waitForPublish": "{{name}} を公開しています。公開が終わってからエクスポートしてください。"
+  },
+  "deployGuard": {
+    "title": "先に取得する変更があります",
+    "getLatest": "先に最新の状態を取得",
+    "gettingLatest": "最新の状態を取得しています…",
+    "publishAnyway": "このまま公開",
+    "pullFailed": "最新の変更を取得できませんでした。",
+    "message_other": "リモートには、まだダウンロードしていない <strong>{{count}} 件の変更</strong> があります。今公開すると、それらの変更を含まない現在のバージョンが送信されます。"
+  },
+  "signOut": {
+    "label": "サインアウト中",
+    "title": "サインアウトしています…",
+    "detail": "Fabric のセッションを安全に終了しています"
+  }
+}

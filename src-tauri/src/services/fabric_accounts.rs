@@ -84,7 +84,7 @@ fn load() -> Registry {
 }
 
 fn save(registry: &Registry) -> Result<(), String> {
-  let fail = |e: String| format!("Couldn't save your Fabric accounts: {e}");
+  let fail = |e: String| t!("services.fabricAccounts.saveFailed", error = e);
   let dir = paths::ensure_data_dir().map_err(|e| fail(e.to_string()))?;
   let body = serde_json::to_string_pretty(registry).map_err(|e| fail(e.to_string()))?;
   let tmp = dir.join("fabric-accounts.json.tmp");
@@ -138,7 +138,7 @@ pub fn activate(id: &str) -> Result<(), String> {
   let _guard = LOCK.lock().unwrap();
   let mut registry = load();
   if id != SHARED && !registry.has(id) {
-    return Err("That Fabric account isn't on this computer anymore. Re-check your accounts.".into());
+    return Err(t!("services.fabricAccounts.gone"));
   }
   registry.active = (id != SHARED).then(|| id.to_string());
   save(&registry)?;
@@ -150,7 +150,7 @@ pub fn activate(id: &str) -> Result<(), String> {
 pub fn create() -> Result<String, String> {
   let id = uuid::Uuid::new_v4().simple().to_string();
   std::fs::create_dir_all(accounts_root().join(&id))
-    .map_err(|e| format!("Couldn't prepare a folder for another Fabric account: {e}"))?;
+    .map_err(|e| t!("services.fabricAccounts.folderFailed", error = e))?;
   let _guard = LOCK.lock().unwrap();
   let mut registry = load();
   registry.accounts.push(Entry { id: id.clone(), added_at: chrono::Utc::now().to_rfc3339() });
@@ -179,7 +179,7 @@ pub fn remove(id: &str) -> Result<(), String> {
   }
   let dir = accounts_root().join(id);
   if dir.exists() {
-    std::fs::remove_dir_all(&dir).map_err(|e| format!("Couldn't delete the Fabric account's folder: {e}"))?;
+    std::fs::remove_dir_all(&dir).map_err(|e| t!("services.fabricAccounts.deleteFailed", error = e))?;
   }
   Ok(())
 }

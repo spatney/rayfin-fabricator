@@ -36,7 +36,7 @@ struct ToolDef {
   min_version: Option<&'static str>,
   required: bool,
   system: Option<SystemPkg>,
-  install_hint: &'static str,
+  install_hint: fn() -> String,
   install_url: Option<&'static str>,
 }
 
@@ -53,7 +53,7 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
         brew: Some("node"),
       }),
       min_version: Some(MIN_NODE_VERSION),
-      install_hint: "Install Node.js 22.12 or newer (includes npm).",
+      install_hint: || t!("commands.doctor.hints.node"),
       install_url: Some("https://nodejs.org/en/download"),
     },
     ToolDef {
@@ -64,7 +64,7 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
       required: true,
       system: None,
       min_version: None,
-      install_hint: "npm ships with Node.js.",
+      install_hint: || t!("commands.doctor.hints.npm"),
       install_url: Some("https://nodejs.org/en/download"),
     },
     ToolDef {
@@ -78,7 +78,7 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
         brew: Some("git"),
       }),
       min_version: None,
-      install_hint: "Install Git for version control of your apps.",
+      install_hint: || t!("commands.doctor.hints.git"),
       install_url: Some("https://git-scm.com/downloads"),
     },
     ToolDef {
@@ -93,7 +93,7 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
         brew: Some("azure-cli"),
       }),
       min_version: None,
-      install_hint: "Optional. Sign in to Azure to share published apps, add Fabric data and migrate Power BI reports, and to let your app's functions and connectors use your Azure access while you develop.",
+      install_hint: || t!("commands.doctor.hints.az"),
       install_url: Some("https://learn.microsoft.com/cli/azure/install-azure-cli"),
     },
     ToolDef {
@@ -107,7 +107,7 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
         brew: Some("gh"),
       }),
       min_version: None,
-      install_hint: "Optional repository browsing with gh — separate from the bundled GitHub Copilot engine.",
+      install_hint: || t!("commands.doctor.hints.gh"),
       install_url: Some("https://cli.github.com"),
     },
   ]
@@ -188,21 +188,22 @@ fn tool_status(def: &ToolDef, result: &exec::RunResult) -> ToolStatus {
   let output = if result.stdout.trim().is_empty() { &result.stderr } else { &result.stdout };
   let version = if result.ok { parse_version(Some(output)) } else { None };
   let check_error = if found && (!result.ok || version.is_none()) {
-    let reason = if result.ok {
-      "returned no recognizable version".to_string()
+    let problem = if result.ok {
+      t!("commands.doctor.check.noVersion", name = def.name)
     } else if let Some(detail) = result.stderr.lines().rev().map(str::trim).find(|line| !line.is_empty())
       .or_else(|| result.stdout.lines().rev().map(str::trim).find(|line| !line.is_empty()))
     {
-      format!("failed: {}", detail.chars().take(500).collect::<String>())
+      t!("commands.doctor.check.failed", name = def.name, detail = detail.chars().take(500).collect::<String>())
     } else {
       match result.exit_code {
-        Some(code) => format!("failed with exit code {code}"),
-        None => "could not finish (it may have timed out or failed to start)".into(),
+        Some(code) => t!("commands.doctor.check.exitCode", name = def.name, code = code),
+        None => t!("commands.doctor.check.unfinished", name = def.name),
       }
     };
-    Some(format!(
-      "{} was found, but its version check {reason}. Re-check or run {} {} in a terminal to diagnose the existing installation.",
-      def.name, def.bin, def.version_args.join(" "),
+    Some(t!(
+      "commands.doctor.check.fix",
+      problem = problem,
+      command = format!("{} {}", def.bin, def.version_args.join(" ")),
     ))
   } else {
     None
@@ -219,7 +220,7 @@ fn tool_status(def: &ToolDef, result: &exec::RunResult) -> ToolStatus {
     version,
     check_error,
     min_version: def.min_version.map(|s| s.to_string()),
-    install_hint: def.install_hint.to_string(),
+    install_hint: (def.install_hint)(),
     install_url: def.install_url.map(|s| s.to_string()),
     auto_installable: is_auto_installable(def),
     required: def.required,
@@ -288,7 +289,7 @@ async fn install_system_tool(app: &AppHandle, def: &ToolDef, on_data: Option<OnD
         emit(
           &on_data,
           Stream::Stdout,
-          &format!("Installing {} via winget (you may see a permission prompt)…\n", def.name),
+          &format!("{}\n", t!("commands.doctor.install.viaWinget", name = def.name)),
         );
         let res = exec::run(
           "winget",
@@ -312,7 +313,7 @@ async fn install_system_tool(app: &AppHandle, def: &ToolDef, on_data: Option<OnD
           emit(
             &on_data,
             Stream::Stdout,
-            &format!("\nInstalled {}. Restart Fabricator to finish setup.\n", def.name),
+            &format!("\n{}\n", t!("commands.doctor.install.installed", name = def.name)),
           );
           return InstallResult {
             ok: true,
@@ -326,15 +327,15 @@ async fn install_system_tool(app: &AppHandle, def: &ToolDef, on_data: Option<OnD
           &on_data,
           Stream::Stderr,
           &format!(
-            "\nwinget could not install {} (exit {:?}). Opening the official installer…\n",
-            def.name, res.exit_code
+            "\n{}\n",
+            t!("commands.doctor.install.wingetFailed", name = def.name, code = format!("{:?}", res.exit_code))
           ),
         );
       } else {
         emit(
           &on_data,
           Stream::Stderr,
-          &format!("\nwinget is unavailable. Opening the official {} installer…\n", def.name),
+          &format!("\n{}\n", t!("commands.doctor.install.noWinget", name = def.name)),
         );
       }
     }
@@ -342,7 +343,7 @@ async fn install_system_tool(app: &AppHandle, def: &ToolDef, on_data: Option<OnD
     if let Some(brew_id) = def.system.as_ref().and_then(|s| s.brew) {
       let has_brew = exec::try_version("brew", &["--version"]).await.is_some();
       if has_brew {
-        emit(&on_data, Stream::Stdout, &format!("Installing {} via Homebrew…\n", def.name));
+        emit(&on_data, Stream::Stdout, &format!("{}\n", t!("commands.doctor.install.viaHomebrew", name = def.name)));
         let res = exec::run(
           "brew",
           &["install", brew_id],
@@ -357,7 +358,7 @@ async fn install_system_tool(app: &AppHandle, def: &ToolDef, on_data: Option<OnD
           emit(
             &on_data,
             Stream::Stdout,
-            &format!("\nInstalled {}. Restart Fabricator to finish setup.\n", def.name),
+            &format!("\n{}\n", t!("commands.doctor.install.installed", name = def.name)),
           );
           return InstallResult {
             ok: true,
@@ -371,15 +372,15 @@ async fn install_system_tool(app: &AppHandle, def: &ToolDef, on_data: Option<OnD
           &on_data,
           Stream::Stderr,
           &format!(
-            "\nHomebrew could not install {} (exit {:?}). Opening the official installer…\n",
-            def.name, res.exit_code
+            "\n{}\n",
+            t!("commands.doctor.install.brewFailed", name = def.name, code = format!("{:?}", res.exit_code))
           ),
         );
       } else {
         emit(
           &on_data,
           Stream::Stderr,
-          &format!("\nHomebrew is unavailable. Opening the official {} installer…\n", def.name),
+          &format!("\n{}\n", t!("commands.doctor.install.noHomebrew", name = def.name)),
         );
       }
     }
@@ -387,12 +388,12 @@ async fn install_system_tool(app: &AppHandle, def: &ToolDef, on_data: Option<OnD
 
   if let Some(url) = def.install_url {
     if let Err(error) = app.opener().open_url(url.to_string(), None::<&str>) {
-      return install_failure(&on_data, format!("Could not open the {} installer: {error}", def.name));
+      return install_failure(&on_data, t!("commands.doctor.install.cantOpenInstaller", name = def.name, error = error));
     }
     emit(
       &on_data,
       Stream::Stdout,
-      &format!("\nOpened {url}. Install {}, then click \u{201c}Restart\u{201d}.\n", def.name),
+      &format!("\n{}\n", t!("commands.doctor.install.opened", url = url, name = def.name)),
     );
   }
   InstallResult {
@@ -406,7 +407,7 @@ async fn install_system_tool(app: &AppHandle, def: &ToolDef, on_data: Option<OnD
 
 pub async fn install_tool(app: &AppHandle, id: &str, on_data: Option<OnData>) -> InstallResult {
   let Some(def) = tool_by_id(id) else {
-    return install_failure(&on_data, format!("Unknown prerequisite: {id}."));
+    return install_failure(&on_data, t!("commands.doctor.install.unknownTool", id = id));
   };
   #[cfg(windows)]
   crate::services::env_path::repair();
@@ -415,7 +416,7 @@ pub async fn install_tool(app: &AppHandle, id: &str, on_data: Option<OnData>) ->
     return install_failure(&on_data, error);
   }
   if status.satisfied {
-    emit(&on_data, Stream::Stdout, &format!("{} is already available.\n", def.name));
+    emit(&on_data, Stream::Stdout, &format!("{}\n", t!("commands.doctor.install.alreadyAvailable", name = def.name)));
     return InstallResult {
       ok: true, exit_code: Some(0), error: None, requires_relaunch: None, manual: None,
     };
@@ -426,14 +427,14 @@ pub async fn install_tool(app: &AppHandle, id: &str, on_data: Option<OnData>) ->
   emit(
     &on_data,
     Stream::Stderr,
-    &format!("{} cannot be installed automatically on this platform.\n", def.name),
+    &format!("{}\n", t!("commands.doctor.install.notAutomatic", name = def.name)),
   );
   if let Some(url) = def.install_url {
     if let Err(error) = app.opener().open_url(url.to_string(), None::<&str>) {
-      return install_failure(&on_data, format!("Could not open the {} installer: {error}", def.name));
+      return install_failure(&on_data, t!("commands.doctor.install.cantOpenInstaller", name = def.name, error = error));
     }
   } else {
-    return install_failure(&on_data, format!("{}. {}", def.name, def.install_hint));
+    return install_failure(&on_data, format!("{}. {}", def.name, (def.install_hint)()));
   }
   InstallResult {
     ok: false,
@@ -447,9 +448,7 @@ pub async fn install_tool(app: &AppHandle, id: &str, on_data: Option<OnData>) ->
 pub async fn install_all_missing(app: &AppHandle, on_data: Option<OnData>) -> InstallResult {
   let report = check_environment().await;
   if let Some(error) = required_probe_failure(&report) {
-    return install_failure(&on_data, format!(
-      "Resolve the existing CLI check failure before installing all prerequisites. {error}"
-    ));
+    return install_failure(&on_data, t!("commands.doctor.install.resolveCheckFirst", error = error));
   }
   let missing: Vec<String> = report
     .tools
@@ -476,13 +475,13 @@ pub async fn install_all_missing(app: &AppHandle, on_data: Option<OnData>) -> In
     .filter(|def| missing.iter().any(|m| m == def.id) && system_installable(def))
     .collect();
   if system_missing.is_empty() {
-    return install_failure(&on_data, "The remaining prerequisites cannot be installed automatically. Follow their setup guidance.".into());
+    return install_failure(&on_data, t!("commands.doctor.install.remainingManual"));
   }
 
   let mut all_ok = true;
   let mut installed_any = false;
   for def in system_missing {
-    emit(&on_data, Stream::Stdout, &format!("\n\u{203a} Installing {}\n", def.name));
+    emit(&on_data, Stream::Stdout, &format!("\n\u{203a} {}\n", t!("commands.doctor.install.installing", name = def.name)));
     installed_any = true;
     let res = install_system_tool(app, def, on_data.clone()).await;
     all_ok = all_ok && res.ok;
@@ -490,7 +489,7 @@ pub async fn install_all_missing(app: &AppHandle, on_data: Option<OnData>) -> In
   InstallResult {
     ok: all_ok,
     exit_code: if all_ok { Some(0) } else { None },
-    error: if all_ok { None } else { Some("One or more installations did not complete. Check the process output for details.".into()) },
+    error: if all_ok { None } else { Some(t!("commands.doctor.install.incomplete")) },
     requires_relaunch: if installed_any { Some(true) } else { None },
     manual: None,
   }

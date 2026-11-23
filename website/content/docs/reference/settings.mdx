@@ -1,9 +1,9 @@
 ---
 title: "Settings"
-description: "Every option in Fabricator's Settings: accounts, API keys, MCP servers, chat defaults, custom instructions, setup, workspace folder, theme, text size, diagnostics, experiments, and About."
+description: "Every option in Fabricator's Settings: accounts, API keys, MCP servers, chat defaults, custom instructions, setup, workspace folder, theme, language, text size, diagnostics, experiments, and About."
 ---
 
-Open **Settings** to manage your accounts, choose what a new project's chat starts with, tell Copilot what you want in every app, change how Fabricator looks, where new projects are created, how diagnostics are captured, and which experiments are on.
+Open **Settings** to manage your accounts, choose what a new project's chat starts with, tell Copilot what you want in every app, change how Fabricator looks, the language it's in, where new projects are created, how diagnostics are captured, and which experiments are on.
 
 Settings groups its options into **General**, **Appearance**, **Diagnostics**, **Experiments**, and **About**. Each option shows its name and what it does, with its control on the right.
 
@@ -60,15 +60,33 @@ To stop using them, delete the text and select **Save**.
 | **Dark** | Uses Fabricator's dark theme. |
 | **Light** | Uses Fabricator's light theme. |
 
+## Language
+
+**Language** sets the language of Fabricator's interface. Fabricator comes in English, Spanish, German, and Japanese.
+
+| Option | What it does |
+| --- | --- |
+| **System** | Uses your computer's language when Fabricator comes in it, and English otherwise. This is the default. The option names the language it picked, such as **System (Deutsch)**. |
+| **English**, **Español**, **Deutsch**, **日本語** | Uses that language, whatever your computer's is set to. |
+
+Fabricator switches as soon as you choose, in every window it has open, and starts in that language next time.
+
+The setting changes Fabricator's own text. Some text stays as it is:
+
+- What Copilot writes, such as its replies in chat and the issues a deep review finds.
+- Output from other tools, such as git, the Rayfin CLI, and the Azure CLI.
+- What Fabricator writes for other people to read, which stays in English: the version info you copy, bug reports, diagnostics, commit messages, and the files it adds to your projects and repositories.
+- This documentation, which is in English.
+
 ## Text size
 
-**Text size** scales the whole interface. The choices are 100%, 110%, 125%, and 150%. The default is 100%.
+**Text size** scales the whole interface. The choices are 50%, 75%, 100%, 110%, 125%, and 150%. The default is 100%.
 
-Use this when Fabricator is hard to read on a large or high-DPI monitor. The setting is saved as the UI scale and is clamped by the app between `80%` and `200%` when stored.
+Use a larger size when Fabricator is hard to read on a large or high-DPI monitor, and a smaller one to fit more on a laptop screen or beside other windows. The setting is saved as the UI scale and is clamped by the app between `50%` and `200%` when stored.
 
 ## Interface zoom in the status bar
 
-The status bar has an **Interface zoom** menu with the same values as **Text size**. Changing it updates the same setting and also scales Point & Edit's outlines and hint in the preview.
+The status bar has an **Interface zoom** menu with the same values as **Text size**. Changing it updates the same setting and also scales Point & Edit's outlines and hint in the preview, which stay at 80% or larger so they're easy to read.
 
 ## Workspace folder
 

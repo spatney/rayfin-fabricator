@@ -1,52 +1,69 @@
 import { useMemo, useRef, type KeyboardEvent, type ReactNode, type JSX } from 'react'
 import type { AdvisorResolved } from '@shared/ipc'
-import { categoryById, normalizeSeverity, severityLabel } from '@shared/advisor/catalog'
+import { normalizeSeverity } from '@shared/advisor/catalog'
 import type { FindingItem, FindingStatus } from '../../advisor/lifecycle'
+import { categoryTitle, findingTitle } from '../../advisor/ruleText'
+import { useTranslation } from '../../i18n'
 import { ChevronRightIcon, Codicon } from '../icons'
-import { CategoryIcon, CodeText, plainText, plural, relativeTime } from './format'
+import { CategoryIcon, CodeText, plainText, relativeTime } from './format'
 
 export type IssueTab = 'open' | 'new' | 'resolved' | 'dismissed'
 
-const STATUS_CHIP: Partial<Record<FindingStatus, { label: string; tone: string }>> = {
-  fixing: { label: 'Fixing…', tone: 'busy' },
-  checking: { label: 'Checking fix…', tone: 'busy' },
-  applied: { label: 'Fix applied', tone: 'applied' },
-  still: { label: 'Still detected', tone: 'still' },
-  muted: { label: 'Rule muted', tone: 'muted' }
+/** The chip for where an issue stands, if it isn't simply open (or dismissed). */
+function statusChip(status: FindingStatus) {
+  switch (status) {
+    case 'fixing':
+      return { label: 'issues.status.fixing', tone: 'busy' } as const
+    case 'checking':
+      return { label: 'issues.status.checkingFix', tone: 'busy' } as const
+    case 'applied':
+      return { label: 'issues.status.applied', tone: 'applied' } as const
+    case 'still':
+      return { label: 'issues.status.still', tone: 'still' } as const
+    case 'muted':
+      return { label: 'issues.status.muted', tone: 'muted' } as const
+    default:
+      return undefined
+  }
 }
 
-const GROUPS: { key: string; title: string }[] = [
-  { key: 'high', title: 'High' },
-  { key: 'medium', title: 'Medium' },
-  { key: 'low', title: 'Low' },
-  { key: 'note', title: 'Suggestions' }
-]
+const GROUPS = [
+  { key: 'high', title: 'severity.high' },
+  { key: 'medium', title: 'severity.medium' },
+  { key: 'low', title: 'severity.low' },
+  { key: 'note', title: 'issues.groups.suggestions' }
+] as const
 
-const TABS: { key: IssueTab; label: string }[] = [
-  { key: 'open', label: 'Open' },
-  { key: 'new', label: 'New' },
-  { key: 'resolved', label: 'Resolved' },
-  { key: 'dismissed', label: 'Dismissed' }
-]
+const TABS = [
+  { key: 'open', label: 'issues.tabs.open' },
+  { key: 'new', label: 'issues.tabs.new' },
+  { key: 'resolved', label: 'issues.tabs.resolved' },
+  { key: 'dismissed', label: 'issues.tabs.dismissed' }
+] as const satisfies readonly { key: IssueTab; label: string }[]
 
 function StatusChip({ item }: { item: FindingItem }): JSX.Element | null {
+  const { t } = useTranslation('advisor')
   if (item.status === 'dismissed') {
-    const label = item.dismissal?.reason === 'false-positive' ? 'False positive' : 'Accepted risk'
+    const label =
+      item.dismissal?.reason === 'false-positive'
+        ? t('detail.falsePositive')
+        : t('detail.acceptedRisk')
     return <span className="adv-status adv-status--muted">{label}</span>
   }
-  const chip = STATUS_CHIP[item.status]
+  const chip = statusChip(item.status)
   if (!chip) return null
   return (
     <span className={`adv-status adv-status--${chip.tone}`}>
       {chip.tone === 'busy' && <span className="step-spin" aria-hidden="true" />}
-      {chip.label}
+      {t(chip.label)}
     </span>
   )
 }
 
 function SourceIcon({ ai }: { ai: boolean }): JSX.Element {
+  const { t } = useTranslation('advisor')
   return (
-    <span className="adv-source" title={ai ? 'Found by Copilot’s deep review' : 'Found by a quick check'}>
+    <span className="adv-source" title={ai ? t('detail.foundByDeep') : t('detail.foundByQuick')}>
       <Codicon name={ai ? 'sparkle' : 'zap'} />
     </span>
   )
@@ -70,11 +87,12 @@ function IssueRow({
   /** The expanded detail. */
   children: ReactNode
 }): JSX.Element {
+  const { t } = useTranslation('advisor')
   const f = item.finding
   const sev = normalizeSeverity(f.severity)
   const count = 1 + (f.locations?.length ?? 0)
   const where = f.file ? (f.line ? `${f.file}:${f.line}` : f.file) : undefined
-  const category = categoryById(f.category)?.title ?? f.category
+  const category = categoryTitle(f.category)
   const hidden = item.status === 'dismissed' || item.status === 'muted'
   return (
     <li
@@ -87,7 +105,7 @@ function IssueRow({
             className="adv-issue-check"
             checked={checked}
             onChange={onCheck}
-            aria-label={`Select “${plainText(f.title)}”`}
+            aria-label={t('issues.select', { title: plainText(findingTitle(f)) })}
           />
         )}
         <button
@@ -99,12 +117,12 @@ function IssueRow({
         >
           <i
             className={`adv-sev-dot adv-sev-dot--${sev}`}
-            title={severityLabel(sev)}
-            aria-label={`${severityLabel(sev)} severity`}
+            title={t(`severity.${sev}`)}
+            aria-label={t(`severity.${sev}Aria`)}
           />
           <span className="adv-issue-main">
             <span className="adv-issue-title">
-              <CodeText text={f.title} />
+              <CodeText text={findingTitle(f)} />
               {count > 1 && <span className="adv-issue-count">×{count}</span>}
             </span>
             <span className="adv-issue-meta">
@@ -121,7 +139,7 @@ function IssueRow({
             </span>
           </span>
           <span className="adv-issue-badges">
-            {item.isNew && <span className="adv-badge adv-badge--new">New</span>}
+            {item.isNew && <span className="adv-badge adv-badge--new">{t('issues.new')}</span>}
             <StatusChip item={item} />
             <SourceIcon ai={f.source === 'ai'} />
           </span>
@@ -133,10 +151,12 @@ function IssueRow({
   )
 }
 
-function resolvedHow(r: AdvisorResolved): string {
-  if (r.via === 'verify') return 'Verified fixed'
-  if (r.fixedByCopilot) return 'Fixed by Copilot'
-  return r.via === 'review' ? 'Not found in the latest review' : 'No longer detected'
+function resolvedHow(r: AdvisorResolved) {
+  if (r.via === 'verify') return 'issues.verifiedFixed' as const
+  if (r.fixedByCopilot) return 'issues.fixedByCopilot' as const
+  return r.via === 'review'
+    ? ('issues.notFoundInReview' as const)
+    : ('issues.noLongerDetected' as const)
 }
 
 /**
@@ -176,6 +196,7 @@ export function IssuesPanel({
   empty: ReactNode
   onClearResolved: () => void
 }): JSX.Element {
+  const { t } = useTranslation('advisor')
   const bodyRef = useRef<HTMLDivElement>(null)
   const selectable = tab === 'open' || tab === 'new'
   const groups = useMemo(
@@ -201,20 +222,22 @@ export function IssuesPanel({
   }
 
   return (
-    <section className="adv-card adv-issues" aria-label="Issues">
+    <section className="adv-card adv-issues" aria-label={t('issues.label')}>
       <header className="adv-card-head adv-issues-head">
-        <div className="adv-seg" role="tablist" aria-label="Show">
-          {TABS.map((t) => (
+        <div className="adv-seg" role="tablist" aria-label={t('issues.show')}>
+          {TABS.map((option) => (
             <button
-              key={t.key}
+              key={option.key}
               type="button"
               role="tab"
-              aria-selected={tab === t.key}
-              className={`adv-seg-btn${tab === t.key ? ' is-on' : ''}`}
-              onClick={() => onTab(t.key)}
+              aria-selected={tab === option.key}
+              className={`adv-seg-btn${tab === option.key ? ' is-on' : ''}`}
+              onClick={() => onTab(option.key)}
             >
-              {t.label}
-              {counts[t.key] > 0 && <span className="adv-seg-count">{counts[t.key]}</span>}
+              {t(option.label)}
+              {counts[option.key] > 0 && (
+                <span className="adv-seg-count">{counts[option.key]}</span>
+              )}
             </button>
           ))}
         </div>
@@ -222,8 +245,8 @@ export function IssuesPanel({
           <Codicon name="search" />
           <input
             type="search"
-            placeholder="Search issues"
-            aria-label="Search issues"
+            placeholder={t('issues.search')}
+            aria-label={t('issues.search')}
             value={query}
             onChange={(e) => onQuery(e.target.value)}
           />
@@ -240,7 +263,7 @@ export function IssuesPanel({
             }}
             onChange={() => onCheckAll(allChecked ? [] : allIds)}
           />
-          {allChecked ? 'Clear selection' : `Select all ${plural(items.length, 'issue')}`}
+          {allChecked ? t('issues.clearSelection') : t('issues.selectAll', { count: items.length })}
         </label>
       )}
 
@@ -257,11 +280,14 @@ export function IssuesPanel({
                       <Codicon name="pass-filled" className="adv-resolved-ico" />
                       <span className="adv-issue-main">
                         <span className="adv-issue-title">
-                          <CodeText text={r.title} />
+                          <CodeText text={findingTitle(r)} />
                         </span>
                         <span className="adv-issue-meta">
                           <CategoryIcon id={r.category} className="adv-issue-cat" />
-                          {resolvedHow(r)} · {relativeTime(r.at)}
+                          {t('issues.resolvedMeta', {
+                            how: t(resolvedHow(r)),
+                            time: relativeTime(r.at)
+                          })}
                           {r.file && (
                             <>
                               <span aria-hidden="true">·</span>
@@ -277,7 +303,7 @@ export function IssuesPanel({
               </ul>
               <div className="adv-issues-foot">
                 <button type="button" className="adv-link" onClick={onClearResolved}>
-                  Clear this list
+                  {t('issues.clearList')}
                 </button>
               </div>
             </>
@@ -288,7 +314,7 @@ export function IssuesPanel({
           groups.map((g) => (
             <div key={g.key} className="adv-group">
               <div className="adv-group-title">
-                {g.title} <span className="adv-group-count">{g.items.length}</span>
+                {t(g.title)} <span className="adv-group-count">{g.items.length}</span>
               </div>
               <ul className="adv-issues-list">
                 {g.items.map((item) => (

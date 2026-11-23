@@ -1,17 +1,19 @@
 import { useEffect, useId, useRef, useState, type JSX } from 'react'
 import type { SecretInfo } from '@shared/ipc'
 import { openDocs } from '../../docsLinks'
+import { Trans, formatLocale, translator, useTranslation } from '../../i18n'
 import { relativeTime } from '../advisor/format'
 import { Codicon } from '../icons'
 import type { LocalSource, SecretEntry } from './entries'
 
 /** A secret's state as a small dot and a word (the Skills tab's status styles). */
 export function SecretStatus({ secret }: { secret: SecretInfo }): JSX.Element {
+  const { t } = useTranslation('secrets')
   const [tone, label] = !secret.stored
-    ? ['update', 'No value']
+    ? ['update', t('values.noValue')]
     : secret.declared
-      ? ['on', 'Set']
-      : ['off', 'Not in rayfin.yml']
+      ? ['on', t('values.set')]
+      : ['off', t('notInYml')]
   return (
     <span className={`skl-status skl-status--${tone}`}>
       <span className="skl-status-dot" aria-hidden="true" />
@@ -39,29 +41,40 @@ export function ValueStatus({ state }: { state: ValueState }): JSX.Element {
 /** Reading a set of values: still reading, read, or couldn't. */
 export type Check = 'loading' | 'ok' | 'failed'
 
-const LOCAL: Record<LocalSource, ValueState> = {
-  none: { tone: 'update', label: 'Not set' },
-  local: { tone: 'on', label: 'Set on this computer' },
-  env: { tone: 'on', label: 'From your environment' },
-  settings: { tone: 'on', label: 'From local.settings.json' }
+const LOCAL = {
+  none: { tone: 'update', label: 'values.notSet' },
+  local: { tone: 'on', label: 'values.setHere' },
+  env: { tone: 'on', label: 'values.fromEnv' },
+  settings: { tone: 'on', label: 'values.fromSettings' }
+} as const satisfies Record<LocalSource, { tone: ValueState['tone']; label: string }>
+
+/** Where a value on this computer comes from, as a {@link ValueState}. */
+function localState(source: LocalSource): ValueState {
+  const { tone, label } = LOCAL[source]
+  return { tone, label: translator('secrets')(label) }
 }
 
-const UNKNOWN: ValueState = { tone: 'off', label: 'Couldn’t check' }
+/** A value that couldn't be checked. */
+function unknownState(): ValueState {
+  return { tone: 'off', label: translator('secrets')('values.unknown') }
+}
 
 /** A secret's value on this computer, or `null` when there's nothing to say. */
 export function localValueState(entry: SecretEntry, check: Check): ValueState | null {
-  if (!entry.local) return check === 'failed' ? UNKNOWN : null
-  if (entry.declared) return LOCAL[entry.local]
+  if (!entry.local) return check === 'failed' ? unknownState() : null
+  if (entry.declared) return localState(entry.local)
   // Functions don't get a secret rayfin.yml doesn't list: its value isn't used.
-  return entry.local === 'none' ? null : { ...LOCAL[entry.local], tone: 'off' }
+  return entry.local === 'none' ? null : { ...localState(entry.local), tone: 'off' }
 }
 
 /** A secret's value on the published app, or `null` when there's nothing to say. */
 export function publishedValueState(entry: SecretEntry, check: Check): ValueState | null {
-  if (check === 'failed') return UNKNOWN
+  if (check === 'failed') return unknownState()
   if (check === 'loading') return null
-  if (entry.published?.stored) return { tone: entry.declared ? 'on' : 'off', label: 'Set' }
-  return entry.declared ? { tone: 'update', label: 'Not set' } : null
+  const t = translator('secrets')
+  if (entry.published?.stored)
+    return { tone: entry.declared ? 'on' : 'off', label: t('values.set') }
+  return entry.declared ? { tone: 'update', label: t('values.notSet') } : null
 }
 
 /** How a function reads the secret. */
@@ -85,6 +98,7 @@ export function copilotPrompt(name: string, declared: boolean): string {
 }
 
 function CopyCode({ text }: { text: string }): JSX.Element {
+  const { t } = useTranslation('secrets')
   const [copied, setCopied] = useState(false)
   const timer = useRef<number | null>(null)
   useEffect(
@@ -110,8 +124,8 @@ function CopyCode({ text }: { text: string }): JSX.Element {
         type="button"
         className="skl-icon-btn"
         onClick={() => void copy()}
-        aria-label={copied ? 'Copied' : `Copy ${text}`}
-        title={copied ? 'Copied' : 'Copy'}
+        aria-label={copied ? t('actions.copied') : t('details.copyCode', { code: text })}
+        title={copied ? t('actions.copied') : t('actions.copy')}
       >
         <Codicon name={copied ? 'check' : 'copy'} />
       </button>
@@ -131,14 +145,15 @@ function DetailsHead({
   status?: JSX.Element | null
   onClose: () => void
 }): JSX.Element {
+  const { t } = useTranslation('secrets')
   return (
     <>
       <button
         type="button"
         className="skl-icon-btn skl-side-close"
         onClick={onClose}
-        aria-label="Close details"
-        title="Close (Esc)"
+        aria-label={t('details.closeDetails')}
+        title={t('details.closeEsc')}
       >
         <Codicon name="close" />
       </button>
@@ -159,22 +174,23 @@ function DetailsHead({
 
 /** When a stored value changed and was added. */
 function ValueDates({ secret }: { secret: SecretInfo }): JSX.Element | null {
+  const { t } = useTranslation('secrets')
   if (!secret.updatedAt && !secret.createdAt) return null
   const now = Date.now()
   return (
     <ul className="skl-facts">
       {secret.updatedAt && (
         <li>
-          <span>Changed</span>
-          <span title={new Date(secret.updatedAt).toLocaleString()}>
+          <span>{t('details.changed')}</span>
+          <span title={new Date(secret.updatedAt).toLocaleString(formatLocale())}>
             {relativeTime(secret.updatedAt, now)}
           </span>
         </li>
       )}
       {secret.createdAt && (
         <li>
-          <span>Added</span>
-          <span title={new Date(secret.createdAt).toLocaleString()}>
+          <span>{t('details.added')}</span>
+          <span title={new Date(secret.createdAt).toLocaleString(formatLocale())}>
             {relativeTime(secret.createdAt, now)}
           </span>
         </li>
@@ -191,16 +207,15 @@ function UseInFunction({
   name: string
   onAskCopilot?: () => void
 }): JSX.Element {
+  const { t } = useTranslation('secrets')
   return (
     <section className="skl-section-block">
-      <h4>Use it in a function</h4>
+      <h4>{t('details.useTitle')}</h4>
       <CopyCode text={readExpression(name)} />
-      <p className="skl-text">
-        Read it only inside a Rayfin function. Code in the browser can’t see secrets, and shouldn’t.
-      </p>
+      <p className="skl-text">{t('details.useHint')}</p>
       {onAskCopilot && (
         <button type="button" className="skl-link" onClick={onAskCopilot}>
-          <Codicon name="copilot" /> Ask Copilot to use it
+          <Codicon name="copilot" /> {t('details.askCopilot')}
         </button>
       )}
     </section>
@@ -225,41 +240,35 @@ export function SecretDetails({
   onClose,
   onAskCopilot
 }: DetailsProps): JSX.Element {
+  const { t } = useTranslation('secrets')
   return (
-    <aside className="skl-side skl-side--detail" aria-label={`${secret.name} details`}>
+    <aside
+      className="skl-side skl-side--detail"
+      aria-label={t('details.label', { name: secret.name })}
+    >
       <DetailsHead
         name={secret.name}
-        kicker={environment ? `Secret · ${environment}` : 'Secret'}
+        kicker={environment ? t('details.kickerIn', { environment }) : t('details.kicker')}
         status={<SecretStatus secret={secret} />}
         onClose={onClose}
       />
 
       {secret.description && <p className="skl-text">{secret.description}</p>}
 
-      {!secret.stored && (
-        <p className="sec-warn">
-          This app has no value for this secret, so functions that read it fail. Set one in the
-          Fabric portal.
-        </p>
-      )}
+      {!secret.stored && <p className="sec-warn">{t('details.noValueTeam')}</p>}
       {secret.stored && !secret.declared && (
         <p className="skl-note">
           <Codicon name="info" />
           <span>
-            <code>rayfin.yml</code> doesn’t list this secret, so functions can’t read it by name
-            yet. Ask Copilot to add it.
+            <Trans t={t} i18nKey="details.undeclaredTeam" components={{ code: <code /> }} />
           </span>
         </p>
       )}
 
       <section className="skl-section-block">
-        <h4>Value</h4>
+        <h4>{t('details.value')}</h4>
         <ValueDates secret={secret} />
-        <p className="skl-hint">
-          {secret.stored
-            ? 'Hidden. Nobody can read a value back, not even you. To change it, set a new one.'
-            : 'Not set yet.'}
-        </p>
+        <p className="skl-hint">{secret.stored ? t('details.hidden') : t('details.notSetYet')}</p>
       </section>
 
       <UseInFunction
@@ -274,7 +283,7 @@ export function SecretDetails({
             className="btn btn--sm"
             onClick={() => void window.api.openExternal(portalUrl)}
           >
-            Open in Fabric <Codicon name="link-external" />
+            {t('openInFabric')} <Codicon name="link-external" />
           </button>
         </div>
       )}
@@ -299,39 +308,38 @@ interface EntryDetailsProps {
 }
 
 /** What a secret's value on this computer means. */
-function localHint(entry: SecretEntry, check: Check): JSX.Element | null {
+function LocalHint({ entry, check }: { entry: SecretEntry; check: Check }): JSX.Element | null {
+  const { t } = useTranslation('secrets')
+  const code = { code: <code /> }
   switch (entry.local) {
     case undefined:
       return (
         <p className="skl-hint">
-          {check === 'failed' ? 'Fabricator couldn’t check this value.' : 'Checking…'}
+          {check === 'failed' ? t('details.couldntCheck') : t('status.checking')}
         </p>
       )
     case 'none':
-      return entry.declared ? (
-        <p className="sec-warn">
-          Functions that read it fail when your app runs on this computer. Set a value to fix that.
-        </p>
-      ) : null
+      return entry.declared ? <p className="sec-warn">{t('details.localMissing')}</p> : null
     case 'local':
       return (
         <p className="skl-hint">
-          Saved in your project’s <code>.rayfin-local</code> folder, outside your code and History.
-          {entry.declared && ' To change it, set a new one.'}
+          <Trans
+            t={t}
+            i18nKey={entry.declared ? 'details.localSavedDeclared' : 'details.localSaved'}
+            components={code}
+          />
         </p>
       )
     case 'env':
       return (
         <p className="skl-hint">
-          Your app uses the <code>{entry.name}</code> environment variable Fabricator started with.
-          To change it, change the variable and restart Fabricator.
+          <Trans t={t} i18nKey="details.localEnv" values={{ name: entry.name }} components={code} />
         </p>
       )
     case 'settings':
       return (
         <p className="skl-hint">
-          Read from <code>local.settings.json</code> in your functions folder. A value you set here
-          is used instead.
+          <Trans t={t} i18nKey="details.localSettings" components={code} />
         </p>
       )
   }
@@ -353,12 +361,13 @@ export function EntryDetails({
   onDeletePublished,
   onAskCopilot
 }: EntryDetailsProps): JSX.Element {
+  const { t } = useTranslation('secrets')
   const localId = useId()
   const publishedId = useId()
   // An unused secret without a value here still says so, like its published value.
   const local = localCheck
     ? (localValueState(entry, localCheck) ??
-      (entry.local === 'none' ? { tone: 'off' as const, label: 'Not set' } : null))
+      (entry.local === 'none' ? { tone: 'off' as const, label: t('values.notSet') } : null))
     : null
   const published = entry.published
   const stored = Boolean(published?.stored)
@@ -368,14 +377,15 @@ export function EntryDetails({
   const hasLocal = entry.local === 'local' || entry.local === 'settings'
 
   return (
-    <aside className="skl-side skl-side--detail" aria-label={`${entry.name} details`}>
+    <aside
+      className="skl-side skl-side--detail"
+      aria-label={t('details.label', { name: entry.name })}
+    >
       <DetailsHead
         name={entry.name}
-        kicker="Secret"
+        kicker={t('details.kicker')}
         status={
-          entry.declared ? null : (
-            <ValueStatus state={{ tone: 'off', label: 'Not in rayfin.yml' }} />
-          )
+          entry.declared ? null : <ValueStatus state={{ tone: 'off', label: t('notInYml') }} />
         }
         onClose={onClose}
       />
@@ -386,24 +396,25 @@ export function EntryDetails({
         <p className="skl-note">
           <Codicon name="info" />
           <span>
-            <code>rayfin.yml</code> doesn’t list this secret, so functions can’t read it by name.{' '}
-            {stored
-              ? 'Set its published value again to add it.'
-              : 'Remove its value if you don’t need it.'}
+            <Trans
+              t={t}
+              i18nKey={stored ? 'details.undeclaredStored' : 'details.undeclaredLocal'}
+              components={{ code: <code /> }}
+            />
           </span>
         </p>
       )}
 
       {localCheck && (
         <section className="skl-section-block" aria-labelledby={localId}>
-          <h4 id={localId}>Local value</h4>
+          <h4 id={localId}>{t('values.local')}</h4>
           {local && <ValueStatus state={local} />}
-          {localHint(entry, localCheck)}
+          <LocalHint entry={entry} check={localCheck} />
           {(canSetLocal || entry.local === 'local') && (
             <div className="sec-actions">
               {canSetLocal && (
                 <button type="button" className="btn btn--sm" onClick={() => onSetLocal(entry)}>
-                  <Codicon name="edit" /> {hasLocal ? 'Change' : 'Set'}
+                  <Codicon name="edit" /> {hasLocal ? t('details.change') : t('details.set')}
                 </button>
               )}
               {entry.local === 'local' && (
@@ -412,7 +423,7 @@ export function EntryDetails({
                   className="btn btn--sm skl-danger"
                   onClick={() => onRemoveLocal(entry)}
                 >
-                  <Codicon name="trash" /> Remove
+                  <Codicon name="trash" /> {t('actions.remove')}
                 </button>
               )}
             </div>
@@ -421,30 +432,23 @@ export function EntryDetails({
       )}
 
       <section className="skl-section-block" aria-labelledby={publishedId}>
-        <h4 id={publishedId}>Published value</h4>
+        <h4 id={publishedId}>{t('values.published')}</h4>
         {publishedCheck === null ? (
-          <p className="skl-hint">Values for the published app can be set after you publish it.</p>
+          <p className="skl-hint">{t('details.publishLater')}</p>
         ) : publishedCheck === 'failed' ? (
-          <p className="skl-hint">Fabricator couldn’t read your published app’s values.</p>
+          <p className="skl-hint">{t('details.publishedFailed')}</p>
         ) : publishedCheck === 'loading' ? (
-          <p className="skl-hint">Checking…</p>
+          <p className="skl-hint">{t('status.checking')}</p>
         ) : (
           <>
             <ValueStatus
-              state={publishedValueState(entry, 'ok') ?? { tone: 'off', label: 'Not set' }}
+              state={publishedValueState(entry, 'ok') ?? { tone: 'off', label: t('values.notSet') }}
             />
             {published && <ValueDates secret={published} />}
             {stored ? (
-              <p className="skl-hint">
-                Hidden. Nobody can read a value back, not even you. To change it, set a new one.
-              </p>
+              <p className="skl-hint">{t('details.hidden')}</p>
             ) : (
-              entry.declared && (
-                <p className="sec-warn">
-                  Your published app has no value for this secret, so its functions that read it
-                  fail. Set one to fix that.
-                </p>
-              )
+              entry.declared && <p className="sec-warn">{t('details.publishedMissing')}</p>
             )}
             {(entry.declared || stored) && (
               <div className="sec-actions">
@@ -454,7 +458,7 @@ export function EntryDetails({
                   disabled={busy}
                   onClick={() => onSetPublished(entry)}
                 >
-                  <Codicon name="edit" /> {stored ? 'Replace value' : 'Set value'}
+                  <Codicon name="edit" /> {stored ? t('dialog.replaceValue') : t('dialog.setValue')}
                 </button>
                 {stored && (
                   <button
@@ -463,7 +467,7 @@ export function EntryDetails({
                     disabled={busy}
                     onClick={() => onDeletePublished(entry)}
                   >
-                    <Codicon name="trash" /> Delete
+                    <Codicon name="trash" /> {t('actions.delete')}
                   </button>
                 )}
               </div>
@@ -495,37 +499,33 @@ export function SecretsOverview({
   /** A personal app that has been published, so it has published values too. */
   published?: boolean
 }): JSX.Element {
+  const { t } = useTranslation('secrets')
   return (
-    <aside className="skl-side skl-side--overview" aria-label="About secrets">
+    <aside className="skl-side skl-side--overview" aria-label={t('overview.label')}>
       <section className="skl-section-block">
-        <h4>How secrets work</h4>
+        <h4>{t('overview.how')}</h4>
         <ol className="skl-how">
+          <li>{t('overview.step1')}</li>
           <li>
-            Add a secret with a name and a value. The value stays on this computer, outside your
-            code and History.
-          </li>
-          <li>
-            Your app’s functions read it by name, such as{' '}
-            <code>{readExpression('OPENAI_API_KEY')}</code>.
+            <Trans
+              t={t}
+              i18nKey="overview.step2"
+              values={{ expression: readExpression('OPENAI_API_KEY') }}
+              components={{ code: <code /> }}
+            />
           </li>
           {team ? (
-            <li>
-              The published app and your preview keep their own values: change them in the Fabric
-              portal. Nobody can read a value back.
-            </li>
+            <li>{t('overview.stepTeam')}</li>
           ) : published ? (
-            <li>
-              Your published app keeps its own values. Nobody can read one back: to change it, set a
-              new one.
-            </li>
+            <li>{t('overview.stepPublished')}</li>
           ) : (
-            <li>Values for the published app can be set after you publish it.</li>
+            <li>{t('details.publishLater')}</li>
           )}
         </ol>
       </section>
 
       <section className="skl-section-block">
-        <h4>In this app</h4>
+        <h4>{t('overview.inApp')}</h4>
         <ul className="skl-facts">
           {facts.map(([label, value]) => (
             <li key={label}>
@@ -534,24 +534,20 @@ export function SecretsOverview({
             </li>
           ))}
           <li>
-            <span>Functions</span>
-            <span>{functionsEnabled ? 'On' : 'Off'}</span>
+            <span>{t('overview.functions')}</span>
+            <span>{functionsEnabled ? t('status.on') : t('status.off')}</span>
           </li>
         </ul>
         {!functionsEnabled && (
           <p className="skl-note">
             <Codicon name="info" />
-            <span>
-              This app doesn’t use functions yet, and only functions can read secrets. Ask Copilot
-              to add a function when you need one. Functions aren’t available in every Fabric region
-              or tenant.
-            </span>
+            <span>{t('overview.noFunctions')}</span>
           </p>
         )}
       </section>
 
       <button type="button" className="skl-link skl-side-foot" onClick={() => openDocs('secrets')}>
-        Learn more about secrets <Codicon name="link-external" />
+        {t('overview.learnMore')} <Codicon name="link-external" />
       </button>
     </aside>
   )

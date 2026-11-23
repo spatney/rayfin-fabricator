@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
+import { useTranslation } from '../../i18n'
 import { Ray, RAY_VIEWBOX, type RayMood } from '../mascot/Ray'
 import { Particles, useParticles } from '../mascot/Particles'
 import { useReducedMotion } from '../mascot/context'
@@ -16,6 +17,7 @@ const TYPE_MS = 32
  * when petted.
  */
 export function HelpRayAvatar(): JSX.Element {
+  const { t } = useTranslation('help')
   const reduced = useReducedMotion()
   const { particles, burst } = useParticles()
   const rayRef = useRef<HTMLButtonElement>(null)
@@ -61,7 +63,7 @@ export function HelpRayAvatar(): JSX.Element {
         className="help-ray-button"
         style={{ width: SIZE_W, height: SIZE_H }}
         onClick={pet}
-        aria-label="Ray, the Fabricator stingray. Select to pet him."
+        aria-label={t('ray.label')}
       >
         <span ref={squishRef} className="help-ray-squish">
           <Ray mood={mood} wave={wave} />

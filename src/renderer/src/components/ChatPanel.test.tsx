@@ -1856,6 +1856,28 @@ describe('ChatPanel Touch Up', () => {
     expect(exit).toHaveBeenCalledOnce()
   })
 
+  it('makes the composer glow while picks wait, with a ripple for each new one', () => {
+    installApi()
+    const { rerender } = render(<PickHarness picks={[]} />)
+    const box = screen.getByPlaceholderText(PLACEHOLDER).closest('.composer-box')!
+    expect(box.classList.contains('composer-box--picks')).toBe(false)
+    expect(box.querySelector('.composer-ripple')).toBeNull()
+
+    rerender(<PickHarness picks={[PICK]} />)
+    expect(box.classList.contains('composer-box--picks')).toBe(true)
+    const first = box.querySelector('.composer-ripple')
+    expect(first).not.toBeNull()
+
+    rerender(<PickHarness picks={[PICK, { ...PICK, id: 'b', n: 2 }]} />)
+    const second = box.querySelector('.composer-ripple')
+    expect(second).not.toBeNull()
+    expect(second).not.toBe(first)
+
+    rerender(<PickHarness picks={[]} />)
+    expect(box.classList.contains('composer-box--picks')).toBe(false)
+    expect(box.querySelector('.composer-ripple')).toBeNull()
+  })
+
   it('re-sends the stored prompt on Try again, keeping the chips', async () => {
     const api = installApi()
     const initial: UIChatMessage[] = [

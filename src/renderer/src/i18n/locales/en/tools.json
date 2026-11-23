@@ -1,0 +1,236 @@
+{
+  "verbs": {
+    "read": {
+      "running": "Reading",
+      "done": "Read"
+    },
+    "edit": {
+      "running": "Editing",
+      "done": "Edited"
+    },
+    "create": {
+      "running": "Creating",
+      "done": "Created"
+    },
+    "delete": {
+      "running": "Removing",
+      "done": "Removed"
+    },
+    "search": {
+      "running": "Searching for",
+      "done": "Searched for"
+    },
+    "find": {
+      "running": "Finding files matching",
+      "done": "Found files matching"
+    },
+    "run": {
+      "running": "Running",
+      "done": "Ran"
+    },
+    "shellIo": {
+      "running": "Checking on a command",
+      "done": "Checked on a command"
+    },
+    "web": {
+      "running": "Reading",
+      "done": "Read"
+    },
+    "webSearch": {
+      "running": "Searching the web for",
+      "done": "Searched the web for"
+    },
+    "skill": {
+      "running": "Loading the skill",
+      "done": "Used the skill"
+    },
+    "todo": {
+      "running": "Updating the task list",
+      "done": "Updated the task list"
+    },
+    "agent": {
+      "running": "Delegating",
+      "done": "Delegated"
+    },
+    "deploy": {
+      "running": "Publishing the app",
+      "done": "Published the app"
+    },
+    "navigate": {
+      "running": "Opening in the preview",
+      "done": "Opened in the preview"
+    },
+    "screenshot": {
+      "running": "Taking a screenshot",
+      "done": "Took a screenshot"
+    },
+    "console": {
+      "running": "Reading the preview console",
+      "done": "Read the preview console"
+    },
+    "scroll": {
+      "running": "Scrolling the preview",
+      "done": "Scrolled the preview"
+    },
+    "model": {
+      "running": "Looking up a semantic model",
+      "done": "Looked up a semantic model"
+    },
+    "localStatus": {
+      "running": "Checking the local backend",
+      "done": "Checked the local backend"
+    },
+    "localCall": {
+      "running": "Calling",
+      "done": "Called"
+    },
+    "localSeed": {
+      "running": "Checking the seed data",
+      "done": "Checked the seed data"
+    },
+    "fabricIq": {
+      "running": "Looking up in Fabric IQ",
+      "done": "Looked up in Fabric IQ"
+    },
+    "workIq": {
+      "running": "Looking up in Work IQ",
+      "done": "Looked up in Work IQ"
+    },
+    "mcp": {
+      "running": "Using",
+      "done": "Used"
+    },
+    "other": {
+      "running": "Using",
+      "done": "Used"
+    }
+  },
+  "bareVerbs": {
+    "read": {
+      "running": "Reading a file",
+      "done": "Read a file"
+    },
+    "edit": {
+      "running": "Editing files",
+      "done": "Edited files"
+    },
+    "create": {
+      "running": "Creating a file",
+      "done": "Created a file"
+    },
+    "delete": {
+      "running": "Removing a file",
+      "done": "Removed a file"
+    },
+    "search": {
+      "running": "Searching the project",
+      "done": "Searched the project"
+    },
+    "find": {
+      "running": "Finding files",
+      "done": "Found files"
+    },
+    "run": {
+      "running": "Running a command",
+      "done": "Ran a command"
+    },
+    "web": {
+      "running": "Reading a web page",
+      "done": "Read a web page"
+    },
+    "webSearch": {
+      "running": "Searching the web",
+      "done": "Searched the web"
+    },
+    "skill": {
+      "running": "Loading a skill",
+      "done": "Used a skill"
+    },
+    "agent": {
+      "running": "Delegating a task",
+      "done": "Delegated a task"
+    },
+    "localCall": {
+      "running": "Calling the app",
+      "done": "Called the app"
+    }
+  },
+  "shellIoVerbs": {
+    "write": {
+      "running": "Sending input to a command",
+      "done": "Sent input to a command"
+    },
+    "stop": {
+      "running": "Stopping a command",
+      "done": "Stopped a command"
+    },
+    "list": {
+      "running": "Listing running commands",
+      "done": "Listed running commands"
+    }
+  },
+  "agentIoVerbs": {
+    "read": {
+      "running": "Waiting for an agent",
+      "done": "Checked on an agent"
+    },
+    "write": {
+      "running": "Messaging an agent",
+      "done": "Messaged an agent"
+    },
+    "list": {
+      "running": "Listing agents",
+      "done": "Listed agents"
+    }
+  },
+  "seedLoad": {
+    "running": "Loading the seed data",
+    "done": "Loaded the seed data"
+  },
+  "phases": {
+    "read": "Reading files",
+    "edit": "Editing code",
+    "create": "Creating files",
+    "delete": "Removing files",
+    "search": "Searching the project",
+    "run": "Running a command",
+    "web": "Reading the web",
+    "webSearch": "Searching the web",
+    "skill": "Loading a skill",
+    "todo": "Updating the task list",
+    "agent": "Delegating a task",
+    "deploy": "Publishing the app",
+    "navigate": "Opening the preview",
+    "screenshot": "Taking a screenshot",
+    "console": "Reading the preview console",
+    "scroll": "Scrolling the preview",
+    "model": "Looking up a semantic model",
+    "localStatus": "Checking the local backend",
+    "localCall": "Calling the app",
+    "localSeed": "Checking the seed data",
+    "fabricIq": "Looking up Power BI data",
+    "workIq": "Looking up Microsoft 365",
+    "mcp": "Using an MCP server",
+    "other": "Working",
+    "server": "Using {{server}}"
+  },
+  "label": {
+    "withTarget": "{{verb}} {{target}}",
+    "quoted": "“{{text}}”",
+    "fromServer": "{{tool}} from {{server}}"
+  },
+  "summary": {
+    "read_one": "Read {{count}} file",
+    "read_other": "Read {{count}} files",
+    "edit_one": "Made {{count}} edit",
+    "edit_other": "Made {{count}} edits",
+    "create_one": "Created {{count}} file",
+    "create_other": "Created {{count}} files",
+    "run_one": "Ran {{count}} command",
+    "run_other": "Ran {{count}} commands",
+    "search_one": "Ran {{count}} search",
+    "search_other": "Ran {{count}} searches",
+    "web_one": "Read {{count}} web page",
+    "web_other": "Read {{count}} web pages"
+  }
+}

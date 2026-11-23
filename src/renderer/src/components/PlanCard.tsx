@@ -1,6 +1,7 @@
 import { useMemo, useState, type JSX } from 'react'
 import type { ChatPlanArtifact, ChatPlanPhase, ChatPlanTodo, ChatPlanTodoStatus } from '@shared/ipc'
-import { completedPlanTodos, planActionLabel, planProgress } from '../chatPlan'
+import { completedPlanTodos, planActionLabel, planErrorText, planProgress } from '../chatPlan'
+import { useTranslation } from '../i18n'
 import Markdown from './Markdown'
 import { Codicon } from './icons'
 import PlanQuestionCard from './PlanQuestionCard'
@@ -49,24 +50,27 @@ export function alternatePlanActions(
   return KNOWN_ACTIONS.filter((a) => plan.actions.includes(a) && a !== primary)
 }
 
-const TODO_META: Record<ChatPlanTodoStatus, { icon: string; label: string }> = {
-  pending: { icon: 'circle-large-outline', label: 'Pending' },
-  in_progress: { icon: 'sync', label: 'In progress' },
-  done: { icon: 'check', label: 'Done' },
-  blocked: { icon: 'circle-slash', label: 'Blocked' }
+const TODO_META: Record<ChatPlanTodoStatus, { icon: string }> = {
+  pending: { icon: 'circle-large-outline' },
+  in_progress: { icon: 'sync' },
+  done: { icon: 'check' },
+  blocked: { icon: 'circle-slash' }
 }
 
-const PHASE_META: Record<ChatPlanPhase, { icon: string; title: string; spin?: boolean }> = {
-  researching: { icon: 'compass', title: 'Researching the codebase…', spin: true },
-  clarifying: { icon: 'question', title: 'A few questions before drafting' },
-  drafting: { icon: 'edit', title: 'Drafting the plan…' },
-  review: { icon: 'checklist', title: 'Plan ready for review' },
-  revising: { icon: 'sync', title: 'Revising the plan…', spin: true },
-  executing: { icon: 'play', title: 'Executing the plan' },
-  completed: { icon: 'check-all', title: 'Plan completed' },
-  failed: { icon: 'error', title: 'Plan failed' },
-  interruptedReview: { icon: 'circle-slash', title: 'Review was interrupted' },
-  interruptedExecution: { icon: 'circle-slash', title: 'Execution was interrupted' }
+const PHASE_META: Record<
+  ChatPlanPhase,
+  { icon: string; title: `phases.${ChatPlanPhase}`; spin?: boolean }
+> = {
+  researching: { icon: 'compass', title: 'phases.researching', spin: true },
+  clarifying: { icon: 'question', title: 'phases.clarifying' },
+  drafting: { icon: 'edit', title: 'phases.drafting' },
+  review: { icon: 'checklist', title: 'phases.review' },
+  revising: { icon: 'sync', title: 'phases.revising', spin: true },
+  executing: { icon: 'play', title: 'phases.executing' },
+  completed: { icon: 'check-all', title: 'phases.completed' },
+  failed: { icon: 'error', title: 'phases.failed' },
+  interruptedReview: { icon: 'circle-slash', title: 'phases.interruptedReview' },
+  interruptedExecution: { icon: 'circle-slash', title: 'phases.interruptedExecution' }
 }
 
 function firstRemainingTodo(todos: ChatPlanTodo[]): ChatPlanTodo | undefined {
@@ -90,6 +94,7 @@ export default function PlanCard({
   onResume,
   onExport
 }: PlanCardProps): JSX.Element {
+  const { t } = useTranslation('plan')
   const [todosExpanded, setTodosExpanded] = useState(false)
   const [revising, setRevising] = useState(false)
   const [feedback, setFeedback] = useState('')
@@ -133,7 +138,7 @@ export default function PlanCard({
       setCopyError(null)
       setTimeout(() => setCopied(false), 1200)
     } catch (err) {
-      setCopyError(err instanceof Error ? err.message : 'Could not copy the plan to the clipboard.')
+      setCopyError(err instanceof Error ? err.message : t('review.copyFailed'))
     }
   }
 
@@ -143,16 +148,16 @@ export default function PlanCard({
         <button
           type="button"
           className="chat-plan-compact-toggle"
-          aria-label="Expand plan progress"
+          aria-label={t('card.expandProgress')}
           aria-expanded={false}
           onClick={() => setExecutionExpanded(true)}
         >
           <span className="chat-plan-icon" aria-hidden="true">
             <Codicon name="sync" className="chat-plan-spin" />
           </span>
-          <span className="chat-plan-compact-title">Executing plan</span>
+          <span className="chat-plan-compact-title">{t('card.executing')}</span>
           <span className="chat-plan-compact-current" title={current?.title}>
-            {current?.title || 'Working through the approved plan'}
+            {current?.title || t('card.workingThrough')}
           </span>
           {progress.total > 0 && (
             <span className="chat-plan-compact-progress">
@@ -171,19 +176,21 @@ export default function PlanCard({
         <span className="chat-plan-icon" aria-hidden="true">
           <Codicon name={meta.icon} className={meta.spin ? 'chat-plan-spin' : undefined} />
         </span>
-        <span className="chat-plan-title">{meta.title}</span>
+        <span className="chat-plan-title">{t(meta.title)}</span>
         {plan.revisionCount ? (
-          <span className="chat-plan-phase-badge">Revision {plan.revisionCount}</span>
+          <span className="chat-plan-phase-badge">
+            {t('card.revision', { number: plan.revisionCount })}
+          </span>
         ) : null}
         {plan.phase === 'executing' && (
           <button
             type="button"
             className="chat-plan-collapse"
-            aria-label="Collapse plan progress"
+            aria-label={t('card.collapseProgress')}
             aria-expanded={true}
             onClick={() => setExecutionExpanded(false)}
           >
-            <Codicon name="chevron-up" /> Collapse
+            <Codicon name="chevron-up" /> {t('card.collapse')}
           </button>
         )}
       </div>
@@ -199,25 +206,28 @@ export default function PlanCard({
           <div
             className="chat-plan-progress-bar"
             role="progressbar"
-            aria-label="Plan progress"
+            aria-label={t('card.progress')}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={progress.percent}
-            aria-valuetext={`${progress.done} of ${progress.total} steps done`}
+            aria-valuetext={t('card.stepsDone', { count: progress.total, done: progress.done })}
           >
             <div className="chat-plan-progress-fill" style={{ width: `${progress.percent}%` }} />
           </div>
           <span className="chat-plan-progress-label">
-            {progress.done} of {progress.total} steps done
+            {t('card.stepsDone', { count: progress.total, done: progress.done })}
           </span>
         </div>
       )}
 
-      {current && (plan.phase === 'executing' || plan.phase === 'interruptedExecution' || plan.phase === 'failed') && (
-        <div className="chat-plan-current">
-          <span className="chat-plan-current-label">Now:</span> {current.title}
-        </div>
-      )}
+      {current &&
+        (plan.phase === 'executing' ||
+          plan.phase === 'interruptedExecution' ||
+          plan.phase === 'failed') && (
+          <div className="chat-plan-current">
+            <span className="chat-plan-current-label">{t('card.now')}</span> {current.title}
+          </div>
+        )}
 
       {displayTodos.length > 0 && (
         <div className="chat-plan-todos">
@@ -242,11 +252,12 @@ export default function PlanCard({
             >
               {todosExpanded ? (
                 <>
-                  <Codicon name="chevron-down" /> Show fewer
+                  <Codicon name="chevron-down" /> {t('card.showFewer')}
                 </>
               ) : (
                 <>
-                  <Codicon name="chevron-right" /> Show all {displayTodos.length} steps
+                  <Codicon name="chevron-right" />{' '}
+                  {t('card.showAll', { count: displayTodos.length })}
                 </>
               )}
             </button>
@@ -256,7 +267,7 @@ export default function PlanCard({
 
       {plan.error && (
         <div className="chat-plan-error">
-          <Codicon name="warning" /> {plan.error}
+          <Codicon name="warning" /> {planErrorText(plan.error)}
         </div>
       )}
 
@@ -273,7 +284,7 @@ export default function PlanCard({
           {hasContent && (
             <div className="chat-plan-toolrow">
               <button type="button" className="chat-plan-tool-btn" onClick={() => void copyPlan()}>
-                <Codicon name="copy" /> {copied ? 'Copied' : 'Copy'}
+                <Codicon name="copy" /> {copied ? t('actions.copied') : t('actions.copy')}
               </button>
               <button
                 type="button"
@@ -281,10 +292,10 @@ export default function PlanCard({
                 disabled={busy}
                 onClick={() => void onExport(plan.content)}
               >
-                <Codicon name="desktop-download" /> Export
+                <Codicon name="desktop-download" /> {t('review.export')}
               </button>
               <button type="button" className="chat-plan-tool-btn" onClick={() => setShowFull(true)}>
-                <Codicon name="diff" /> Review full plan
+                <Codicon name="diff" /> {t('card.reviewFull')}
               </button>
             </div>
           )}
@@ -310,7 +321,7 @@ export default function PlanCard({
                 {alternates.length > 0 && (
                   <select
                     className="chat-plan-alt-select"
-                    aria-label="Other plan actions"
+                    aria-label={t('review.otherActions')}
                     disabled={busy}
                     value=""
                     onChange={(e) => {
@@ -320,7 +331,7 @@ export default function PlanCard({
                     }}
                   >
                     <option value="" disabled>
-                      {primary ? 'More options…' : 'Choose an action…'}
+                      {primary ? t('review.moreOptions') : t('review.chooseAction')}
                     </option>
                     {alternates.map((a) => (
                       <option key={a} value={a}>
@@ -335,7 +346,7 @@ export default function PlanCard({
                   disabled={busy}
                   onClick={() => setRevising((v) => !v)}
                 >
-                  Request changes
+                  {t('review.requestChanges')}
                 </button>
               </div>
 
@@ -343,7 +354,7 @@ export default function PlanCard({
                 <div className="chat-plan-revise">
                   <textarea
                     className="chat-plan-feedback"
-                    placeholder="Optional — what should change about the plan?"
+                    placeholder={t('review.feedbackPlaceholder')}
                     value={feedback}
                     rows={2}
                     disabled={busy}
@@ -359,7 +370,7 @@ export default function PlanCard({
                       setRevising(false)
                     }}
                   >
-                    Send feedback
+                    {t('review.sendFeedback')}
                   </button>
                 </div>
               )}
@@ -376,7 +387,7 @@ export default function PlanCard({
             disabled={busy}
             onClick={() => onResume('review')}
           >
-            Continue planning
+            {t('card.continuePlanning')}
           </button>
         </div>
       )}
@@ -390,7 +401,7 @@ export default function PlanCard({
             disabled={busy}
             onClick={() => onResume('execute', plan.selectedAction)}
           >
-            Resume remaining work
+            {t('card.resumeRemaining')}
           </button>
         </div>
       )}
@@ -403,7 +414,7 @@ export default function PlanCard({
             disabled={busy}
             onClick={() => onResume('review')}
           >
-            Retry planning
+            {t('card.retryPlanning')}
           </button>
         </div>
       )}
@@ -411,7 +422,7 @@ export default function PlanCard({
       {(plan.phase === 'completed' || plan.phase === 'executing') && hasContent && (
         <div className="chat-plan-toolrow">
           <button type="button" className="chat-plan-tool-btn" onClick={() => setShowFull(true)}>
-            <Codicon name="diff" /> Review full plan
+            <Codicon name="diff" /> {t('card.reviewFull')}
           </button>
         </div>
       )}

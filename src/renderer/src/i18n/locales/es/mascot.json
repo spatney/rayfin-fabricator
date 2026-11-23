@@ -1,0 +1,203 @@
+{
+  "ui": {
+    "ray": "Ray, la mantarraya de Fabricator. Selecciónalo para acariciarlo.",
+    "sendAway": "Despedir a Ray por ahora",
+    "another": "Haz clic para ver otra"
+  },
+  "labels": {
+    "rayfin": "Dato de Rayfin",
+    "tip": "Consejo de Fabricator",
+    "ray": "Dato de Ray"
+  },
+  "facts": {
+    "rayfin": {
+      "classes": "Rayfin convierte clases de TypeScript en una base de datos, API y un cliente con seguridad de tipos.",
+      "decorators": "Tu modelo de datos es TypeScript puro. Decoradores como @text, @int y @date describen cada campo.",
+      "rayfinUp": "Un solo comando, rayfin up, publica toda la aplicación en Microsoft Fabric.",
+      "boundary": "Las aplicaciones de Rayfin se ejecutan en Microsoft Fabric, dentro de los límites de tu organización.",
+      "signIn": "El inicio de sesión viene integrado: en las aplicaciones de Rayfin, cada persona entra con Microsoft Entra ID.",
+      "rowLevelSecurity": "Una directiva en @authenticated puede mostrar a cada persona solo sus propias filas. Seguridad de nivel de fila, en una línea.",
+      "relations": "@one y @many vinculan entidades, así un cliente puede tener muchos pedidos.",
+      "queries": "Las consultas de Rayfin son cadenas con seguridad de tipos: select, where, orderBy y, al final, execute.",
+      "aggregates": "¿Necesitas totales? groupBy() y aggregate() se encargan de sumas, promedios y recuentos.",
+      "validators": "Rayfin puede generar un validador a partir de una entidad, para que un formulario compruebe los datos antes de guardarlos.",
+      "connectors": "Los conectores leen datos que ya están en Fabric: almacenes de datos, bases de datos SQL, modelos semánticos y bases de datos KQL.",
+      "dax": "Con un conector, tu aplicación puede ejecutar DAX en un modelo semántico de Fabric.",
+      "functions": "Las funciones ejecutan TypeScript en el servidor, junto a tus datos. Ojo: aún no están en todas las regiones de Fabric.",
+      "secrets": "Las funciones pueden llamar a API externas con claves guardadas como secretos, así las claves nunca quedan en tu código.",
+      "versions": "Todos los paquetes @microsoft/rayfin-* comparten el mismo número de versión, así que se actualizan a la par.",
+      "universalApp": "Las aplicaciones nuevas parten de la Universal App de Rayfin. Empieza pequeña y crece hasta ser lo que describas.",
+      "hosting": "Rayfin también aloja tu front-end. La aplicación compilada se sirve desde Fabric, junto a sus datos.",
+      "files": "Las aplicaciones de Rayfin también pueden guardar archivos, como fotos y recibos, en su propio almacenamiento de archivos.",
+      "typeScript": "Rayfin es TypeScript hasta el fondo: modelo de datos, código de cliente y lógica de la aplicación.",
+      "docs": "La documentación de Rayfin también está escrita para agentes. Agrega .md a cualquier página de rayfin.ai para obtenerla en Markdown."
+    },
+    "tip": {
+      "describe": "Describe lo que quieres con tus propias palabras. Copilot escribe el código y yo te animo.",
+      "design": "En la vista previa, Diseño te permite señalar cualquier cosa y pedir un cambio.",
+      "history": "Cada cambio se guarda. En Código → Historial puedes restaurar una versión anterior.",
+      "advisor": "El Asesor evalúa la salud de tu aplicación, y cada hallazgo trae una corrección de un solo clic.",
+      "blueprint": "Blueprint muestra cómo está armada tu aplicación, con el modelo de datos incluido.",
+      "secrets": "¿Una clave de API para una función? Agrégala en Código → Secretos para que nunca quede en tu código.",
+      "publish": "Al publicar, tu aplicación pasa a Microsoft Fabric, donde las personas de tu organización pueden abrirla.",
+      "autoPublish": "La opción “Publicar después de cada turno de chat” decide si cada cambio va a Fabric al instante.",
+      "share": "Cuando tu aplicación esté publicada, Compartir permite que las personas de tu organización la abran.",
+      "help": "¿Te atascas más adelante? Selecciona Ayuda en la barra de estado y bucearé contigo en los registros."
+    },
+    "ray": {
+      "cartilage": "Las rayas somos primas de los tiburones. Nuestro esqueleto es de cartílago, no de hueso.",
+      "rayFinned": "Giro de guion: por radiante que sea, no soy un pez de aletas radiadas. Estoy más emparentado con los tiburones.",
+      "eyes": "Una mantarraya tiene los ojos arriba y la boca abajo, así que puede vigilar mientras come.",
+      "electric": "Las rayas pueden percibir los débiles campos eléctricos de las presas escondidas en la arena.",
+      "fever": "En inglés, a un grupo de mantarrayas se le llama “fever”: fiebre. No me lo invento.",
+      "mantaBrain": "Las mantas tienen el cerebro más grande de todos los peces.",
+      "mantaSpan": "La manta gigante puede medir unos 7 metros de punta a punta de las alas."
+    },
+    "quip": {
+      "school": "Un grupo de peces es un banco. Un grupo de paquetes es node_modules.",
+      "spots": "Intenté contar con mis manchas los paquetes que descarga npm. Me quedé sin manchas.",
+      "wings": "Te echaría una mano con los paquetes, pero solo tengo aletas.",
+      "blink": "La mayoría de los peces no pueden parpadear. Yo practiqué."
+    }
+  },
+  "install": {
+    "intro": "¡Hola, soy Ray! Mientras npm descarga tus paquetes, te cuento cosas de Rayfin.",
+    "introPrepare": "¡Hola, soy Ray! Mientras esta aplicación recibe sus paquetes, te cuento cosas de Rayfin.",
+    "hello": {
+      "create": "¡Uy, una aplicación nueva! Te cuento cosas de Rayfin mientras npm hace lo suyo.",
+      "createBack": "¡Hola de nuevo! Aplicación nueva, paquetes nuevos. Te hago compañía.",
+      "clone": "Clonando, genial. Te hago compañía mientras llegan los paquetes.",
+      "cloneBack": "¡Hola de nuevo! Te cuento cosas de Rayfin mientras esto se instala.",
+      "prepare": "Esta aplicación necesita sus paquetes primero. Te hago compañía.",
+      "prepareBack": "¡Hola de nuevo! Una instalación rápida y listo."
+    },
+    "success": {
+      "create": "¡Tu aplicación está lista! Se ejecuta aquí mismo, en tu dispositivo. ¡A crear!",
+      "team": "¡Tu aplicación está lista! La canalización del equipo está implementando tu primera vista previa.",
+      "ready": "¡Todo listo! Tu aplicación ya está preparada."
+    },
+    "error": {
+      "prepare": "Vaya, no funcionó. El mensaje dice por qué. Usa Reintentar o pídele a Ayuda que lo investigue.",
+      "details": "Vaya, no funcionó. Los detalles muestran por qué, y Ayuda puede investigarlo."
+    },
+    "retry": "Segundo asalto. Confío en ti.",
+    "resume": "¡Anda! Hay más que instalar. Me quedo.",
+    "slow": "npm está siendo muy minucioso hoy.",
+    "bye": "¡Bueno, hasta luego! Estaré en Ayuda si me necesitas."
+  },
+  "play": {
+    "pet": {
+      "hehe": "¡Jiji!",
+      "tickles": "¡Me haces cosquillas!",
+      "again": "¡Otra vez! ¡Otra vez!",
+      "favorite": "Eres mi persona favorita.",
+      "likeYou": "Tú también me caes bien.",
+      "wiggle": "¡Meneíto de felicidad!"
+    },
+    "dizzy": {
+      "spinning": "Uf… todo me da vueltas.",
+      "tooMany": "Demasiadas… caricias…"
+    },
+    "lift": "¡Yupiii!",
+    "drop": {
+      "thanks": "¡Gracias por el paseo!",
+      "niceSpot": "Oh, buen sitio.",
+      "canFly": "Sé volar, ¿sabes? Bajo el agua. Pero gracias."
+    },
+    "hover": {
+      "hi": "¡Ah, hola!",
+      "hello": "Hola, hola.",
+      "psst": "Psst. Puedes acariciarme."
+    },
+    "wake": {
+      "up": "¿Eh? ¡Estoy despierto! ¡Despierto!",
+      "resting": "No estaba dormido. Estaba descansando las alas."
+    }
+  },
+  "help": {
+    "hello": {
+      "morning": "¡Buenos días! Soy Ray.",
+      "afternoon": "¡Buenas tardes! Soy Ray.",
+      "evening": "¡Buenas! Soy Ray.",
+      "late": "¿Trasnochando? Yo también. Soy Ray."
+    },
+    "working": {
+      "logs": "revisando tus registros",
+      "clues": "pescando pistas",
+      "docs": "buceando en la documentación",
+      "source": "leyendo el código fuente",
+      "trail": "siguiendo el rastro",
+      "sand": "rebuscando en la arena",
+      "dots": "atando cabos",
+      "answer": "sacando una respuesta del agua"
+    }
+  },
+  "splash": {
+    "intro": "¡Hola, soy Ray! Vamos a prepararte para crear.",
+    "hello": "¡Hola de nuevo! Deja que prepare todo.",
+    "launch": {
+      "welcomeBack": "¡Hola de nuevo!",
+      "hey": "¡Qué bien verte!",
+      "build": "¡Hola otra vez! ¿Creamos?",
+      "morning": "¡Buenos días! ¿Seguimos?",
+      "evening": "¡Buenas tardes! ¿Seguimos?",
+      "late": "¿Trasnochando? ¡Hola de nuevo!"
+    },
+    "tools": {
+      "toolbox": "Rebuscando en la caja de herramientas…",
+      "fins": "¿Aletas? Sí. ¿Cola? También. Sigo buscando…"
+    },
+    "accounts": {
+      "knocking": "Llamando a algunas puertas…",
+      "knuckles": "Sigo llamando. Las aletas son pésimos nudillos."
+    },
+    "ready": "¡Todo listo! Hagamos algo genial.",
+    "setup": "Primero hay que configurar algunas cosas. ¡Te enseño todo!",
+    "error": "Mmm, algo se enredó en las algas. Echemos un vistazo."
+  },
+  "deploy": {
+    "hello": "¡Llevando tus últimos cambios a Fabric!",
+    "helloFirst": "¡Primer viaje de {{name}} a Fabric! Yo lo llevo nadando.",
+    "live": "¡{{name}} ya está en línea! Échale un vistazo.",
+    "trouble": {
+      "failed": "Tu aplicación no llegó a Fabric. ¿Quieres que averigüe por qué?",
+      "signin": "Fabric necesita que vuelvas a iniciar sesión antes de publicar esta aplicación.",
+      "stopped": "La publicación se detuvo antes de terminar.",
+      "unsupported": "Las aplicaciones de Fabric aún no están disponibles en la región de esa área de trabajo. Elijamos un área de trabajo de otra región.",
+      "unsupportedRegion": "La capacidad de esa área de trabajo está en {{region}}, y las aplicaciones de Fabric aún no llegan ahí. Elijamos un área de trabajo de otra región."
+    },
+    "steps": {
+      "packages": "Cargando unos paquetes antes de zarpar…",
+      "suitcase": "npm está haciendo la maleta…",
+      "hiFabric": "Saludando a Fabric…",
+      "knock": "Toc, toc, Fabric. Soy Ray.",
+      "id": "Fabric quiere ver tu identificación. ¡Revisa el explorador!",
+      "room": "Buscando sitio para que tu aplicación nade…",
+      "pond": "Haciendo sitio en el estanque…",
+      "swimOver": "Nadando hacia tu área de trabajo…",
+      "workspaceRoom": "Comprobando que tu área de trabajo tenga espacio…",
+      "spot": "Guardándole un sitio a tu aplicación en Fabric…",
+      "welcomeMat": "Desenrollando la alfombra de bienvenida…",
+      "knobs": "Afinando algunos ajustes…",
+      "guestList": "Revisando quién está en la lista de invitados…",
+      "tables": "Ordenando tus tablas…",
+      "tricks": "Enseñándole trucos nuevos a tu base de datos…",
+      "files": "Haciendo espacio para tus archivos…",
+      "shelves": "Quitándoles el polvo a unos estantes…",
+      "plugging": "Enchufando tus conexiones de datos…",
+      "cables": "Desenredando unos cables…",
+      "building": "Compilando tu aplicación. ¡Aletas cruzadas!",
+      "bundling": "Empaquetándolo todo bien ordenadito…",
+      "current": "Enviándola a Fabric con la corriente…",
+      "waking": "Despertando tus funciones…",
+      "riseAndShine": "¡Arriba, funciones, a brillar!",
+      "ready": "Preparando todo en Fabric…",
+      "bow": "Envolviéndola con un lazo…",
+      "almost": "Ya casi. ¡Nada, Ray, nada!",
+      "magic": "Haciendo un poco de magia de Fabric…",
+      "new": "¡Algo nuevo! Lo observo de cerca…",
+      "busy": "Fabric está algo ocupado. Lo intento de nuevo…",
+      "live": "¡Ya está en línea! Échale un vistazo."
+    }
+  }
+}

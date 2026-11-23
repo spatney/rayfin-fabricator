@@ -1,6 +1,8 @@
 // Path helpers for the chat: tools report absolute (often Windows) paths, while
 // the Code tab and the user think in project-relative, forward-slash paths.
 
+import { translator } from '../../i18n'
+
 /** Forward slashes, no trailing slash. */
 export function normalizePath(path: string): string {
   return path.trim().replace(/\\/g, '/').replace(/\/+$/, '')
@@ -54,7 +56,7 @@ export interface DisplayPath {
 export function displayPath(path: string, projectRoot: string): DisplayPath {
   const full = path.trim()
   const rel = projectRelative(full, projectRoot)
-  if (rel === '') return { dir: '', base: 'project folder', rel, full }
+  if (rel === '') return { dir: '', base: translator('chat')('paths.projectFolder'), rel, full }
   const shown = rel ?? normalizePath(full)
   const cut = shown.lastIndexOf('/')
   const base = cut >= 0 ? shown.slice(cut + 1) : shown

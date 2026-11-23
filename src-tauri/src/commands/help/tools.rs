@@ -419,14 +419,12 @@ impl OutputParams {
 pub fn local_output_title(args: Option<&Value>) -> String {
   let params = args.and_then(|a| serde_json::from_value::<OutputParams>(a.clone()).ok()).unwrap_or_default();
   let query = params.query();
-  let mut title = "Read the local backend's output".to_string();
-  if let Some(source) = &query.source {
-    title.push_str(&format!(" from {source}"));
+  match (&query.source, query.problems_only) {
+    (None, false) => t!("assist.help.localOutput.all"),
+    (Some(source), false) => t!("assist.help.localOutput.from", source = source),
+    (None, true) => t!("assist.help.localOutput.problems"),
+    (Some(source), true) => t!("assist.help.localOutput.fromProblems", source = source),
   }
-  if query.problems_only {
-    title.push_str(" (warnings and errors)");
-  }
-  title
 }
 
 struct LocalOutputTool(Arc<ToolContext>);

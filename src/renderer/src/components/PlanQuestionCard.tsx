@@ -1,5 +1,6 @@
 import { useId, useState, type JSX } from 'react'
 import type { ChatPlanQuestion } from '@shared/ipc'
+import { useTranslation } from '../i18n'
 import { Codicon } from './icons'
 
 export interface PlanQuestionCardProps {
@@ -28,6 +29,7 @@ export default function PlanQuestionCard({
   busy = false,
   onAnswer
 }: PlanQuestionCardProps): JSX.Element {
+  const { t } = useTranslation('plan')
   const fieldId = useId()
   const [freeform, setFreeform] = useState('')
 
@@ -44,9 +46,7 @@ export default function PlanQuestionCard({
         {answer ? (
           <div className="chat-plan-question-reply">{answer}</div>
         ) : question.state === 'interrupted' ? (
-          <div className="chat-plan-question-missed">
-            Not answered before the turn was interrupted.
-          </div>
+          <div className="chat-plan-question-missed">{t('question.interrupted')}</div>
         ) : null}
       </div>
     )
@@ -76,7 +76,9 @@ export default function PlanQuestionCard({
                 onClick={() => onAnswer(question.id, choice, false)}
               >
                 <span className="chat-plan-choice-label">{label}</span>
-                {recommended && <span className="chat-plan-choice-badge">Recommended</span>}
+                {recommended && (
+                  <span className="chat-plan-choice-badge">{t('question.recommended')}</span>
+                )}
               </button>
             )
           })}
@@ -85,14 +87,14 @@ export default function PlanQuestionCard({
       {question.allowFreeform && (
         <div className="chat-plan-question-freeform">
           <label className="chat-plan-question-freeform-label" htmlFor={fieldId}>
-            {hasChoices ? 'Or answer in your own words' : 'Your answer'}
+            {hasChoices ? t('question.orOwnWords') : t('question.yourAnswer')}
           </label>
           <div className="chat-plan-question-freeform-row">
             <textarea
               id={fieldId}
               className="chat-plan-feedback"
               rows={1}
-              placeholder="Type an answer…"
+              placeholder={t('question.placeholder')}
               value={freeform}
               disabled={busy}
               onChange={(e) => setFreeform(e.target.value)}
@@ -109,7 +111,7 @@ export default function PlanQuestionCard({
               disabled={!canSubmitFreeform}
               onClick={submit}
             >
-              Send answer
+              {t('question.send')}
             </button>
           </div>
         </div>

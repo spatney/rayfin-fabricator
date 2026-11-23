@@ -1,4 +1,5 @@
 import { memo, useMemo, useState, type JSX } from 'react'
+import { useTranslation } from '../../i18n'
 import Markdown from '../Markdown'
 import { ChevronRightIcon } from '../icons'
 import { AgentRow } from './AgentRow'
@@ -33,11 +34,13 @@ export const WorkLog = memo(function WorkLog({
   soleBlock: boolean
   onOpenFile?: (path: string) => void
 }): JSX.Element {
+  const { t, i18n } = useTranslation('chat')
   const { items, steps, live } = block
   const [choice, setChoice] = useState<boolean | null>(null)
   const [showAll, setShowAll] = useState(false)
   const open = choice ?? live
-  const kinds = useMemo(() => summarizeKinds(steps), [steps])
+  // The summary is in the language shown, so a switch summarizes again.
+  const kinds = useMemo(() => summarizeKinds(steps), [steps, i18n.language])
   const duration = live ? undefined : workDuration(steps, turnElapsedMs, soleBlock)
 
   const windowStart = live && !showAll ? Math.max(0, items.length - LIVE_WINDOW) : 0
@@ -49,12 +52,12 @@ export const WorkLog = memo(function WorkLog({
   const shown = windowStart ? [...earlier.filter(working), ...items.slice(windowStart)] : items
   const hiddenSteps = hidden.filter((i) => i.kind === 'tool').length
 
-  const stepCount = `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`
+  const stepCount = t('steps.count', { count: steps.length })
   const title = live
-    ? 'Working'
+    ? t('workLog.working')
     : duration != null
-      ? `Worked for ${formatTurnDuration(duration)}`
-      : 'Worked'
+      ? t('workLog.workedFor', { duration: formatTurnDuration(duration) })
+      : t('workLog.worked')
   const summary = [title, stepCount, ...kinds.map((k) => k.label)].join(', ')
 
   return (
@@ -64,7 +67,7 @@ export const WorkLog = memo(function WorkLog({
         className="worklog-head"
         aria-expanded={open}
         aria-label={summary}
-        title={open ? 'Hide steps' : 'Show steps'}
+        title={open ? t('workLog.hideSteps') : t('workLog.showSteps')}
         onClick={() => setChoice(!open)}
       >
         <span className="worklog-icon" aria-hidden="true">
@@ -88,10 +91,9 @@ export const WorkLog = memo(function WorkLog({
         <div className="worklog-body">
           {hidden.length > 0 && (
             <button type="button" className="worklog-earlier" onClick={() => setShowAll(true)}>
-              Show{' '}
               {hiddenSteps > 0
-                ? `${hiddenSteps} earlier ${hiddenSteps === 1 ? 'step' : 'steps'}`
-                : 'earlier notes'}
+                ? t('steps.showEarlier', { count: hiddenSteps })
+                : t('workLog.showEarlierNotes')}
             </button>
           )}
           {shown.map((item) =>

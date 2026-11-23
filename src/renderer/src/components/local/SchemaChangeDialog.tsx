@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type JSX } from 'react'
+import { Trans, useTranslation } from '../../i18n'
 import { useSuppressPreview } from '../../overlay'
 import { useModalFocus } from '../../modalFocus'
 import './local.css'
@@ -39,6 +40,7 @@ export default function SchemaChangeDialog({
   onReset,
   onKeep
 }: Props): JSX.Element {
+  const { t } = useTranslation('preview')
   useSuppressPreview()
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
@@ -73,15 +75,19 @@ export default function SchemaChangeDialog({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>This change would delete local data</h2>
+          <h2 id={titleId}>{t('schema.title')}</h2>
         </div>
         <div className="modal-body">
           <p className="schema-dialog-lead">
-            The data model of <strong>{projectName}</strong> changed. Applying the change deletes
-            this data, stored on this computer:
+            <Trans
+              t={t}
+              i18nKey="schema.lead"
+              values={{ name: projectName }}
+              components={{ b: <strong /> }}
+            />
           </p>
           {losses.length > 0 ? (
-            <ul className="schema-losses" aria-label="Data the change deletes">
+            <ul className="schema-losses" aria-label={t('schema.deletes')}>
               {losses.map((loss) => (
                 <li key={loss}>
                   <code>{loss}</code>
@@ -89,15 +95,22 @@ export default function SchemaChangeDialog({
               ))}
             </ul>
           ) : (
-            <p className="schema-dialog-lead">Which data it deletes isn’t known.</p>
+            <p className="schema-dialog-lead">{t('schema.unknown')}</p>
           )}
           <p className="schema-dialog-choices">
-            <strong>Delete this data and apply</strong> deletes only what’s listed.{' '}
-            <strong>Reset local data</strong> deletes all of the app’s local data, its test users
-            and files, then applies the change. <strong>Keep the current version</strong> keeps your
-            data and the data model you have now
-            {atStart ? ', and the app doesn’t start until you choose.' : '.'}
-            {published ? ' Your published app and its data aren’t affected.' : ''}
+            <Trans
+              t={t}
+              i18nKey={
+                atStart
+                  ? published
+                    ? 'schema.choices.atStartPublished'
+                    : 'schema.choices.atStart'
+                  : published
+                    ? 'schema.choices.published'
+                    : 'schema.choices.default'
+              }
+              components={{ b: <strong /> }}
+            />
           </p>
           {error && (
             <p className="confirm-error" role="alert">
@@ -113,7 +126,7 @@ export default function SchemaChangeDialog({
             disabled={busy}
             autoFocus
           >
-            Keep the current version
+            {t('schema.keep')}
           </button>
           <button
             type="button"
@@ -124,7 +137,7 @@ export default function SchemaChangeDialog({
             }}
             disabled={busy}
           >
-            {working('reset', 'Resetting…', 'Reset local data')}
+            {working('reset', t('schema.resetting'), t('schema.reset'))}
           </button>
           <button
             type="button"
@@ -135,7 +148,7 @@ export default function SchemaChangeDialog({
             }}
             disabled={busy}
           >
-            {working('apply', 'Applying…', 'Delete this data and apply')}
+            {working('apply', t('schema.applying'), t('schema.apply'))}
           </button>
         </div>
       </div>

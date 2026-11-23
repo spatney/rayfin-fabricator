@@ -9,6 +9,7 @@ import type {
   TeamProblem,
   TeamWorkspace
 } from '@shared/ipc'
+import { translator, useTranslation } from '../../../i18n'
 import ConfirmModal from '../../ConfirmModal'
 import { Codicon } from '../../icons'
 import { ProblemView, teamError } from '../common'
@@ -97,11 +98,12 @@ export function parsePatch(patch: string): PatchRow[] {
 const KIND_LETTER: Record<TeamDiffFile['change'], string> = { added: 'A', modified: 'M', deleted: 'D', renamed: 'R' }
 
 function PatchView({ file }: { file: TeamDiffFile }): JSX.Element {
+  const { t } = useTranslation('teamMap')
   const rows = useMemo(() => (file.patch ? parsePatch(file.patch) : []), [file.patch])
   if (!file.patch) {
     return (
       <p className="tmap-patch-note">
-        {file.change === 'deleted' ? 'This file was removed.' : 'No preview for this file (it’s binary or very large).'}
+        {file.change === 'deleted' ? t('diff.removedFile') : t('diff.noPreview')}
       </p>
     )
   }
@@ -114,13 +116,14 @@ function PatchView({ file }: { file: TeamDiffFile }): JSX.Element {
           <code>{row.kind === 'hunk' ? row.text : row.text || ' '}</code>
         </div>
       ))}
-      {file.truncated && <div className="tmap-patch-note">The rest of this file’s changes aren’t shown here.</div>}
+      {file.truncated && <div className="tmap-patch-note">{t('diff.fileTruncated')}</div>}
     </div>
   )
 }
 
 /** A working copy's changes compared with the published app. */
 function DiffView({ workspaceId, app, copy }: { workspaceId: string; app: TeamMapApp; copy: TeamMapCopy }): JSX.Element {
+  const { t } = useTranslation('teamMap')
   const local = copy.mine && Boolean(app.projectId)
   const [diff, setDiff] = useState<TeamDiff | null>(null)
   const [openFile, setOpenFile] = useState<string | null>(null)
@@ -136,7 +139,10 @@ function DiffView({ workspaceId, app, copy }: { workspaceId: string; app: TeamMa
         if (alive) setDiff(d)
       })
       .catch((reason) => {
-        if (alive) setDiff({ ok: false, error: teamError(reason, 'Could not load the changes.'), files: [], truncated: false })
+        if (alive) {
+          const error = teamError(reason, translator('teamMap')('diff.loadFailed'))
+          setDiff({ ok: false, error, files: [], truncated: false })
+        }
       })
     return () => {
       alive = false
@@ -146,12 +152,12 @@ function DiffView({ workspaceId, app, copy }: { workspaceId: string; app: TeamMa
   if (!diff) {
     return (
       <p className="tmap-dim">
-        <span className="ws-spinner" /> Loading the changes…
+        <span className="ws-spinner" /> {t('diff.loading')}
       </p>
     )
   }
-  if (!diff.ok) return <div className="alert alert--error">{diff.error ?? 'Could not load the changes.'}</div>
-  if (diff.files.length === 0) return <p className="tmap-dim">No changes compared with the published app yet.</p>
+  if (!diff.ok) return <div className="alert alert--error">{diff.error ?? t('diff.loadFailed')}</div>
+  if (diff.files.length === 0) return <p className="tmap-dim">{t('diff.none')}</p>
 
   const prefix = `${app.folder}/`
   const additions = diff.files.reduce((sum, f) => sum + f.additions, 0)
@@ -159,11 +165,9 @@ function DiffView({ workspaceId, app, copy }: { workspaceId: string; app: TeamMa
   return (
     <div className="tmap-diff">
       <div className="tmap-diff-summary">
-        <span>
-          {diff.files.length} {diff.files.length === 1 ? 'file' : 'files'}
-        </span>
+        <span>{t('shared.files', { count: diff.files.length })}</span>
         <DiffBar additions={additions} deletions={deletions} />
-        {local && <span className="tmap-chip">Includes unsaved edits</span>}
+        {local && <span className="tmap-chip">{t('diff.unsaved')}</span>}
       </div>
       <ul className="tmap-files">
         {diff.files.map((file) => {
@@ -194,12 +198,12 @@ function DiffView({ workspaceId, app, copy }: { workspaceId: string; app: TeamMa
       </ul>
       {diff.truncated && (
         <p className="tmap-dim">
-          Some changes aren’t shown here.
+          {t('diff.truncated')}
           {copy.pr && (
             <>
               {' '}
               <button type="button" className="tmap-link" onClick={() => void window.api.openExternal(`${copy.pr?.url}/files`)}>
-                See them all on GitHub
+                {t('diff.seeAll')}
               </button>
             </>
           )}
@@ -219,6 +223,7 @@ function External({ url, children }: { url: string; children: ReactNode }): JSX.
 
 /** An owner's "Remove from workspace…", with its confirmation. */
 function RemoveApp({ workspace, app, onRemoved }: { workspace: TeamWorkspace; app: TeamMapApp; onRemoved: () => void }): JSX.Element {
+  const { t } = useTranslation('teamMap')
   const [confirming, setConfirming] = useState(false)
   const [deleteApps, setDeleteApps] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -233,13 +238,13 @@ function RemoveApp({ workspace, app, onRemoved }: { workspace: TeamWorkspace; ap
       const result = await window.api.team.removeProject(workspace.id, app.folder, deleteApps)
       if (!result.ok) {
         if (result.problem) setProblem(result.problem)
-        else setError(result.error ?? 'Could not remove the app.')
+        else setError(result.error ?? t('remove.failed'))
         return
       }
       setConfirming(false)
       onRemoved()
     } catch (reason) {
-      setError(teamError(reason, 'Could not remove the app.'))
+      setError(teamError(reason, t('remove.failed')))
     } finally {
       setBusy(false)
     }
@@ -248,20 +253,20 @@ function RemoveApp({ workspace, app, onRemoved }: { workspace: TeamWorkspace; ap
   return (
     <>
       <button type="button" className="btn btn--sm btn--ghost" onClick={() => setConfirming(true)}>
-        Remove from workspace…
+        {t('remove.button')}
       </button>
       {confirming && (
         <ConfirmModal
-          title={`Remove ${app.name}?`}
+          title={t('remove.title', { name: app.name })}
           danger
           busy={busy}
-          confirmLabel="Remove"
+          confirmLabel={t('actions.remove')}
           message={
             <>
-              <p>The app&apos;s folder is removed from the workspace for everyone.</p>
+              <p>{t('remove.message')}</p>
               <label className="tmap-check">
                 <input type="checkbox" checked={deleteApps} onChange={(event) => setDeleteApps(event.target.checked)} />
-                <span>Also delete its published app and previews in Fabric, with their data</span>
+                <span>{t('remove.alsoFabric')}</span>
               </label>
               {problem && <ProblemView problem={problem} />}
               {error && <div className="alert alert--error">{error}</div>}
@@ -292,6 +297,7 @@ export default function Inspector({
   onOpenApp,
   onRemoved
 }: Props): JSX.Element {
+  const { t } = useTranslation('teamMap')
   const now = useNow(true)
   const [diagnose, setDiagnose] = useState<DiagnosisInput | null>(null)
   const target = parseNodeId(selection)
@@ -311,18 +317,16 @@ export default function Inspector({
         <header className="tmap-insp-head">
           <FabricGlyph />
           <div className="tmap-titles">
-            <span className="tmap-kicker">Microsoft Fabric workspace</span>
-            <h3>{prod ? 'Published apps' : 'Previews'}</h3>
+            <span className="tmap-kicker">{t('fabric.kicker')}</span>
+            <h3>{prod ? t('shared.publishedApps') : t('shared.previews')}</h3>
             <span className="tmap-dim">{ws?.name}</span>
           </div>
         </header>
         <p className="tmap-insp-text">
-          {prod
-            ? 'The pipeline deploys each app here when changes are published. Everyone on the team uses these.'
-            : 'The pipeline deploys everyone’s personal previews here, one per person and app, so work in progress never touches the published apps or their data.'}
+          {prod ? t('fabric.prodText') : t('fabric.previewText')}
         </p>
         <section className="tmap-insp-section">
-          <h4>{prod ? 'Apps' : 'Previews'}</h4>
+          <h4>{prod ? t('shared.apps') : t('shared.previews')}</h4>
           <ul className="tmap-insp-list">
             {map.apps.flatMap((a) =>
               prod
@@ -345,7 +349,7 @@ export default function Inspector({
                         <Avatar login={c.author || 'you'} url={c.avatarUrl} size={22} />
                         <span className="tmap-insp-grow">
                           {a.name}
-                          <span className="tmap-dim"> · {c.mine ? 'you' : c.author}</span>
+                          <span className="tmap-dim"> · {c.mine ? t('fabric.you') : c.author}</span>
                         </span>
                         <HealthPill health={copyHealth(a, c, runs)} />
                       </button>
@@ -357,14 +361,14 @@ export default function Inspector({
         {ws?.id && (
           <div className="tmap-insp-actions">
             <button type="button" className="btn btn--sm" onClick={() => void window.api.openExternal(fabricWorkspaceUrl(ws.id))}>
-              Open in Fabric <Codicon name="link-external" />
+              {t('shared.openInFabric')} <Codicon name="link-external" />
             </button>
           </div>
         )}
       </>
     )
   } else if (!app) {
-    body = <p className="tmap-dim">This is no longer in the workspace.</p>
+    body = <p className="tmap-dim">{t('shared.gone')}</p>
   } else if (target.kind === 'app') {
     body = (
       <>
@@ -373,46 +377,48 @@ export default function Inspector({
             {(app.name.trim()[0] ?? '?').toUpperCase()}
           </span>
           <div className="tmap-titles">
-            <span className="tmap-kicker">App</span>
+            <span className="tmap-kicker">{t('app.kicker')}</span>
             <h3>{app.name}</h3>
             <span className="tmap-mono tmap-dim">{app.folder}/</span>
           </div>
         </header>
         <section className="tmap-insp-section">
-          <h4>Published</h4>
+          <h4>{t('shared.published')}</h4>
           {app.published ? (
             <div className="tmap-insp-row">
               <HealthPill health={publishedHealth(app, runs)} />
               <span className="tmap-insp-grow tmap-dim">
-                {app.production?.updatedAt ? `Updated ${timeAgo(app.production.updatedAt, now)}` : 'Not deployed yet'}
+                {app.production?.updatedAt
+                  ? t('shared.updated', { time: timeAgo(app.production.updatedAt, now) })
+                  : t('shared.notDeployed')}
               </span>
-              {app.production?.url && <External url={app.production.url}>Visit</External>}
+              {app.production?.url && <External url={app.production.url}>{t('shared.visit')}</External>}
             </div>
           ) : (
-            <p className="tmap-insp-text">Not published yet: it’s published for everyone the first time someone publishes it.</p>
+            <p className="tmap-insp-text">{t('app.notPublished')}</p>
           )}
         </section>
         <section className="tmap-insp-section">
-          <h4>Working copies</h4>
+          <h4>{t('app.workingCopies')}</h4>
           <ul className="tmap-insp-list">
             {app.copies.map((c) => (
               <li key={c.branch}>
                 <button type="button" className="tmap-insp-row tmap-insp-row--button" onClick={() => onSelect(nodeIds.copy(app.folder, c.branch))}>
                   <Avatar login={c.author || 'you'} url={c.avatarUrl} size={22} />
                   <span className="tmap-insp-grow">
-                    {c.mine ? 'You' : c.author}
-                    <span className="tmap-dim tmap-block">{changeTitle(c.pr?.title, app.name) ?? 'Not on GitHub yet'}</span>
+                    {c.mine ? t('shared.you') : c.author}
+                    <span className="tmap-dim tmap-block">{changeTitle(c.pr?.title, app.name) ?? t('shared.notOnGitHub')}</span>
                   </span>
                   <DiffBar additions={c.additions} deletions={c.deletions} />
                 </button>
               </li>
             ))}
-            {app.copies.length === 0 && <li className="tmap-dim">Nobody is changing this app right now.</li>}
+            {app.copies.length === 0 && <li className="tmap-dim">{t('app.nobody')}</li>}
           </ul>
         </section>
         <div className="tmap-insp-actions">
           <button type="button" className="btn btn--sm btn--primary" disabled={opening !== null} onClick={() => onOpenApp(app.folder)}>
-            {opening === app.folder ? 'Opening…' : app.projectId ? 'Open' : 'Open on this computer'}
+            {opening === app.folder ? t('shared.opening') : app.projectId ? t('actions.open') : t('app.openHere')}
           </button>
           {owner && <RemoveApp key={app.folder} workspace={workspace} app={app} onRemoved={onRemoved} />}
         </div>
@@ -428,66 +434,68 @@ export default function Inspector({
             <Codicon name="globe" />
           </span>
           <div className="tmap-titles">
-            <span className="tmap-kicker">Published app</span>
+            <span className="tmap-kicker">{t('pub.kicker')}</span>
             <h3>{app.name}</h3>
             <HealthPill health={publishedHealth(app, runs)} />
           </div>
         </header>
         {deploying ? (
           <section className="tmap-insp-section">
-            <h4>Publishing now</h4>
-            {deploying.job ? <StepTimeline steps={deploying.job.steps} now={now} /> : <p className="tmap-dim">The pipeline is getting ready…</p>}
-            <External url={deploying.job?.url ?? deploying.run.url}>Watch on GitHub</External>
+            <h4>{t('pub.publishingNow')}</h4>
+            {deploying.job ? (
+              <StepTimeline steps={deploying.job.steps} now={now} />
+            ) : (
+              <p className="tmap-dim">{t('pub.gettingReady')}</p>
+            )}
+            <External url={deploying.job?.url ?? deploying.run.url}>{t('shared.watchOnGitHub')}</External>
           </section>
         ) : (
           <section className="tmap-insp-section">
-            <h4>Latest deployment</h4>
+            <h4>{t('pub.latest')}</h4>
             {record ? (
               <ul className="tmap-facts">
                 {record.url && (
                   <li>
-                    <span>Address</span>
+                    <span>{t('pub.address')}</span>
                     <External url={record.url}>{host(record.url)}</External>
                   </li>
                 )}
                 {record.sha && (
                   <li>
-                    <span>Version</span>
+                    <span>{t('pub.version')}</span>
                     <span className="tmap-mono">{record.sha.slice(0, 7)}</span>
                   </li>
                 )}
                 {record.updatedAt && (
                   <li>
-                    <span>When</span>
+                    <span>{t('pub.when')}</span>
                     <span>{timeAgo(record.updatedAt, now)}</span>
                   </li>
                 )}
                 {record.logUrl && (
                   <li>
-                    <span>Log</span>
-                    <External url={record.logUrl}>Pipeline run</External>
+                    <span>{t('pub.log')}</span>
+                    <External url={record.logUrl}>{t('runLabel.pipelineRun')}</External>
                   </li>
                 )}
               </ul>
             ) : (
-              <p className="tmap-dim">Not deployed yet.</p>
+              <p className="tmap-dim">{t('pub.notDeployed')}</p>
             )}
             {record?.reason === 'data-loss' && (
-              <p className="tmap-insp-warn">
-                The last publish stopped because it would delete data. Publish again from the app and confirm to allow it.
-              </p>
+              <p className="tmap-insp-warn">{t('pub.dataLoss')}</p>
             )}
           </section>
         )}
         <div className="tmap-insp-actions">
           {record?.url && (
             <button type="button" className="btn btn--sm btn--primary" onClick={() => void window.api.openExternal(record.url ?? '')}>
-              Visit <Codicon name="link-external" />
+              {t('shared.visit')} <Codicon name="link-external" />
             </button>
           )}
           {record?.portalUrl && (
             <button type="button" className="btn btn--sm" onClick={() => void window.api.openExternal(record.portalUrl ?? '')}>
-              Open in Fabric <Codicon name="link-external" />
+              {t('shared.openInFabric')} <Codicon name="link-external" />
             </button>
           )}
           {!deploying && publishedHealth(app, runs) === 'failed' && (
@@ -496,7 +504,7 @@ export default function Inspector({
               className="btn btn--sm"
               onClick={() => setDiagnose({ kind: 'pipeline', workspaceId: workspace.id, runUrl: record?.logUrl, projectId: app.projectId })}
             >
-              <Codicon name="sparkle" /> Diagnose with Copilot
+              <Codicon name="sparkle" /> {t('shared.diagnose')}
             </button>
           )}
         </div>
@@ -511,7 +519,7 @@ export default function Inspector({
         <header className="tmap-insp-head">
           <Avatar login={copy.author || 'you'} url={copy.avatarUrl} size={40} />
           <div className="tmap-titles">
-            <span className="tmap-kicker">{copy.mine ? 'Your working copy' : `${copy.author}’s working copy`}</span>
+            <span className="tmap-kicker">{copy.mine ? t('copy.mine') : t('copy.theirs', { author: copy.author })}</span>
             <h3>{title ?? app.name}</h3>
             <span className="tmap-mono tmap-dim tmap-ellipsis" title={copy.branch}>
               {copy.branch}
@@ -521,44 +529,42 @@ export default function Inspector({
         <div className="tmap-chips">
           {copy.pr ? (
             <span className="tmap-chip">
-              #{copy.pr.number} · {copy.pr.draft ? 'Draft' : 'Ready'}
+              #{copy.pr.number} · {copy.pr.draft ? t('copy.draft') : t('copy.ready')}
             </span>
           ) : (
-            <span className="tmap-chip">Not on GitHub yet</span>
+            <span className="tmap-chip">{t('shared.notOnGitHub')}</span>
           )}
-          <span className="tmap-chip">
-            {copy.commits} {copy.commits === 1 ? 'save' : 'saves'}
-          </span>
-          {copy.localEdits && <span className="tmap-chip tmap-chip--warn">Unsaved edits</span>}
-          {(copy.behind ?? 0) > 0 && <span className="tmap-chip">{copy.behind} published changes to bring in</span>}
-          {copy.review === 'APPROVED' && <span className="tmap-chip tmap-chip--ok">Approved</span>}
-          {copy.review === 'CHANGES_REQUESTED' && <span className="tmap-chip tmap-chip--danger">Changes requested</span>}
+          <span className="tmap-chip">{t('copy.saves', { count: copy.commits })}</span>
+          {copy.localEdits && <span className="tmap-chip tmap-chip--warn">{t('copy.unsaved')}</span>}
+          {(copy.behind ?? 0) > 0 && <span className="tmap-chip">{t('copy.behind', { count: copy.behind ?? 0 })}</span>}
+          {copy.review === 'APPROVED' && <span className="tmap-chip tmap-chip--ok">{t('copy.approved')}</span>}
+          {copy.review === 'CHANGES_REQUESTED' && <span className="tmap-chip tmap-chip--danger">{t('copy.changesRequested')}</span>}
         </div>
         <section className="tmap-insp-section">
-          <h4>Preview</h4>
+          <h4>{t('shared.preview')}</h4>
           <div className="tmap-insp-row">
             <HealthPill health={health} />
             <span className="tmap-insp-grow tmap-dim">
               {deploying
-                ? 'The pipeline is deploying the latest save'
+                ? t('copy.deploying')
                 : previewBehind(copy)
-                  ? 'Shows an earlier save'
+                  ? t('copy.earlier')
                   : copy.preview?.updatedAt
-                    ? `Updated ${timeAgo(copy.preview.updatedAt, now)}`
+                    ? t('shared.updated', { time: timeAgo(copy.preview.updatedAt, now) })
                     : copy.preview
                       ? ''
                       : !deploysPreview(workspace, copy)
                         ? copy.mine
-                          ? 'Runs on your computer. Your preview deploys when you publish.'
-                          : `Runs on ${copy.author}’s computer. Their preview deploys when they publish.`
-                        : 'Not deployed yet'}
+                          ? t('copy.localMine')
+                          : t('copy.localTheirs', { author: copy.author })
+                        : t('shared.notDeployed')}
             </span>
-            {copy.preview?.url && !deploying && <External url={copy.preview.url}>Open</External>}
+            {copy.preview?.url && !deploying && <External url={copy.preview.url}>{t('actions.open')}</External>}
           </div>
           {deploying?.job && <StepTimeline steps={deploying.job.steps} now={now} />}
-          {deploying && <External url={deploying.job?.url ?? deploying.run.url}>Watch on GitHub</External>}
+          {deploying && <External url={deploying.job?.url ?? deploying.run.url}>{t('shared.watchOnGitHub')}</External>}
           {!deploying && health === 'failed' && copy.preview?.logUrl && (
-            <External url={copy.preview.logUrl}>See why it failed</External>
+            <External url={copy.preview.logUrl}>{t('copy.seeWhy')}</External>
           )}
           {!deploying && health === 'failed' && (
             <button
@@ -573,39 +579,45 @@ export default function Inspector({
                 })
               }
             >
-              <Codicon name="sparkle" /> Diagnose with Copilot
+              <Codicon name="sparkle" /> {t('shared.diagnose')}
             </button>
           )}
         </section>
         <section className="tmap-insp-section">
-          <h4>Changes</h4>
+          <h4>{t('copy.changes')}</h4>
           <DiffView workspaceId={workspace.id} app={app} copy={copy} />
         </section>
         <div className="tmap-insp-actions">
           {copy.mine && (
             <button type="button" className="btn btn--sm btn--primary" disabled={opening !== null} onClick={() => onOpenApp(app.folder)}>
-              {opening === app.folder ? 'Opening…' : 'Continue working'}
+              {opening === app.folder ? t('shared.opening') : t('copy.continue')}
             </button>
           )}
           {copy.pr && (
             <button type="button" className="btn btn--sm" onClick={() => void window.api.openExternal(copy.pr?.url ?? '')}>
-              View on GitHub <Codicon name="link-external" />
+              {t('copy.viewOnGitHub')} <Codicon name="link-external" />
             </button>
           )}
         </div>
       </>
     )
   } else {
-    body = <p className="tmap-dim">This working copy was published or discarded.</p>
+    body = <p className="tmap-dim">{t('copy.gone')}</p>
   }
 
   return (
-    <aside className="tmap-side tmap-inspector" aria-label="Details">
-      <button type="button" className="tmap-icon-btn tmap-inspector-close" onClick={onClose} aria-label="Close details" title="Back to deployments">
+    <aside className="tmap-side tmap-inspector" aria-label={t('actions.details')}>
+      <button
+        type="button"
+        className="tmap-icon-btn tmap-inspector-close"
+        onClick={onClose}
+        aria-label={t('inspector.closeDetails')}
+        title={t('shared.backToDeployments')}
+      >
         <Codicon name="close" />
       </button>
       {body}
-      {diagnose && <TeamDiagnosisModal input={diagnose} title="Diagnose the failed deploy" onClose={() => setDiagnose(null)} />}
+      {diagnose && <TeamDiagnosisModal input={diagnose} title={t('inspector.diagnoseDeploy')} onClose={() => setDiagnose(null)} />}
     </aside>
   )
 }

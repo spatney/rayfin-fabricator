@@ -1,0 +1,172 @@
+{
+  "hero": {
+    "eyebrow": "Willkommen bei",
+    "tagline": "Erstelle und veröffentliche Rayfin-Apps, indem du mit einem KI-Agenten chattest."
+  },
+  "progress": {
+    "checking": "Es wird geprüft, was bereits vorhanden ist…",
+    "ready": "Alles ist bereit. Du kannst mit dem Erstellen beginnen.",
+    "start": "Lass uns Fabricator einrichten. Das dauert normalerweise etwa eine Minute.",
+    "left_one": "Noch {{count}} Punkt einzurichten.",
+    "left_other": "Noch {{count}} Punkte einzurichten."
+  },
+  "problem": {
+    "askHelp": "Hilfe fragen",
+    "showDetails": "Details anzeigen",
+    "hideDetails": "Details ausblenden"
+  },
+  "problems": {
+    "busy": {
+      "title": "Auf diesem Computer wird bereits eine andere Installation ausgeführt.",
+      "fix": "Warte, bis sie abgeschlossen ist – oft ist ein Windows-Update die Ursache – und versuche es dann erneut."
+    },
+    "permission": {
+      "title": "Fabricator hat keine Berechtigung, dies zu installieren.",
+      "fix": "Schließe Fabricator, klicke mit der rechten Maustaste darauf, wähle „Als Administrator ausführen“ und versuche es dann erneut. Wenn dein Computer von deinem Arbeitgeber verwaltet wird, muss die IT-Abteilung es möglicherweise für dich installieren."
+    },
+    "offline": {
+      "title": "Fabricator konnte für den Download keine Verbindung mit dem Internet herstellen.",
+      "fix": "Überprüfe deine Verbindung und versuche es erneut. Wenn du ein Firmennetzwerk oder ein VPN verwendest, blockiert es möglicherweise den Download."
+    },
+    "diskFull": {
+      "title": "Für die Installation ist nicht genügend freier Speicherplatz vorhanden.",
+      "fix": "Gib etwas Speicherplatz frei und versuche es erneut."
+    },
+    "noWinget": {
+      "title": "Auf diesem Computer fehlt der Windows-Paket-Manager (winget).",
+      "fix": "Installiere ihn aus dem Microsoft Store, indem du nach „App-Installer“ suchst, oder installiere das Tool über den Downloadlink selbst."
+    },
+    "noHomebrew": {
+      "title": "Auf diesem Mac fehlt Homebrew, mit dem Fabricator Tools installiert.",
+      "fix": "Installiere Homebrew von brew.sh, oder installiere das Tool über den Downloadlink selbst."
+    },
+    "cancelled": {
+      "title": "Die Installation wurde abgebrochen.",
+      "fix": "Versuche es erneut, wenn du so weit bist."
+    },
+    "sso": {
+      "title": "Deine Organisation verlangt, dass du dich zuerst über sie anmeldest.",
+      "fix": "Schließe die Anmeldung ab, die dein Browser geöffnet hat, einschließlich aller zusätzlichen Schritte deiner Organisation, und versuche es dann erneut."
+    },
+    "noCopilot": {
+      "title": "Für dieses Konto ist GitHub Copilot nicht verfügbar.",
+      "fix": "Melde dich mit einem Konto an, das Copilot hat, oder richte es unter github.com/features/copilot ein."
+    },
+    "notOnPath": {
+      "title": "Das Tool wurde installiert, wird auf diesem Computer aber noch nicht erkannt.",
+      "fix": "Starte Fabricator neu, damit das neue Tool erkannt wird."
+    },
+    "unknownFix": "Wenn das weiterhin passiert, frag die Hilfe – sie kann nachlesen, was schiefgelaufen ist, und es dir erklären."
+  },
+  "relaunch": {
+    "message": "<strong>Fast geschafft.</strong> Starte neu, um die Einrichtung der gerade installierten Tools abzuschließen.",
+    "restartNow": "Jetzt neu starten"
+  },
+  "copilot": {
+    "title": "GitHub Copilot verbinden",
+    "note": "Die KI, die deine App erstellt – und deine Fragen beantwortet, während du den Rest einrichtest",
+    "subtitle": "Melde dich an, um mit dem Erstellen zu beginnen und die Hilfe freizuschalten",
+    "helpReady": "Die Hilfe ist jetzt verfügbar. Wenn unten etwas schiefgeht, wähle <strong>Hilfe</strong> aus, und sie liest nach, was passiert ist."
+  },
+  "tools": {
+    "title": "Tools installieren",
+    "note": "Kostenlose Tools, die Fabricator im Hintergrund verwendet. Fabricator kann sie für dich installieren.",
+    "allInstalled_one": "Das Tool ist installiert",
+    "allInstalled_other": "Alle {{count}} installiert",
+    "requiredInstalled_one": "Das erforderliche Tool ist installiert",
+    "requiredInstalled_other": "Alle {{count}} erforderlichen Tools installiert",
+    "installAll": "Alle installieren",
+    "installing": "Wird installiert…",
+    "updating": "Wird aktualisiert…",
+    "getIt": "Herunterladen",
+    "needsInternet": "Für die Installation ist eine Internetverbindung erforderlich",
+    "resolveChecks": "Behebe zuerst die Fehler bei der CLI-Prüfung",
+    "offline": "Du bist offline, daher kann Fabricator sie noch nicht herunterladen. Stelle die Verbindung wieder her, und wähle <strong>Erneut prüfen</strong> aus.",
+    "purpose": {
+      "node": "Führt deine App auf diesem Computer aus, während du sie erstellst",
+      "npm": "Lädt die Bausteine herunter, aus denen deine App besteht",
+      "git": "Speichert einen Verlauf deiner App, damit du jederzeit zurückkehren kannst",
+      "az": "Ermöglicht Fabricator, dich bei Azure anzumelden",
+      "gh": "Ermöglicht Fabricator, mit deinem Code auf GitHub zu arbeiten",
+      "fallback": "Wird von Fabricator im Hintergrund verwendet"
+    },
+    "versionNeedsMin": "Version {{version}} – Fabricator benötigt {{min}} oder neuer",
+    "versionNeedsNewer": "Version {{version}} – Fabricator benötigt eine neuere Version",
+    "unknownVersionNeedsMin": "Version unbekannt – Fabricator benötigt {{min}} oder neuer",
+    "unknownVersionNeedsNewer": "Version unbekannt – Fabricator benötigt eine neuere Version",
+    "state": {
+      "ready": "Bereit",
+      "needsUpdating": "Update erforderlich",
+      "optional": "Optional",
+      "missing": "Fehlt"
+    }
+  },
+  "azure": {
+    "title": "Bei Azure anmelden",
+    "note": "Optional. Damit kannst du Apps teilen, Fabric-Daten hinzufügen und Power BI-Berichte migrieren. Du kannst dich auch später anmelden.",
+    "optional": "Optional",
+    "subtitle": "Greife auf deine Azure-Ressourcen zu",
+    "installCliFirst": "Installiere zuerst die Azure CLI"
+  },
+  "account": {
+    "signedIn": "Angemeldet",
+    "checking": "Wird geprüft",
+    "connected": "Verbunden",
+    "signOutOf": "Von {{name}} abmelden",
+    "signingOut": "Wird abgemeldet…",
+    "waiting": "Warten…"
+  },
+  "finish": {
+    "allSet": "Alles bereit",
+    "almostThere": "Fast geschafft",
+    "restart": "Starte Fabricator neu, um die Einrichtung der gerade installierten Tools abzuschließen.",
+    "ready": "Deine Tools sind installiert und deine Konten verbunden.",
+    "readyWithoutAzure": "Deine Tools sind installiert und GitHub Copilot ist verbunden. Melde dich bei Azure an, wenn du es brauchst.",
+    "stepsLeft_one": "Schließe den Schritt oben ab, um fortzufahren.",
+    "stepsLeft_other": "Schließe die {{count}} Schritte oben ab, um fortzufahren.",
+    "enter": "Fabricator öffnen"
+  },
+  "log": {
+    "empty": "Hier wird die Prozessausgabe angezeigt.",
+    "manualInstall": "Schließe die Installation auf der geöffneten Seite ab, und klicke dann auf „Neu starten“."
+  },
+  "section": {
+    "hide": "Ausblenden"
+  },
+  "actionBar": {
+    "help": "Hilfe",
+    "helpTitle": "Frag die Hilfe zu allem, was nicht funktioniert",
+    "helpOfflineTitle": "Hilfe zur Einrichtung erhalten – einschließlich der Dokumentation",
+    "showLog": "Protokoll anzeigen",
+    "hideLog": "Protokoll ausblenden",
+    "checking": "Wird geprüft…",
+    "signingOut": "Wird abgemeldet…",
+    "recheckRequired": "Erneute Prüfung erforderlich",
+    "stepsLeft_one": "Noch {{count}} Schritt",
+    "stepsLeft_other": "Noch {{count}} Schritte",
+    "back": "Zurück zu Fabricator"
+  },
+  "recheck": {
+    "button": "Erneut prüfen",
+    "tool": "{{name}} erneut prüfen"
+  },
+  "signingIn": {
+    "label": "Anmeldung",
+    "title": "Du wirst angemeldet…",
+    "finalizing": "Alles wird vorbereitet…",
+    "browser": "Schließe die Anmeldung bei {{provider}} in deinem Browser ab, oder folge den Anweisungen zum Gerätecode unten."
+  },
+  "run": {
+    "copilotSignIn": "Bei GitHub Copilot anmelden",
+    "copilotSignOut": "Von GitHub Copilot abmelden",
+    "azureSignIn": "Bei Azure anmelden",
+    "azureSignOut": "Von Azure abmelden",
+    "installAll": "Alles installieren",
+    "install": "{{name}} installieren",
+    "update": "{{name}} aktualisieren",
+    "failed": "„{{action}}“ wurde nicht abgeschlossen. Versuche es erneut.",
+    "installFailed": "„{{action}}“ wurde nicht abgeschlossen. Überprüfe die Prozessausgabe.",
+    "verifyFailed": "Der Kontostatus konnte nicht überprüft werden: {{error}}",
+    "recheckFailed": "Die Umgebung konnte nicht erneut geprüft werden: {{error}}"
+  }
+}

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { GitMessageResult, GitRemoteStatus, GitStatus } from '@shared/ipc'
 import GitControl from './GitControl'
+import { setLanguage } from '../i18n'
 import { deferred } from '../../test/deferred'
 
 const dirty: GitStatus = { isRepo: true, branch: 'master', changedCount: 1 }
@@ -207,6 +208,30 @@ describe('GitControl branches and merges', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Finish merge' }))
     await waitFor(() => expect(onSynced).toHaveBeenCalledWith(true))
     expect(git.finishMerge).toHaveBeenCalledWith('p1')
+  })
+})
+
+describe('GitControl in German', () => {
+  afterEach(async () => {
+    cleanup()
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('counts a merge’s conflicts with German plurals', async () => {
+    installGit({
+      status: vi.fn().mockResolvedValue({
+        ...clean,
+        changedCount: 1,
+        merging: true,
+        conflicts: ['a.ts']
+      })
+    })
+    await act(() => setLanguage('de'))
+    render(<GitControl projectId="p1" refreshKey={0} />)
+    fireEvent.click(await screen.findByRole('button', { name: /1 Konflikt/ }))
+    expect(screen.getByText('1 Datei hat Konflikte')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Merge abbrechen' })).toBeTruthy()
   })
 })
 

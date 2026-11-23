@@ -1,0 +1,211 @@
+{
+  "health": {
+    "failed": "Veröffentlichung fehlgeschlagen",
+    "changes": "Änderungen nicht veröffentlicht",
+    "outdated": "Rayfin-Update verfügbar",
+    "outdatedVersion": "Rayfin {{version}} verfügbar",
+    "unpublished": "Noch nicht veröffentlicht"
+  },
+  "time": {
+    "justNow": "gerade eben"
+  },
+  "published": {
+    "when": "Veröffentlicht {{when}}",
+    "never": "Noch nicht veröffentlicht",
+    "notYet": "Noch nicht"
+  },
+  "app": {
+    "label": "{{name}}, in {{workspace}}",
+    "onThisComputer": "Auf diesem Computer",
+    "teamWorkspace": "Team-Arbeitsbereich: {{name}}",
+    "teamPreview": "Team-Vorschau",
+    "pin": "{{name}} anheften",
+    "unpin": "Lösen",
+    "pinToTop": "Oben anheften",
+    "openApp": "App öffnen",
+    "openInFabric": "In Fabric öffnen",
+    "openInFabricator": "In Fabricator öffnen"
+  },
+  "details": {
+    "label": "Über {{name}}",
+    "close": "Details schließen",
+    "closeTitle": "Schließen (Esc)",
+    "copyLink": "Link kopieren",
+    "quickLook": "Schnellansicht",
+    "quickLookTitle": "Schnellansicht (Leertaste)",
+    "lookingUp": "Die Adresse der App wird gesucht…",
+    "noAddress": "Fabric hat die Adresse dieser App nicht mitgeteilt. Öffne sie stattdessen in Fabric.",
+    "notPublished": "Diese App hat ihre Seiten noch nicht veröffentlicht.",
+    "teammatePreview": "{{name}} · Vorschau eines Teammitglieds",
+    "canChange": "Du kannst sie ändern",
+    "canOpen": "Du kannst sie öffnen",
+    "facts": {
+      "published": "Veröffentlicht",
+      "address": "Adresse",
+      "workspace": "Arbeitsbereich",
+      "access": "Dein Zugriff",
+      "project": "Projekt",
+      "team": "Team"
+    }
+  },
+  "describe": {
+    "text": "Noch keine Beschreibung. Copilot kann anhand der App eine schreiben, und alle, die sie öffnen können, sehen sie hier und in Fabric.",
+    "write": "Beschreibung schreiben",
+    "writing": "Beschreibung wird geschrieben…",
+    "failed": "Copilot hat keine Beschreibung geschrieben."
+  },
+  "table": {
+    "name": "Name",
+    "workspace": "Arbeitsbereich",
+    "published": "Veröffentlicht",
+    "status": "Status",
+    "where": "Ort",
+    "pin": "Anheften"
+  },
+  "view": {
+    "listFailed": "Deine Fabric-Apps konnten nicht aufgelistet werden. Versuche es erneut.",
+    "notLocal": "Diese App ist nicht auf diesem Computer."
+  },
+  "sort": {
+    "menu": "Sortieren",
+    "name": {
+      "label": "Name",
+      "desc": "A bis Z"
+    },
+    "recent": {
+      "label": "Zuletzt veröffentlicht",
+      "desc": "Neueste Veröffentlichung zuerst"
+    },
+    "opened": {
+      "label": "Zuletzt geöffnet",
+      "desc": "Die zuletzt geöffneten Apps zuerst"
+    },
+    "workspace": {
+      "label": "Arbeitsbereich",
+      "desc": "Gruppiert, deine letzten Arbeitsbereiche zuerst"
+    }
+  },
+  "count": {
+    "apps_one": "{{count, number}} App",
+    "apps_other": "{{count, number}} Apps",
+    "workspaces_one": "{{count, number}} Arbeitsbereich",
+    "workspaces_other": "{{count, number}} Arbeitsbereiche"
+  },
+  "summary": {
+    "filtered_one": "{{shown, number}} von {{count, number}} App angezeigt",
+    "filtered_other": "{{shown, number}} von {{count, number}} Apps angezeigt",
+    "total": "{{apps}} · {{workspaces}}"
+  },
+  "announce": {
+    "filtered_one": "{{shown, number}} von {{count, number}} App angezeigt",
+    "filtered_other": "{{shown, number}} von {{count, number}} Apps angezeigt",
+    "all_one": "{{count, number}} App angezeigt",
+    "all_other": "{{count, number}} Apps angezeigt",
+    "loading": "Deine Fabric-Apps werden geladen"
+  },
+  "head": {
+    "eyebrow": "Microsoft Fabric",
+    "title": "App-Galerie",
+    "sub": "Alle Rayfin-Apps, die du in Fabric öffnen kannst.",
+    "subAs": "Alle Rayfin-Apps, die du in Fabric öffnen kannst, als <b>{{user}}</b>.",
+    "checking": "Fabric wird geprüft…"
+  },
+  "layout": {
+    "label": "Layout",
+    "grid": "Karten",
+    "table": "Tabelle"
+  },
+  "tabs": {
+    "label": "Anzeigen",
+    "apps": "Apps",
+    "examples": "Beispiele"
+  },
+  "search": {
+    "placeholder": "Apps, Arbeitsbereiche und Beschreibungen durchsuchen",
+    "label": "Apps durchsuchen"
+  },
+  "where": {
+    "label": "Wo die Apps sind",
+    "all": "Alle",
+    "local": "Auf diesem Computer",
+    "remote": "Nur in Fabric"
+  },
+  "filters": {
+    "attention": "Erfordert Aufmerksamkeit",
+    "attentionTitle": "Apps, deren letzte Veröffentlichung fehlgeschlagen ist, die sich seit der Veröffentlichung geändert haben, die Rayfin aktualisieren können oder die nie veröffentlicht wurden",
+    "editable": "Apps, die ich bearbeiten kann",
+    "editableTitle": "Apps in Arbeitsbereichen, in denen du Administrator, Mitglied oder Mitwirkender bist"
+  },
+  "notes": {
+    "truncated": "Fabric hat mehr Apps, als Fabricator auf einmal liest, daher werden einige Apps, die du öffnen kannst, nicht angezeigt."
+  },
+  "loadingLabel": "Apps werden geladen",
+  "empty": {
+    "title": "Noch keine Rayfin-Apps",
+    "desc": "Hier erscheinen Apps, die du in Fabric veröffentlichst, und Apps, die andere mit dir teilen.",
+    "newProject": "Neues Projekt"
+  },
+  "noMatch": {
+    "text": "Keine Apps entsprechen „{{text}}“",
+    "filters": "Keine Apps entsprechen diesen Filtern",
+    "desc": "Versuche es mit anderen Wörtern, oder suche in allen Arbeitsbereichen.",
+    "showAll": "Alle Apps anzeigen"
+  },
+  "groups": {
+    "pinned": "Angeheftet",
+    "pinnedApps": "Angeheftete Apps",
+    "appsIn": "Apps in {{name}}",
+    "used": "Zuletzt verwendet: {{when}}"
+  },
+  "list": {
+    "label": "Apps"
+  },
+  "more_one": "Mehr anzeigen (noch {{count, number}})",
+  "more_other": "Mehr anzeigen (noch {{count, number}})",
+  "azure": {
+    "signIn": "Bei Azure anmelden",
+    "signingIn": "Anmeldung läuft…",
+    "finish": "Schließe die Anmeldung bei Azure in deinem Browser ab."
+  },
+  "error": {
+    "title": "Deine Apps konnten nicht aufgelistet werden"
+  },
+  "banner": {
+    "signIn": "Melde dich bei Azure an, um deine neuesten Apps zu sehen. Diese hier sind von früher.",
+    "failed": "Fabric konnte nicht auf Änderungen geprüft werden: {{error}}"
+  },
+  "examples": {
+    "loadFailed": "Die Beispiele konnten nicht geladen werden.",
+    "loading": "Beispiele werden geladen…",
+    "failedTitle": "Die Beispiele konnten nicht geladen werden",
+    "empty": "Noch keine Beispiele",
+    "intro": "Apps als Ausgangspunkt, aus <b>{{source}}</b>. Wähle eine aus, und Copilot macht daraus deine App.",
+    "label": "Beispiele",
+    "useLabel": "{{name}} verwenden",
+    "use": "Dieses Beispiel verwenden"
+  },
+  "menu": {
+    "current": "{{name}}: {{value}}"
+  },
+  "quickLook": {
+    "failed": "Die Schnellansicht konnte nicht geöffnet werden.",
+    "label": "Schnellansicht von {{name}}",
+    "close": "Schnellansicht schließen",
+    "closeTitle": "Schließen (Leertaste oder Esc)",
+    "loading": "{{name}} wird geladen…"
+  },
+  "workspaces": {
+    "menu": "Arbeitsbereich",
+    "title": "Arbeitsbereiche",
+    "searchPlaceholder": "Arbeitsbereiche durchsuchen…",
+    "search": "Arbeitsbereiche durchsuchen",
+    "all": "Alle Arbeitsbereiche",
+    "recent": "Zuletzt verwendet",
+    "others": "Andere Arbeitsbereiche",
+    "noMatch": "Kein Arbeitsbereich entspricht „{{query}}“.",
+    "found_one": "{{found, number}} von {{count, number}} Arbeitsbereich",
+    "found_other": "{{found, number}} von {{count, number}} Arbeitsbereichen",
+    "navigate": "Navigieren",
+    "select": "Auswählen"
+  }
+}

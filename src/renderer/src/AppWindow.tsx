@@ -2,8 +2,9 @@ import { useCallback, useEffect, useId, useRef, useState, type JSX, type ReactNo
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { AppActionResult, AppWindowInfo, LocalLogEvent, LocalStatus } from '@shared/ipc'
 import { errorMessage } from './errorReport'
+import { formatLocale, translator, useTranslation } from './i18n'
 import { formatBytes, listNames } from './components/blueprint/localData'
-import { ProjectFileProgress, count } from './components/projectFile'
+import { ProjectFileProgress } from './components/projectFile'
 import AppIcon from './components/AppIcon'
 import SecurityCheckPanel from './components/security/SecurityCheck'
 import { useSecurityCheck } from './components/security/useSecurityCheck'
@@ -43,7 +44,7 @@ function windowLabel(): string {
 function exportedOn(iso: string | undefined): string | undefined {
   const at = iso ? new Date(iso) : null
   if (!at || Number.isNaN(at.getTime())) return undefined
-  return at.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  return at.toLocaleDateString(formatLocale(), { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 /** One thing the file brings in. */
@@ -80,6 +81,7 @@ function Fact({
  * to say why and offer to try again.
  */
 export default function AppWindow(): JSX.Element {
+  const { t } = useTranslation('projects')
   const label = useRef(windowLabel()).current
   const titleId = useId()
   const [info, setInfo] = useState<AppWindowInfo | null>(null)
@@ -129,7 +131,7 @@ export default function AppWindow(): JSX.Element {
       setStage({
         kind: 'failed',
         code: result.code,
-        message: result.error ?? 'The app didn’t start.',
+        message: result.error ?? translator('projects')('appWindow.errors.didntStart'),
         hint: 'hint' in result ? result.hint : undefined
       })
     },
@@ -146,7 +148,7 @@ export default function AppWindow(): JSX.Element {
       const result = await window.api.apps.run()
       if (!result.ok) fail(result)
     } catch (reason) {
-      fail({ error: errorMessage(reason, 'The app didn’t start.') })
+      fail({ error: errorMessage(reason, translator('projects')('appWindow.errors.didntStart')) })
     }
   }, [fail])
 
@@ -157,7 +159,7 @@ export default function AppWindow(): JSX.Element {
     } catch (reason) {
       setStage({
         kind: 'error',
-        message: errorMessage(reason, 'Fabricator couldn’t open this app.')
+        message: errorMessage(reason, translator('projects')('appWindow.errors.cantOpen'))
       })
       return
     }
@@ -167,7 +169,10 @@ export default function AppWindow(): JSX.Element {
     if (next.mode === 'install' || next.mode === 'update') {
       setStage({ kind: 'ask' })
     } else if (next.mode === 'error') {
-      setStage({ kind: 'error', message: next.error ?? 'There’s nothing to open.' })
+      setStage({
+        kind: 'error',
+        message: next.error ?? translator('projects')('appWindow.errors.nothingToOpen')
+      })
     } else if (next.status.state === 'error' && next.status.error) {
       const problem = next.status.error
       fail({ code: problem.code, error: problem.message, hint: problem.hint ?? undefined })
@@ -226,7 +231,7 @@ export default function AppWindow(): JSX.Element {
     try {
       result = await window.api.apps.install()
     } catch (reason) {
-      result = { ok: false, error: errorMessage(reason, 'Fabricator couldn’t install the app.') }
+      result = { ok: false, error: errorMessage(reason, t('appWindow.errors.cantInstall')) }
     }
     if (result.ok) {
       void start()
@@ -255,17 +260,29 @@ export default function AppWindow(): JSX.Element {
 
   const file = info?.file
   const installed = info?.installed
-  const name = file?.name ?? installed?.name ?? 'Rayfin app'
+  const name = file?.name ?? installed?.name ?? t('appWindow.defaultName')
   const icon = file?.icon ?? installed?.icon
   const from = file?.from ?? installed?.from
   const version = file?.version ?? installed?.version
-  const lead = [from ? `From ${from}` : null, version ? `Version ${version}` : null]
+  const lead = [
+    from ? t('parts.from', { from }) : null,
+    version ? t('parts.version', { version }) : null
+  ]
     .filter(Boolean)
     .join(' · ')
   const updating = info?.mode === 'update'
   const failed = stage.kind === 'failed' ? stage : null
   const needsNode = failed?.code !== undefined && NODE_CODES.has(failed.code)
   const asks = stage.kind === 'ask' && file !== undefined
+  const installedOn = exportedOn(installed?.exportedAt)
+  const fileOn = exportedOn(file?.exportedAt)
+  const updateText = installedOn
+    ? fileOn
+      ? t('appWindow.update.bothDates', { name, installedOn, fileOn })
+      : t('appWindow.update.installedDate', { name, installedOn })
+    : fileOn
+      ? t('appWindow.update.fileDate', { name, fileOn })
+      : t('appWindow.update.noDates', { name })
 
   return (
     <main
@@ -287,30 +304,24 @@ export default function AppWindow(): JSX.Element {
 
         {stage.kind === 'ask' && file && (
           <>
-            <p className="app-window-text">
-              {updating
-                ? `${name} is installed${exportedOn(installed?.exportedAt) ? ` (exported ${exportedOn(installed?.exportedAt)})` : ''}. This file has another version${exportedOn(file.exportedAt) ? `, exported ${exportedOn(file.exportedAt)}` : ''}. Updating replaces the app and keeps its data.`
-                : 'Install it to use it on this computer. It opens in a window of its own and keeps its data on this computer.'}
-            </p>
-            <div className="project-file-parts" role="list" aria-label="What it brings">
+            <p className="app-window-text">{updating ? updateText : t('appWindow.installText')}</p>
+            <div className="project-file-parts" role="list" aria-label={t('appWindow.bringsIn')}>
               <Fact
                 icon="file-code"
-                title="App code"
-                detail={`${count(file.files, 'file')} · ${formatBytes(file.bytes)}`}
+                title={t('parts.code')}
+                detail={`${t('file.files', { count: file.files })} · ${formatBytes(file.bytes)}`}
               >
-                The first time it opens, Fabricator installs its packages and builds it.
+                {t('appWindow.codeDesc')}
               </Fact>
               {file.secrets.length > 0 && (
-                <Fact icon="key" title="Secrets" detail={listNames(file.secrets)}>
-                  Their values don’t come with it, so what needs them won’t work.
+                <Fact icon="key" title={t('parts.secrets')} detail={listNames(file.secrets)}>
+                  {t('appWindow.secretsDesc')}
                 </Fact>
               )}
             </div>
             <p className="project-file-note">
               <span className="codicon codicon-shield" aria-hidden="true" />
-              <span>
-                Only install apps from people you trust. Its code runs on this computer, as you.
-              </span>
+              <span>{t('appWindow.trust')}</span>
             </p>
             <div className="app-window-side">
               <SecurityCheckPanel check={check} kind="app" />
@@ -321,7 +332,7 @@ export default function AppWindow(): JSX.Element {
                 className="btn"
                 onClick={() => void (updating ? start() : window.api.apps.close())}
               >
-                {updating ? 'Open the installed one' : 'Cancel'}
+                {updating ? t('appWindow.openInstalled') : t('actions.cancel')}
               </button>
               <button
                 type="button"
@@ -331,11 +342,11 @@ export default function AppWindow(): JSX.Element {
               >
                 {updating
                   ? risky
-                    ? 'Update anyway'
-                    : 'Update'
+                    ? t('appWindow.updateAnyway')
+                    : t('actions.update')
                   : risky
-                    ? 'Install anyway'
-                    : 'Install'}
+                    ? t('appWindow.installAnyway')
+                    : t('actions.install')}
               </button>
             </div>
           </>
@@ -343,8 +354,8 @@ export default function AppWindow(): JSX.Element {
 
         {stage.kind === 'installing' && (
           <ProjectFileProgress
-            label={`Installing ${name}…`}
-            name="Install progress"
+            label={t('appWindow.installingName', { name })}
+            name={t('appWindow.progress')}
             processed={stage.processed}
             total={stage.total}
           />
@@ -355,16 +366,12 @@ export default function AppWindow(): JSX.Element {
             <span className="app-window-status-text">
               <span className="ws-spinner" aria-hidden="true" />
               {packages
-                ? `Getting ${name} ready…`
+                ? t('appWindow.gettingReady', { name })
                 : building
-                  ? `Building ${name}…`
-                  : `Starting ${name}…`}
+                  ? t('appWindow.building', { name })
+                  : t('appWindow.starting', { name })}
             </span>
-            {packages && (
-              <span className="app-window-hint">
-                Installing its packages. The first time takes a minute or two.
-              </span>
-            )}
+            {packages && <span className="app-window-hint">{t('appWindow.packagesHint')}</span>}
             {line && (
               <span className="app-window-line" title={line}>
                 {line}
@@ -378,7 +385,9 @@ export default function AppWindow(): JSX.Element {
             <div className="app-window-problem" role="alert">
               <span className="codicon codicon-error" aria-hidden="true" />
               <span>
-                <strong>{needsNode ? 'This app needs Node.js' : `${name} didn’t start`}</strong>
+                <strong>
+                  {needsNode ? t('appWindow.needsNode') : t('appWindow.didntStart', { name })}
+                </strong>
                 <span>{failed.message}</span>
                 {failed.hint && <span className="app-window-hint">{failed.hint}</span>}
               </span>
@@ -386,27 +395,27 @@ export default function AppWindow(): JSX.Element {
             {restartNeeded && (
               <p className="project-file-note">
                 <span className="codicon codicon-info" aria-hidden="true" />
-                <span>Once Node.js is installed, restart to use it.</span>
+                <span>{t('appWindow.restartForNode')}</span>
               </p>
             )}
             {logs && (
-              <pre className="app-window-log" aria-label="Details">
+              <pre className="app-window-log" aria-label={t('actions.details')}>
                 {logs.length
                   ? logs
                       .slice(-60)
                       .map((l) => l.line)
                       .join('\n')
-                  : 'There’s no output yet.'}
+                  : t('appWindow.noOutput')}
               </pre>
             )}
             <div className="app-window-actions">
               {!logs && (
                 <button type="button" className="btn btn--ghost" onClick={() => void showDetails()}>
-                  Show details
+                  {t('appWindow.showDetails')}
                 </button>
               )}
               <button type="button" className="btn" onClick={() => void window.api.apps.close()}>
-                Close
+                {t('actions.close')}
               </button>
               {needsNode && !restartNeeded ? (
                 <button
@@ -415,7 +424,7 @@ export default function AppWindow(): JSX.Element {
                   disabled={installingNode}
                   onClick={() => void installNode()}
                 >
-                  {installingNode ? 'Installing Node.js…' : 'Install Node.js'}
+                  {installingNode ? t('appWindow.installingNode') : t('appWindow.installNode')}
                 </button>
               ) : restartNeeded ? (
                 <button
@@ -423,11 +432,11 @@ export default function AppWindow(): JSX.Element {
                   className="btn btn--primary"
                   onClick={() => void window.api.relaunch()}
                 >
-                  Restart
+                  {t('actions.restart')}
                 </button>
               ) : (
                 <button type="button" className="btn btn--primary" onClick={() => void start()}>
-                  Try again
+                  {t('actions.tryAgain')}
                 </button>
               )}
             </div>
@@ -439,7 +448,7 @@ export default function AppWindow(): JSX.Element {
             <div className="app-window-problem" role="alert">
               <span className="codicon codicon-error" aria-hidden="true" />
               <span>
-                <strong>Fabricator can’t open this app</strong>
+                <strong>{t('appWindow.cantOpenTitle')}</strong>
                 <span>{stage.message}</span>
               </span>
             </div>
@@ -450,7 +459,7 @@ export default function AppWindow(): JSX.Element {
                 autoFocus
                 onClick={() => void window.api.apps.close()}
               >
-                Close
+                {t('actions.close')}
               </button>
             </div>
           </>

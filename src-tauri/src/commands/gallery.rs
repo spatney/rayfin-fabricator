@@ -151,13 +151,13 @@ pub async fn gallery_describe(
   replace: Option<bool>,
 ) -> Result<GalleryDescribeResult, String> {
   let Some(project) = store::find_project(&project_id) else {
-    return Ok(failed("That project isn't in Fabricator anymore."));
+    return Ok(failed(t!("commands.shared.projectGone")));
   };
   if project.team.is_some() {
-    return Ok(failed("A team app is published by its team's pipeline."));
+    return Ok(failed(t!("commands.gallery.teamApp")));
   }
   let Some((workspace, item)) = gallery::published_item(&project) else {
-    return Ok(failed("This app isn't published yet."));
+    return Ok(failed(t!("commands.gallery.notPublished")));
   };
   if !replace.unwrap_or(false) {
     match gallery::app_description(&workspace, &item).await {
@@ -179,8 +179,8 @@ pub async fn gallery_describe(
     crate::commands::transient::run_transient(state.inner(), &project.path, None, None, prompt, &[], None).await;
   let description = match reply.map(|reply| description_line(&reply)) {
     Ok(Some(line)) => line,
-    Ok(None) => return Ok(failed("Copilot didn't write a description. Try again.")),
-    Err(error) => return Ok(failed(format!("Couldn't write a description: {error}"))),
+    Ok(None) => return Ok(failed(t!("commands.gallery.noDescription"))),
+    Err(error) => return Ok(failed(t!("commands.gallery.cantWrite", error = error))),
   };
   Ok(match gallery::set_description(&workspace, &item, &description).await {
     Ok(()) => GalleryDescribeResult { ok: true, description: Some(description), ..Default::default() },

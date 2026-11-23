@@ -80,7 +80,7 @@ pub async fn open_logs(app: AppHandle) -> AppResult<String> {
 #[tauri::command]
 pub async fn open_in_editor(app: AppHandle, id: String) -> AppResult<OpenInEditorResult> {
   let project = crate::services::store::find_project(&id)
-    .ok_or_else(|| AppError::Msg("Project not found.".into()))?;
+    .ok_or_else(|| AppError::Msg(t!("commands.shared.projectNotFound")))?;
   let path = project.path.clone();
 
   if launch_vscode(&path) {

@@ -8,6 +8,7 @@ import {
   type JSX,
   type KeyboardEvent as ReactKeyboardEvent
 } from 'react'
+import { useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { fold } from './rank'
 import { Icon, Keys } from './parts'
@@ -42,6 +43,7 @@ export function ActionPanel({
   sections: PanelSection[]
   onClose: () => void
 }): JSX.Element {
+  const { t } = useTranslation('spotlight')
   const listId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
   const [filter, setFilter] = useState('')
@@ -108,9 +110,9 @@ export function ActionPanel({
   }
 
   return (
-    <div className="sl-actions" role="dialog" aria-label="Actions">
+    <div className="sl-actions" role="dialog" aria-label={t('panel.title')}>
       <div className="sl-actions-title">{title}</div>
-      <div className="sl-actions-list" id={listId} role="listbox" aria-label="Actions">
+      <div className="sl-actions-list" id={listId} role="listbox" aria-label={t('panel.title')}>
         {shown.map((section, s) => (
           <div
             key={section.title ?? s}
@@ -153,7 +155,7 @@ export function ActionPanel({
             })}
           </div>
         ))}
-        {flat.length === 0 && <p className="sl-actions-empty">No actions match</p>}
+        {flat.length === 0 && <p className="sl-actions-empty">{t('panel.noMatch')}</p>}
       </div>
       <div className="sl-actions-search">
         <input
@@ -161,12 +163,12 @@ export function ActionPanel({
           className="sl-actions-input"
           type="text"
           role="combobox"
-          aria-label="Search for actions"
+          aria-label={t('panel.search')}
           aria-expanded={flat.length > 0}
           aria-controls={listId}
           aria-autocomplete="list"
           aria-activedescendant={current ? optionId(at) : undefined}
-          placeholder="Search for actions…"
+          placeholder={t('panel.searchPlaceholder')}
           value={filter}
           spellCheck={false}
           autoComplete="off"

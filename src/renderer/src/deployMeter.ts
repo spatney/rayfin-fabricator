@@ -1,5 +1,6 @@
 import { useNow } from './components/team/runProgress'
 import { deployRuns, readDeployProgress, type DeployProgress } from './deployProgress'
+import { translator } from './i18n'
 
 /**
  * A running deploy's progress as one number and a few words: the same in the app
@@ -110,8 +111,9 @@ export function clockLabel(seconds: number): string {
 /** What a deploy is doing, in a few words for a strip or a status line. */
 export function meterStepLabel(meter: DeployMeter): string {
   const { progress } = meter
-  if (progress.live) return 'Going live'
-  if (progress.topic === 'signin') return 'Waiting for you to sign in to Fabric in your browser'
-  if (progress.topic === 'retry') return 'Fabric is busy, trying again'
+  const t = translator('publish')
+  if (progress.live) return t('deploySteps.live')
+  if (progress.topic === 'signin') return t('progress.waitingForSignIn')
+  if (progress.topic === 'retry') return t('progress.retrying')
   return progress.current.label
 }

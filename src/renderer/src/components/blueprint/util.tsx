@@ -1,20 +1,34 @@
 import type { StudioProject } from '@shared/ipc'
+import { translator } from '../../i18n'
 import type { AppIdentityInfo, Identity } from '../../model/architecture'
 
 import type { JSX } from 'react'
 
-export const IDENTITY_LABEL: Record<Identity, string> = { user: 'User’s identity', app: 'App identity', key: 'A key' }
+/** Who a connection runs as: keys into the `blueprint` catalog. */
+export const IDENTITY_LABEL = {
+  user: 'identity.user',
+  app: 'identity.app',
+  key: 'identity.key'
+} as const satisfies Record<Identity, string>
 
-/** What a part's connections use to sign in, as its port says it. */
-export const PORT_LABEL: Record<Identity, string> = {
-  user: 'Uses user’s identity',
-  app: 'Uses app identity',
-  key: 'Uses a key'
-}
+/** What a part's connections use to sign in, as its port says it: keys into the `blueprint` catalog. */
+export const PORT_LABEL = {
+  user: 'port.user',
+  app: 'port.app',
+  key: 'port.key'
+} as const satisfies Record<Identity, string>
+
+/** A port's accessible name, "{{part}}, uses …": keys into the `blueprint` catalog. */
+export const PORT_ARIA = {
+  user: 'portAria.user',
+  app: 'portAria.app',
+  key: 'portAria.key'
+} as const satisfies Record<Identity, string>
 
 /** The app identity in a few words: who it is, or how it will be decided. */
 export function appIdentityName(identity: AppIdentityInfo, published: boolean): string {
-  return identity.who ?? (published ? 'The account that first published it' : 'Whoever publishes it first')
+  const t = translator('blueprint')
+  return identity.who ?? (published ? t('appIdentity.firstPublisher') : t('appIdentity.nextPublisher'))
 }
 
 export const IDENTITY_ICON: Record<Identity, string> = { user: 'person', app: 'robot', key: 'key' }

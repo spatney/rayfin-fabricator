@@ -1,0 +1,321 @@
+{
+  "localState": {
+    "starting": "Iniciando…",
+    "restarting": "Reiniciando…",
+    "running": "En ejecución",
+    "stopped": "Detenido",
+    "runningProblems_one": "En ejecución · 1 problema",
+    "runningProblems_other": "En ejecución · {{count}} problemas"
+  },
+  "runningProblem": {
+    "analysis": "No se pudo leer el último cambio del modelo de datos de tu aplicación, así que sigue usando el modelo de datos anterior.",
+    "schema": "No se pudo aplicar el último cambio del modelo de datos de tu aplicación a su base de datos local, así que sigue usando la anterior.",
+    "functions": "Las funciones de tu aplicación no se compilaron, así que llamarlas falla o ejecuta su compilación anterior.",
+    "vite": "El servidor de desarrollo de Vite de tu aplicación se detuvo y no pudo volver a iniciarse, así que la vista previa no puede mostrarla."
+  },
+  "fallback": {
+    "published": {
+      "newerVersion": "Esta aplicación usa Rayfin {{version}}, que es más reciente que las versiones de Rayfin que Fabricator ejecuta en este dispositivo y no pudo iniciarse aquí, así que la vista previa usa el back-end de tu aplicación publicada.",
+      "newer": "La versión más reciente de Rayfin que usa esta aplicación no pudo iniciarse en este dispositivo, así que la vista previa usa el back-end de tu aplicación publicada.",
+      "oldVersion": "Esta aplicación usa Rayfin {{version}}, que Fabricator no puede ejecutar en este dispositivo, así que la vista previa usa el back-end de tu aplicación publicada.",
+      "old": "La versión de Rayfin que usa esta aplicación no se puede ejecutar en este dispositivo, así que la vista previa usa el back-end de tu aplicación publicada.",
+      "connector": "El conector {{name}} solo se ejecuta en Fabric, así que la vista previa usa el back-end de tu aplicación publicada.",
+      "connectors": "Los conectores {{names}} solo se ejecutan en Fabric, así que la vista previa usa el back-end de tu aplicación publicada."
+    },
+    "team": {
+      "newerVersion": "Esta aplicación usa Rayfin {{version}}, que es más reciente que las versiones de Rayfin que Fabricator ejecuta en este dispositivo y no pudo iniciarse aquí, así que la vista previa usa la implementación del equipo en Fabric.",
+      "newer": "La versión más reciente de Rayfin que usa esta aplicación no pudo iniciarse en este dispositivo, así que la vista previa usa la implementación del equipo en Fabric.",
+      "oldVersion": "Esta aplicación usa Rayfin {{version}}, que Fabricator no puede ejecutar en este dispositivo, así que la vista previa usa la implementación del equipo en Fabric.",
+      "old": "La versión de Rayfin que usa esta aplicación no se puede ejecutar en este dispositivo, así que la vista previa usa la implementación del equipo en Fabric.",
+      "connector": "El conector {{name}} solo se ejecuta en Fabric, así que la vista previa usa la implementación del equipo en Fabric.",
+      "connectors": "Los conectores {{names}} solo se ejecutan en Fabric, así que la vista previa usa la implementación del equipo en Fabric."
+    }
+  },
+  "sdkWarning": {
+    "newerVersion": "Esta aplicación usa Rayfin {{version}}, que es más reciente que las versiones de Rayfin que Fabricator ejecuta en este dispositivo, así que es posible que algunas cosas no funcionen como se espera.",
+    "newer": "Esta aplicación usa una versión de Rayfin más reciente que las que Fabricator ejecuta en este dispositivo, así que es posible que algunas cosas no funcionen como se espera.",
+    "olderVersion": "Esta aplicación usa Rayfin {{version}}, que no es una de las versiones de Rayfin que Fabricator ejecuta en este dispositivo, así que es posible que algunas cosas no funcionen como se espera.",
+    "older": "La versión de Rayfin que usa esta aplicación no es una de las que Fabricator ejecuta en este dispositivo, así que es posible que algunas cosas no funcionen como se espera."
+  },
+  "problem": {
+    "couldntStart": "Tu aplicación no pudo iniciarse en este dispositivo",
+    "stopped": "Su back-end local se detuvo.",
+    "schemaRefused": {
+      "title": "Este cambio eliminaría datos locales",
+      "message": "El modelo de datos cambió de una forma que elimina datos almacenados en este dispositivo, así que tu aplicación espera a que decidas."
+    },
+    "packagesMissing": {
+      "title": "Los paquetes de tu aplicación no están instalados",
+      "hint": "Instálalos y Fabricator volverá a iniciar tu aplicación."
+    },
+    "nodeMissing": {
+      "title": "Node.js no está instalado",
+      "message": "Tu aplicación se ejecuta en Node.js, y Fabricator no lo encontró en este dispositivo.",
+      "hint": "Configúralo y vuelve a intentarlo."
+    },
+    "nodeTooOld": {
+      "title": "Node.js necesita una actualización",
+      "messageVersion": "Tu aplicación necesita Node.js 20 o posterior, y este dispositivo tiene {{version}}.",
+      "message": "Tu aplicación necesita Node.js 20 o posterior.",
+      "hint": "Actualízalo y vuelve a intentarlo."
+    },
+    "alreadyServing": {
+      "title": "Esta aplicación ya está en ejecución",
+      "messagePid": "Otro programa ejecuta esta aplicación en este dispositivo (proceso {{pid}}), como rayfin-local en un terminal.",
+      "message": "Otro programa ejecuta esta aplicación en este dispositivo, como rayfin-local en un terminal.",
+      "hint": "Detenlo y Fabricator ejecutará tu aplicación aquí."
+    },
+    "crashed": "Tu aplicación se detiene una y otra vez"
+  },
+  "starting": {
+    "restarted": "Se detuvo de forma inesperada, así que Fabricator la está volviendo a iniciar.",
+    "analysis": "Leyendo el modelo de datos de tu aplicación",
+    "schema": "Actualizando su base de datos",
+    "functions": "Compilando sus funciones",
+    "vite": "Iniciando su servidor de desarrollo",
+    "restarting": "Volviendo a iniciarla en este dispositivo",
+    "starting": "Preparándola en este dispositivo"
+  },
+  "seed": {
+    "row": "fila {{row}}",
+    "label": "Datos de inicialización",
+    "problems_one": "Los datos de inicialización tienen {{count, number}} problema, así que no se cargaron.",
+    "problems_other": "Los datos de inicialización tienen {{count, number}} problemas, así que no se cargaron.",
+    "fixRequest": "Corrige los problemas de los datos de inicialización",
+    "fix": "Corregir con Copilot",
+    "offer": "<b>Esta aplicación incluye datos de inicialización</b> ({{amount}}). Sus datos locales están vacíos: carga los datos de inicialización para empezar con ellos.",
+    "offerEmpty": "<b>Esta aplicación incluye datos de inicialización</b>. Sus datos locales están vacíos: carga los datos de inicialización para empezar con ellos.",
+    "rows_one": "{{count, number}} fila",
+    "rows_other": "{{count, number}} filas",
+    "files_one": "{{count, number}} archivo",
+    "files_other": "{{count, number}} archivos",
+    "rowsAndFiles": "{{rows}} y {{files}}",
+    "load": "Cargar datos de inicialización"
+  },
+  "notes": {
+    "backend": "Back-end de la vista previa",
+    "rayfinVersion": "Versión de Rayfin",
+    "schemaWaiting": "Cambio del modelo de datos pendiente",
+    "schemaWaitingText": "<b>Hay un cambio del modelo de datos pendiente.</b> Eliminaría datos almacenados en este dispositivo, así que tu aplicación sigue usando el modelo de datos anterior."
+  },
+  "output": {
+    "running": "Tu aplicación se ejecuta en este dispositivo, con su propio back-end y sus propios datos.",
+    "starting": "Tu aplicación se está iniciando en este dispositivo.",
+    "couldntStart": "Tu aplicación no pudo iniciarse en este dispositivo.",
+    "notRunning": "Tu aplicación no se está ejecutando en este dispositivo.",
+    "problems_one": "1 problema",
+    "problems_other": "{{count}} problemas",
+    "label": "Salida: {{state}}",
+    "show": "{{explanation}} Selecciona para ver su salida.",
+    "hide": "{{explanation}} Selecciona para ocultar su salida."
+  },
+  "info": {
+    "label": "Acerca de Local y Publicada",
+    "freshTitle": "{{name}} ahora se ejecuta en este dispositivo, con sus propios datos. Selecciona para obtener más información.",
+    "title": "{{name}} se ejecuta en dos lugares",
+    "local": "<b>Local</b> es tu aplicación en este dispositivo, con sus propios datos, separados de los de la aplicación publicada. Los cambios de Copilot se muestran aquí primero.",
+    "localEmpty": "<b>Local</b> es tu aplicación en este dispositivo, con sus propios datos, separados de los de la aplicación publicada. Esos datos empiezan vacíos. Los cambios de Copilot se muestran aquí primero.",
+    "publishedTeam": "<b>Publicada</b> es la aplicación que usa tu equipo en Microsoft Fabric, con sus datos. Tus cambios llegan a ella cuando los publicas.",
+    "published": "<b>Publicada</b> es tu aplicación en Microsoft Fabric, con sus datos. Tus cambios llegan a ella cuando los publicas."
+  },
+  "statePanel": {
+    "viewOutput": "Ver salida",
+    "noPages": "{{name}} no tiene páginas que mostrar. Su back-end se ejecuta en {{url}}.",
+    "notRunning": "{{name}} no se está ejecutando en este dispositivo.",
+    "start": "Iniciar",
+    "starting": "Iniciando…",
+    "installing": "Instalando…",
+    "install": "Instalar dependencias",
+    "stopping": "Deteniendo…",
+    "stopOther": "Detener el otro",
+    "setUpNode": "Configurar Node.js",
+    "allowHelp": "Ver cómo permitirlo",
+    "whyTitle": "Abre la Ayuda, que lee lo que ocurrió y lo explica",
+    "why": "Averiguar por qué"
+  },
+  "schema": {
+    "title": "Este cambio eliminaría datos locales",
+    "lead": "El modelo de datos de <b>{{name}}</b> cambió. Aplicar el cambio elimina estos datos, almacenados en este dispositivo:",
+    "deletes": "Datos que elimina el cambio",
+    "unknown": "No se sabe qué datos elimina.",
+    "choices": {
+      "default": "<b>Eliminar estos datos y aplicar</b> elimina solo lo que aparece en la lista. <b>Restablecer datos locales</b> elimina todos los datos locales de la aplicación, sus usuarios de prueba y sus archivos, y luego aplica el cambio. <b>Mantener la versión actual</b> conserva tus datos y el modelo de datos que tienes ahora.",
+      "atStart": "<b>Eliminar estos datos y aplicar</b> elimina solo lo que aparece en la lista. <b>Restablecer datos locales</b> elimina todos los datos locales de la aplicación, sus usuarios de prueba y sus archivos, y luego aplica el cambio. <b>Mantener la versión actual</b> conserva tus datos y el modelo de datos que tienes ahora, y la aplicación no se inicia hasta que elijas.",
+      "published": "<b>Eliminar estos datos y aplicar</b> elimina solo lo que aparece en la lista. <b>Restablecer datos locales</b> elimina todos los datos locales de la aplicación, sus usuarios de prueba y sus archivos, y luego aplica el cambio. <b>Mantener la versión actual</b> conserva tus datos y el modelo de datos que tienes ahora. Tu aplicación publicada y sus datos no se ven afectados.",
+      "atStartPublished": "<b>Eliminar estos datos y aplicar</b> elimina solo lo que aparece en la lista. <b>Restablecer datos locales</b> elimina todos los datos locales de la aplicación, sus usuarios de prueba y sus archivos, y luego aplica el cambio. <b>Mantener la versión actual</b> conserva tus datos y el modelo de datos que tienes ahora, y la aplicación no se inicia hasta que elijas. Tu aplicación publicada y sus datos no se ven afectados."
+    },
+    "keep": "Mantener la versión actual",
+    "resetting": "Restableciendo…",
+    "reset": "Restablecer datos locales",
+    "applying": "Aplicando…",
+    "apply": "Eliminar estos datos y aplicar",
+    "review": "Revisar el cambio"
+  },
+  "rayfinWarning": {
+    "prerelease": "Todavía no es la versión más reciente de Rayfin, así que podría ser inestable.",
+    "unsupported": "Fabricator todavía no la ejecuta en este dispositivo, así que es posible que algunas cosas no funcionen aquí como se espera."
+  },
+  "devices": {
+    "desktop": "Escritorio",
+    "tablet": "Tableta",
+    "phone": "Teléfono"
+  },
+  "port": {
+    "anApp": "una aplicación",
+    "holder": {
+      "backend": "<b>{{name}}</b>, otra aplicación que se está ejecutando en este dispositivo, la está usando.",
+      "preview": "La vista previa en vivo de <b>{{name}}</b> la está usando mientras Copilot trabaja en esa aplicación.",
+      "earlierPreview": "Una vista previa anterior de <b>{{name}}</b> sigue en ejecución y la está usando.",
+      "appPreview": "Una vista previa de <b>{{name}}</b> la está usando.",
+      "devServerFor": "Un servidor de desarrollo de <b>{{name}}</b> la está usando.",
+      "devServer": "Un servidor de desarrollo la está usando.",
+      "program": "<b>{{name}}</b>, otro programa de este dispositivo, la está usando.",
+      "unknown": "Otro programa de este dispositivo la está usando, y Fabricator no puede saber cuál."
+    },
+    "stop": {
+      "named": "Detener {{name}}",
+      "appWorking": "Copilot está trabajando en {{name}} ahora mismo. Volverá a iniciarse cuando la abras.",
+      "appIdle": "Volverá a iniciarse cuando la abras.",
+      "earlierPreview": "Detener la vista previa anterior",
+      "preview": "Detener esa vista previa",
+      "previewDetail": "No se pierde nada: es solo una vista previa.",
+      "devServer": "Detener el servidor de desarrollo",
+      "devServerDetail": "No se pierde nada: puedes volver a iniciarlo más tarde.",
+      "programDetail": "Se pierde todo lo que no se haya guardado en {{name}}.",
+      "unknown": "Detener ese programa",
+      "unknownDetail": "Se pierde todo lo que no se haya guardado en él."
+    },
+    "recommended": "Recomendado",
+    "stopping": "Deteniendo…",
+    "use": "Usar localhost:{{port}} en su lugar",
+    "useDetailPush": "La agrega a la configuración de inicio de sesión de tu aplicación y la actualiza en Fabric. Tarda un momento.",
+    "useDetail": "La agrega a la configuración de inicio de sesión de tu aplicación. El inicio de sesión la acepta en cuanto publiques.",
+    "updatingSignIn": "Actualizando la configuración de inicio de sesión…",
+    "updatingYml": "Actualizando rayfin.yml…",
+    "title": "Tu vista previa en vivo necesita localhost:{{port}}",
+    "sub": "Es la dirección que acepta el inicio de sesión de tu aplicación.",
+    "useLater": "Usar localhost:{{port}} en su lugar actualiza la configuración de inicio de sesión de tu aplicación en Fabric, y eso no puede hacerse mientras Copilot está trabajando. Omite este paso por ahora para elegirlo con tu próximo mensaje.",
+    "log": "Salida del registro del puerto",
+    "technical": "Detalles técnicos",
+    "program": "Programa",
+    "command": "Comando",
+    "process": "{{name}} (PID {{pid}})",
+    "skip": "Omitir vista previa en vivo",
+    "skipTitle": "Copilot sigue trabajando y la vista previa muestra tu aplicación publicada."
+  },
+  "previewAs": {
+    "title": "Vista previa como",
+    "label": "Vista previa como: {{label}}",
+    "sub": "Con qué usuario inicia sesión la aplicación en este dispositivo",
+    "you": "Tú",
+    "youTip": "Tu cuenta de Microsoft Entra si has iniciado sesión en Azure; si no, una cuenta de desarrollador local",
+    "signedOut": "Sesión cerrada",
+    "noOne": "Nadie ha iniciado sesión",
+    "testUser": "Usuario de prueba",
+    "testUsers": "Usuarios de prueba",
+    "whoTitle": {
+      "you": "La vista previa ha iniciado sesión como tú. Elige con qué usuario inicia sesión.",
+      "signedOut": "La vista previa no ha iniciado sesión. Elige con qué usuario inicia sesión.",
+      "user": "La vista previa ha iniciado sesión como {{name}}. Elige con qué usuario inicia sesión."
+    },
+    "chooseTitle": "Elige con qué usuario inicia sesión la aplicación en la vista previa.",
+    "couldntSwitch": "No se pudo cambiar el usuario con el que inicia sesión la vista previa: {{message}}",
+    "reload": {
+      "you": "Vuelve a cargar la vista previa para ver la aplicación como tú.",
+      "signedOut": "Vuelve a cargar la vista previa para ver la aplicación sin sesión iniciada.",
+      "user": "Vuelve a cargar la vista previa para ver la aplicación como {{name}}."
+    },
+    "progress": {
+      "reloading": "Volviendo a cargar la vista previa…",
+      "signingOut": "Cerrando sesión…",
+      "adding": "Agregando a {{name}}…",
+      "signingInYou": "Iniciando sesión como tú…",
+      "signingIn": "Iniciando sesión como {{name}}…"
+    },
+    "account": {
+      "unknown": "Tu cuenta de Microsoft Entra o una cuenta local",
+      "entra": "{{name}} · Microsoft Entra ID",
+      "local": "{{name}} · cuenta local"
+    },
+    "email": {
+      "label": "Correo electrónico del usuario de prueba",
+      "empty": "Escribe una dirección de correo electrónico.",
+      "invalid": "Escribe una dirección de correo electrónico, como ana@example.com.",
+      "yours": "Es tu propia cuenta. Elige Tú en su lugar.",
+      "exists": "{{name}} ya es un usuario de prueba."
+    },
+    "addUser": "Agregar usuario de prueba…",
+    "addForm": "Agregar un usuario de prueba",
+    "adding": "Agregando…",
+    "hint": "Los usuarios de prueba no tienen contraseña: inician sesión aquí, mediante Vista previa como.",
+    "note": "Al cambiar, se borra el almacenamiento del explorador de la vista previa y se vuelve a cargar."
+  },
+  "pane": {
+    "status": {
+      "publishing": "Publicando…",
+      "published": "Publicada",
+      "failed": "No se pudo publicar",
+      "notPublished": "Sin publicar",
+      "updating": "Publicada · actualizando",
+      "title": "Se muestra la aplicación publicada: lo que ve todo el equipo."
+    },
+    "fabric": {
+      "unavailable": "La vista del portal de Fabric no está disponible para esta aplicación publicada",
+      "local": "La vista del portal de Fabric muestra tu aplicación publicada, no esta vista previa en tu dispositivo",
+      "exit": "Se está viendo dentro del shell del portal de Fabric: haz clic para volver a la vista directa de la aplicación",
+      "enter": "Ver la aplicación dentro del shell del portal de Fabric, donde funciona por completo"
+    },
+    "forward": "Adelante",
+    "reload": "Volver a cargar",
+    "views": {
+      "label": "Aplicación que se muestra",
+      "local": "Local",
+      "localTitle": "Tu aplicación en este dispositivo, con sus datos locales",
+      "published": "Publicada",
+      "publishedTitle": "Tu aplicación publicada en Microsoft Fabric, con sus datos"
+    },
+    "data": {
+      "published": "Datos publicados",
+      "publishedTitle": "Usa los datos de la aplicación publicada, así que los cambios que hagas en ella son reales.",
+      "none": "Aún no hay datos",
+      "noneTitle": "Todavía no hay nada publicado, así que se ejecuta sin datos."
+    },
+    "url": {
+      "local": "Tu aplicación, que se ejecuta en este dispositivo en {{url}}, con su propio back-end y datos locales: los cambios de Copilot aparecen aquí a medida que los hace. Haz clic para abrirla en el explorador.",
+      "teamPublishedData": "Tu aplicación, que se ejecuta en este dispositivo en {{url}} con la implementación del equipo en Fabric: los cambios de Copilot aparecen aquí a medida que los hace. Usa los datos de la aplicación publicada, así que los cambios que hagas en ella son reales. Haz clic para abrirla en el explorador.",
+      "teamNoData": "Tu aplicación, que se ejecuta en este dispositivo en {{url}} con la implementación del equipo en Fabric: los cambios de Copilot aparecen aquí a medida que los hace. Todavía no hay nada publicado, así que se ejecuta sin datos. Haz clic para abrirla en el explorador.",
+      "teamOwnData": "Tu aplicación, que se ejecuta en este dispositivo en {{url}} con la implementación del equipo en Fabric: los cambios de Copilot aparecen aquí a medida que los hace. Usa los datos de tu vista previa. Haz clic para abrirla en el explorador.",
+      "manual": "Tu aplicación, que se ejecuta en este dispositivo en {{url}} con el back-end de tu aplicación publicada. Mientras los turnos del chat no publiquen, muestra tus últimos cambios siempre que la aplicación esté abierta. Haz clic para abrirla en el explorador.",
+      "published": "Tu aplicación, que se ejecuta en este dispositivo en {{url}} con el back-end de tu aplicación publicada mientras Copilot trabaja, así que sus cambios aparecen a medida que los hace. Haz clic para abrirla en el explorador."
+    },
+    "device": {
+      "label": "Ancho de la vista previa",
+      "width": "Ancho: {{device}}",
+      "fixed": "{{device}}: {{width}} px de ancho",
+      "fill": "{{device}}: ocupar todo el panel"
+    },
+    "pick": {
+      "publishing": "{{feature}} vuelve a estar disponible cuando termine la publicación.",
+      "waiting": "{{feature}} funciona cuando tu aplicación aparezca aquí."
+    },
+    "focus": {
+      "exit": "Salir del enfoque",
+      "enter": "Enfocar",
+      "exitTitle": "Salir del enfoque: volver a mostrar el chat",
+      "enterTitle": "Enfocar la vista previa: ocultar el chat"
+    },
+    "publishUnfinished": "La publicación no terminó.",
+    "workspace": {
+      "title": "Elige dónde publicar",
+      "text": "<b>{{name}}</b> aún no se ha publicado. Selecciona <b>Publicar</b> en el encabezado de arriba para ponerle nombre y elegir el área de trabajo de Fabric donde publicarla."
+    },
+    "empty": {
+      "teamFailed": "La canalización del equipo no pudo publicar esta versión. Abre el menú del equipo en el encabezado para ver qué pasó.",
+      "region": "Elige un área de trabajo en una capacidad de otra región y vuelve a publicar.",
+      "failed": "Revisa el error y los registros de arriba y vuelve a publicar para intentarlo de nuevo.",
+      "team": "La aplicación publicada aparece aquí cuando tu equipo la publique.",
+      "local": "Tu aplicación publicada aparece aquí cuando la publiques.",
+      "default": "Tu aplicación publicada se mostrará aquí después de un <code>rayfin up</code> completo. Pide a Copilot que cree algo o selecciona <b>Publicar</b>."
+    }
+  }
+}

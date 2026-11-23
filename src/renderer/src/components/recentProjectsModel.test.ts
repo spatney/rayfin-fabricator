@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { makeProject } from '../../test/harness'
+import { setLanguage } from '../i18n'
 import {
   groupProjects,
   matchesProject,
+  openedText,
   projectLinks,
   publishState,
   rayfinUpdate
@@ -97,5 +99,28 @@ describe('recent projects’ groups and filter', () => {
     expect(matchesProject(project, 'ops team', 'Ops team')).toBe(true)
     expect(matchesProject(project, 'care nothing')).toBe(false)
     expect(matchesProject(project, '  ')).toBe(true)
+  })
+})
+
+describe('recent projects in another language', () => {
+  afterEach(async () => {
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('says when and how a project was published, and groups it, in German', async () => {
+    await setLanguage('de')
+    const yesterday = new Date(NOON - DAY).toISOString()
+    const project = makeProject('p', {
+      lastOpenedAt: yesterday,
+      lastDeploy: { status: 'success', at: yesterday, url: 'https://p.example.app' }
+    })
+    expect(publishState(project, { now: NOON }).label).toBe('Veröffentlicht gestern')
+    expect(publishState(project, { now: NOON, changed: true })).toMatchObject({
+      label: 'Änderungen nicht veröffentlicht',
+      title: 'Veröffentlicht gestern. Seitdem wurde es geändert.'
+    })
+    expect(openedText(project, NOON)).toBe('Geöffnet gestern')
+    expect(groupProjects([project], NOON).map((g) => g.label)).toEqual(['Diese Woche'])
   })
 })

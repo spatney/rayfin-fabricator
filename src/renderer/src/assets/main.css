@@ -143,6 +143,22 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Japanese: Latin text keeps the app's font; kana and kanji use a Japanese
+   UI font rather than whatever the system falls back to. */
+html:lang(ja) body {
+  font-family:
+    'Segoe UI Variable Display',
+    'Segoe UI',
+    'Yu Gothic UI',
+    'Meiryo UI',
+    'Hiragino Sans',
+    'Hiragino Kaku Gothic ProN',
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+}
+
 code {
   font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
   background: var(--code-inline-bg);
@@ -10088,6 +10104,15 @@ button.deploy-trouble-ray:focus-visible {
 .set-card .seg-btn--active {
   background: var(--set-raised);
   box-shadow: var(--shadow-sm);
+}
+/* The Language picker, the height of the segmented pickers around it. */
+.set-card .set-select {
+  height: 28px;
+  padding: 0 30px 0 10px;
+  font-size: 12.5px;
+  background-color: var(--set-raised);
+  background-position: right 9px center;
+  background-size: 12px 12px;
 }
 /* The workspace folder, on its own line under its row. */
 .set-path {

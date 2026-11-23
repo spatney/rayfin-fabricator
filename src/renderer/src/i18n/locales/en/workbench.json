@@ -1,0 +1,167 @@
+{
+  "preview": {
+    "title": "Local preview",
+    "updateFailed": "The local preview could not be updated.",
+    "stopped": "The local preview stopped.",
+    "stoppedTitle": "Local preview stopped",
+    "startFailed": "The local Vite server could not be started.",
+    "startFailedTitle": "Local preview failed"
+  },
+  "remove": {
+    "trashedAndAppDeleted": "Its folder is in your system trash, and its published app is deleted.",
+    "trashed": "Its folder is in your system trash. You can restore it from there.",
+    "removed": "Removed {{name}}",
+    "failed": "Couldn’t remove {{name}}"
+  },
+  "publish": {
+    "closedBeforeStart": "The workbench closed before publishing started.",
+    "waitForAuth": "Wait for Fabric authentication to finish, then publish again.",
+    "paused": "Publishing paused",
+    "didNotFinishRetry": "Publishing didn’t finish. Please try again.",
+    "signInFirst": "Sign in to Fabric before publishing again.",
+    "didNotFinish": "Publishing didn’t finish.",
+    "failedTitle": "Couldn’t publish",
+    "refreshFailed": "Could not refresh the project after publishing.",
+    "waitForTurn": "Copilot is still working on this app. Publish it once the turn finishes.",
+    "waitForTurnTitle": "Publishing waits for Copilot"
+  },
+  "team": {
+    "unpublished": "{{name}} has unpublished changes. They're saved on GitHub; publish them when you're ready.",
+    "notPublished": "Not published yet",
+    "notOnGitHub": "Not on GitHub yet",
+    "savingToGitHub": "Saving to GitHub — sending resumes in a moment",
+    "moveFailed": "Could not move the project.",
+    "moved": "{{name}} is now in the team workspace.",
+    "movedTitle": "Moved"
+  },
+  "auth": {
+    "verifyFailedTitle": "Sign-in check failed",
+    "fabricSignInFailed": "Fabric sign-in did not complete. Please try again.",
+    "fabricSignOutFailed": "Fabric sign-out did not complete. Please try again.",
+    "signOutFailedTitle": "Sign-out failed",
+    "signInFailedTitle": "Sign-in failed"
+  },
+  "project": {
+    "refreshFailedTitle": "Project refresh failed",
+    "beingRemoved": "{{name}} is being removed.",
+    "pinFailed": "Couldn’t pin {{name}}.",
+    "unpinFailed": "Couldn’t unpin {{name}}.",
+    "revealFailed": "Couldn’t show {{name}}’s folder.",
+    "openFolderFailed": "Could not open that folder.",
+    "openFileFailed": "Could not open that file.",
+    "importedWhere": "It’s in {{path}}.",
+    "imported": "Imported {{name}}",
+    "renameFailed": "Could not rename the project.",
+    "renameFailedRetry": "Could not rename the project. Please try again.",
+    "gone": "That project isn’t in Fabricator anymore."
+  },
+  "port": {
+    "skipped": "localhost:{{port}} is in use, so this turn shows your published app. Fabricator will ask again with your next message.",
+    "skippedTitle": "Live preview skipped",
+    "registerFailed": "The port could not be registered.",
+    "stillInUse": "localhost:{{port}} is still in use. Try again, or use another address.",
+    "stopFailed": "That could not be stopped."
+  },
+  "packages": {
+    "installing": "Installing them and restarting your app…",
+    "changedTitle": "Your app’s packages changed",
+    "installed": "Your app runs on its new packages.",
+    "installedTitle": "Installed the packages",
+    "failedTitle": "Couldn’t install your app’s packages"
+  },
+  "turn": {
+    "refreshFailed": "Could not refresh the project after coding.",
+    "saveChatFailed": "Could not save the conversation.",
+    "saveChatFailedTitle": "Chat history save failed",
+    "versionCheckFailed": "Could not refresh the Rayfin version.",
+    "versionCheckFailedTitle": "Version check failed",
+    "changesCheckFailed": "Could not check for changes to publish.",
+    "autoPublishCheckFailed": "{{error}} Select Publish to publish your changes.",
+    "autoPublishFailedTitle": "Couldn’t publish automatically"
+  },
+  "rayfin": {
+    "updateTo": "Update Rayfin to {{version}}",
+    "noUpdate": "Fabricator didn’t find a Rayfin update for {{name}} just now."
+  },
+  "authRefresh": {
+    "busy": "Wait for publishing or the current sign-in to finish, then retry.",
+    "failed": "Fabric authentication could not be refreshed. Please retry.",
+    "verified": "Fabric authentication is verified. Publish again to retry.",
+    "verifiedTitle": "Fabric authentication refreshed",
+    "title": "Refresh Fabric authentication",
+    "confirm": "Clear credentials and sign in",
+    "busyLabel": "Refreshing authentication…",
+    "message": "Run <code>rayfin logout</code> and <code>rayfin login</code> with <strong>{{name}}</strong>'s CLI, then verify the new Fabric credential. This lets Rayfin recover stale token-cache locks and replace expired credentials.",
+    "shared": "Rayfin CLI credentials are shared across projects. This does not sign out of Copilot, Azure CLI, or the preview browser, and it doesn’t publish your app again. Update older projects to Rayfin 1.35.1 or newer using the Rayfin version control.",
+    "log": "Authentication refresh log"
+  },
+  "diagnostics": {
+    "savedForReport": "A diagnostics file was saved and the logs folder opened — attach it to your bug report.",
+    "saved": "A diagnostics file was saved and the logs folder opened.",
+    "exportedTitle": "Diagnostics exported",
+    "writeFailed": "The diagnostics file could not be written.",
+    "exportFailedTitle": "Couldn't export diagnostics"
+  },
+  "migration": {
+    "title": "Report migration",
+    "waitPublish": "Waiting for publishing to finish.",
+    "waitSave": "Waiting for the save to GitHub.",
+    "waitCopilot": "Waiting for Copilot to finish.",
+    "waitDependencies": "Waiting for the app’s dependencies.",
+    "modelFailed": "Could not set the migration’s Copilot model.",
+    "startFailed": "Could not start migrating the report.",
+    "fromPowerBi": "From Power BI"
+  },
+  "editor": {
+    "openedFolderInstead": "VS Code isn’t installed, so we opened the project folder instead.",
+    "openFailed": "Fabricator couldn’t open VS Code.",
+    "loading": "Loading editor…"
+  },
+  "appBar": {
+    "returnTo": "Return to {{name}}",
+    "returnToProjects": "Return to your projects",
+    "searchTitle": "Search projects, actions and docs, or ask Help ({{shortcut}})"
+  },
+  "divider": {
+    "label": "Resize chat and preview",
+    "title": "Drag to resize · double-click to reset"
+  },
+  "loading": {
+    "label": "Loading project",
+    "project": "Loading {{name}}…"
+  },
+  "statusBar": {
+    "teamRepoBranch": "Team workspace {{repo}}. Working branch: {{branch}}",
+    "teamRepoNoBranch": "Team workspace {{repo}}. Working branch: none",
+    "teamBranch": "Team workspace. Working branch: {{branch}}",
+    "teamNoBranch": "Team workspace. Working branch: none",
+    "team": "Team",
+    "zoomTitle": "Interface zoom — scales the whole UI (and Point & Edit in the preview)",
+    "zoom": "Interface zoom",
+    "version": "Rayfin Fabricator version",
+    "terminalTitle": "Terminal — run commands in {{name}}’s folder ({{shortcut}})",
+    "terminal": "Terminal",
+    "running_one": "{{count}} running",
+    "running_other": "{{count}} running",
+    "helpTitle": "Ask Help — debug a problem, browse the docs, or report an issue ({{shortcut}})",
+    "help": "Help"
+  },
+  "export": {
+    "waitForTurn": "Copilot is still working on {{name}}. Export it once the turn finishes.",
+    "waitForPublish": "{{name}} is publishing. Export it once it finishes."
+  },
+  "deployGuard": {
+    "title": "You have changes to get first",
+    "getLatest": "Get latest first",
+    "gettingLatest": "Getting latest…",
+    "publishAnyway": "Publish anyway",
+    "pullFailed": "Could not get the latest changes.",
+    "message_one": "The remote has <strong>{{count}} change</strong> you haven’t downloaded yet. Publishing now sends your current version without them.",
+    "message_other": "The remote has <strong>{{count}} changes</strong> you haven’t downloaded yet. Publishing now sends your current version without them."
+  },
+  "signOut": {
+    "label": "Signing out",
+    "title": "Signing you out…",
+    "detail": "Ending your Fabric session securely"
+  }
+}

@@ -24,18 +24,18 @@ fn is_webp(bytes: &[u8]) -> bool {
 fn decode(data_url: &str) -> Result<Vec<u8>, String> {
   let b64 = data_url
     .strip_prefix(DATA_URL_PREFIX)
-    .ok_or_else(|| "A thumbnail must be a WebP image.".to_string())?;
+    .ok_or_else(|| t!("services.thumbnails.mustBeWebp"))?;
   if b64.len() > MAX_BYTES * 4 / 3 + 4 {
-    return Err("That thumbnail is too large.".into());
+    return Err(t!("services.thumbnails.tooLarge"));
   }
   let bytes = base64::engine::general_purpose::STANDARD
     .decode(b64.trim().as_bytes())
-    .map_err(|_| "That thumbnail isn't a WebP image.".to_string())?;
+    .map_err(|_| t!("services.thumbnails.notWebp"))?;
   if bytes.len() > MAX_BYTES {
-    return Err("That thumbnail is too large.".into());
+    return Err(t!("services.thumbnails.tooLarge"));
   }
   if !is_webp(&bytes) {
-    return Err("That thumbnail isn't a WebP image.".into());
+    return Err(t!("services.thumbnails.notWebp"));
   }
   Ok(bytes)
 }
@@ -53,13 +53,13 @@ fn modified_at(path: &Path) -> Option<String> {
 /// Write `bytes` to `path` whole: to a sibling first, then moved over it, so a
 /// reader never sees half an image.
 fn write_whole(path: &Path, bytes: &[u8]) -> Result<(), String> {
-  let dir = path.parent().ok_or_else(|| "No folder for thumbnails.".to_string())?;
-  std::fs::create_dir_all(dir).map_err(|e| format!("Couldn't save the thumbnail: {e}"))?;
+  let dir = path.parent().ok_or_else(|| t!("services.thumbnails.noFolder"))?;
+  std::fs::create_dir_all(dir).map_err(|e| t!("services.thumbnails.saveFailed", error = e))?;
   let partial = path.with_extension(format!("{}.partial", uuid::Uuid::new_v4().simple()));
-  std::fs::write(&partial, bytes).map_err(|e| format!("Couldn't save the thumbnail: {e}"))?;
+  std::fs::write(&partial, bytes).map_err(|e| t!("services.thumbnails.saveFailed", error = e))?;
   std::fs::rename(&partial, path).map_err(|e| {
     let _ = std::fs::remove_file(&partial);
-    format!("Couldn't save the thumbnail: {e}")
+    t!("services.thumbnails.saveFailed", error = e)
   })
 }
 
@@ -72,7 +72,7 @@ fn read_at(path: &Path) -> Option<String> {
 /// as the project's `thumbnail_at` reports it.
 pub fn save(project_id: &str, image: &str) -> Result<String, String> {
   if store::find_project(project_id).is_none() {
-    return Err("That project isn't in Fabricator anymore.".into());
+    return Err(t!("services.thumbnails.projectGone"));
   }
   let bytes = decode(image)?;
   let path = paths::thumbnail_file(project_id);

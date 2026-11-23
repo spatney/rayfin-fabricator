@@ -153,19 +153,19 @@ pub async fn files_read(id: String, path: String) -> FileContent {
   };
 
   let Some(project) = find_project(&id) else {
-    return err(0, "Project not found.");
+    return err(0, &t!("commands.shared.projectNotFound"));
   };
   let Some(target) = safe_resolve(&project.path, &path) else {
-    return err(0, "Path is outside the project.");
+    return err(0, &t!("commands.shared.pathOutside"));
   };
 
   let size = match std::fs::metadata(&target) {
     Ok(m) if m.is_file() => m.len(),
-    Ok(_) => return err(0, "Not a file."),
+    Ok(_) => return err(0, &t!("commands.files.notAFile")),
     Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-      return FileContent { missing: Some(true), ..err(0, "File not found.") };
+      return FileContent { missing: Some(true), ..err(0, &t!("commands.files.notFound")) };
     }
-    Err(_) => return err(0, "File not found."),
+    Err(_) => return err(0, &t!("commands.files.notFound")),
   };
 
   if size > MAX_FILE_BYTES {
@@ -180,7 +180,7 @@ pub async fn files_read(id: String, path: String) -> FileContent {
       content: Some(String::from_utf8_lossy(&buf).to_string()),
       ..Default::default()
     },
-    Err(_) => err(size, "Could not read the file."),
+    Err(_) => err(size, &t!("commands.files.cantRead")),
   }
 }
 
@@ -224,15 +224,15 @@ fn list_dir(dir: &Path) -> DirListing {
   let shown = dir.to_string_lossy().to_string();
   let failed = |error: &str| DirListing { dir: shown.clone(), error: Some(error.into()), ..Default::default() };
   if dir.is_file() {
-    return failed("This is a file, not a folder.");
+    return failed(&t!("commands.files.isFile"));
   }
   let read = match std::fs::read_dir(dir) {
     Ok(read) => read,
-    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return failed("There's no folder here."),
+    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return failed(&t!("commands.files.noFolder")),
     Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-      return failed("You don't have access to this folder.")
+      return failed(&t!("commands.files.noAccess"))
     }
-    Err(_) => return failed("Couldn't open this folder."),
+    Err(_) => return failed(&t!("commands.files.cantOpenFolder")),
   };
   let mut entries: Vec<DirEntryInfo> = read
     .flatten()
@@ -252,12 +252,12 @@ fn list_dir(dir: &Path) -> DirListing {
 /// the user can open, in the project or outside it. Names only: nothing is read.
 pub async fn files_list_dir(id: String, path: String) -> DirListing {
   let Some(project) = find_project(&id) else {
-    return DirListing { error: Some("Project not found.".into()), ..Default::default() };
+    return DirListing { error: Some(t!("commands.shared.projectNotFound")), ..Default::default() };
   };
   let dir = resolve_reference(Path::new(&project.path), &path);
   tokio::task::spawn_blocking(move || list_dir(&dir))
     .await
-    .unwrap_or_else(|_| DirListing { error: Some("Couldn't open this folder.".into()), ..Default::default() })
+    .unwrap_or_else(|_| DirListing { error: Some(t!("commands.files.cantOpenFolder")), ..Default::default() })
 }
 
 #[cfg(test)]

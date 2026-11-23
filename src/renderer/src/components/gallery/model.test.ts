@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { GalleryApp } from '@shared/ipc'
+import { setLanguage } from '../../i18n'
 import {
   ago,
   appHealth,
@@ -180,6 +181,21 @@ describe('gallery covers and times', () => {
     expect(ago('2026-10-24T03:34:31Z', now)).toBe('last week')
     expect(ago(undefined, now)).toBeUndefined()
     expect(ago('soon', now)).toBeUndefined()
+  })
+})
+
+describe('gallery times in another language', () => {
+  afterEach(async () => {
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('says when an app was published in German words', async () => {
+    await setLanguage('de')
+    const now = Date.parse('2026-10-31T12:00:00Z')
+    expect(ago('2026-10-31T11:59:30Z', now)).toBe('gerade eben')
+    expect(ago('2026-10-31T09:00:00Z', now)).toBe('vor 3 Stunden')
+    expect(ago('2026-10-30T12:00:00Z', now)).toBe('gestern')
   })
 })
 

@@ -1353,7 +1353,8 @@ function installApi(): void {
     },
     // What the app reads at launch: the sample settings.
     settings: {
-      get: () => Promise.resolve(sampleSettings())
+      get: () => Promise.resolve(sampleSettings()),
+      systemLanguage: () => Promise.resolve('en')
     },
     projects: {
       // Settings shows where new projects go.

@@ -1,6 +1,7 @@
 import { useEffect, useState, type JSX } from 'react'
 import type { SkillInfo } from '@shared/ipc'
 import { openDocs } from '../../docsLinks'
+import { Trans, useTranslation } from '../../i18n'
 import Markdown from '../Markdown'
 import Skeleton from '../Skeleton'
 import { Codicon } from '../icons'
@@ -41,6 +42,7 @@ export default function SkillInspector({
   onDelete,
   onSaveToLibrary
 }: InspectorProps): JSX.Element {
+  const { t } = useTranslation('skills')
   const source = sourceOf(skill)
   const [file, setFile] = useState<SkillFile | null>(null)
   const [installed, setInstalled] = useState(skill.active)
@@ -61,7 +63,7 @@ export default function SkillInspector({
           setReadError(null)
         } else {
           setFile(null)
-          setReadError(res.error ?? 'Couldn’t read this skill.')
+          setReadError(res.error ?? t('inspector.readError'))
         }
       })
       .catch((err) => {
@@ -72,7 +74,7 @@ export default function SkillInspector({
     return () => {
       alive = false
     }
-  }, [projectId, skill.id, skill.active, skill.outdated])
+  }, [projectId, skill.id, skill.active, skill.outdated, t])
 
   const triggers = file?.triggers ?? []
   const shownTriggers = allTriggers ? triggers : triggers.slice(0, TRIGGER_PREVIEW)
@@ -80,13 +82,16 @@ export default function SkillInspector({
   const filePath = `.agents/skills/${skill.id}/SKILL.md`
 
   return (
-    <aside className="skl-side skl-side--detail" aria-label={`${skill.title} details`}>
+    <aside
+      className="skl-side skl-side--detail"
+      aria-label={t('inspector.label', { title: skill.title })}
+    >
       <button
         type="button"
         className="skl-icon-btn skl-side-close"
         onClick={onClose}
-        aria-label="Close details"
-        title="Close (Esc)"
+        aria-label={t('inspector.close')}
+        title={t('inspector.closeTitle')}
       >
         <Codicon name="close" />
       </button>
@@ -105,31 +110,23 @@ export default function SkillInspector({
       {source === 'rayfin' ? (
         <p className="skl-note">
           <Codicon name="lock" />
-          <span>Rayfin manages this skill. It’s always on and updates with the Rayfin CLI.</span>
+          <span>{t('inspector.managedNote')}</span>
         </p>
       ) : source === 'app' ? (
         <p className="skl-note">
           <Codicon name="info" />
-          <span>
-            {skill.promotable
-              ? 'This skill lives only in this app. Save it to your library to use it in other apps.'
-              : 'This skill lives only in this app. It can’t be saved to your library under its current name.'}
-          </span>
+          <span>{skill.promotable ? t('inspector.appNote') : t('inspector.appNoteLocked')}</span>
         </p>
       ) : (
         <label className="skl-toggle">
           <span className="skl-toggle-text">
-            <strong>Use in this app</strong>
-            <span>
-              {skill.active
-                ? 'Copilot follows it from your next message.'
-                : 'Adds it to this app. Every change is saved in History.'}
-            </span>
+            <strong>{t('inspector.use')}</strong>
+            <span>{skill.active ? t('inspector.useOn') : t('inspector.useOff')}</span>
           </span>
           <SkillSwitch
             on={skill.active}
             busy={busy}
-            label={`Use ${skill.title} in this app`}
+            label={t('skill.use', { title: skill.title })}
             onChange={() => onToggle(skill)}
           />
         </label>
@@ -137,15 +134,15 @@ export default function SkillInspector({
 
       {skill.outdated && skill.active && (
         <div className="skl-update">
-          <span>A newer version of this skill is available.</span>
+          <span>{t('inspector.newer')}</span>
           <button type="button" className="btn btn--xs" disabled={busy} onClick={() => onUpdate(skill)}>
-            {busy ? 'Updating…' : 'Update'}
+            {busy ? t('skill.updating') : t('actions.update')}
           </button>
         </div>
       )}
 
       <section className="skl-section-block">
-        <h4>When Copilot uses it</h4>
+        <h4>{t('inspector.whenHeading')}</h4>
         {readError ? (
           <p className="skl-text">{readError}</p>
         ) : !file ? (
@@ -154,7 +151,7 @@ export default function SkillInspector({
           <>
             {file.when && <p className="skl-text">{file.when}</p>}
             {triggers.length > 0 && (
-              <div className="skl-chips" role="list" aria-label="Trigger words">
+              <div className="skl-chips" role="list" aria-label={t('inspector.triggers')}>
                 {shownTriggers.map((trigger) => (
                   <span key={trigger} className="skl-chip" role="listitem">
                     {trigger}
@@ -162,13 +159,15 @@ export default function SkillInspector({
                 ))}
                 {triggers.length > TRIGGER_PREVIEW && (
                   <button type="button" className="skl-chip skl-chip--more" onClick={() => setAllTriggers((v) => !v)}>
-                    {allTriggers ? 'Fewer' : `+${triggers.length - TRIGGER_PREVIEW} more`}
+                    {allTriggers
+                      ? t('inspector.fewer')
+                      : t('inspector.more', { count: triggers.length - TRIGGER_PREVIEW })}
                   </button>
                 )}
               </div>
             )}
             {!file.when && triggers.length === 0 && (
-              <p className="skl-text">Copilot decides from the skill’s instructions.</p>
+              <p className="skl-text">{t('inspector.noTriggers')}</p>
             )}
           </>
         )}
@@ -176,38 +175,38 @@ export default function SkillInspector({
 
       {file?.body && (
         <section className="skl-section-block">
-          <h4>What it teaches</h4>
+          <h4>{t('inspector.teachesHeading')}</h4>
           <div className={`skl-guidance${foldable && !allGuidance ? ' skl-guidance--folded' : ''}`}>
             <Markdown>{file.body}</Markdown>
           </div>
           {foldable && (
             <button type="button" className="skl-link" onClick={() => setAllGuidance((v) => !v)}>
-              {allGuidance ? 'Show less' : 'Show all'}
+              {allGuidance ? t('actions.showLess') : t('inspector.showAll')}
             </button>
           )}
         </section>
       )}
 
       <section className="skl-section-block">
-        <h4>File</h4>
+        <h4>{t('inspector.fileHeading')}</h4>
         <div className="skl-file" title={filePath}>
           <Codicon name="file" />
           <span className="skl-file-path">{filePath}</span>
         </div>
-        {!installed && <p className="skl-hint">Added to this app when you turn the skill on.</p>}
+        {!installed && <p className="skl-hint">{t('inspector.notInstalled')}</p>}
       </section>
 
       <div className="skl-actions">
         <button type="button" className="btn btn--sm" onClick={() => onViewSource(skill)}>
-          <Codicon name="go-to-file" /> View SKILL.md
+          <Codicon name="go-to-file" /> {t('inspector.viewSource')}
         </button>
         {source === 'library' && (
           <>
             <button type="button" className="btn btn--sm" onClick={() => onEdit(skill)}>
-              <Codicon name="edit" /> Edit
+              <Codicon name="edit" /> {t('actions.edit')}
             </button>
             <button type="button" className="btn btn--sm skl-danger" onClick={() => onDelete(skill)}>
-              <Codicon name="trash" /> Delete
+              <Codicon name="trash" /> {t('actions.delete')}
             </button>
           </>
         )}
@@ -215,11 +214,11 @@ export default function SkillInspector({
           <>
             {skill.promotable && (
               <button type="button" className="btn btn--sm" disabled={busy} onClick={() => onSaveToLibrary(skill)}>
-                <Codicon name="library" /> Save to library
+                <Codicon name="library" /> {t('inspector.saveToLibrary')}
               </button>
             )}
             <button type="button" className="btn btn--sm skl-danger" disabled={busy} onClick={() => onRemove(skill)}>
-              <Codicon name="trash" /> Remove
+              <Codicon name="trash" /> {t('actions.remove')}
             </button>
           </>
         )}
@@ -251,41 +250,38 @@ export function SkillsOverview({
   updating: boolean
   onUpdateAll: () => void
 }): JSX.Element {
+  const { t } = useTranslation('skills')
   return (
-    <aside className="skl-side skl-side--overview" aria-label="About skills">
+    <aside className="skl-side skl-side--overview" aria-label={t('overview.label')}>
       <section className="skl-section-block">
-        <h4>How skills work</h4>
+        <h4>{t('overview.howTitle')}</h4>
         <ol className="skl-how">
-          <li>Turn a skill on. Fabricator adds its instructions to this app and saves the change in History.</li>
-          <li>When a request matches the skill, Copilot reads it and follows its guidance.</li>
-          <li>Turn it off at any time. Select a skill to see what it teaches.</li>
+          <li>{t('overview.how1')}</li>
+          <li>{t('overview.how2')}</li>
+          <li>{t('overview.how3')}</li>
         </ol>
       </section>
 
       <section className="skl-section-block">
-        <h4>In this app</h4>
+        <h4>{t('overview.inThisApp')}</h4>
         <ul className="skl-facts">
           <li>
-            <span>Always on</span>
+            <span>{t('overview.alwaysOn')}</span>
             <span>{counts.always}</span>
           </li>
           <li>
-            <span>Built-in skills</span>
-            <span>
-              {counts.builtInOn} of {counts.builtIn} on
-            </span>
+            <span>{t('overview.builtIn')}</span>
+            <span>{t('overview.onOf', { on: counts.builtInOn, total: counts.builtIn })}</span>
           </li>
           {counts.library > 0 && (
             <li>
-              <span>Your library</span>
-              <span>
-                {counts.libraryOn} of {counts.library} on
-              </span>
+              <span>{t('overview.library')}</span>
+              <span>{t('overview.onOf', { on: counts.libraryOn, total: counts.library })}</span>
             </li>
           )}
           {counts.appOnly > 0 && (
             <li>
-              <span>Added in this app</span>
+              <span>{t('overview.appOnly')}</span>
               <span>{counts.appOnly}</span>
             </li>
           )}
@@ -294,30 +290,25 @@ export function SkillsOverview({
 
       {updates > 0 && (
         <section className="skl-section-block">
-          <h4>Updates</h4>
-          <p className="skl-text">
-            {updates === 1
-              ? 'A built-in skill in this app has a newer version.'
-              : `${updates} built-in skills in this app have a newer version.`}
-          </p>
+          <h4>{t('overview.updates')}</h4>
+          <p className="skl-text">{t('overview.updatesText', { count: updates })}</p>
           <div>
             <button type="button" className="btn btn--sm" disabled={updating} onClick={onUpdateAll}>
-              <Codicon name="arrow-circle-up" /> {updating ? 'Updating…' : updates === 1 ? 'Update it' : `Update all ${updates}`}
+              <Codicon name="arrow-circle-up" /> {updating ? t('skill.updating') : t('overview.updateAll', { count: updates })}
             </button>
           </div>
         </section>
       )}
 
       <section className="skl-section-block">
-        <h4>Your own skills</h4>
+        <h4>{t('overview.ownTitle')}</h4>
         <p className="skl-text">
-          Select <strong>New skill</strong> to write one for your brand, your data’s vocabulary or your team’s review
-          checklist, or to upload a skill you already have.
+          <Trans t={t} i18nKey="overview.ownText" components={{ strong: <strong /> }} />
         </p>
       </section>
 
       <button type="button" className="skl-link skl-side-foot" onClick={() => openDocs('skills')}>
-        Learn more about skills <Codicon name="link-external" />
+        {t('overview.learnMore')} <Codicon name="link-external" />
       </button>
     </aside>
   )

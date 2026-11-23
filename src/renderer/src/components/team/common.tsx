@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type JSX } from 'react'
 import type { TeamEnvStatus, TeamGhAccount, TeamProblem, TeamProgressEvent } from '@shared/ipc'
 import { openDocs } from '../../docsLinks'
+import { useTranslation } from '../../i18n'
 import './team.css'
 
 /** One row of a progress checklist. */
@@ -67,6 +68,7 @@ export function StepList({ rows }: { rows: StepRow[] }): JSX.Element {
  * CLI's active account when absent) in to GitHub again.
  */
 export function ProblemView({ problem, account }: { problem: TeamProblem; account?: string }): JSX.Element {
+  const { t } = useTranslation('team')
   const [copied, setCopied] = useState(false)
   /** A terminal sign-in was opened. */
   const [signingIn, setSigningIn] = useState(false)
@@ -87,9 +89,9 @@ export function ProblemView({ problem, account }: { problem: TeamProblem; accoun
     try {
       const result = await window.api.team.githubSignIn(true, false, account || undefined)
       if (result.ok) setSigningIn(true)
-      else setSignInError(result.error ?? 'Could not start GitHub sign-in.')
+      else setSignInError(result.error ?? t('shared.signInFailed'))
     } catch (reason) {
-      setSignInError(teamError(reason, 'Could not start GitHub sign-in.'))
+      setSignInError(teamError(reason, t('shared.signInFailed')))
     }
   }
   return (
@@ -110,24 +112,22 @@ export function ProblemView({ problem, account }: { problem: TeamProblem; accoun
           {problem.link && sso && ' '}
           {sso && (
             <button type="button" className="btn btn--sm" onClick={() => void signInAgain()}>
-              Sign in to GitHub again
+              {t('problem.signInAgain')}
             </button>
           )}
         </div>
       )}
-      {signingIn && (
-        <p className="team-muted">Finish signing in in the terminal window and your browser, then try again.</p>
-      )}
+      {signingIn && <p className="team-muted">{t('problem.finishSignIn')}</p>}
       {signInError && <FieldProblem text={signInError} />}
       {problem.adminNote && (
         <>
           <pre className="team-admin-note">{problem.adminNote}</pre>
           <div>
             <button type="button" className="btn btn--sm" onClick={() => void copy()}>
-              {copied ? 'Copied' : 'Copy instructions for your admin'}
+              {copied ? t('actions.copied') : t('problem.copyForAdmin')}
             </button>{' '}
             <button type="button" className="btn btn--sm btn--link" onClick={() => openDocs('teamAdmins')}>
-              What administrators need to know
+              {t('problem.adminDocs')}
             </button>
           </div>
         </>
@@ -157,20 +157,21 @@ export function FieldLoading({ text }: { text: string }): JSX.Element {
 export function FieldProblem({
   text,
   onRetry,
-  action = 'Try again'
+  action
 }: {
   text: string
   onRetry?: () => void
-  /** The button's label. */
+  /** The button's label; "Try again" by default. */
   action?: string
 }): JSX.Element {
+  const { t } = useTranslation('team')
   return (
     <div className="team-field-problem" role="alert">
       <span className="codicon codicon-warning" aria-hidden="true" />
       <span className="team-field-problem-text">{text}</span>
       {onRetry && (
         <button type="button" className="link-btn" onClick={onRetry}>
-          {action}
+          {action ?? t('actions.tryAgain')}
         </button>
       )}
     </div>
@@ -209,6 +210,7 @@ export function GithubAccountField({
   /** A heading around the field already says what it is. */
   hideLabel?: boolean
 }): JSX.Element {
+  const { t } = useTranslation('team')
   const fieldId = useId()
   const [status, setStatus] = useState<TeamEnvStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -224,7 +226,7 @@ export function GithubAccountField({
       setError(next.error ?? null)
       return next
     } catch (reason) {
-      setError(teamError(reason, 'Could not check your GitHub accounts.'))
+      setError(teamError(reason, t('account.checkFailed')))
       return null
     }
   }
@@ -279,12 +281,12 @@ export function GithubAccountField({
       const result =
         kind === 'add' ? await window.api.team.githubSignIn(false) : await window.api.team.githubSignIn(true, false, value)
       if (!result.ok) {
-        setError(result.error ?? 'Could not start GitHub sign-in.')
+        setError(result.error ?? t('shared.signInFailed'))
         return
       }
       setWaiting(kind)
     } catch (reason) {
-      setError(teamError(reason, 'Could not start GitHub sign-in.'))
+      setError(teamError(reason, t('shared.signInFailed')))
     }
   }
 
@@ -292,19 +294,17 @@ export function GithubAccountField({
     <div className="field">
       {!hideLabel && (
         <label className="field-label" htmlFor={fieldId}>
-          GitHub account
+          {t('account.label')}
         </label>
       )}
       {!status ? (
-        <FieldLoading text="Checking your GitHub accounts…" />
+        <FieldLoading text={t('account.checking')} />
       ) : accounts.length === 0 ? (
         <div className="team-check">
           <span className="team-check-dot team-check-dot--error" />
-          <span className="team-check-text team-muted">
-            Sign in to GitHub so Fabricator can work with the team&apos;s repository.
-          </span>
+          <span className="team-check-text team-muted">{t('account.signInFirst')}</span>
           <button type="button" className="btn btn--sm btn--primary" disabled={Boolean(waiting)} onClick={() => void signIn('add')}>
-            {waiting ? 'Waiting…' : 'Sign in to GitHub'}
+            {waiting ? t('shared.waiting') : t('shared.signInToGithub')}
           </button>
         </div>
       ) : (
@@ -312,20 +312,19 @@ export function GithubAccountField({
           <select
             id={fieldId}
             className="field-input"
-            aria-label={hideLabel ? 'GitHub account' : undefined}
+            aria-label={hideLabel ? t('account.label') : undefined}
             value={chosen?.login ?? ''}
             disabled={Boolean(waiting)}
             onChange={(event) => onChange(event.target.value)}
           >
             {accounts.map((a) => (
               <option key={a.login} value={a.login}>
-                {a.login}
-                {a.signedIn ? '' : ' (sign-in expired)'}
+                {a.signedIn ? a.login : t('account.expired', { login: a.login })}
               </option>
             ))}
           </select>
           <button type="button" className="btn btn--sm" disabled={Boolean(waiting)} onClick={() => void signIn('add')}>
-            {waiting === 'add' ? 'Waiting…' : 'Add account'}
+            {waiting === 'add' ? t('shared.waiting') : t('account.add')}
           </button>
         </div>
       )}
@@ -335,19 +334,23 @@ export function GithubAccountField({
           <span className={`team-check-dot team-check-dot--${chosen.signedIn ? 'warn' : 'error'}`} />
           <span className="team-check-text team-muted">
             {chosen.signedIn
-              ? `Fabricator needs more GitHub permissions for ${chosen.login}: to manage repositories and their pipelines (${chosen.missingScopes.join(', ')}).`
-              : `The GitHub CLI's sign-in for ${chosen.login} has expired.`}
+              ? t('account.needsScopes', { login: chosen.login, scopes: chosen.missingScopes.join(', ') })
+              : t('account.signInExpired', { login: chosen.login })}
           </span>
           <button type="button" className="btn btn--sm btn--primary" disabled={Boolean(waiting)} onClick={() => void signIn('fix')}>
-            {waiting === 'fix' ? 'Waiting…' : chosen.signedIn ? 'Grant GitHub access' : 'Sign in again'}
+            {waiting === 'fix'
+              ? t('shared.waiting')
+              : chosen.signedIn
+                ? t('shared.grantGithubAccess')
+                : t('account.signInAgain')}
           </button>
         </div>
       )}
       {waiting && (
         <span className="team-muted">
-          Finish signing in in the terminal window, then come back. This updates automatically.{' '}
+          {t('shared.finishSignIn')}{' '}
           <button type="button" className="link-btn" onClick={() => setWaiting(null)}>
-            Stop waiting
+            {t('shared.stopWaiting')}
           </button>
         </span>
       )}
@@ -372,6 +375,7 @@ export function TeamPrerequisites({
   account?: string
   requireAccount?: boolean
 }): JSX.Element {
+  const { t } = useTranslation('team')
   const [status, setStatus] = useState<TeamEnvStatus | null>(null)
   const [waiting, setWaiting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -382,7 +386,7 @@ export function TeamPrerequisites({
       setStatus(next)
       return next
     } catch (reason) {
-      setError(teamError(reason, 'Could not check your sign-ins.'))
+      setError(teamError(reason, t('prereq.checkFailed')))
       return null
     }
   }
@@ -421,7 +425,7 @@ export function TeamPrerequisites({
       ? await window.api.team.githubSignIn(Boolean(status?.ghSignedIn), false, account)
       : await window.api.team.githubSignIn(false)
     if (!result.ok) {
-      setError(result.error ?? 'Could not start GitHub sign-in.')
+      setError(result.error ?? t('shared.signInFailed'))
       return
     }
     setWaiting(true)
@@ -430,7 +434,7 @@ export function TeamPrerequisites({
   if (!status) {
     return (
       <div className="team-muted">
-        <span className="ws-spinner" /> Checking your GitHub and Azure sign-ins…
+        <span className="ws-spinner" /> {t('prereq.checking')}
       </div>
     )
   }
@@ -457,23 +461,29 @@ export function TeamPrerequisites({
           <strong>GitHub</strong>
           <div className="team-muted">
             {!status.ghInstalled
-              ? 'Install the GitHub CLI (gh) from setup first.'
+              ? t('prereq.installGh')
               : !requireAccount
                 ? signedIn.length
-                  ? `Signed in as ${signedIn[0].login}${others > 0 ? ` and ${others} more account${others === 1 ? '' : 's'}` : ''}.`
-                  : 'Sign in so Fabricator can create and use the team repository.'
+                  ? others > 0
+                    ? t('prereq.signedInAsMore', { login: signedIn[0].login, count: others })
+                    : t('prereq.signedInAs', { login: signedIn[0].login })
+                  : t('prereq.signInToCreate')
                 : !status.ghSignedIn
                   ? account
-                    ? `Sign in to GitHub as ${account}, the account this workspace uses.`
-                    : 'Sign in so Fabricator can create and use the team repository.'
+                    ? t('prereq.signInAs', { account })
+                    : t('prereq.signInToCreate')
                   : status.ghMissingScopes.length
-                    ? `Signed in as ${status.ghUser}. Fabricator also needs permission to manage repositories and their pipelines (${status.ghMissingScopes.join(', ')}).`
-                    : `Signed in as ${status.ghUser}.`}
+                    ? t('prereq.missingScopes', { login: status.ghUser, scopes: status.ghMissingScopes.join(', ') })
+                    : t('prereq.signedInAs', { login: status.ghUser })}
           </div>
         </span>
         {status.ghInstalled && ghState !== 'ok' && (
           <button type="button" className="btn btn--sm btn--primary" onClick={() => void signIn()}>
-            {waiting ? 'Waiting…' : requireAccount && status.ghSignedIn ? 'Grant GitHub access' : 'Sign in to GitHub'}
+            {waiting
+              ? t('shared.waiting')
+              : requireAccount && status.ghSignedIn
+                ? t('shared.grantGithubAccess')
+                : t('shared.signInToGithub')}
           </button>
         )}
       </div>
@@ -482,22 +492,16 @@ export function TeamPrerequisites({
         <span className="team-check-text">
           <strong>Microsoft Entra ID (Azure CLI)</strong>
           <div className="team-muted">
-            {status.azSignedIn
-              ? `Signed in as ${status.azUser}.`
-              : 'Sign in to Azure from setup so Fabricator can create the deploy identity.'}
+            {status.azSignedIn ? t('prereq.signedInAs', { login: status.azUser }) : t('prereq.azureSignIn')}
           </div>
         </span>
       </div>
-      {waiting && (
-        <p className="team-muted">
-          Finish signing in in the terminal window, then come back. This updates automatically.
-        </p>
-      )}
+      {waiting && <p className="team-muted">{t('shared.finishSignIn')}</p>}
       {error && <div className="alert alert--error">{error}</div>}
       {!ready && !waiting && (
         <div>
           <button type="button" className="btn btn--sm btn--ghost" onClick={() => void check()}>
-            Check again
+            {t('prereq.checkAgain')}
           </button>
         </div>
       )}

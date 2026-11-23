@@ -245,7 +245,7 @@ async fn review(
     }
     if event_type == "session.error" {
       let message = data.get("message").and_then(Value::as_str).map(str::trim).filter(|m| !m.is_empty());
-      error = Some(message.unwrap_or("Copilot reported an error.").to_string());
+      error = Some(message.map_or_else(|| t!("assist.common.copilotError"), str::to_string));
     }
     matches!(event_type, "session.idle" | "session.error")
   })
@@ -258,7 +258,7 @@ async fn review(
 /// A reason the review didn't run, as the window says it.
 fn plain_error(error: &str) -> String {
   if error == COPILOT_SIGN_IN_REQUIRED {
-    return "GitHub Copilot isn’t signed in. Sign in to Copilot in Fabricator, then check again.".into();
+    return t!("assist.security.signInRequired");
   }
   error.trim().replace("retry your message", "check again")
 }
@@ -281,15 +281,15 @@ fn finalize(log: &CheckLog, areas: &[&str], files: (u64, u64), end: Result<(Drai
       report.partial = true;
       report.error = Some(match (end, error) {
         (_, Some(error)) => plain_error(&error),
-        (DrainEnd::TimedOut, _) => format!("Copilot didn’t finish in {} minutes.", RUN_TIMEOUT_MS / 60_000),
-        _ => "Copilot stopped before it finished.".to_string(),
+        (DrainEnd::TimedOut, _) => t!("assist.security.timedOut", minutes = RUN_TIMEOUT_MS / 60_000),
+        _ => t!("assist.security.stopped"),
       });
     }
     Ok((end, error)) => {
       report.error = Some(match (end, error) {
         (_, Some(error)) => plain_error(&error),
-        (DrainEnd::TimedOut, _) => format!("Copilot didn’t finish in {} minutes.", RUN_TIMEOUT_MS / 60_000),
-        _ => "Copilot ended without reporting what it found.".to_string(),
+        (DrainEnd::TimedOut, _) => t!("assist.security.timedOut", minutes = RUN_TIMEOUT_MS / 60_000),
+        _ => t!("assist.security.noReport"),
       })
     }
   }
@@ -298,9 +298,9 @@ fn finalize(log: &CheckLog, areas: &[&str], files: (u64, u64), end: Result<(Drai
   report.areas = log.area_results(areas, true);
   report.summary = match (&log.summary, report.verdict.as_str()) {
     (Some(summary), _) if report.ok => summary.clone(),
-    (_, "danger") => "It has code that could harm this computer or your data.".into(),
-    (_, "caution") => "It has things worth a look before you go ahead.".into(),
-    _ => "Nothing in it looks risky.".into(),
+    (_, "danger") => t!("assist.security.summary.danger"),
+    (_, "caution") => t!("assist.security.summary.caution"),
+    _ => t!("assist.security.summary.clear"),
   };
   report
 }
@@ -318,7 +318,7 @@ async fn check(
   let areas = areas_for(kind);
   let (from, root) = (source.to_path_buf(), dir.to_path_buf());
   let prepared = tokio::task::spawn_blocking(move || {
-    std::fs::create_dir_all(&root).map_err(|e| format!("Fabricator couldn’t make a folder to check it in: {e}"))?;
+    std::fs::create_dir_all(&root).map_err(|e| t!("assist.security.cantMakeFolder", error = e))?;
     let (name, files) = export::unpack_for_check(&from, &root, worth_reading, checks::decides, MAX_REVIEW_BYTES)?;
     mask_npmrcs(&root, &files);
     let outcome = checks::run(&root, &files, kind);
@@ -377,7 +377,7 @@ pub async fn security_check(
 ) -> Result<SecurityReport, String> {
   let check_id = check_id.trim().to_string();
   if check_id.is_empty() || check_id.len() > 80 {
-    return Err("That isn’t a check Fabricator can run.".into());
+    return Err(t!("assist.security.invalidCheck"));
   }
   let source = PathBuf::from(&path);
   let zip = source.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("zip"));
@@ -386,16 +386,16 @@ pub async fn security_check(
   } else if export::is_export(&source) || zip {
     Kind::Project
   } else {
-    return Err("Fabricator checks .fabricator, .rayfin and .zip files.".into());
+    return Err(t!("assist.security.unsupportedFile"));
   };
   if !source.is_file() {
-    return Err("That file isn’t there anymore.".into());
+    return Err(t!("assist.security.fileMissing"));
   }
   let token = CancelToken::new();
   {
     let mut checks = CHECKS.lock().unwrap();
     if checks.contains_key(&check_id) {
-      return Err("This check is already running.".into());
+      return Err(t!("assist.security.alreadyRunning"));
     }
     checks.insert(check_id.clone(), token.clone());
   }

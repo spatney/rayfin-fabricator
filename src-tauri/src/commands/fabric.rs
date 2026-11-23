@@ -263,14 +263,14 @@ async fn app_items_in(project_dir: &Path, workspace_id: &str) -> Result<Vec<Stri
   }
   let auth_path = project_auth_module(Some(project_dir)).await?;
   let script_path = write_helper("fabric-app-items.mjs", APP_ITEMS_HELPER_SOURCE)
-    .map_err(|e| format!("Could not prepare the Fabric app lookup: {e}"))?;
+    .map_err(|e| t!("commands.fabric.cantPrepareAppLookup", error = e))?;
   let (script, auth) = (script_path.to_string_lossy().to_string(), auth_path.to_string_lossy().to_string());
   let res = fabric_auth::run_helper(&[&script, &auth, FABRIC_API_BASE, workspace_id], RunOptions::timeout(60_000)).await;
   let parsed: AppItems = fabric_auth::parse_helper_output(&res)?;
   if parsed.ok {
     Ok(parsed.names)
   } else {
-    Err(parsed.error.unwrap_or_else(|| "Could not list the apps in that workspace.".into()))
+    Err(parsed.error.unwrap_or_else(|| t!("commands.fabric.cantListApps")))
   }
 }
 
@@ -350,16 +350,16 @@ pub(crate) async fn workspace_details(
   timeout_ms: u64,
 ) -> Result<WorkspaceDetails, String> {
   let auth_path = exec::project_rayfin_auth_module(Some(project_dir))
-    .ok_or_else(|| "Could not locate the Rayfin CLI to look up the workspace.".to_string())?;
+    .ok_or_else(|| t!("commands.fabric.noCliForWorkspace"))?;
   let script_path = write_helper("fabric-workspace.mjs", WORKSPACE_HELPER_SOURCE)
-    .map_err(|e| format!("Could not prepare the workspace lookup: {e}"))?;
+    .map_err(|e| t!("commands.fabric.cantPrepareWorkspaceLookup", error = e))?;
   let (script, auth) = (script_path.to_string_lossy().to_string(), auth_path.to_string_lossy().to_string());
   let res = fabric_auth::run_helper(&[&script, &auth, FABRIC_API_BASE, workspace_id], RunOptions::timeout(timeout_ms)).await;
   let details: WorkspaceDetails = fabric_auth::parse_helper_output(&res)?;
   if details.ok {
     Ok(details)
   } else {
-    Err(details.error.clone().unwrap_or_else(|| "Could not look up the workspace.".into()))
+    Err(details.error.clone().unwrap_or_else(|| t!("commands.fabric.cantLookUpWorkspace")))
   }
 }
 
@@ -393,11 +393,9 @@ async fn project_auth_module(project_dir: Option<&Path>) -> Result<PathBuf, Stri
   if let Some(dir) = project_dir {
     exec::ensure_project_dependencies(dir, None)
       .await
-      .map_err(|error| format!("Could not install this project's dependencies: {error}"))?;
+      .map_err(|error| t!("commands.fabric.cantInstallDeps", error = error))?;
   }
-  exec::project_rayfin_auth_module(project_dir).ok_or_else(|| {
-    "Could not locate the Rayfin CLI. Open a Rayfin project to reach Fabric.".to_string()
-  })
+  exec::project_rayfin_auth_module(project_dir).ok_or_else(|| t!("commands.fabric.noCli"))
 }
 
 /// Why the CLI's Fabric sign-in couldn't be confirmed.
@@ -450,12 +448,10 @@ async fn probe_once(project_dir: Option<&Path>) -> Result<(), ProbeFailure> {
   }
 
   let auth_path = exec::project_rayfin_auth_module(project_dir).ok_or_else(|| {
-    ProbeFailure::Unverified(
-      "Could not locate the Rayfin CLI authentication module. Open a Rayfin project to reach Fabric.".to_string(),
-    )
+    ProbeFailure::Unverified(t!("commands.fabric.noAuthModule"))
   })?;
   let script_path = write_helper("fabric-auth-probe.mjs", AUTH_PROBE_HELPER_SOURCE).map_err(|error| {
-    ProbeFailure::Unverified(format!("Could not prepare the Fabric authentication check: {error}"))
+    ProbeFailure::Unverified(t!("commands.fabric.cantPrepareAuthCheck", error = error))
   })?;
   let auth_str = auth_path.to_string_lossy();
   let script_str = script_path.to_string_lossy();
@@ -471,7 +467,7 @@ async fn probe_once(project_dir: Option<&Path>) -> Result<(), ProbeFailure> {
   if probe.ok {
     return Ok(());
   }
-  let error = probe.error.unwrap_or_else(|| "Could not verify the current Fabric session.".into());
+  let error = probe.error.unwrap_or_else(|| t!("commands.fabric.cantVerifySession"));
   Err(if probe.needs_login { ProbeFailure::SignIn(error) } else { ProbeFailure::Unverified(error) })
 }
 
@@ -499,7 +495,7 @@ pub async fn fabric_workspaces() -> FabricWorkspacesResult {
         ok: false,
         workspaces: None,
         needs_login: None,
-        error: Some(format!("Could not prepare the workspace lookup helper: {err}")),
+        error: Some(t!("commands.fabric.cantPrepareWorkspacesHelper", error = err)),
       }
     }
   };
@@ -513,7 +509,7 @@ pub async fn fabric_workspaces() -> FabricWorkspacesResult {
       ok: false,
       workspaces: None,
       needs_login: None,
-      error: Some("Node.js was not found on PATH.".to_string()),
+      error: Some(t!("commands.shared.nodeMissing")),
     };
   }
 
@@ -575,7 +571,7 @@ pub async fn fabric_capacities() -> FabricCapacitiesResult {
         ok: false,
         capacities: None,
         needs_login: None,
-        error: Some(format!("Could not prepare the capacities lookup helper: {err}")),
+        error: Some(t!("commands.fabric.cantPrepareCapacitiesHelper", error = err)),
       }
     }
   };
@@ -587,7 +583,7 @@ pub async fn fabric_capacities() -> FabricCapacitiesResult {
       ok: false,
       capacities: None,
       needs_login: None,
-      error: Some("Node.js was not found on PATH.".to_string()),
+      error: Some(t!("commands.shared.nodeMissing")),
     };
   }
   let out = res.stdout.trim();
@@ -628,7 +624,7 @@ pub async fn fabric_create_workspace(name: String, capacity_id: String) -> Fabri
         ok: false,
         workspace_id: None,
         needs_login: None,
-        error: Some(format!("Could not prepare the create-workspace helper: {err}")),
+        error: Some(t!("commands.fabric.cantPrepareCreateHelper", error = err)),
       }
     }
   };
@@ -644,7 +640,7 @@ pub async fn fabric_create_workspace(name: String, capacity_id: String) -> Fabri
       ok: false,
       workspace_id: None,
       needs_login: None,
-      error: Some("Node.js was not found on PATH.".to_string()),
+      error: Some(t!("commands.shared.nodeMissing")),
     };
   }
   let out = res.stdout.trim();
@@ -676,7 +672,7 @@ pub async fn fabric_delete_apps(project_id: String) -> FabricDeleteResult {
       deleted: 0,
       failures: vec![],
       needs_login: None,
-      error: Some(crate::services::team::NO_LOCAL_DEPLOY.to_string()),
+      error: Some(crate::services::team::no_local_deploy()),
     };
   }
   if store::find_project(&project_id).is_none() {
@@ -685,7 +681,7 @@ pub async fn fabric_delete_apps(project_id: String) -> FabricDeleteResult {
       deleted: 0,
       failures: vec![],
       needs_login: None,
-      error: Some("Project not found.".to_string()),
+      error: Some(t!("commands.shared.projectNotFound")),
     };
   }
 
@@ -720,7 +716,7 @@ pub async fn fabric_delete_apps(project_id: String) -> FabricDeleteResult {
       deleted: 0,
       failures: vec![],
       needs_login: None,
-      error: Some("Some of this project's published apps have no Fabric workspace or item ID recorded. Nothing was deleted.".into()),
+      error: Some(t!("commands.fabric.unrecordedApps")),
     };
   }
 
@@ -770,7 +766,7 @@ pub(crate) async fn delete_items(project_dir: Option<&Path>, items: &[DeleteItem
         deleted: 0,
         failures: vec![],
         needs_login: None,
-        error: Some(format!("Could not prepare the delete helper: {err}")),
+        error: Some(t!("commands.fabric.cantPrepareDeleteHelper", error = err)),
       }
     }
   };
@@ -791,7 +787,7 @@ pub(crate) async fn delete_items(project_dir: Option<&Path>, items: &[DeleteItem
       deleted: 0,
       failures: vec![],
       needs_login: None,
-      error: Some("Node.js was not found on PATH.".to_string()),
+      error: Some(t!("commands.shared.nodeMissing")),
     };
   }
 
@@ -1028,17 +1024,15 @@ pub async fn fabric_share_app(
     .filter(|r| !r.is_empty())
     .collect();
   if recipients.is_empty() {
-    return FabricShareResult::failure("Enter at least one email to share with.".to_string());
+    return FabricShareResult::failure(t!("commands.fabric.enterEmail"));
   }
   let ws = workspace_id.trim().to_string();
   if ws.is_empty() {
-    return FabricShareResult::failure(
-      "This published app has no Fabric workspace ID yet. Publish it before you share it.".to_string(),
-    );
+    return FabricShareResult::failure(t!("commands.fabric.noWorkspaceId"));
   }
 
   let Some(project) = store::find_project(&project_id) else {
-    return FabricShareResult::failure("Project not found.".to_string());
+    return FabricShareResult::failure(t!("commands.shared.projectNotFound"));
   };
   let project_dir = PathBuf::from(project.path);
 
@@ -1049,7 +1043,7 @@ pub async fn fabric_share_app(
   let script_path = match write_helper("fabric-share.mjs", SHARE_HELPER_SOURCE) {
     Ok(p) => p,
     Err(err) => {
-      return FabricShareResult::failure(format!("Could not prepare the share helper: {err}"))
+      return FabricShareResult::failure(t!("commands.fabric.cantPrepareShareHelper", error = err))
     }
   };
 
@@ -1072,7 +1066,7 @@ pub async fn fabric_share_app(
   let res = fabric_auth::run_helper(&[&script_str, &auth_str, &request_str], RunOptions::timeout(SHARE_TIMEOUT_MS)).await;
 
   if res.not_found {
-    return FabricShareResult::failure("Node.js was not found on PATH.".to_string());
+    return FabricShareResult::failure(t!("commands.shared.nodeMissing"));
   }
 
   let out = res.stdout.trim();
@@ -1112,7 +1106,7 @@ pub async fn fabric_directory_search(query: String) -> FabricDirectoryResult {
     Err(err) => {
       return FabricDirectoryResult {
         ok: false,
-        error: Some(format!("Could not prepare the directory helper: {err}")),
+        error: Some(t!("commands.fabric.cantPrepareDirectoryHelper", error = err)),
         ..Default::default()
       }
     }
@@ -1133,7 +1127,7 @@ pub async fn fabric_directory_search(query: String) -> FabricDirectoryResult {
   if res.not_found {
     return FabricDirectoryResult {
       ok: false,
-      error: Some("Node.js was not found on PATH.".to_string()),
+      error: Some(t!("commands.shared.nodeMissing")),
       ..Default::default()
     };
   }

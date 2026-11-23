@@ -1,7 +1,8 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { FabricDeleteResult, ProcResult, ProjectsState } from '@shared/ipc'
-import { useProjectRemovals } from './projectRemovals'
+import { removalStatus, useProjectRemovals, type ProjectRemoval } from './projectRemovals'
+import { setLanguage } from './i18n'
 import { makeProject } from '../test/harness'
 import { deferred } from '../test/deferred'
 
@@ -148,5 +149,31 @@ describe('useProjectRemovals', () => {
     expect(deleteApps).toHaveBeenCalledTimes(1)
     expect(remove).toHaveBeenCalledTimes(2)
     expect(onRemoved).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), state, true)
+  })
+})
+
+describe('removalStatus', () => {
+  afterEach(async () => {
+    vi.restoreAllMocks()
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('counts the files moving to trash in the language shown', async () => {
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-US'])
+    const removal = (files: number, trashingSince?: number): ProjectRemoval => ({
+      project: makeProject('p1'),
+      deleteApp: false,
+      appDeleted: false,
+      step: 'folder',
+      progress: { id: 'p1', phase: 'trashing', processed: files, total: files },
+      trashingSince
+    })
+    expect(removalStatus(removal(1200, 1000), 6000)).toBe('Moving 1,200 files to trash… 5s')
+    await setLanguage('de')
+    expect(removalStatus(removal(1200, 1000), 6000)).toBe(
+      '1.200 Dateien werden in den Papierkorb verschoben… 5 s'
+    )
+    expect(removalStatus(removal(1), 0)).toBe('1 Datei wird in den Papierkorb verschoben…')
   })
 })

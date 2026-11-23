@@ -1,0 +1,296 @@
+{
+  "common": {
+    "separator": ", ",
+    "andMore_one": "{{items}} und {{count}} weitere",
+    "andMore_other": "{{items}} und {{count}} weitere",
+    "places_one": "An {{count}} Stelle gefunden: {{labels}}.",
+    "places_other": "An {{count}} Stellen gefunden: {{labels}}.",
+    "sentences": "{{first}} {{second}}"
+  },
+  "access/entity-missing-permission": {
+    "hit": "{{entity}} hat keinen Berechtigungs-Decorator, daher kann jeder angemeldete Benutzer alle Zeilen erstellen, lesen, aktualisieren und löschen.",
+    "summary_one": "{{count}} Entität hat keinen Berechtigungs-Decorator, daher hat jeder angemeldete Benutzer vollen Zugriff auf ihre Zeilen: {{entities}}.",
+    "summary_other": "{{count}} Entitäten haben keinen Berechtigungs-Decorator, daher hat jeder angemeldete Benutzer vollen Zugriff auf ihre Zeilen: {{entities}}."
+  },
+  "access/on-auth-state-change": {
+    "hit": "{{file}} ruft {{method}} auf, das es im Rayfin-Auth-Client nicht gibt."
+  },
+  "access/fabric-provider-missing": {
+    "hit": "{{setting}} ist auf true gesetzt, aber {{package}} ist nicht als Abhängigkeit in package.json eingetragen."
+  },
+  "access/fabric-provider-dynamic-import": {
+    "hit": "{{file}} lädt den Fabric-Auth-Provider mit {{dynamicImport}}, und kein Modul importiert ihn statisch."
+  },
+  "access/mock-auth-credentials": {
+    "hit": "{{file}} meldet sich mit hartcodierter E-Mail-Adresse und hartcodiertem Kennwort an, und die App greift weiterhin darauf zurück, wenn keine Back-End-URL konfiguriert ist."
+  },
+  "access/entra-exchange-not-enabled": {
+    "hit": "{{file}} ruft {{call}} auf, aber rayfin.yml setzt {{setting}} nicht."
+  },
+  "policy/owner-field-without-policy": {
+    "hit": "{{entity}} speichert {{owner}}, aber die Freigabe {{grant}} hat keine Richtlinie auf Zeilenebene, daher kann jeder angemeldete Benutzer die Zeilen anderer Benutzer ändern.",
+    "summary": "Diese Entitäten speichern einen Besitzer, lassen aber jeden angemeldeten Benutzer jede Zeile ändern: {{entities}}."
+  },
+  "policy/anonymous-write": {
+    "hit": "{{entity}} gewährt anonymen Aufrufern {{actions}}, daher kann jeder die Zeilen ohne Anmeldung ändern."
+  },
+  "policy/anonymous-grant": {
+    "hitLocal": "{{entity}} erlaubt anonyme Lesezugriffe. Sie funktionieren in der lokalen Vorschau, aber die Veröffentlichung schlägt fehl, sofern dein Mandantenadministrator den anonymen Datenzugriff für Fabric-Apps nicht eingeschaltet hat.",
+    "hitFabric": "{{entity}} erlaubt anonyme Lesezugriffe, die Fabric ablehnt, sofern dein Mandantenadministrator den anonymen Datenzugriff für Fabric-Apps nicht eingeschaltet hat.",
+    "summaryLocal_one": "{{count}} Entität erlaubt anonyme Lesezugriffe. Sie funktionieren in der lokalen Vorschau, aber die Veröffentlichung schlägt fehl, sofern dein Mandantenadministrator den anonymen Datenzugriff für Fabric-Apps nicht eingeschaltet hat: {{entities}}.",
+    "summaryLocal_other": "{{count}} Entitäten erlauben anonyme Lesezugriffe. Sie funktionieren in der lokalen Vorschau, aber die Veröffentlichung schlägt fehl, sofern dein Mandantenadministrator den anonymen Datenzugriff für Fabric-Apps nicht eingeschaltet hat: {{entities}}.",
+    "summaryFabric_one": "{{count}} Entität erlaubt anonyme Lesezugriffe, die Fabric ablehnt, sofern dein Mandantenadministrator den anonymen Datenzugriff für Fabric-Apps nicht eingeschaltet hat: {{entities}}.",
+    "summaryFabric_other": "{{count}} Entitäten erlauben anonyme Lesezugriffe, die Fabric ablehnt, sofern dein Mandantenadministrator den anonymen Datenzugriff für Fabric-Apps nicht eingeschaltet hat: {{entities}}."
+  },
+  "policy/unsupported-claim": {
+    "hit": "Die Richtlinie von {{entity}} vergleicht {{claim}}, aber Richtlinien unterstützen nur {{sub}}, {{email}} und {{role}}."
+  },
+  "policy/blob-without-permission": {
+    "hit": "Die mit {{blob}} markierte Speicherklasse {{storageClass}} hat keinen Berechtigungs-Decorator."
+  },
+  "policy/prefer-shorthand": {
+    "hit": "{{entity}} verwendet {{longhand}}; die dokumentierte Kurzform ist {{shorthand}}."
+  },
+  "secrets/secret-in-public-env": {
+    "inEnvFile": "{{key}} in {{file}} sieht wie ein Geheimnis aus, aber sein Präfix macht es im Browser sichtbar.",
+    "inCode": "{{file}} liest {{name}}, das wie ein Geheimnis aussieht, aus Umgebungsvariablen, die im Browser sichtbar sind."
+  },
+  "secrets/env-file-not-ignored": {
+    "hit": "{{file}} wird von Git nicht ignoriert, daher können die Werte darin committet werden."
+  },
+  "secrets/hardcoded-credential": {
+    "hit": "{{file}} enthält {{credential}}.",
+    "credentials": {
+      "privateKey": "einen privaten Schlüssel",
+      "storageAccountKey": "einen Azure-Speicherkontoschlüssel",
+      "sqlPassword": "eine SQL-Verbindungszeichenfolge mit Kennwort",
+      "githubToken": "ein GitHub-Token",
+      "apiSecretKey": "einen geheimen API-Schlüssel",
+      "slackToken": "ein Slack-Token",
+      "awsAccessKey": "einen AWS-Zugriffsschlüssel",
+      "clientSecret": "einen geheimen Clientschlüssel eines Dienstprinzipals",
+      "rayfinToken": "ein Token der Rayfin CLI"
+    }
+  },
+  "secrets/redirect-uri-scope": {
+    "wildcard": "Der zulässige Umleitungs-URI {{uri}} enthält ein Platzhalterzeichen.",
+    "plainHttp": "Der zulässige Umleitungs-URI {{uri}} verwendet unverschlüsseltes http auf einem nicht lokalen Host."
+  },
+  "secrets/publishable-key-mismatch": {
+    "hit": "{{key}} in {{file}} enthält keinen veröffentlichbaren Schlüssel (diese beginnen mit {{prefix}})."
+  },
+  "secrets/deployments-file-tracked": {
+    "hit": "{{file}} wird von Git nicht ignoriert, daher können die IDs deines Arbeitsbereichs und deiner Elemente committet werden."
+  },
+  "secrets/local-backend-not-ignored": {
+    "what": "{{holds}} ({{files}})",
+    "holds": {
+      "secrets": "die lokalen Werte deiner Geheimnisse",
+      "keys": "die Signaturschlüssel des lokalen Back-Ends",
+      "database": "die lokale Datenbank der App",
+      "uploads": "in die lokale App hochgeladene Dateien",
+      "ids": "die IDs der lokalen App",
+      "otherFiles": "die übrigen Dateien des lokalen Back-Ends",
+      "files": "die Dateien des lokalen Back-Ends"
+    },
+    "missing": "{{gitignore}} fehlt, daher kann Git {{what}} committen.",
+    "changed": "{{gitignore}} ignoriert nicht mehr alles im Ordner, daher kann Git {{what}} committen.",
+    "tracked": "Git verfolgt Dateien in {{folder}}, obwohl {{gitignore}} den Ordner ignoriert, daher enthalten Commits {{what}}.",
+    "unknown": "Git kann {{what}} committen."
+  },
+  "secrets/encryption-fallback-committed": {
+    "hit": "{{file}} schaltet das Zwischenspeichern von CLI-Token im Klartext ein."
+  },
+  "data-model/text-without-max": {
+    "hit": "{{field}} ist als {{decorator}} ohne {{max}} deklariert und wird daher in MSSQL zu NVARCHAR(MAX).",
+    "summary_one": "{{count}} Textfeld hat keine maximale Länge: {{fields}}.",
+    "summary_other": "{{count}} Textfelder haben keine maximale Länge: {{fields}}."
+  },
+  "data-model/fk-typed-text": {
+    "hit": "{{field}} verweist über {{relation}} auf {{target}}, ist aber als {{declared}} statt als {{expected}} deklariert."
+  },
+  "data-model/relation-not-lazy": {
+    "hit": "{{field}} übergibt {{target}} direkt an {{decorator}} statt {{lazy}}."
+  },
+  "data-model/relation-import-type": {
+    "typeImport": "{{file}} importiert {{names}} mit {{importType}}, verwendet es aber in einem Beziehungs-Decorator, der die Klasse zur Laufzeit braucht.",
+    "noExtension": "{{file}} importiert {{module}} ohne die Endung {{extension}}, sodass der Import als ESM nicht aufgelöst wird."
+  },
+  "data-model/entity-not-registered": {
+    "notInSchema": "{{entity}} ({{file}}) ist nicht im Array {{schema}} in {{schemaFile}} aufgeführt.",
+    "notInType": "{{entity}} ist im Array {{schema}} enthalten, fehlt aber im Typ {{type}}.",
+    "notInArray": "{{entity}} ist im Typ {{type}} enthalten, fehlt aber im Array {{schema}}."
+  },
+  "data-model/field-missing-decorator": {
+    "none": "{{field}} hat keinen Feld-Decorator und wird daher nicht gespeichert.",
+    "several_one": "{{field}} hat {{count}} Feld-Decorator ({{decorators}}).",
+    "several_other": "{{field}} hat {{count}} Feld-Decorators ({{decorators}})."
+  },
+  "data-model/decimal-precision": {
+    "onlyPrecision": "{{field}} legt nur die Genauigkeit fest.",
+    "onlyScale": "{{field}} legt nur die Dezimalstellen fest.",
+    "tooPrecise": "{{field}} legt die Genauigkeit auf {{precision}} fest, mehr als das Maximum von 28."
+  },
+  "data-model/nullable-mismatch": {
+    "optionWithoutQuestion": "{{field}} setzt {{option}}, aber die Eigenschaft hat kein {{question}}.",
+    "questionWithoutOption": "{{field}} ist mit {{question}} markiert, aber sein Decorator setzt {{option}} nicht, daher ist die Spalte weiterhin erforderlich."
+  },
+  "data-model/many-to-many": {
+    "hit": "{{entity}} und {{other}} deklarieren jeweils {{many}} der anderen, was Rayfin ohne Verknüpfungsentität nicht unterstützt."
+  },
+  "data-model/reserved-entity-name": {
+    "registeredAs": "{{entity}} ist als {{name}} registriert, ein Name, den GraphQL reserviert.",
+    "named": "Die Entität {{name}} verwendet einen Namen, den GraphQL reserviert."
+  },
+  "data-model/relation-options": {
+    "hit": "{{field}} übergibt {{options}} an {{decorator}}, der nur {{optional}} und {{unique}} akzeptiert."
+  },
+  "queries/count-method": {
+    "hit": "{{file}} ruft {{method}} für eine Rayfin-Abfrage auf, die diese Methode nicht hat."
+  },
+  "queries/find-by-pk": {
+    "hit": "{{file}} ruft {{method}} auf, das es in Rayfin nicht gibt."
+  },
+  "queries/total-count": {
+    "hit": "{{file}} liest {{property}}, das Rayfin nie befüllt."
+  },
+  "queries/where-dot-path": {
+    "hit": "{{file}} filtert nach {{path}}; Punktpfade funktionieren nur in {{select}}."
+  },
+  "queries/select-nested-path": {
+    "hit": "{{file}} wählt {{path}} aus, was mehr als eine Beziehungsebene tief reicht."
+  },
+  "queries/aggregate-with-row-methods": {
+    "hit": "{{file}} kombiniert {{aggregate}} mit {{rowMethod}} in einer Abfrage."
+  },
+  "queries/sort-direction-case": {
+    "hit": "{{file}} sortiert mit {{direction}} statt {{lowercase}}."
+  },
+  "queries/raw-data-fetch": {
+    "fetch": "{{file}} sendet mit {{fetch}} eine handgeschriebene GraphQL-Anfrage.",
+    "gql": "{{file}} erstellt mit {{gql}} ein rohes GraphQL-Dokument."
+  },
+  "config/missing-service-blocks": {
+    "hit": "rayfin.yml deklariert {{service}} nicht."
+  },
+  "config/data-dialect": {
+    "noDialect": "{{service}} ist aktiviert, legt aber {{dialect}} nicht fest.",
+    "wrongDialect": "{{setting}} ist {{value}}; Fabric-Apps unterstützen nur {{mssql}}."
+  },
+  "config/experimental-decorators": {
+    "hit": "{{file}} setzt {{option}}."
+  },
+  "config/decorators-lib": {
+    "libMissing": "{{lib}} in {{file}} enthält {{decorators}} nicht.",
+    "noLib": "{{file}} setzt {{lib}} nicht, daher ist {{decorators}} nicht enthalten."
+  },
+  "config/swc-with-runtime-entities": {
+    "hit": "{{file}} importiert {{module}} als Wert, wodurch dekorierte Entitätsklassen in den Browser-Build gelangen. Dieses Projekt wird mit {{plugin}} gebaut, das diese Decorators nicht parsen kann."
+  },
+  "config/vite-target": {
+    "hit": "{{file}} zielt nicht auf ES2022 oder höher ab, aber das Bundle enthält Entitätsklassen (zum Beispiel {{example}})."
+  },
+  "config/static-hosting-folder": {
+    "hit": "{{setting}} ist {{folder}}, aber Vite schreibt den Build nach {{outDir}}."
+  },
+  "config/deprecated-yml-keys": {
+    "topLevelKey": "rayfin.yml enthält noch den veralteten Schlüssel {{key}} auf oberster Ebene.",
+    "connectorsEnabled": "{{setting}} hat seit Rayfin 1.36 keine Wirkung mehr; Connectors sind immer aktiviert.",
+    "anonymousAccess": "{{setting}} wurde in Rayfin 1.35.1 durch {{replacement}} ersetzt."
+  },
+  "config/functions-auth": {
+    "noAuth": "{{service}} ist aktiviert, legt aber {{setting}} nicht fest.",
+    "wrongType": "{{setting}} ist {{value}}; aktivierte Functions brauchen {{application}}."
+  },
+  "config/static-hosting-posture": {
+    "noAccess": "{{service}} legt {{setting}} nicht fest.",
+    "wrongAccess": "{{setting}} ist {{value}}; verwende {{protected}} oder {{public}}."
+  },
+  "config/embedded-public-conflict": {
+    "hit": "{{service}} setzt {{public}} zusammen mit {{embedded}}."
+  },
+  "config/stale-feature-flags": {
+    "hit_one": "{{file}} führt {{flags}} in {{variable}} auf, obwohl dafür kein Flag mehr nötig ist.",
+    "hit_other": "{{file}} führt {{flags}} in {{variable}} auf, obwohl dafür kein Flag mehr nötig ist."
+  },
+  "config/connectors-list-shape": {
+    "hit": "{{key}} in rayfin.yml ist eine Zuordnung mit dem Connector-Namen als Schlüssel ({{names}}) statt einer Liste mit Einträgen der Form {{entry}}."
+  },
+  "platform/cli-outdated": {
+    "hit": "Die Rayfin CLI ist auf {{installed}}; {{latest}} ist das neueste Release."
+  },
+  "platform/sdk-outdated": {
+    "hit": "Das Rayfin SDK ist auf {{installed}} ({{package}}); {{latest}} ist das neueste Release."
+  },
+  "platform/sdk-lockstep": {
+    "hit": "Pakete des Rayfin SDK sind in unterschiedlichen Versionen installiert: {{packages}}."
+  },
+  "platform/sdk-local-range": {
+    "runs": "von Fabricator auf diesem Computer ausgeführten Rayfin-Releases ({{lines}})",
+    "older": "{{package}} ist als {{spec}} deklariert, womit sich die {{runs}} nicht installieren lassen.",
+    "loose": "{{package}} ist als {{spec}} deklariert, daher kann die nächste Installation das Paket über Rayfin {{line}} hinaus auf ein Release anheben, das Fabricator auf diesem Computer möglicherweise nicht ausführt.",
+    "installedPinned": "{{package}} ist in Version {{version}} installiert, außerhalb der {{runs}}, obwohl es als {{spec}} deklariert ist. Führe {{command}} aus, um es zurückzuholen.",
+    "installedOutside": "{{package}} ist in Version {{version}} installiert, außerhalb der {{runs}}.",
+    "pinIt": "Lege es auf {{pin}} fest.",
+    "summary": "Diese Rayfin-Pakete sind nicht auf die {{runs}} festgelegt: {{packages}}.",
+    "pinThem": "Lege sie auf {{pin}} fest und installiere sie neu."
+  },
+  "platform/connector-version": {
+    "range": "{{package}} ist als {{range}} deklariert, womit ein anderes Release als das der CLI installiert werden kann.",
+    "installed": "{{package}} ist in Version {{installed}} installiert, die CLI dagegen in {{cli}}."
+  },
+  "platform/connector-schema-value-import": {
+    "imports": "{{file}} importiert {{names}} als Werte statt mit {{typeOnly}}.",
+    "reexports": "{{file}} exportiert {{names}} erneut als Werte statt mit {{typeOnly}}."
+  },
+  "platform/connector-client-experimental-import": {
+    "hit": "{{file}} importiert {{name}} aus {{experimental}} statt aus {{package}}."
+  },
+  "platform/removed-experimental-import": {
+    "hit_one": "{{file}} importiert {{names}} aus {{module}}, das es nicht mehr exportiert; es befindet sich jetzt in {{homes}}.",
+    "hit_other": "{{file}} importiert {{names}} aus {{module}}, das sie nicht mehr exportiert; sie befinden sich jetzt in {{homes}}."
+  },
+  "platform/connector-app-auth": {
+    "hit": "Der Connector {{connector}} vom Typ {{type}} verwendet {{setting}}, was für diesen Connectortyp nicht zulässig ist."
+  },
+  "platform/connector-fabric-only": {
+    "hit": "{{connector}} ist ein Connector vom Typ {{type}}, der nur in Fabric läuft, daher kann die lokale Vorschau ihn nicht aufrufen. {{outcome}}",
+    "summary": "Diese Connectors laufen nur in Fabric, daher kann die lokale Vorschau sie nicht aufrufen: {{connectors}}. {{outcome}}",
+    "outcome": "Bis die App veröffentlicht ist, schlagen diese Aufrufe fehl; danach verwendet die Vorschau das Back-End der veröffentlichten App."
+  },
+  "platform/connector-orphaned-dir": {
+    "hit": "Für {{folder}} gibt es in rayfin.yml keinen passenden Connector."
+  },
+  "platform/functions-context-import": {
+    "hit": "{{file}} importiert {{names}} aus {{package}}."
+  },
+  "platform/functions-mssql": {
+    "pinned": "{{file}} legt {{dependency}} fest, eine Version unter 12.6.0.",
+    "strictEncrypt": "{{file}} verbindet sich mit {{strict}} statt {{encrypt}}."
+  },
+  "platform/functions-removed-audience": {
+    "hit": "{{file}} verwendet {{audience}}, das in Rayfin 1.36 entfernt wurde."
+  },
+  "platform/functions-legacy-context-api": {
+    "hit": "{{file}} ruft {{call}} statt {{replacement}} auf."
+  },
+  "platform/functions-availability": {
+    "hit": "Der Dienst {{service}} ist aktiviert; er ist nicht in jeder Fabric-Region und jedem Mandanten verfügbar."
+  },
+  "platform/experimental-services": {
+    "hit": "Der experimentelle Dienst {{service}} ist aktiviert."
+  },
+  "platform/deprecated-fabric-callback": {
+    "bridge": "{{file}} ruft das veraltete {{function}} auf.",
+    "callbackUrl": "{{file}} übergibt die veraltete Option {{option}}."
+  },
+  "platform/ai-files-missing": {
+    "hit": "{{file}} ist nicht installiert, daher erhalten Coding-Agents keine zur Version passenden Anleitungen für Rayfin."
+  },
+  "performance/oversized-page": {
+    "hit": "{{file}} fordert Seiten mit {{rows}} Zeilen an."
+  },
+  "accessibility/img-alt": {
+    "hit": "Ein {{img}} in {{file}} hat kein Attribut {{alt}}."
+  }
+}

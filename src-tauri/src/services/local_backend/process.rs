@@ -141,9 +141,7 @@ pub fn terminate(pid: u32, grace: Duration) -> Result<(), String> {
   if wait_for_exit(&[pid], Duration::from_secs(5)).is_empty() {
     Ok(())
   } else {
-    Err(format!(
-      "Couldn't stop rayfin-local (PID {pid}). It may run as another user or as administrator: stop it where it runs, then start this app again."
-    ))
+    Err(t!("services.localBackend.stopFailed", pid = pid))
   }
 }
 

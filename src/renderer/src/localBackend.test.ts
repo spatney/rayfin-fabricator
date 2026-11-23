@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 import { invoke } from '@tauri-apps/api/core'
 import type { LocalProblem, LocalReady, LocalStatus, StudioProject } from '@shared/ipc'
 import { api } from './api'
+import { setLanguage } from './i18n'
 import {
   LocalBackendError,
   alreadyServing,
@@ -488,6 +489,38 @@ describe('local backend helpers', () => {
       expect(retriesAfterTurn(failed(code)), code).toBe(false)
     }
     expect(retriesAfterTurn(status({ state: 'running', ready }))).toBe(false)
+  })
+})
+
+describe('local backend labels in the app’s language', () => {
+  afterEach(async () => {
+    await setLanguage('en')
+    localStorage.clear()
+  })
+
+  it('counts a running app’s problems in German', async () => {
+    await setLanguage('de')
+    const at = '2026-10-30T17:18:08.000Z'
+    const vite: LocalStatus['vite'] = {
+      state: 'failed',
+      url: null,
+      version: null,
+      message: 'Vite kept exiting.',
+      time: at
+    }
+    const analysis: LocalStatus['analysis'] = {
+      ok: false,
+      sdk: null,
+      entities: [],
+      storageFolders: [],
+      message: null,
+      time: at
+    }
+    expect(localStateLabel(status({ state: 'starting' }))).toBe('Wird gestartet…')
+    expect(localStateLabel(status({ state: 'running', ready, vite }))).toBe('Läuft · 1 Problem')
+    expect(localStateLabel(status({ state: 'running', ready, vite, analysis }))).toBe(
+      'Läuft · 2 Probleme'
+    )
   })
 })
 

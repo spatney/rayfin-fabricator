@@ -1,5 +1,5 @@
-//! Settings commands: get + patch (theme, experiment flags, chat defaults,
-//! custom instructions).
+//! Settings commands: get + patch (theme, language, experiment flags, chat
+//! defaults, custom instructions).
 
 use serde::Deserialize;
 
@@ -12,6 +12,13 @@ pub fn settings_get() -> AppSettings {
   store::get_settings()
 }
 
+/// The language the computer's settings ask for, of the ones Fabricator comes
+/// in (English when it's none of them): what Settings' "System" language is.
+#[tauri::command]
+pub fn settings_system_language() -> String {
+  crate::i18n::system_language().to_string()
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SettingsPatch {
@@ -19,6 +26,9 @@ pub struct SettingsPatch {
   theme: Option<String>,
   #[serde(default)]
   ui_scale: Option<f64>,
+  /// A language Fabricator comes in, or "system" for the computer's.
+  #[serde(default)]
+  language: Option<String>,
   #[serde(default)]
   experiments: Option<ExperimentFlags>,
   #[serde(default)]
@@ -38,13 +48,18 @@ pub fn settings_set(patch: SettingsPatch) -> AppSettings {
   // Work IQ's experiment decides whether chats can have its plugin: changing it
   // tries Work IQ again from scratch, and turning it off drops its sign-in.
   let work_iq_changed = patch.experiments.as_ref().is_some_and(|e| e.work_iq.is_some());
+  let language_changed = patch.language.is_some();
   let mut settings = store::set_settings(
     patch.theme,
     patch.ui_scale,
+    patch.language,
     patch.experiments,
     patch.full_diagnostics,
     patch.deploy_mode,
   );
+  if language_changed {
+    crate::i18n::set_preference(settings.language.as_deref());
+  }
   if let Some(defaults) = patch.chat_defaults {
     settings = store::set_chat_defaults(crate::commands::chat::chat_defaults(defaults, &settings.mcp_servers));
   }

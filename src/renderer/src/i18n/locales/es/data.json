@@ -1,0 +1,255 @@
+{
+  "view": {
+    "title": "Explorador de datos",
+    "localData": "Datos locales",
+    "summary": "{{entities}} · {{rows}}",
+    "backend": "Back-end local",
+    "reading": "Leyendo los datos locales…",
+    "readError": "No se pudieron leer los datos locales",
+    "oldBackend": "Esta versión del back-end local no comparte sus datos con Fabricator.",
+    "oldBackendHint": "Actualiza Fabricator y vuelve a intentarlo.",
+    "noEntitiesTitle": "Aún no hay entidades",
+    "noEntitiesSub": "Cuando el modelo de datos de la aplicación tenga entidades, sus filas aparecerán aquí."
+  },
+  "backend": {
+    "unreachable": "No se pudo conectar con el back-end local",
+    "unsupported": "Esta versión de Fabricator no puede leer datos locales.",
+    "checking": "Comprobando el back-end local…",
+    "stoppedTitle": "El back-end local no se está ejecutando",
+    "stoppedMessage": "Inícialo para ver los datos locales de la aplicación.",
+    "starting": "El back-end local se está iniciando",
+    "restarting": "El back-end local se está reiniciando",
+    "startingMessage": "Los datos locales de la aplicación aparecerán aquí cuando se esté ejecutando.",
+    "start": "Iniciar",
+    "startBusy": "Iniciando…"
+  },
+  "side": {
+    "entities": "Entidades",
+    "noEntities": "No hay entidades",
+    "entityItem_one": "{{name}}, {{count, number}} fila",
+    "entityItem_other": "{{name}}, {{count, number}} filas",
+    "storage": "Almacenamiento",
+    "storageError": "No se pudieron leer los archivos almacenados",
+    "noFolders": "No hay carpetas de almacenamiento",
+    "folderItem_one": "{{name}}, {{count, number}} archivo",
+    "folderItem_other": "{{name}}, {{count, number}} archivos"
+  },
+  "toolbar": {
+    "note": "Datos locales de este dispositivo. Al publicar, no se copian en Fabric.",
+    "notePublished": "Datos locales de este dispositivo, independientes de los datos de la aplicación publicada.",
+    "refreshTitle": "Volver a leer los datos locales",
+    "loadSeedTitle": "Reemplazar los datos locales por los datos de inicialización de rayfin/seed",
+    "noSeedTitle": "Esta aplicación aún no tiene datos de inicialización en rayfin/seed. Guarda los datos locales como datos de inicialización o pide a Copilot que agregue algunos.",
+    "saveSeedTitle": "Guardar los datos locales en rayfin/seed para que cualquiera que abra el proyecto pueda cargarlos",
+    "reset": "Restablecer datos locales"
+  },
+  "seed": {
+    "load": "Cargar datos de inicialización",
+    "save": "Guardar como datos de inicialización",
+    "loaded": "Se cargaron los datos de inicialización: {{amount}}.",
+    "saved": "Guardado en rayfin/seed: {{amount}}.",
+    "savedSkipped_one": "Guardado en rayfin/seed: {{amount}}. No se pudo guardar {{count, number}} archivo almacenado: {{files}}",
+    "savedSkipped_other": "Guardado en rayfin/seed: {{amount}}. No se pudieron guardar {{count, number}} archivos almacenados: {{files}}",
+    "rowsIn_one": "{{count, number}} fila en {{entities}}",
+    "rowsIn_other": "{{count, number}} filas en {{entities}}",
+    "nothing": "ninguna fila ni archivo"
+  },
+  "notices": {
+    "fallback": "{{reason}} El Explorador de datos solo muestra datos locales.",
+    "unreadLabel": "Cambio del modelo de datos no leído",
+    "unread": "No se pudo leer el último cambio del modelo de datos de la aplicación, por lo que su back-end local sigue usando el modelo de datos anterior.",
+    "unreadNoEntities": "No se muestran entidades porque no se pudo leer el último cambio del modelo de datos de la aplicación. El back-end local sigue usando el modelo de datos anterior, que no tiene ninguna."
+  },
+  "seedProblems": {
+    "title_one": "Los datos de inicialización tienen {{count, number}} problema",
+    "title_other": "Los datos de inicialización tienen {{count, number}} problemas",
+    "intro": "No se cargó nada, así que los datos locales no han cambiado. Corrige estos problemas y vuelve a cargarlos:",
+    "fix": "Corregir con Copilot",
+    "fixRequest": "Corregir los problemas de los datos de inicialización"
+  },
+  "rows": {
+    "reading": "Leyendo filas…",
+    "readError": "No se pudieron leer las filas",
+    "clearSorting": "Quitar ordenación",
+    "emptyTitle": "Aún no hay filas",
+    "emptySub": "Las propias páginas de la aplicación agregan los datos. Usa la aplicación en la vista previa y, después, actualiza.",
+    "sortBy": "Ordenar por {{column}}",
+    "keyType": "{{type}} · clave",
+    "clear": "Borrar filas"
+  },
+  "users": {
+    "title": "Usuarios locales",
+    "readError": "No se pudieron leer los usuarios locales",
+    "notListed": "El back-end local no los enumeró.",
+    "emptyTitle": "Aún no hay usuarios locales",
+    "emptySub": "Los usuarios locales aparecerán aquí cuando alguien inicie sesión en la aplicación en este dispositivo.",
+    "username": "Nombre de usuario",
+    "email": "Correo electrónico",
+    "signsInWith": "Inicia sesión con",
+    "created": "Creado",
+    "developer": "Desarrollador",
+    "password": "Contraseña",
+    "fabricatorOnly": "Solo Fabricator",
+    "deleteLabel": "Eliminar a {{username}}"
+  },
+  "files": {
+    "reading": "Leyendo archivos…",
+    "readError": "No se pudieron leer los archivos",
+    "emptyTitle": "Aún no hay archivos",
+    "emptySub": "Aquí aparecen los archivos que la aplicación almacena en esta carpeta. Usa la aplicación en la vista previa y, después, actualiza.",
+    "regionLabel": "Archivos de {{folder}}",
+    "folderNameTitle": "Nombre de la carpeta en el código de la aplicación",
+    "orphan": "No está en la aplicación",
+    "orphanTitle": "La aplicación ya no tiene esta carpeta de almacenamiento. Los archivos permanecen aquí hasta que los borres.",
+    "meta_one": "{{count, number}} archivo · {{size}}",
+    "meta_other": "{{count, number}} archivos · {{size}}",
+    "clear": "Borrar archivos",
+    "previewLabel": "Ver la vista previa de {{path}}",
+    "deleteLabel": "Eliminar {{path}}",
+    "signedOutUpload": "Cargado sin haber iniciado sesión",
+    "anonymous": "Anónimo"
+  },
+  "fields": {
+    "name": "Nombre",
+    "path": "Ruta",
+    "type": "Tipo",
+    "size": "Tamaño",
+    "owner": "Propietario",
+    "uploaded": "Cargado",
+    "updated": "Actualizado",
+    "actions": "Acciones"
+  },
+  "preview": {
+    "label": "Vista previa de {{path}}",
+    "save": "Guardar una copia",
+    "saveTitle": "Guardar una copia del archivo en este dispositivo",
+    "saved": "Se guardó una copia de {{name}} en {{where}}.",
+    "saveError": "No se pudo guardar una copia",
+    "close": "Cerrar la vista previa",
+    "error": "No se pudo mostrar la vista previa del archivo",
+    "pdfError": "No se pudo representar este PDF: {{reason}}",
+    "noneTitle": "Sin vista previa",
+    "noneSub": "Fabricator no puede mostrar archivos {{type}}. Guarda una copia para abrirlo en otra aplicación.",
+    "drawingPdf": "Representando el PDF…",
+    "reading": "Leyendo el archivo…",
+    "textClipped": "Se muestran los primeros {{size}}. Guarda una copia para verlo completo.",
+    "pdfClipped": "Se muestran las primeras {{shown}} de {{total}} páginas. Guarda una copia para verlas todas.",
+    "page": "Página {{page}} de {{name}}",
+    "fieldTitle": "Un campo que la aplicación almacena con el archivo"
+  },
+  "confirm": {
+    "cantUndo": "Esta acción no se puede deshacer.",
+    "cantUndoPublished": "Los datos de la aplicación publicada no se ven afectados. Esta acción no se puede deshacer.",
+    "clearing": "Borrando…",
+    "resetting": "Restableciendo…",
+    "refused": "Otras filas aún hacen referencia a estas filas, por lo que no se pueden borrar por sí solas. Borra primero esas filas o restablece todos los datos locales.",
+    "refusedNamed": "Las filas de {{names}} aún hacen referencia a estas filas, por lo que no se pueden borrar por sí solas. Borra primero {{names}} o restablece todos los datos locales.",
+    "clear": {
+      "title": "¿Borrar todas las filas de {{entity}}?",
+      "message_one": "Se eliminará la única fila de {{entity}} de los datos locales de la aplicación en este dispositivo. Las demás entidades, los usuarios locales y los archivos almacenados se conservan.",
+      "message_other": "Se eliminarán las {{count, number}} filas de {{entity}} de los datos locales de la aplicación en este dispositivo. Las demás entidades, los usuarios locales y los archivos almacenados se conservan."
+    },
+    "reset": {
+      "title": "¿Restablecer los datos locales?",
+      "intro": "Se eliminarán los datos locales de la aplicación en este dispositivo:",
+      "allRows_one": "La única fila de {{entities}}",
+      "allRows_other": "Las {{count, number}} filas de {{entities}}",
+      "itsEntities_one": "su única entidad",
+      "itsEntities_other": "sus {{count, number}} entidades",
+      "everyRowOf": "Todas las filas de {{entities}}",
+      "everyRow": "Todas las filas de todas las entidades",
+      "users_one": "El único usuario local y sus sesiones",
+      "users_other": "Los {{count, number}} usuarios locales y sus sesiones",
+      "usersAny": "Los usuarios locales y sus sesiones",
+      "files_one": "El único archivo almacenado",
+      "files_other": "Los {{count, number}} archivos almacenados",
+      "filesAny": "Los archivos almacenados",
+      "schemaWaiting": "Después, se aplica el cambio del modelo de datos que está pendiente de tu decisión."
+    },
+    "clearFiles": {
+      "title": "¿Eliminar todos los archivos de {{folder}}?",
+      "message_one": "Se eliminará el único archivo de la carpeta de almacenamiento {{folder}} de los datos locales de la aplicación en este dispositivo. Las filas de las entidades, los usuarios locales y los archivos de otras carpetas se conservan.",
+      "message_other": "Se eliminarán los {{count, number}} archivos de la carpeta de almacenamiento {{folder}} de los datos locales de la aplicación en este dispositivo. Las filas de las entidades, los usuarios locales y los archivos de otras carpetas se conservan."
+    },
+    "deleteFile": {
+      "title": "¿Eliminar {{name}}?",
+      "message": "Se eliminará {{path}} de la carpeta de almacenamiento {{folder}} de los datos locales de la aplicación en este dispositivo.",
+      "action": "Eliminar archivo"
+    },
+    "loadSeed": {
+      "title": "¿Cargar los datos de inicialización?",
+      "intro": "Se reemplazarán los datos locales de la aplicación en este dispositivo por los datos de inicialización de rayfin/seed:",
+      "noRows": "Ninguna fila",
+      "deletesAll": "Se eliminan las filas actuales y los archivos almacenados de la aplicación. Los usuarios locales se conservan y se agregan los usuarios que indican los datos de inicialización.",
+      "deletesRows": "Se eliminan las filas actuales de la aplicación. Los usuarios locales se conservan y se agregan los usuarios que indican los datos de inicialización."
+    },
+    "saveSeed": {
+      "title": "¿Guardar los datos locales como datos de inicialización?",
+      "intro": "Se guardarán los datos locales de la aplicación en rayfin/seed del proyecto, en lugar de los datos de inicialización que hay allí:",
+      "rows_one": "{{count, number}} fila de {{entities}}, en rayfin/seed/data",
+      "rows_other": "{{count, number}} filas de {{entities}}, en rayfin/seed/data",
+      "files_one": "{{count, number}} archivo almacenado, en rayfin/seed/storage",
+      "files_other": "{{count, number}} archivos almacenados, en rayfin/seed/storage",
+      "ids": "Cualquiera que abra el proyecto podrá cargarlos. Los identificadores de usuario se convierten en <code>{{developer}}</code> (tú) y <code>{{user}}</code> (los usuarios locales). Fabricator guarda el cambio como una versión en Historial."
+    },
+    "deleteUser": {
+      "title": "¿Eliminar a {{username}}?",
+      "message": "Se eliminará a {{username}} de los usuarios locales de la aplicación y se cerrará su sesión en la aplicación en este dispositivo.",
+      "action": "Eliminar usuario"
+    }
+  },
+  "pager": {
+    "range": "{{first, number}}–{{last, number}} de {{total, number}}",
+    "previous": "Anterior",
+    "previousPage": "Página anterior",
+    "nextPage": "Página siguiente"
+  },
+  "cell": {
+    "emptyText": "Texto vacío"
+  },
+  "size": {
+    "bytes_one": "{{count, number}} byte",
+    "bytes_other": "{{count, number}} bytes",
+    "kilobytes": "{{size}} KB",
+    "megabytes": "{{size}} MB",
+    "gigabytes": "{{size}} GB"
+  },
+  "counts": {
+    "rows_one": "{{count, number}} fila",
+    "rows_other": "{{count, number}} filas",
+    "entities_one": "{{count, number}} entidad",
+    "entities_other": "{{count, number}} entidades",
+    "files_one": "{{count, number}} archivo",
+    "files_other": "{{count, number}} archivos",
+    "storedFiles_one": "{{count, number}} archivo almacenado",
+    "storedFiles_other": "{{count, number}} archivos almacenados",
+    "users_one": "{{count, number}} usuario",
+    "users_other": "{{count, number}} usuarios"
+  },
+  "access": {
+    "anySignedIn": "Cualquier usuario con sesión iniciada",
+    "public": "Público",
+    "scoped": "Directiva por fila",
+    "mixed": "Directiva mixta",
+    "defaultDetail": "No hay ningún decorador de acceso, así que esta entidad usa el valor predeterminado de Rayfin, `authenticated: *`: todos los usuarios con sesión iniciada pueden leer y escribir todas las filas.",
+    "publicDetail": "Una concesión `@anonymous` expone las filas a llamadores no autenticados (acciones: {{actions}}).",
+    "scopedDetail": "Para los usuarios con sesión iniciada, el acceso se restringe mediante una devolución de llamada `policy` por fila.",
+    "mixedDetail": "Algunas concesiones para usuarios con sesión iniciada están limitadas por fila mediante una directiva y otras no.",
+    "authenticatedDetail": "Cualquier usuario con sesión iniciada puede acceder a todas las filas (no hay ninguna `policy` por fila).",
+    "customDetail": "Concesiones de roles personalizados: {{grants}}."
+  },
+  "schema": {
+    "noImport": "La entidad “{{name}}” aparece en {{schema}}, pero no tiene importación.",
+    "notAFile": "La entidad “{{name}}” se importa desde “{{module}}”, que no es un archivo de esta aplicación.",
+    "unreadable": "No se pudo leer el archivo de entidad {{file}} de “{{name}}”.",
+    "noEntityClass": "No se encontró ninguna clase @entity en {{file}} para “{{name}}”.",
+    "noEntities": "{{schema}} aún no declara ninguna entidad."
+  },
+  "sqlSource": {
+    "notDiscovered": "{{file}} lee la tabla {{table}}, que no está entre las tablas detectadas.",
+    "notDiscoveredAny": "{{file}} lee una tabla que no está entre las tablas detectadas.",
+    "unreadable": "No se pudo leer {{name}}.",
+    "wrongShape": "{{name}} no tiene el formato que escribe Rayfin, así que se omitió.",
+    "grantWithPolicy": "{{role}}: {{actions}} (directiva de fila)"
+  }
+}

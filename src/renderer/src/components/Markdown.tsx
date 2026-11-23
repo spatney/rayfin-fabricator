@@ -13,6 +13,7 @@ import {
 } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useTranslation } from '../i18n'
 import { highlightCode } from '../syntax'
 import { Codicon } from './icons'
 import './markdown.css'
@@ -44,6 +45,7 @@ function extractCode(children: ReactNode): { text: string; lang?: string } {
 }
 
 function CodeBlock({ text, lang }: { text: string; lang?: string }): JSX.Element {
+  const { t } = useTranslation('chat')
   const lines = text.split('\n').length
   const [copied, setCopied] = useState(false)
   const [wrap, setWrap] = useState(false)
@@ -70,15 +72,15 @@ function CodeBlock({ text, lang }: { text: string; lang?: string }): JSX.Element
   return (
     <div className={`md-codeblock${wrap ? ' is-wrap' : ''}${expanded ? '' : ' is-collapsed'}`}>
       <div className="md-codeblock-head">
-        <span className="md-codeblock-lang">{hl?.label ?? lang ?? 'text'}</span>
+        <span className="md-codeblock-lang">{hl?.label ?? lang ?? t('code.text')}</span>
         <span className="md-codeblock-tools">
           <button
             type="button"
             className={`md-codeblock-btn${wrap ? ' is-on' : ''}`}
             onClick={() => setWrap((w) => !w)}
             aria-pressed={wrap}
-            title={wrap ? 'Don’t wrap long lines' : 'Wrap long lines'}
-            aria-label="Wrap long lines"
+            title={wrap ? t('code.noWrapLines') : t('code.wrapLines')}
+            aria-label={t('code.wrapLines')}
           >
             <Codicon name="word-wrap" />
           </button>
@@ -86,10 +88,11 @@ function CodeBlock({ text, lang }: { text: string; lang?: string }): JSX.Element
             type="button"
             className="md-codeblock-btn"
             onClick={copy}
-            title="Copy code"
-            aria-label="Copy code"
+            title={t('code.copyCode')}
+            aria-label={t('code.copyCode')}
           >
-            <Codicon name={copied ? 'check' : 'copy'} /> {copied ? 'Copied' : 'Copy'}
+            <Codicon name={copied ? 'check' : 'copy'} />{' '}
+            {copied ? t('actions.copied') : t('actions.copy')}
           </button>
         </span>
       </div>
@@ -102,7 +105,7 @@ function CodeBlock({ text, lang }: { text: string; lang?: string }): JSX.Element
       </pre>
       {!expanded && (
         <button type="button" className="md-codeblock-more" onClick={() => setExpanded(true)}>
-          Show all {lines} lines
+          {t('code.showAll', { count: lines })}
         </button>
       )}
     </div>
@@ -110,11 +113,11 @@ function CodeBlock({ text, lang }: { text: string; lang?: string }): JSX.Element
 }
 
 const CALLOUTS = {
-  note: { title: 'Note', icon: 'info' },
-  tip: { title: 'Tip', icon: 'lightbulb' },
-  important: { title: 'Important', icon: 'report' },
-  warning: { title: 'Warning', icon: 'warning' },
-  caution: { title: 'Caution', icon: 'error' }
+  note: { title: 'markdown.note', icon: 'info' },
+  tip: { title: 'markdown.tip', icon: 'lightbulb' },
+  important: { title: 'markdown.important', icon: 'report' },
+  warning: { title: 'markdown.warning', icon: 'warning' },
+  caution: { title: 'markdown.caution', icon: 'error' }
 } as const
 
 type CalloutKind = keyof typeof CALLOUTS
@@ -122,6 +125,7 @@ const CALLOUT_RE = /^\s*\[!(note|tip|important|warning|caution)\]\s*/i
 
 /** GitHub alert syntax (`> [!NOTE]`) → a callout; ordinary quotes pass through. */
 function Blockquote({ children }: { children?: ReactNode }): JSX.Element {
+  const { t } = useTranslation('chat')
   const kids = Children.toArray(children).filter((c) => !(typeof c === 'string' && !c.trim()))
   const first = kids[0]
   if (isValidElement(first)) {
@@ -137,7 +141,7 @@ function Blockquote({ children }: { children?: ReactNode }): JSX.Element {
       return (
         <div className={`md-callout md-callout--${kind}`} role="note">
           <div className="md-callout-title">
-            <Codicon name={CALLOUTS[kind].icon} /> {CALLOUTS[kind].title}
+            <Codicon name={CALLOUTS[kind].icon} /> {t(CALLOUTS[kind].title)}
           </div>
           {rest.length > 0 && <p>{rest}</p>}
           {kids.slice(1)}
@@ -149,6 +153,7 @@ function Blockquote({ children }: { children?: ReactNode }): JSX.Element {
 }
 
 function InlineCode({ children }: { children?: ReactNode }): JSX.Element {
+  const { t } = useTranslation('chat')
   const links = useContext(MarkdownLinksContext)
   const text = Children.toArray(children).join('')
   const file = links?.resolveFile(text)
@@ -158,7 +163,7 @@ function InlineCode({ children }: { children?: ReactNode }): JSX.Element {
         type="button"
         className="md-code-inline md-file-link"
         onClick={() => links.openFile(file)}
-        title={`Open ${file} in the Code tab`}
+        title={t('files.openInCode', { path: file })}
       >
         {text}
       </button>
@@ -168,13 +173,14 @@ function InlineCode({ children }: { children?: ReactNode }): JSX.Element {
 }
 
 function Link({ href, children }: { href?: string; children?: ReactNode }): JSX.Element {
+  const { t } = useTranslation('chat')
   const links = useContext(MarkdownLinksContext)
   const relative = Boolean(href) && !/^[a-z][a-z0-9+.-]*:/i.test(href!) && !href!.startsWith('#')
   const file = relative ? links?.resolveFile(decodeURIComponent(href!)) : null
   return (
     <a
       href={href}
-      title={file ? `Open ${file} in the Code tab` : href}
+      title={file ? t('files.openInCode', { path: file }) : href}
       onClick={(e) => {
         e.preventDefault()
         if (file) links?.openFile(file)

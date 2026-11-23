@@ -173,17 +173,12 @@ fn unsupported_message(workspace: &UnsupportedWorkspace) -> String {
   let name = workspace.name.as_deref().map(str::trim).filter(|n| !n.is_empty());
   let region = workspace.region.as_deref().map(str::trim).filter(|r| !r.is_empty());
   let headline = match (name, region) {
-    (Some(name), Some(region)) => {
-      format!("Fabric apps aren’t available in “{name}”, a workspace on a capacity in {region}.")
-    }
-    (None, Some(region)) => format!("Fabric apps aren’t available in this workspace, on a capacity in {region}."),
-    (Some(name), None) => format!("Fabric apps aren’t available in “{name}”."),
-    (None, None) => "Fabric apps aren’t available in this workspace.".to_string(),
+    (Some(name), Some(region)) => t!("commands.deploy.unsupported.nameRegion", name = name, region = region),
+    (None, Some(region)) => t!("commands.deploy.unsupported.region", region = region),
+    (Some(name), None) => t!("commands.deploy.unsupported.name", name = name),
+    (None, None) => t!("commands.deploy.unsupported.none"),
   };
-  format!(
-    "{headline} They aren’t in every region yet, so publish to a workspace on a capacity in another region. \
-     If none works, ask your Fabric admin to turn on Fabric Apps."
-  )
+  t!("commands.deploy.unsupported.message", headline = headline)
 }
 
 #[derive(Deserialize)]
@@ -476,9 +471,9 @@ async fn has_changes_since_deploy(dir: &str, deployed_commit: Option<&str>) -> R
   )
   .await;
   if !status.ok {
-    return Err(format!(
-      "Could not check for unpublished changes. {}",
-      error_text(&status, &status.stdout, "git status failed.")
+    return Err(t!(
+      "commands.deploy.cantCheckChanges",
+      error = error_text(&status, &status.stdout, &t!("commands.deploy.gitStatusFailed"))
     ));
   }
   if !status.stdout.trim().is_empty() {
@@ -498,9 +493,9 @@ async fn has_changes_since_deploy(dir: &str, deployed_commit: Option<&str>) -> R
   match diff.exit_code {
     Some(0) if diff.ok => Ok(false),
     Some(1) if !diff.not_found => Ok(true),
-    _ => Err(format!(
-      "Could not compare the project with its last published version. {}",
-      error_text(&diff, &diff.stdout, "git diff failed.")
+    _ => Err(t!(
+      "commands.deploy.cantCompare",
+      error = error_text(&diff, &diff.stdout, &t!("commands.deploy.gitDiffFailed"))
     )),
   }
 }
@@ -537,9 +532,9 @@ async fn pending_since_deploy(dir: &str, deployed_commit: Option<&str>) -> Resul
   )
   .await;
   if !status.ok {
-    return Err(format!(
-      "Could not check for unpublished changes. {}",
-      error_text(&status, &status.stdout, "git status failed.")
+    return Err(t!(
+      "commands.deploy.cantCheckChanges",
+      error = error_text(&status, &status.stdout, &t!("commands.deploy.gitStatusFailed"))
     ));
   }
   let mut files: std::collections::BTreeSet<String> = porcelain_paths(&status.stdout).into_iter().collect();
@@ -552,9 +547,9 @@ async fn pending_since_deploy(dir: &str, deployed_commit: Option<&str>) -> Resul
   )
   .await;
   if !diff.ok {
-    return Err(format!(
-      "Could not compare the project with its last published version. {}",
-      error_text(&diff, &diff.stdout, "git diff failed.")
+    return Err(t!(
+      "commands.deploy.cantCompare",
+      error = error_text(&diff, &diff.stdout, &t!("commands.deploy.gitDiffFailed"))
     ));
   }
   files.extend(diff.stdout.split('\0').filter(|path| !path.is_empty()).map(String::from));
@@ -623,7 +618,7 @@ pub async fn deploy_run(
   // renderer's lifetime.
   match tokio::spawn(async move { run_deploy(app, project_id, workspace, item_name).await }).await {
     Ok(result) => result,
-    Err(error) => deployment_error(format!("The publish task failed: {error}")),
+    Err(error) => deployment_error(t!("commands.deploy.taskFailed", error = error)),
   }
 }
 
@@ -641,7 +636,7 @@ pub(crate) async fn run_deploy(
   // Team projects are deployed by their workspace's pipeline, never from here
   // (enforced whether or not the experiment is on).
   if crate::services::team::is_team_project_id(&project_id) {
-    return deployment_error(crate::services::team::NO_LOCAL_DEPLOY.into());
+    return deployment_error(crate::services::team::no_local_deploy());
   }
   let state = app.state::<crate::state::AppState>();
   let _lease = match state.mutations.deploy(&project_id) {
@@ -759,7 +754,7 @@ async fn refused_publish(project: &StudioProject, target: Option<&str>, renderer
 /// the next regular deploy.
 pub(crate) async fn push_runtime_settings(project: &StudioProject, on_data: OnData) -> DeployResult {
   if crate::services::team::is_team_project(project) {
-    return deployment_error(crate::services::team::NO_LOCAL_DEPLOY.into());
+    return deployment_error(crate::services::team::no_local_deploy());
   }
   let dir = Path::new(&project.path);
   if let Err(error) = exec::ensure_project_dependencies(dir, Some(on_data.clone())).await {
@@ -792,7 +787,7 @@ pub(crate) async fn push_runtime_settings(project: &StudioProject, on_data: OnDa
     return DeployResult { ok: true, outcome: "success".into(), url: None, api_url: None, portal_url: None, error: None, unsupported: None };
   }
   let captured_text = captured.lock().unwrap().clone();
-  let error = error_text(&result, &captured_text, "rayfin up couldn't push the sign-in settings. Check the log above.");
+  let error = error_text(&result, &captured_text, &t!("commands.deploy.settingsPushFailed"));
   let outcome = if result.not_found { "not-found" } else { failure_outcome(&error) };
   crashlog::log_error("settings-push", &format!("exit={:?} outcome={outcome}: {error}", result.exit_code));
   DeployResult { ok: false, outcome: outcome.into(), url: None, api_url: None, portal_url: None, error: Some(error), unsupported: None }
@@ -812,7 +807,7 @@ async fn run_deploy_inner(
       url: None,
       api_url: None,
       portal_url: None,
-      error: Some("Project not found.".into()),
+      error: Some(t!("commands.shared.projectNotFound")),
       unsupported: None,
     };
   };
@@ -902,7 +897,7 @@ async fn run_deploy_inner(
   }
 
   if result.not_found {
-    let error = error_text(&result, &captured_text, "The project's Rayfin CLI could not be started.");
+    let error = error_text(&result, &captured_text, &t!("commands.deploy.cliNotStarted"));
     patch_deploy(&project_id, |d| {
       d.status = Some("error".into());
       d.outcome = Some("not-found".into());
@@ -927,14 +922,14 @@ async fn run_deploy_inner(
   }
 
   if !result.ok {
-    let fallback = format!(
-      "rayfin up exited with code {} without a detailed failure reason. View the publish log. If Fabric sign-in looks successful but publishing keeps failing, use Refresh Fabric authentication and update the project's Rayfin CLI and SDK to 1.35.1 or newer.",
-      result.exit_code.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into())
+    let fallback = t!(
+      "commands.deploy.exitedWithoutReason",
+      code = result.exit_code.map(|c| c.to_string()).unwrap_or_else(|| t!("commands.deploy.unknownCode"))
     );
     let detail = error_text(&result, &captured_text, &fallback);
     let outcome = failure_outcome(&detail);
     let error = if outcome == "auth-cache-error" {
-      format!("{detail} Use Refresh Fabric authentication to clear the CLI credentials and sign in again. This project's Rayfin CLI and SDK should be 1.35.1 or newer.")
+      t!("commands.deploy.authCache", detail = detail)
     } else {
       detail
     };
@@ -1047,14 +1042,14 @@ pub async fn deploy_status(project_id: String) -> DeployStatus {
 
 #[tauri::command]
 pub async fn deploy_has_changes(project_id: String) -> Result<bool, String> {
-  let project = store::find_project(&project_id).ok_or_else(|| "Project not found.".to_string())?;
+  let project = store::find_project(&project_id).ok_or_else(|| t!("commands.shared.projectNotFound"))?;
   if crate::services::team::is_team_project(&project) {
     return Ok(false);
   }
   // A folder opened from disk may have no repository yet. Start its version
   // history so the comparison below can tell what changed.
   version_history::ensure_project_tracked(&project).await.map_err(|error| {
-    format!("Could not start this app's version history, so Fabricator can't tell what changed. {error}")
+    t!("commands.deploy.cantStartHistory", error = error)
   })?;
   let commit = project.last_deploy.as_ref().and_then(|d| d.commit.as_deref());
   has_changes_since_deploy(&project.path, commit).await
@@ -1065,7 +1060,7 @@ pub async fn deploy_has_changes(project_id: String) -> Result<bool, String> {
 /// Read-only: unlike `deploy_has_changes`, it never starts version history.
 #[tauri::command]
 pub async fn deploy_pending(project_id: String) -> Result<PendingChanges, String> {
-  let project = store::find_project(&project_id).ok_or_else(|| "Project not found.".to_string())?;
+  let project = store::find_project(&project_id).ok_or_else(|| t!("commands.shared.projectNotFound"))?;
   if crate::services::team::is_team_project(&project) {
     return Ok(PendingChanges { changed: false, files: Some(0) });
   }
@@ -1090,7 +1085,7 @@ pub async fn deploy_list(project_id: String) -> Vec<FabricDeployment> {
 /// query; an auth/CLI failure must not silently permit deleting the local app.
 /// Team projects have no deployments of their own on this computer.
 pub(crate) async fn deploy_list_checked(project_id: &str) -> Result<Vec<FabricDeployment>, String> {
-  let project = store::find_project(project_id).ok_or_else(|| "Project not found.".to_string())?;
+  let project = store::find_project(project_id).ok_or_else(|| t!("commands.shared.projectNotFound"))?;
   if crate::services::team::is_team_project(&project) {
     return Ok(vec![]);
   }
@@ -1104,13 +1099,12 @@ fn checked_deploy_list(
   names: &std::collections::HashMap<String, String>,
 ) -> Result<Vec<FabricDeployment>, String> {
   if !res.ok || res.not_found {
-    return Err(format!(
-      "Could not read this project's published apps. {}",
-      crate::services::fabric_auth::failure_message(res)
+    return Err(t!(
+      "commands.deploy.cantReadPublished",
+      error = crate::services::fabric_auth::failure_message(res)
     ));
   }
-  parse_deploy_list_opt(&res.stdout, names)
-    .ok_or_else(|| "Could not read this project's published apps: invalid CLI response. Nothing was deleted.".into())
+  parse_deploy_list_opt(&res.stdout, names).ok_or_else(|| t!("commands.deploy.invalidListResponse"))
 }
 
 /// Reconcile the Studio store's recorded deployment with on-disk reality
@@ -1214,7 +1208,7 @@ pub async fn deploy_reconcile(project_id: String) -> ProjectsState {
 #[tauri::command]
 pub async fn deploy_switch(app: AppHandle, project_id: String, workspace: String, by_id: Option<bool>) -> DeployResult {
   if crate::services::team::is_team_project_id(&project_id) {
-    return deployment_error(crate::services::team::NO_LOCAL_DEPLOY.into());
+    return deployment_error(crate::services::team::no_local_deploy());
   }
   let state = app.state::<crate::state::AppState>();
   let _lease = match state.mutations.deploy(&project_id) {
@@ -1229,7 +1223,7 @@ pub async fn deploy_switch(app: AppHandle, project_id: String, workspace: String
       url: None,
       api_url: None,
       portal_url: None,
-      error: Some("Project not found.".into()),
+      error: Some(t!("commands.shared.projectNotFound")),
       unsupported: None,
     };
   };
@@ -1258,12 +1252,12 @@ pub async fn deploy_switch(app: AppHandle, project_id: String, workspace: String
       url: None,
       api_url: None,
       portal_url: None,
-      error: Some("The rayfin CLI was not found on PATH.".into()),
+      error: Some(t!("commands.deploy.cliNotOnPath")),
       unsupported: None,
     };
   }
   if !res.ok {
-    let error = error_text(&res, &res.stdout, "rayfin up switch failed.");
+    let error = error_text(&res, &res.stdout, &t!("commands.deploy.switchFailed"));
     return DeployResult {
       ok: false,
       outcome: "error".into(),
@@ -1350,13 +1344,13 @@ struct NextActive {
 /// including what Fabricator doesn't read, stays as it was.
 fn forget_deployment(dir: &Path, key: &str) -> Result<Option<NextActive>, String> {
   let path = dir.join("rayfin").join(".deployments.json");
-  let unreadable = |e: String| format!("Couldn't read {}: {e}", path.display());
+  let unreadable = |e: String| t!("commands.deploy.cantReadFile", path = path.display(), error = e);
   let text = std::fs::read_to_string(&path).map_err(|e| unreadable(e.to_string()))?;
   let mut registry: serde_json::Value = serde_json::from_str(&text).map_err(|e| unreadable(e.to_string()))?;
   let was_active = registry.get("active").and_then(serde_json::Value::as_str) == Some(key);
   let latest = {
     let Some(deployments) = registry.get_mut("deployments").and_then(serde_json::Value::as_object_mut) else {
-      return Err(unreadable("it has no deployments".into()));
+      return Err(unreadable(t!("commands.deploy.noDeployments")));
     };
     deployments.shift_remove(key);
     deployments
@@ -1385,7 +1379,7 @@ fn forget_deployment(dir: &Path, key: &str) -> Result<Option<NextActive>, String
   let staged = path.with_extension("json.tmp");
   std::fs::write(&staged, body)
     .and_then(|()| std::fs::rename(&staged, &path))
-    .map_err(|e| format!("Couldn't update {}: {e}", path.display()))?;
+    .map_err(|e| t!("commands.deploy.cantUpdateFile", path = path.display(), error = e))?;
   Ok(next)
 }
 
@@ -1403,13 +1397,13 @@ pub async fn deploy_remove(app: AppHandle, project_id: String, workspace: String
   // Once started, it finishes, whatever the renderer does meanwhile.
   match tokio::spawn(async move { remove_deployment(app, project_id, workspace).await }).await {
     Ok(result) => result,
-    Err(error) => removal_failed(format!("Deleting the published app failed: {error}")),
+    Err(error) => removal_failed(t!("commands.deploy.deleteFailed", error = error)),
   }
 }
 
 async fn remove_deployment(app: AppHandle, project_id: String, workspace: String) -> DeployRemoveResult {
   if crate::services::team::is_team_project_id(&project_id) {
-    return removal_failed(crate::services::team::NO_LOCAL_DEPLOY);
+    return removal_failed(crate::services::team::no_local_deploy());
   }
   let state = app.state::<crate::state::AppState>();
   let _lease = match state.mutations.deploy(&project_id) {
@@ -1417,11 +1411,11 @@ async fn remove_deployment(app: AppHandle, project_id: String, workspace: String
     Err(error) => return removal_failed(error),
   };
   let Some(project) = store::find_project(&project_id) else {
-    return removal_failed("Project not found.");
+    return removal_failed(t!("commands.shared.projectNotFound"));
   };
   let dir = PathBuf::from(&project.path);
   let Some(target) = read_registry(&dir).and_then(|list| list.into_iter().find(|r| is_deployment(r, &workspace))) else {
-    return removal_failed("That published app isn't recorded in this project anymore.");
+    return removal_failed(t!("commands.deploy.notRecorded"));
   };
   // Recorded deployments always have both (see `read_registry`).
   let workspace_id = target.entry.fabric_workspace_id.clone().unwrap_or_default();
@@ -1435,13 +1429,13 @@ async fn remove_deployment(app: AppHandle, project_id: String, workspace: String
       return DeployRemoveResult {
         ok: false,
         needs_login: deleted.needs_login,
-        error: Some(error.unwrap_or_else(|| "Fabric didn't delete the app.".into())),
+        error: Some(error.unwrap_or_else(|| t!("commands.deploy.fabricDidntDelete"))),
       };
     }
   }
   let next = match forget_deployment(&dir, &target.workspace) {
     Ok(next) => next,
-    Err(error) => return removal_failed(format!("Fabric deleted the app, but this project still records it. {error}")),
+    Err(error) => return removal_failed(t!("commands.deploy.stillRecorded", error = error)),
   };
   // The app that takes over gets its settings in rayfin/.env, as Switch gives it.
   if let Some(next) = next {

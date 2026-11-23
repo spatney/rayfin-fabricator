@@ -9,7 +9,7 @@ use regex::Regex;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, State};
 
-use super::{fail, fail_with, git_identity, problem, progress, sleep_or_cancel, unique_dir, viewer, CANCELLED};
+use super::{cancelled, fail, fail_with, git_identity, problem, progress, run_status, sleep_or_cancel, unique_dir, viewer};
 use crate::commands::util::now_iso;
 use crate::services::exec::CancelToken;
 use crate::services::store;
@@ -20,7 +20,8 @@ use crate::types::{
   TeamProblem, TeamSettings, TeamSetupState, TeamWorkspace,
 };
 
-/// Setup steps in order: (id, label). The renderer shows the same checklist.
+/// Setup steps in order: (id, English label, for Copilot). The renderer shows
+/// the same checklist; `label` gives a step's label in the app's language.
 pub const SETUP_STEPS: &[(&str, &str)] = &[
   ("github", "Create the private GitHub repository"),
   ("fabric", "Create the production and preview Fabric workspaces"),
@@ -33,8 +34,19 @@ pub const SETUP_STEPS: &[(&str, &str)] = &[
   ("verify", "Check that the pipeline can reach Fabric"),
 ];
 
-fn label(step: &str) -> &'static str {
-  SETUP_STEPS.iter().find(|(id, _)| *id == step).map(|(_, l)| *l).unwrap_or("Set up the workspace")
+fn label(step: &str) -> String {
+  match step {
+    "github" => t!("team.setup.step.github"),
+    "fabric" => t!("team.setup.step.fabric"),
+    "identity" => t!("team.setup.step.identity"),
+    "trust" => t!("team.setup.step.trust"),
+    "access" => t!("team.setup.step.access"),
+    "files" => t!("team.setup.step.files"),
+    "protection" => t!("team.setup.step.protection"),
+    "clone" => t!("team.setup.step.clone"),
+    "verify" => t!("team.setup.step.verify"),
+    _ => t!("team.setup.step.setup"),
+  }
 }
 
 pub(crate) const FABRIC_SP_NOTE: &str = "In the Fabric admin portal, open Tenant settings → Developer settings and turn on \"Service principals can call Fabric public APIs\" (for the organization, or for a security group that includes the workspace's deploy identity).";
@@ -52,14 +64,14 @@ impl Setup<'_> {
   }
 
   fn start(&self, step: &str) {
-    progress(self.app, &self.scope, step, "running", label(step), None);
+    progress(self.app, &self.scope, step, "running", &label(step), None);
   }
 
   fn finish(&mut self, step: &str) {
     if !self.done(step) {
       self.state.completed.push(step.to_string());
     }
-    progress(self.app, &self.scope, step, "done", label(step), None);
+    progress(self.app, &self.scope, step, "done", &label(step), None);
     self.save();
   }
 
@@ -71,7 +83,7 @@ impl Setup<'_> {
   }
 
   fn fail(mut self, p: TeamProblem) -> TeamActionResult {
-    progress(self.app, &self.scope, &p.step, "error", label(&p.step), Some(p.message.clone()));
+    progress(self.app, &self.scope, &p.step, "error", &label(&p.step), Some(p.message.clone()));
     self.state.problem = Some(p.clone());
     self.save();
     let mut result = fail_with(p);
@@ -88,33 +100,18 @@ fn github_problem(step: &str, action: &str, e: &gh::GhError) -> TeamProblem {
   }
   let mut p = problem(step, e.describe(action));
   if e.status == Some(403) {
-    p.guidance = Some(if step == "github" {
-      CANT_CREATE_REPOS.into()
-    } else {
-      "Your GitHub organization may not allow you to do this. Ask an organization owner for permission, then retry.".into()
-    });
+    p.guidance = Some(if step == "github" { t!("team.setup.cantCreateRepos") } else { t!("team.setup.orgMayNotAllow") });
   } else if e.message.to_ascii_lowercase().contains("workflow") {
-    p.guidance = Some("Give Fabricator the GitHub \"workflow\" permission (Grant GitHub access in this window), then retry.".into());
+    p.guidance = Some(t!("team.setup.workflowPermission"));
   }
   p
 }
 
-const CANT_CREATE_REPOS: &str = "Your GitHub organization may not let you create repositories. Ask one of its owners to create an empty private repository for the workspace and give you the Maintain role (or Admin), then choose Existing repository and enter it. Or choose another GitHub owner.";
-
-/// Why setup's "Protect the main branch" step left it to Fabricator.
-const PLAN_PROTECTION: &str =
-  "GitHub doesn't offer branch protection for this private repository on your plan, so Fabricator enforces the publish flow itself.";
-const ADMIN_PROTECTION: &str =
-  "Only the repository's admins can protect its main branch on GitHub, so Fabricator enforces the publish flow itself.";
-const UNPROTECTED: &str = "GitHub didn't protect the main branch, so Fabricator enforces the publish flow itself.";
-
 fn azure_problem(step: &str, action: &str, e: &entra::AzError, admin_note: Option<String>) -> TeamProblem {
   let mut p = problem(step, e.describe(action));
   if e.kind == entra::AzErrorKind::Blocked {
-    p.message = "Your organization doesn't let you create or change app registrations in Microsoft Entra ID.".into();
-    p.guidance = Some(
-      "Ask an administrator to create the deploy identity with the instructions below, then retry setup and choose \"Use an existing app registration\" with its client ID.".into(),
-    );
+    p.message = t!("team.setup.entraBlocked");
+    p.guidance = Some(t!("team.setup.entraBlockedHint"));
     p.admin_note = admin_note;
   }
   p
@@ -123,11 +120,7 @@ fn azure_problem(step: &str, action: &str, e: &entra::AzError, admin_note: Optio
 fn fabric_problem(step: &str, action: &str, e: &fabric::FabricError) -> TeamProblem {
   let mut p = problem(step, e.describe(action));
   if matches!(e.status, Some(401) | Some(403)) {
-    p.guidance = Some(if step == "fabric" {
-      "Make sure you can create workspaces on the chosen capacity, or pick another capacity.".into()
-    } else {
-      "Make sure you're an Admin or Member of both Fabric workspaces.".into()
-    });
+    p.guidance = Some(if step == "fabric" { t!("team.setup.fabricCapacityHint") } else { t!("team.setup.fabricRoleHint") });
     if step == "access" {
       p.admin_note = Some(FABRIC_SP_NOTE.into());
     }
@@ -144,12 +137,12 @@ pub async fn team_create(app: AppHandle, request: TeamCreateRequest, scope: Stri
   let mut request = request;
   request.name = request.name.trim().to_string();
   if request.name.is_empty() {
-    return fail("Enter a name for the team workspace.");
+    return fail(t!("team.setup.enterName"));
   }
   request.existing_repo = match request.existing_repo.as_deref().map(str::trim).filter(|r| !r.is_empty()) {
     Some(raw) => match naming::parse_repo(raw) {
       Some(repo) => Some(repo),
-      None => return fail("Enter the existing repository as owner/name, for example contoso/sales-apps."),
+      None => return fail(t!("team.setup.repoFormat")),
     },
     None => None,
   };
@@ -158,15 +151,15 @@ pub async fn team_create(app: AppHandle, request: TeamCreateRequest, scope: Stri
     request.owner = repo.split('/').next().unwrap_or_default().to_string();
   }
   if request.owner.trim().is_empty() {
-    return fail("Choose the GitHub account that will own the workspace.");
+    return fail(t!("team.setup.chooseOwner"));
   }
   if request.capacity_id.trim().is_empty() {
-    return fail("Choose a Fabric capacity for the workspace's apps.");
+    return fail(t!("team.setup.chooseCapacity"));
   }
   request.existing_client_id = request.existing_client_id.map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
   request.account = request.account.map(|a| a.trim().to_string()).filter(|a| !a.is_empty());
   if request.account.as_deref().is_some_and(|a| !gh::is_login(a)) {
-    return fail("Choose one of the GitHub accounts you're signed in to.");
+    return fail(t!("team.workspace.chooseAccount"));
   }
   request.runner = match request.runner.map(templates::clean_runner).transpose() {
     Ok(runner) => runner,
@@ -203,10 +196,10 @@ pub async fn team_resume_setup(
     return fail(e);
   }
   let Some(mut ws) = store::find_team_workspace(&workspace_id) else {
-    return fail("That team workspace is no longer on this computer.");
+    return fail(t!("team.workspaceMissing"));
   };
   let Some(setup) = ws.setup.as_mut() else {
-    return fail("This workspace was joined, not set up, on this computer.");
+    return fail(t!("team.setup.joinedHere"));
   };
   if let Some(client) = existing_client_id.map(|c| c.trim().to_string()).filter(|c| !c.is_empty()) {
     setup.request.existing_client_id = Some(client);
@@ -253,13 +246,10 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
 
   let tenant = match entra::account().await {
     Ok((t, _)) => t,
-    Err(e) => return s.fail(azure_problem("identity", "Check your Azure sign-in", &e, None)),
+    Err(e) => return s.fail(azure_problem("identity", &t!("team.actions.checkAzureSignIn"), &e, None)),
   };
   if s.state.tenant_id.as_deref().is_some_and(|t| t != tenant) {
-    return s.fail(problem(
-      "identity",
-      "The Azure CLI is signed in to a different organization than the one this workspace was set up in. Sign in to that organization from setup, then retry.",
-    ));
+    return s.fail(problem("identity", t!("team.setup.wrongTenant")));
   }
   s.state.tenant_id = Some(tenant.clone());
 
@@ -268,7 +258,7 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
   let info = if !s.ws.repo.is_empty() {
     match gh::repo(&s.ws.repo).await {
       Ok(info) => info,
-      Err(e) => return s.fail(github_problem("github", "Open the GitHub repository", &e)),
+      Err(e) => return s.fail(github_problem("github", &t!("team.actions.openGithubRepo"), &e)),
     }
   } else if let Some(existing) = &req.existing_repo {
     match adopt_repo(existing, &me.login).await {
@@ -296,8 +286,8 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
     match created {
       Some(info) => info,
       None => {
-        let e = last_error.unwrap_or_else(|| gh::GhError { status: None, message: "No name was available.".into(), missing_cli: false, sso_url: None });
-        return s.fail(github_problem("github", "Create the GitHub repository", &e));
+        let e = last_error.unwrap_or_else(|| gh::GhError { status: None, message: t!("team.setup.noRepoName"), missing_cli: false, sso_url: None });
+        return s.fail(github_problem("github", &t!("team.actions.createRepo"), &e));
       }
     }
   };
@@ -333,14 +323,14 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
   if s.state.production_workspace_id.is_none() {
     match fabric::create_workspace(&name, &req.capacity_id).await {
       Ok((id, _)) => s.state.production_workspace_id = Some(id),
-      Err(e) => return s.fail(fabric_problem("fabric", "Create the Fabric workspace", &e)),
+      Err(e) => return s.fail(fabric_problem("fabric", &t!("team.actions.createFabricWorkspace"), &e)),
     }
     s.save();
   }
   if s.state.previews_workspace_id.is_none() {
     match fabric::create_workspace(&format!("{name} previews"), &req.capacity_id).await {
       Ok((id, _)) => s.state.previews_workspace_id = Some(id),
-      Err(e) => return s.fail(fabric_problem("fabric", "Create the previews workspace", &e)),
+      Err(e) => return s.fail(fabric_problem("fabric", &t!("team.actions.createPreviewsWorkspace"), &e)),
     }
   }
   s.finish("fabric");
@@ -361,14 +351,12 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
     let registration = match &req.existing_client_id {
       Some(client) => match entra::app(client).await {
         Ok(Some(app)) => app,
-        Ok(None) => {
-          return s.fail(problem("identity", format!("There's no app registration with client ID {client} in your organization.")))
-        }
-        Err(e) => return s.fail(azure_problem("identity", "Find the app registration", &e, Some(note.clone()))),
+        Ok(None) => return s.fail(problem("identity", t!("team.setup.noAppRegistration", client = client))),
+        Err(e) => return s.fail(azure_problem("identity", &t!("team.actions.findAppRegistration"), &e, Some(note.clone()))),
       },
       None => match entra::create_app(&display).await {
         Ok(app) => app,
-        Err(e) => return s.fail(azure_problem("identity", "Create the deploy identity", &e, Some(note.clone()))),
+        Err(e) => return s.fail(azure_problem("identity", &t!("team.actions.createDeployIdentity"), &e, Some(note.clone()))),
       },
     };
     s.state.app_id = Some(registration.app_id);
@@ -380,7 +368,7 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
   if s.state.sp_object_id.is_none() {
     match entra::ensure_service_principal(&app_id).await {
       Ok(id) => s.state.sp_object_id = Some(id),
-      Err(e) => return s.fail(azure_problem("identity", "Create the service principal", &e, Some(note.clone()))),
+      Err(e) => return s.fail(azure_problem("identity", &t!("team.actions.createSp"), &e, Some(note.clone()))),
     }
     s.save();
   }
@@ -392,7 +380,7 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
           s.state.preview_app_id = Some(app.app_id);
           s.state.preview_app_object_id = Some(app.object_id);
         }
-        Err(e) => return s.fail(azure_problem("identity", "Create the preview identity", &e, Some(note.clone()))),
+        Err(e) => return s.fail(azure_problem("identity", &t!("team.actions.createPreviewIdentity"), &e, Some(note.clone()))),
       }
       s.save();
     }
@@ -400,7 +388,7 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
       let preview_app = s.state.preview_app_id.clone().unwrap_or_default();
       match entra::ensure_service_principal(&preview_app).await {
         Ok(id) => s.state.preview_sp_object_id = Some(id),
-        Err(e) => return s.fail(azure_problem("identity", "Create the preview service principal", &e, Some(note.clone()))),
+        Err(e) => return s.fail(azure_problem("identity", &t!("team.actions.createPreviewSp"), &e, Some(note.clone()))),
       }
     }
   }
@@ -418,11 +406,11 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
   // 4. Trust the repository's pipeline (GitHub OIDC; no secrets).
   s.start("trust");
   if let Err(e) = entra::ensure_federated_credentials(&app_object_id, &deploy_subjects).await {
-    return s.fail(azure_problem("trust", "Trust the repository's pipeline", &e, Some(note.clone())));
+    return s.fail(azure_problem("trust", &t!("team.actions.trustPipeline"), &e, Some(note.clone())));
   }
   if separate {
     if let Err(e) = entra::ensure_federated_credentials(&preview_app_object_id, &preview_subjects).await {
-      return s.fail(azure_problem("trust", "Trust the repository's pull requests", &e, Some(note.clone())));
+      return s.fail(azure_problem("trust", &t!("team.actions.trustPrs"), &e, Some(note.clone())));
     }
   }
   s.finish("trust");
@@ -432,7 +420,7 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
   s.start("access");
   for (ws_id, principal) in [(&prod_ws, &sp_id), (&preview_ws, &preview_sp_id)] {
     if let Err(e) = fabric::add_role(ws_id, principal, "ServicePrincipal", "Contributor").await {
-      return s.fail(fabric_problem("access", "Give the deploy identities access to Fabric", &e));
+      return s.fail(fabric_problem("access", &t!("team.actions.grantIdentities"), &e));
     }
   }
   s.finish("access");
@@ -464,7 +452,7 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
     ("FABRIC_PREVIEW_WORKSPACE_ID", preview_ws.as_str()),
   ] {
     if let Err(e) = gh::set_variable(&info.full_name, var, value).await {
-      let p = github_problem("files", "Configure the pipeline", &e);
+      let p = github_problem("files", &t!("team.actions.configurePipeline"), &e);
       return s.fail(or_locked(p, &info.full_name, &me.login).await);
     }
   }
@@ -475,7 +463,7 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
       None => gh::delete_variable(&info.full_name, templates::RUNS_ON_VARIABLE).await,
     };
     if let Err(e) = saved {
-      let p = github_problem("files", "Choose where the pipeline runs", &e);
+      let p = github_problem("files", &t!("team.actions.chooseRunner"), &e);
       return s.fail(or_locked(p, &info.full_name, &me.login).await);
     }
   }
@@ -498,14 +486,14 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
   s.start("protection");
   let (protection, protection_note) = match gh::protect_main(&info.full_name, false).await {
     Ok(true) => ("enforced", None),
-    Ok(false) => ("app", Some(PLAN_PROTECTION)),
+    Ok(false) => ("app", Some(t!("team.setup.protection.plan"))),
     Err(e) => {
       log::warn!("couldn't protect main on {}: {}", info.full_name, e.message);
-      ("app", Some(if info.admin { UNPROTECTED } else { ADMIN_PROTECTION }))
+      ("app", Some(if info.admin { t!("team.setup.protection.unprotected") } else { t!("team.setup.protection.adminOnly") }))
     }
   };
   s.state.protection = Some(protection.into());
-  progress(app, &s.scope, "protection", "done", label("protection"), protection_note.map(String::from));
+  progress(app, &s.scope, "protection", "done", &label("protection"), protection_note);
   if !s.done("protection") {
     s.state.completed.push("protection".into());
   }
@@ -524,10 +512,6 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
   // 9. Prove the pipeline can sign in and reach both workspaces.
   s.start("verify");
   if let Err(p) = verify_pipeline(app, &s.scope, &info.full_name, cancel).await {
-    let mut p = p;
-    if p.admin_note.is_none() && p.guidance.as_deref().is_some_and(|g| g.contains("administrator")) {
-      p.admin_note = Some(FABRIC_SP_NOTE.into());
-    }
     return s.fail(p);
   }
   s.finish("verify");
@@ -539,17 +523,17 @@ async fn provision(app: &AppHandle, ws: TeamWorkspace, scope: &str, cancel: &Can
 /// The repository someone created for the workspace, when setup can use it.
 /// An invitation to it waiting for this account is accepted.
 async fn adopt_repo(full_name: &str, login: &str) -> Result<gh::RepoInfo, TeamProblem> {
-  let open = |e: &gh::GhError| github_problem("github", &format!("Open {full_name}"), e);
+  let open = |e: &gh::GhError| github_problem("github", &t!("team.actions.openNamedRepo", repo = full_name), e);
   let info = match gh::repo(full_name).await {
     Ok(info) => info,
     Err(e) if e.is_not_found() => match super::join::accept_pending_invitation(full_name).await {
       Ok(true) => gh::repo(full_name).await.map_err(|e| open(&e))?,
       Ok(false) => {
-        let mut p = problem("github", format!("GitHub doesn't show {full_name} to {login}."));
-        p.guidance = Some(format!("Check the repository's name, and ask its owner to give {login} the Maintain or Admin role on it."));
+        let mut p = problem("github", t!("team.setup.repoHidden", repo = full_name, login = login));
+        p.guidance = Some(t!("team.setup.repoHiddenHint", login = login));
         return Err(p);
       }
-      Err(e) => return Err(github_problem("github", &format!("Accept the invitation to {full_name}"), &e)),
+      Err(e) => return Err(github_problem("github", &t!("team.actions.acceptInvitationTo", repo = full_name), &e)),
     },
     Err(e) => return Err(open(&e)),
   };
@@ -567,22 +551,22 @@ fn adoption_problem(info: &gh::RepoInfo, login: &str, has_commits: bool, is_work
   let repo = &info.full_name;
   let owner = repo.split('/').next().unwrap_or_default();
   let (message, guidance) = if info.archived {
-    (format!("{repo} is archived."), "Ask its owner to unarchive it on GitHub, or use another repository.".to_string())
+    (t!("team.setup.adopt.archived", repo = repo), t!("team.setup.adopt.archivedHint"))
   } else if let Some(p) = locked_problem("github", info, login) {
     return Some(p);
   } else if !info.manages() {
     (
-      format!("{login} needs the Maintain or Admin role on {repo} to set up a workspace in it."),
-      format!("Ask an owner of {owner}, or an admin of the repository, to give {login} the Maintain role on it, then try again."),
+      t!("team.setup.adopt.needsRole", login = login, repo = repo),
+      t!("team.setup.adopt.needsRoleHint", owner = owner, login = login),
     )
   } else if !info.private {
-    (format!("{repo} is public."), "Team workspaces need a private or internal repository. Make it private on GitHub, or use another repository.".into())
+    (t!("team.setup.adopt.public", repo = repo), t!("team.setup.adopt.publicHint"))
   } else if is_workspace {
-    (format!("{repo} is already a team workspace."), "Join it instead: on Home, under Team workspaces, select Join.".into())
+    (t!("team.setup.adopt.alreadyWorkspace", repo = repo), t!("team.setup.adopt.alreadyWorkspaceHint"))
   } else if has_commits && info.default_branch != naming::DEFAULT_BRANCH {
     (
-      format!("{repo}'s default branch is {}.", info.default_branch),
-      "Team workspaces use a default branch named main. Rename the branch in the repository's settings on GitHub, or use an empty repository.".into(),
+      t!("team.setup.adopt.defaultBranch", repo = repo, branch = info.default_branch),
+      t!("team.setup.adopt.defaultBranchHint"),
     )
   } else {
     return None;
@@ -601,14 +585,13 @@ fn locked_problem(step: &str, info: &gh::RepoInfo, login: &str) -> Option<TeamPr
   }
   let repo = &info.full_name;
   let owner = repo.split('/').next().unwrap_or_default();
-  let mut p = problem(step, format!("{owner} locked {repo} until it's set up in the organization's portal, so {login} can't change it yet."));
-  p.link = info.setup_url().map(|url| TeamLink { label: "Finish setting up the repository".into(), url });
-  let finish = if p.link.is_some() {
-    "Select Finish setting up the repository and complete the steps in the portal"
+  let mut p = problem(step, t!("team.setup.locked.message", owner = owner, repo = repo, login = login));
+  p.link = info.setup_url().map(|url| TeamLink { label: t!("team.setup.locked.link"), url });
+  p.guidance = Some(if p.link.is_some() {
+    t!("team.setup.locked.hintLink", login = login)
   } else {
-    "Finish setting it up as its description on GitHub says"
-  };
-  p.guidance = Some(format!("{finish}, then try again. Setup needs {login} to have the Maintain or Admin role on the repository."));
+    t!("team.setup.locked.hint", login = login)
+  });
   Some(p)
 }
 
@@ -625,7 +608,7 @@ async fn or_locked(p: TeamProblem, repo: &str, login: &str) -> TeamProblem {
 /// repository, or a commit for each file that differs in one with commits (an
 /// existing repository, or a retry after the first push).
 async fn write_files(repo: &str, files: &[(String, String)], git_name: &str, git_email: &str) -> Result<(), TeamProblem> {
-  let has_commits = gh::has_commits(repo).await.map_err(|e| github_problem("files", "Check the repository", &e))?;
+  let has_commits = gh::has_commits(repo).await.map_err(|e| github_problem("files", &t!("team.actions.checkRepo"), &e))?;
   if !has_commits {
     let Err(e) = repo::seed_repository(repo, files, git_name, git_email).await else {
       return Ok(());
@@ -636,18 +619,18 @@ async fn write_files(repo: &str, files: &[(String, String)], git_name: &str, git
     if !raced {
       let mut p = problem("files", e.clone());
       if lower.contains("workflow") {
-        p.guidance = Some("Give Fabricator the GitHub \"workflow\" permission (Grant GitHub access in this window), then retry.".into());
+        p.guidance = Some(t!("team.setup.workflowPermission"));
       }
       return Err(p);
     }
   }
   for (path, content) in files {
-    let existing = gh::main_file(repo, path).await.map_err(|e| github_problem("files", "Check the repository", &e))?;
+    let existing = gh::main_file(repo, path).await.map_err(|e| github_problem("files", &t!("team.actions.checkRepo"), &e))?;
     let Some(content) = merged_file(path, content, existing.as_ref().map(|(text, _)| text.as_str())) else {
       continue;
     };
     if let Err(e) = gh::put_main_file(repo, path, &content, "Set up Fabricator team workspace").await {
-      return Err(github_problem("files", &format!("Add {path} to the repository"), &e));
+      return Err(github_problem("files", &t!("team.actions.addFile", path = path), &e));
     }
   }
   Ok(())
@@ -702,7 +685,7 @@ fn either(names: &[String]) -> String {
   match names {
     [] => String::new(),
     [one] => one.clone(),
-    [rest @ .., last] => format!("{} or {last}", rest.join(", ")),
+    [rest @ .., last] => t!("team.setup.verify.either", rest = rest.join(", "), last = last),
   }
 }
 
@@ -710,40 +693,41 @@ fn either(names: &[String]) -> String {
 fn verify_problem(log: &str, url: &str, repo: &str) -> (TeamProblem, bool) {
   let lower = log.to_ascii_lowercase();
   if let Some((allowed, actual)) = enterprise_restriction(log) {
-    let enterprises = if allowed.is_empty() { "certain GitHub enterprises".to_string() } else { format!("the GitHub enterprises {}", either(&allowed)) };
-    let theirs = if actual.is_empty() { format!("{repo} isn't in one") } else { format!("{repo} is in the enterprise {actual}") };
-    let mut p = problem(
-      "verify",
-      format!("Your Microsoft Entra ID only accepts the pipeline's sign-in from repositories owned by organizations in {enterprises}, and {theirs}."),
-    );
-    p.guidance = Some("Set the workspace up in a repository owned by an organization in one of those enterprises: select Abandon setup…, then create the workspace again and choose that organization as the GitHub owner. Or choose Existing repository and enter one of its repositories where you have the Maintain or Admin role (an owner can create one for you).".into());
+    let message = match (allowed.is_empty(), actual.is_empty()) {
+      (true, true) => t!("team.setup.verify.enterprise.someNotIn", repo = repo),
+      (true, false) => t!("team.setup.verify.enterprise.someIn", repo = repo, enterprise = actual),
+      (false, true) => t!("team.setup.verify.enterprise.listNotIn", enterprises = either(&allowed), repo = repo),
+      (false, false) => t!("team.setup.verify.enterprise.listIn", enterprises = either(&allowed), repo = repo, enterprise = actual),
+    };
+    let mut p = problem("verify", message);
+    p.guidance = Some(t!("team.setup.verify.enterprise.hint"));
     return (p, false);
   }
   if ["aadsts70021", "no matching federated identity record", "aadsts700016", "aadsts700213", "aadsts70025"].iter().any(|k| lower.contains(k)) {
-    let mut p = problem("verify", "Microsoft Entra ID didn't accept the pipeline's sign-in yet.");
-    p.guidance = Some("New trust settings can take a few minutes to apply. Retry setup in a few minutes; if it keeps failing, use Repair in the workspace settings.".into());
+    let mut p = problem("verify", t!("team.setup.verify.notAccepted"));
+    p.guidance = Some(t!("team.setup.verify.notAcceptedHint"));
     return (p, true);
   }
   // The workflow's own messages when the runner's network blocks a sign-in or Fabric.
   if ["couldn't get an oidc token from github", "couldn't reach microsoft entra id", "couldn't reach microsoft fabric"].iter().any(|k| lower.contains(k)) {
-    let mut p = problem("verify", "The pipeline's runner couldn't reach GitHub's sign-in, Microsoft Entra ID or Fabric.");
-    p.guidance = Some("If the pipeline runs on your organization's own runners, ask whoever manages them to allow outbound access to GitHub, login.microsoftonline.com and api.fabric.microsoft.com, or choose other runners under Where the pipeline runs. Then try again.".into());
+    let mut p = problem("verify", t!("team.setup.verify.unreachable"));
+    p.guidance = Some(t!("team.setup.verify.unreachableHint"));
     p.kind = Some("runner".into());
     return (p, false);
   }
   if lower.contains("returned http 401") || lower.contains("returned http 403") {
-    let mut p = problem("verify", "The pipeline signed in, but Fabric refused it.");
-    p.guidance = Some("A Fabric administrator may need to allow service principals to call Fabric APIs, then retry setup.".into());
+    let mut p = problem("verify", t!("team.setup.verify.refused"));
+    p.guidance = Some(t!("team.setup.verify.refusedHint"));
     p.admin_note = Some(FABRIC_SP_NOTE.into());
     return (p, false);
   }
   if lower.contains("returned http 404") {
-    let mut p = problem("verify", "The pipeline can't see the Fabric workspaces.");
-    p.guidance = Some("Use Repair in the workspace settings to give the deploy identity access again.".into());
+    let mut p = problem("verify", t!("team.setup.verify.cantSee"));
+    p.guidance = Some(t!("team.setup.verify.cantSeeHint"));
     return (p, false);
   }
-  let mut p = problem("verify", "The verification run failed.");
-  p.guidance = Some(format!("Open the run on GitHub to see what happened: {url}"));
+  let mut p = problem("verify", t!("team.setup.verify.failed"));
+  p.guidance = Some(t!("team.setup.verify.failedHint", url = url));
   (p, false)
 }
 
@@ -761,14 +745,14 @@ pub(crate) async fn verify_pipeline(app: &AppHandle, scope: &str, full_name: &st
         }
         Err(e) if e.is_not_found() || e.status == Some(422) => {
           if sleep_or_cancel(8_000, cancel).await {
-            return Err(problem("verify", CANCELLED));
+            return Err(problem("verify", cancelled()));
           }
         }
-        Err(e) => return Err(problem("verify", e.describe("Start the verification run"))),
+        Err(e) => return Err(problem("verify", e.describe(&t!("team.actions.startVerification")))),
       }
     }
     if !dispatched {
-      return Err(problem("verify", "GitHub didn't start the verification run. Check that GitHub Actions is enabled for the repository, then retry."));
+      return Err(problem("verify", t!("team.setup.verify.notDispatched")));
     }
     let mut run = None;
     for _ in 0..30 {
@@ -784,11 +768,11 @@ pub(crate) async fn verify_pipeline(app: &AppHandle, scope: &str, full_name: &st
         break;
       }
       if sleep_or_cancel(4_000, cancel).await {
-        return Err(problem("verify", CANCELLED));
+        return Err(problem("verify", cancelled()));
       }
     }
     let Some(run) = run else {
-      return Err(problem("verify", "The verification run didn't start. Check GitHub Actions for the repository, then retry."));
+      return Err(problem("verify", t!("team.setup.verify.notStarted")));
     };
     let finished = match finish_verification(app, scope, full_name, run, cancel).await? {
       Verification::Finished(run) => run,
@@ -814,15 +798,15 @@ pub(crate) async fn verify_pipeline(app: &AppHandle, scope: &str, full_name: &st
     let log = gh::run_log(full_name, finished.id, 8_000).await.unwrap_or_default();
     let (p, retry) = verify_problem(&log, &finished.url, full_name);
     if retry && attempt == 0 {
-      progress(app, scope, "verify", "running", label("verify"), Some("Waiting for the new trust settings to apply…".into()));
+      progress(app, scope, "verify", "running", &label("verify"), Some(t!("team.setup.verify.waitingForTrust")));
       if sleep_or_cancel(45_000, cancel).await {
-        return Err(problem("verify", CANCELLED));
+        return Err(problem("verify", cancelled()));
       }
       continue;
     }
     return Err(p);
   }
-  Err(problem("verify", "The verification run failed."))
+  Err(problem("verify", t!("team.setup.verify.failed")))
 }
 
 /// How long the verification run may wait for a runner before setup says
@@ -858,20 +842,20 @@ async fn finish_verification(
       if since.elapsed() >= RUNNER_WAIT {
         return Ok(Verification::Stuck(run));
       }
-      "Waiting for a runner".to_string()
+      t!("team.setup.verify.waitingForRunner")
     } else {
       waiting_since = None;
-      run.status.replace('_', " ")
+      run_status(&run.status)
     };
-    progress(app, scope, "verify", "running", label("verify"), Some(detail));
+    progress(app, scope, "verify", "running", &label("verify"), Some(detail));
     if sleep_or_cancel(6_000, cancel).await {
-      return Err(problem("verify", CANCELLED));
+      return Err(problem("verify", cancelled()));
     }
     if let Ok(next) = gh::run(full_name, run.id).await {
       run = next;
     }
   }
-  Err(problem("verify", format!("The pipeline run is taking unusually long. Follow it on GitHub: {}", run.url)))
+  Err(problem("verify", t!("team.runTooLong", url = run.url)))
 }
 
 fn job_str<'a>(job: &'a Value, key: &str) -> Option<&'a str> {
@@ -917,33 +901,23 @@ async fn unusable_runs_on(repo: &str) -> Option<String> {
 fn runner_problem(repo: &str, why: NoRunner) -> TeamProblem {
   let mut p = match why {
     NoRunner::Waited => {
-      let mut p = problem(
-        "verify",
-        format!("No runner picked up the pipeline's verification run in {} minutes.", RUNNER_WAIT.as_secs() / 60),
-      );
-      p.guidance = Some("GitHub-hosted runners may be turned off for this repository, or the runners the pipeline asks for are busy or offline. Choose the runners your organization uses under Where the pipeline runs, then try again.".into());
+      let mut p = problem("verify", t!("team.setup.runner.waited", minutes = RUNNER_WAIT.as_secs() / 60));
+      p.guidance = Some(t!("team.setup.runner.waitedHint"));
       p
     }
     NoRunner::Refused(reason) => {
       let reason: String = reason.trim().chars().take(400).collect();
       let mut p = problem(
         "verify",
-        if reason.is_empty() {
-          "GitHub didn't start the pipeline's verification run.".to_string()
-        } else {
-          format!("GitHub didn't start the pipeline's verification run: {reason}")
-        },
+        if reason.is_empty() { t!("team.setup.runner.refused") } else { t!("team.setup.runner.refusedWith", reason = reason) },
       );
-      p.guidance = Some("If GitHub-hosted runners are turned off for this repository, or the runners the pipeline asks for aren't available to it, choose the runners your organization uses under Where the pipeline runs, then try again.".into());
+      p.guidance = Some(t!("team.setup.runner.refusedHint"));
       p
     }
     NoRunner::Invalid(value) => {
       let value: String = value.trim().chars().take(200).collect();
-      let mut p = problem(
-        "verify",
-        format!("GitHub can't use the pipeline's runner setting: {} is {value}.", templates::RUNS_ON_VARIABLE),
-      );
-      p.guidance = Some("Choose the runners under Where the pipeline runs, then try again. Fabricator saves them in a form GitHub accepts.".into());
+      let mut p = problem("verify", t!("team.setup.runner.invalid", variable = templates::RUNS_ON_VARIABLE, value = value));
+      p.guidance = Some(t!("team.setup.runner.invalidHint"));
       p
     }
   };
@@ -969,6 +943,9 @@ mod tests {
     let ids: Vec<&str> = SETUP_STEPS.iter().map(|(id, _)| *id).collect();
     assert_eq!(ids, vec!["github", "fabric", "identity", "trust", "access", "files", "protection", "clone", "verify"]);
     assert_eq!(label("trust"), "Let the repository's pipeline sign in as those identities");
+    for (id, english) in SETUP_STEPS {
+      assert_eq!(label(id), *english, "the app's label for {id} matches the one Copilot reads");
+    }
   }
 
   #[test]

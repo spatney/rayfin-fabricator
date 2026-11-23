@@ -1,6 +1,7 @@
 import type { JSX } from 'react'
 import type { ChatPickRef } from '@shared/ipc'
 import { CloseIcon, PickIcon } from '../components/icons'
+import { useTranslation } from '../i18n'
 import type { PickedElement } from './useTouchUp'
 import './pick.css'
 
@@ -21,9 +22,10 @@ export function PickTray({
   /** Show a pick's picture large, to draw on. */
   onOpen?: (id: string) => void
 }): JSX.Element | null {
+  const { t } = useTranslation('app')
   if (picks.length === 0) return null
   return (
-    <ul className="pick-tray" aria-label="Picked elements to send">
+    <ul className="pick-tray" aria-label={t('pick.toSend')}>
       {picks.map((p) => (
         <li
           key={p.id}
@@ -32,7 +34,7 @@ export function PickTray({
           onMouseEnter={() => onFocus?.(p.id)}
           onMouseLeave={() => onFocus?.(null)}
         >
-          <span className="pick-chip-n" aria-label={`Pick ${p.n}`}>
+          <span className="pick-chip-n" aria-label={t('pick.number', { n: p.n })}>
             {p.n}
           </span>
           {p.shot && onOpen ? (
@@ -40,8 +42,8 @@ export function PickTray({
               type="button"
               className="pick-chip-shot pick-chip-shot--open"
               onClick={() => onOpen(p.id)}
-              aria-label={`Draw on the picture of ${p.target.label}`}
-              title="Show it larger and draw on it"
+              aria-label={t('pick.draw', { label: p.target.label })}
+              title={t('pick.drawTitle')}
             >
               <img src={p.shot.thumb} alt="" draggable={false} />
             </button>
@@ -61,8 +63,8 @@ export function PickTray({
               onFocus?.(null)
               onRemove(p.id)
             }}
-            aria-label={`Remove ${p.target.label}`}
-            title="Remove"
+            aria-label={t('pick.remove', { label: p.target.label })}
+            title={t('actions.remove')}
           >
             <CloseIcon />
           </button>
@@ -88,13 +90,14 @@ export function SentPicks({
   /** Show the message's picture at this index large. */
   onOpen?: (shot: number) => void
 }): JSX.Element {
+  const { t } = useTranslation('app')
   return (
-    <ul className="msg-picks" aria-label="Picked elements">
+    <ul className="msg-picks" aria-label={t('pick.sent')}>
       {picks.map((p) => {
         const thumb = p.shot == null ? undefined : thumbs?.[p.shot]
         return (
           <li key={p.n} className="pick-chip pick-chip--sent" title={p.label}>
-            <span className="pick-chip-n" aria-label={`Pick ${p.n}`}>
+            <span className="pick-chip-n" aria-label={t('pick.number', { n: p.n })}>
               {p.n}
             </span>
             {thumb &&
@@ -103,8 +106,8 @@ export function SentPicks({
                   type="button"
                   className="pick-chip-shot pick-chip-shot--open"
                   onClick={() => onOpen(p.shot!)}
-                  aria-label={`Show the picture of ${p.label}`}
-                  title="Show it larger"
+                  aria-label={t('pick.show', { label: p.label })}
+                  title={t('pick.showTitle')}
                 >
                   <img src={thumb} alt="" draggable={false} />
                 </button>

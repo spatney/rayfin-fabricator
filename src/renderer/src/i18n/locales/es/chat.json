@@ -1,0 +1,354 @@
+{
+  "format": {
+    "quoted": "“{{text}}”",
+    "more": "+{{count}} más",
+    "dateTime": "{{date}}, {{time}}"
+  },
+  "duration": {
+    "underSecond": "<1 s",
+    "seconds": "{{s}} s",
+    "minutes": "{{m}} min",
+    "minutesSeconds": "{{m}} min {{s}} s"
+  },
+  "steps": {
+    "count_one": "{{count}} paso",
+    "count_other": "{{count}} pasos",
+    "showEarlier_one": "Mostrar {{count}} paso anterior",
+    "showEarlier_other": "Mostrar {{count}} pasos anteriores",
+    "failed": "falló",
+    "exit": "código de salida {{code}}",
+    "copyCommand": "Copiar comando",
+    "open": "Abrir {{name}}"
+  },
+  "code": {
+    "text": "texto",
+    "wrap": "Ajustar",
+    "wrapLines": "Ajustar las líneas largas",
+    "noWrapLines": "No ajustar las líneas largas",
+    "copyCode": "Copiar código",
+    "showAll_one": "Mostrar {{count}} línea",
+    "showAll_other": "Mostrar las {{count}} líneas"
+  },
+  "files": {
+    "openInCode": "Abrir {{path}} en la pestaña Código"
+  },
+  "agentRow": {
+    "agent": "Agente",
+    "hideSteps": "Ocultar sus pasos",
+    "showSteps": "Mostrar sus pasos"
+  },
+  "agentStatus": {
+    "waitingFor": "Esperando a {{agent}}",
+    "agentsWorking_one": "{{agents}} está trabajando",
+    "agentsWorking_other": "{{agents}} están trabajando",
+    "thinking": "Pensando",
+    "writing": "Escribiendo la respuesta",
+    "working": "Trabajando",
+    "waitingDecision": "Esperando tu decisión",
+    "waitingAnswer": "Esperando tu respuesta"
+  },
+  "assistant": {
+    "needsInput": "Fabricator necesita tu respuesta",
+    "youAdded": "Agregaste"
+  },
+  "copyButton": {
+    "copyMessage": "Copiar mensaje"
+  },
+  "tray": {
+    "removeItem": "Quitar {{name}}"
+  },
+  "dataTray": {
+    "toConnect": "Datos de Fabric para conectar",
+    "data": "Datos",
+    "chipTitle": "{{kind}} en {{workspace}}. Copilot los conecta cuando envías el mensaje. Haz clic para cambiar los datos.",
+    "sent": "Datos de Fabric",
+    "sentTitle": "{{kind}} en {{workspace}}",
+    "setup": "Configuración inicial",
+    "wrapUp": "Cierre",
+    "page": "Página {{index}} de {{total}}: {{name}}",
+    "setupAndPage": "Configuración inicial y página {{index}} de {{total}}: {{name}}",
+    "migration": "Migración de Power BI",
+    "migrating": "Migrando “{{report}}” desde Power BI"
+  },
+  "fileTray": {
+    "toSend": "Archivos y carpetas para enviar",
+    "sent": "Archivos y carpetas"
+  },
+  "diffView": {
+    "added": "Archivo nuevo",
+    "deleted": "Eliminado",
+    "renamed": "Renombrado",
+    "line": "⋯ Línea {{line}}",
+    "shortened": "Diferencias acortadas: abre el archivo para verlo todo."
+  },
+  "imageViewer": {
+    "picture": "Imagen",
+    "pictureOf": "Imagen {{index}} de {{total}}",
+    "closeTitle": "Cerrar (Esc)",
+    "previous": "Imagen anterior",
+    "previousTitle": "Anterior (←)",
+    "next": "Imagen siguiente",
+    "nextTitle": "Siguiente (→)",
+    "showLarger": "Ver en grande",
+    "attachment": "Captura de pantalla adjunta"
+  },
+  "messageRow": {
+    "screenshots_one": "{{count}} captura de pantalla",
+    "screenshots_other": "{{count}} capturas de pantalla",
+    "resend": "Volver a enviar este mensaje",
+    "interrupted": "Esta respuesta se interrumpió al cerrarse la aplicación.",
+    "resumeTitle": "Volver a ejecutar esta indicación y continuar",
+    "resume": "Reanudar",
+    "resumeApprovedPlan": "Reanuda el plan aprobado",
+    "reviseRecoveredPlan": "Revisa el plan recuperado",
+    "resumePlanning": "Reanuda la planificación"
+  },
+  "thinking": {
+    "live": "Pensando…",
+    "thoughtItThrough": "Lo pensó a fondo",
+    "thoughtFor": "Pensó durante {{duration}}"
+  },
+  "workLog": {
+    "working": "Trabajando",
+    "worked": "Trabajó",
+    "workedFor": "Trabajó durante {{duration}}",
+    "hideSteps": "Ocultar pasos",
+    "showSteps": "Mostrar pasos",
+    "showEarlierNotes": "Mostrar notas anteriores"
+  },
+  "welcome": {
+    "title": "Vamos a crear {{name}}",
+    "sub": "Describe lo que quieres con tus propias palabras. Escribiré el código y te lo mostraré funcionando en la vista previa, sin necesidad de programar.",
+    "tailoring": "Adaptando ideas a tu aplicación…",
+    "ideas": "Ideas para empezar",
+    "refreshTitle": "Generar nuevas ideas a partir del código de tu aplicación",
+    "tips": "Consejos",
+    "tipScreenshot": "Pega o suelta una captura de pantalla",
+    "tipMention": "Escribe <kbd>@</kbd> para hacer referencia a un archivo",
+    "tipData": "Usa <kbd>+</kbd> para conectar datos"
+  },
+  "paths": {
+    "projectFolder": "carpeta del proyecto"
+  },
+  "fusion": {
+    "modelDid": "{{model}} {{did}}",
+    "did": {
+      "primary": "respondió",
+      "draft": "redactó",
+      "critic": "revisó",
+      "revision": "corrigió",
+      "judge": "verificó",
+      "repair": "reparó",
+      "followUp": "continuó"
+    }
+  },
+  "plugins": {
+    "fabricIq": "Explora los informes de Power BI y los modelos semánticos que puedes abrir.",
+    "workIq": "Busca tus correos, reuniones, archivos, mensajes de Teams y personas de Microsoft 365."
+  },
+  "markup": {
+    "pen": "Lápiz",
+    "highlighter": "Resaltador",
+    "arrow": "Flecha",
+    "box": "Rectángulo",
+    "red": "Rojo",
+    "yellow": "Amarillo",
+    "green": "Verde",
+    "blue": "Azul",
+    "white": "Blanco"
+  },
+  "usage": {
+    "unit": {
+      "aiCredits_one": "crédito de IA",
+      "aiCredits_other": "créditos de IA",
+      "credits_one": "crédito",
+      "credits_other": "créditos",
+      "premiumRequests_one": "solicitud premium",
+      "premiumRequests_other": "solicitudes premium"
+    },
+    "unlimited": {
+      "aiCredits": "Créditos de IA ilimitados",
+      "premiumRequests": "Solicitudes premium ilimitadas"
+    },
+    "amount": "{{amount}} {{unit}}",
+    "tokens": "{{tokens}} tokens",
+    "tokenLine": "{{input}} de entrada · {{output}} de salida",
+    "tokenDetail": "{{input}} tokens de entrada y {{output}} tokens de salida",
+    "tokenDetailCached": "{{input}} tokens de entrada ({{cached}} de la caché de indicaciones) y {{output}} tokens de salida",
+    "left": "Quedan {{left}} de {{total}} {{unit}}",
+    "resets": "Se restablece el {{day}}",
+    "overage": "{{amount}} {{unit}} de uso adicional"
+  },
+  "usageMeter": {
+    "providerKey": "Con tu clave de {{provider}}, que factura su proveedor",
+    "ownKey": "Con tu propia clave, que factura su proveedor",
+    "yourKey": "Tu clave",
+    "plan": "Plan de Copilot",
+    "percentLeft": "Queda {{percent}}",
+    "planFailed": "No se pudo comprobar tu plan de Copilot.",
+    "planChecking": "Comprobando tu plan…",
+    "remaining": "Quedan <strong>{{left}}</strong> de {{total}} {{unit}}",
+    "planLeft": "Plan de Copilot restante",
+    "tokens": "tokens",
+    "sessionCredits": "Créditos de la sesión",
+    "sessionUsage": "Uso de la sesión",
+    "columnTokens": "Tokens",
+    "columnCredits": "Créditos",
+    "columnRequests": "Solicitudes",
+    "chipLabel": "Uso del chat: {{summary}}",
+    "chipTitle": "Lo que ha usado este chat: {{summary}}",
+    "howCounted": "Cómo se cuenta el uso",
+    "usedTokens": "tokens usados",
+    "usedCredits_one": "crédito usado",
+    "usedCredits_other": "créditos usados",
+    "usedRequests_one": "solicitud premium usada",
+    "usedRequests_other": "solicitudes premium usadas",
+    "costTitle": "A 0,01 US$ por crédito de IA",
+    "approx": "≈ {{cost}}",
+    "partial": "Algunas respuestas no informaron de sus créditos, así que esto es un mínimo.",
+    "byModel": "Uso por modelo",
+    "tokenDetails": "Detalles de los tokens",
+    "viewUsage": "Ver el uso",
+    "otherModels": "Otros modelos"
+  },
+  "imageMarkup": {
+    "hint": "Dibuja encima para mostrarle a Copilot lo que quieres decir",
+    "cancelTitle": "Cancelar (Esc)",
+    "failed": "No se pudo abrir esta imagen.",
+    "area": {
+      "pen": "Área de dibujo: dibuja con el lápiz",
+      "highlighter": "Área de dibujo: dibuja con el resaltador",
+      "arrow": "Área de dibujo: dibuja con la flecha",
+      "box": "Área de dibujo: dibuja con el rectángulo"
+    },
+    "opening": "Abriendo la imagen…",
+    "discard": "Presiona Esc de nuevo para descartar el dibujo",
+    "tools": "Herramientas de dibujo",
+    "tool": "Herramienta",
+    "color": "Color",
+    "withKey": "{{label}} ({{key}})",
+    "undoTitle": "Deshacer ({{mod}}+Z)",
+    "redo": "Rehacer",
+    "redoTitle": "Rehacer ({{mod}}+Mayús+Z)",
+    "clear": "Borrar el dibujo",
+    "keepTitle": "Conservar el dibujo (Entrar)",
+    "closeTitle": "Cerrar (Entrar)"
+  },
+  "access": {
+    "readOnly": "Solo lectura",
+    "readWrite": "Lectura y escritura"
+  },
+  "addMenu": {
+    "title": "Agregar imágenes, archivos o datos",
+    "image": "Imagen",
+    "orPaste": "O pégala",
+    "files": "Archivos y carpetas…",
+    "fabricData": "Datos de Fabric",
+    "dax": "DAX",
+    "browseAll": "Examinar todos los datos de Fabric…"
+  },
+  "pluginsMenu": {
+    "plugins": "Complementos",
+    "pluginsOn": "Complementos: {{names}}",
+    "disabled": "Los complementos no se pueden cambiar mientras el asistente está trabajando",
+    "title": "Complementos y herramientas",
+    "sub": "Elige lo que puede usar este chat.",
+    "enabled_one": "{{count}} activado",
+    "enabled_other": "{{count}} activados",
+    "experiment": "Experimento",
+    "mcpServers": "Servidores MCP",
+    "mcpNote": "Un servidor MCP puede hacer todo lo que hacen sus herramientas.",
+    "manage": "Administrar servidores MCP…",
+    "addServer": "Agregar un servidor MCP…",
+    "note": "El chat solo los usa cuando una solicitud los necesita.",
+    "learn": "Más información sobre los complementos"
+  },
+  "turnFooter": {
+    "changedFiles_one": "Se cambió {{count}} archivo",
+    "changedFiles_other": "Se cambiaron {{count}} archivos",
+    "changed": "Cambios",
+    "created": "Se creó {{path}}",
+    "edited": "Se editó {{path}}",
+    "deleted": "Se eliminó {{path}}",
+    "hideChanges": "{{what}}: ocultar los cambios",
+    "showChanges": "{{what}}: mostrar los cambios",
+    "openInCode": "{{what}}: abrir en la pestaña Código",
+    "partial": "Algunas ediciones de este archivo no se registraron: ábrelo para verlas todas.",
+    "stepwise": "Se muestra edición por edición: estas ediciones no se pudieron combinar en una sola vista de diferencias.",
+    "changesTo": "Cambios en {{path}}",
+    "noNetChange": "Sin cambios netos: las ediciones posteriores deshicieron las anteriores.",
+    "followed_one": "Siguió tu instrucción <list/>",
+    "followed_other": "Siguió tus instrucciones <list/>",
+    "copyAnswer": "Copiar respuesta",
+    "tryAgainTitle": "Volver a ejecutar tu último mensaje para intentarlo de nuevo",
+    "durationTitle": "Cuánto tardó"
+  },
+  "markdown": {
+    "note": "Nota",
+    "tip": "Consejo",
+    "important": "Importante",
+    "warning": "Advertencia",
+    "caution": "Precaución"
+  },
+  "suggestions": {
+    "list": "Muestra mis {{things}} en una página limpia",
+    "create": "Agrega un formulario para crear y editar cada {{thing}}",
+    "search": "Agrega búsqueda y filtros a mis {{things}}",
+    "chart": "Agrega un panel que muestre mis {{things}} en gráficos",
+    "auth": "Exige iniciar sesión para que cada persona tenga sus {{things}} por separado",
+    "photo": "Permíteme adjuntar una foto a cada {{thing}}",
+    "design": "Dale a toda la aplicación un aspecto nuevo y moderno"
+  },
+  "panel": {
+    "exitFocusTitle": "Salir del enfoque: volver a mostrar la vista previa",
+    "focusTitle": "Enfocar el chat: ocultar la vista previa",
+    "exitFocus": "Salir del enfoque",
+    "focus": "Enfocar el chat",
+    "newChatTitle": "Borrar esta conversación y empezar de cero",
+    "newChat": "Nuevo chat",
+    "jumpTitle": "Ir al último mensaje",
+    "newMessages": "Mensajes nuevos",
+    "jump": "Ir al más reciente",
+    "newChatConfirm": "¿Iniciar un nuevo chat?",
+    "newChatMessage": "Esto borra la conversación y reinicia Fabricator desde cero. Tu aplicación y sus archivos se quedan exactamente como están."
+  },
+  "mention": {
+    "filesAndFolders": "Archivos y carpetas",
+    "projectFiles": "Archivos del proyecto",
+    "referenceFileOrFolder": "Hacer referencia a un archivo o una carpeta",
+    "referenceFile": "Hacer referencia a un archivo",
+    "loading": "Cargando archivos…",
+    "nothingHere": "Nada aquí coincide con “{{query}}”",
+    "noFiles": "Ningún archivo coincide con “{{query}}”",
+    "outsideHint": "Para hacer referencia a algo fuera del proyecto, escribe ../ o una ruta completa."
+  },
+  "composer": {
+    "cantReadImages": "{{model}} no puede leer imágenes",
+    "imagesBlocked": "{{note}}. Quita las imágenes o elige un modelo que pueda leerlas.",
+    "screenshot": "Captura de pantalla",
+    "chooseAnswerToPlan": "Elige una de las respuestas disponibles para que la planificación pueda continuar.",
+    "chooseAnswer": "Elige una de las respuestas disponibles para continuar.",
+    "thisFolder": "Esta carpeta",
+    "dropToAttach": "Suelta para adjuntar",
+    "showLargerDraw": "Ver en grande y dibujar encima",
+    "screenshotToSend": "Captura de pantalla para enviar",
+    "removeScreenshot": "Quitar la captura de pantalla",
+    "addingImage": "Agregando imagen",
+    "placeholderPick": "Di cómo cambiar {{label}} o presiona Entrar para pulirlo",
+    "placeholderPicks": "Di cómo cambiar estos {{count}} elementos o presiona Entrar para pulirlos",
+    "placeholderData": "Di qué crear con estos datos o simplemente presiona Entrar para conectarlos",
+    "placeholderFiles": "Di qué hacer con esto o simplemente presiona Entrar para enviarlo",
+    "placeholder": "Escribe a Fabricator sobre {{name}}…",
+    "enterToSend": "<kbd>Entrar</kbd> para enviar",
+    "interjectTitle": "Intervenir: enviar esto ahora sin esperar",
+    "interject": "Intervenir con este mensaje",
+    "stop": "Detener la generación",
+    "publishing": "Publicando: el envío se reanudará cuando la aplicación esté publicada",
+    "sendPicks_one": "Enviar con el elemento seleccionado (Entrar)",
+    "sendPicks_other": "Enviar con los {{count}} elementos seleccionados (Entrar)",
+    "sendData_one": "Enviar y conectar estos datos (Entrar)",
+    "sendData_other": "Enviar y conectar estos {{count}} orígenes de datos (Entrar)",
+    "sendTitle": "Enviar (Entrar)",
+    "send": "Enviar"
+  }
+}

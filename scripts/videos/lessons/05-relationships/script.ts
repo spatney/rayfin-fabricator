@@ -199,7 +199,7 @@ export const SCRIPT = {
     },
     {
       id: 'stinger',
-      // From RAY_FACTS (src/renderer/src/components/mascot/lines.ts). The intro used the fever,
+      // From RAY_FACTS (facts.ray in src/renderer/src/i18n/locales/en/mascot.json). The intro used the fever,
       // lesson 1 the cartilage, lesson 2 the eyes on top, lesson 3 the electric fields, and
       // lesson 4 the ray-finned fish.
       beats: [{ id: 'fact', text: '[whispers] Psst… manta rays have the biggest brains of any fish. [giggles] Plenty of room for relationships!' }],

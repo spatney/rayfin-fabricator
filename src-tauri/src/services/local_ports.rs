@@ -61,23 +61,19 @@ pub fn stoppable(pid: u32, protected: &[u32]) -> bool {
 /// one the user was shown). Returns once the port is free.
 pub fn stop(port: u16, pid: u32, protected: &[u32]) -> Result<(), String> {
   if !stoppable(pid, protected) {
-    return Err("Fabricator won't stop that process. Use another port instead.".into());
+    return Err(t!("services.localPorts.wontStop"));
   }
   match listener_pid(port) {
     Some(current) if current == pid => {}
-    Some(_) => return Err(format!("A different process is using port {port} now. Try again.")),
+    Some(_) => return Err(t!("services.localPorts.otherProcess", port = port)),
     None if !is_listening(port) => return Ok(()),
-    None => {
-      return Err(format!(
-        "Fabricator can't tell which process is using port {port}, so it won't stop anything. Stop it yourself, or use another port."
-      ))
-    }
+    None => return Err(t!("services.localPorts.unknownProcess", port = port)),
   }
   kill(pid)?;
   let deadline = Instant::now() + Duration::from_secs(5);
   while is_listening(port) {
     if Instant::now() >= deadline {
-      return Err(format!("Port {port} is still in use after stopping PID {pid}. Try again, or use another port."));
+      return Err(t!("services.localPorts.stillInUse", port = port, pid = pid));
     }
     std::thread::sleep(Duration::from_millis(100));
   }
@@ -152,15 +148,16 @@ fn kill(pid: u32) -> Result<(), String> {
     .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
     .stdin(Stdio::null())
     .output()
-    .map_err(|e| format!("Couldn't run taskkill: {e}"))?;
+    .map_err(|e| t!("services.localPorts.taskkillFailed", error = e))?;
   if out.status.success() {
     return Ok(());
   }
   let detail = String::from_utf8_lossy(&out.stderr).trim().to_string();
-  let detail = if detail.is_empty() { String::new() } else { format!(" ({detail})") };
-  Err(format!(
-    "Couldn't stop PID {pid}{detail}. It may be running as administrator: stop it yourself, or use another port."
-  ))
+  Err(if detail.is_empty() {
+    t!("services.localPorts.stopFailed", pid = pid)
+  } else {
+    t!("services.localPorts.stopFailedWhy", pid = pid, detail = detail)
+  })
 }
 
 /// Listening sockets from the Windows TCP tables — instant and exact, unlike a
@@ -283,7 +280,7 @@ fn kill(pid: u32) -> Result<(), String> {
       .is_ok_and(|status| status.success())
   };
   if !signal("-TERM") {
-    return Err(format!("Couldn't stop PID {pid}. Stop it yourself, or use another port."));
+    return Err(t!("services.localPorts.stopFailedUnix", pid = pid));
   }
   let deadline = Instant::now() + Duration::from_secs(3);
   while signal("-0") {

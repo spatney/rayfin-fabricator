@@ -500,7 +500,8 @@ export const api: RayfinStudioApi = {
 
   settings: {
     get: () => invoke('settings_get'),
-    set: (patch: Partial<AppSettings>) => invoke('settings_set', { patch })
+    set: (patch: Partial<AppSettings>) => invoke('settings_set', { patch }),
+    systemLanguage: () => invoke('settings_system_language')
   },
 
   byok: {

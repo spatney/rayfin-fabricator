@@ -21,12 +21,12 @@ import { getCopilotHost, signInToCopilot, signOutOfCopilot } from '../copilotAut
 import { authErrorMessage } from '../authErrors'
 import {
   deviceCode,
-  FABRIC_SIGN_IN_NEEDS_PROJECT,
   tenantLabel,
   tenantName,
   tenantsDiffer
 } from '../accounts'
 import { openDocs } from '../docsLinks'
+import { Trans, translator, useTranslation } from '../i18n'
 import CopilotHostInput from './CopilotHostInput'
 import { CopilotLogo } from './brand-icons'
 import { Codicon } from './icons'
@@ -97,6 +97,7 @@ export default function AccountsModal({
   onClose
 }: Props): JSX.Element {
   useSuppressPreview()
+  const { t } = useTranslation('accounts')
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
   const mountedRef = useRef(true)
@@ -159,7 +160,7 @@ export default function AccountsModal({
       if (mountedRef.current) {
         setErrors((all) => ({
           ...all,
-          fabric: authErrorMessage(reason, 'Could not list your Fabric accounts.')
+          fabric: authErrorMessage(reason, translator('accounts')('modal.errors.listFabric'))
         }))
       }
     }
@@ -174,7 +175,7 @@ export default function AccountsModal({
         setAzureAccounts({
           azInstalled: true,
           accounts: [],
-          error: authErrorMessage(reason, 'Could not list your Azure accounts. Please retry.')
+          error: authErrorMessage(reason, translator('accounts')('modal.errors.listAzure'))
         })
       }
     }
@@ -189,7 +190,7 @@ export default function AccountsModal({
         setGithub({
           ghInstalled: true,
           accounts: [],
-          error: authErrorMessage(reason, 'Could not list your GitHub accounts. Please retry.')
+          error: authErrorMessage(reason, translator('accounts')('modal.errors.listGithub'))
         })
       }
     }
@@ -228,7 +229,7 @@ export default function AccountsModal({
       if (mountedRef.current) {
         setErrors((all) => ({
           ...all,
-          [card]: authErrorMessage(reason, 'That didn’t work. Please try again.')
+          [card]: authErrorMessage(reason, t('modal.errors.generic'))
         }))
       }
       return false
@@ -243,14 +244,14 @@ export default function AccountsModal({
       'copilot:in',
       'copilot',
       async () => {
-        expectOk(await signInToCopilot(host), 'Copilot sign-in did not complete. Please try again.')
+        expectOk(await signInToCopilot(host), t('copilotSignInFailed'))
         await onAuthChanged()
       },
       'login:copilot'
     )
   const copilotOut = (): Promise<boolean> =>
     run('copilot:out', 'copilot', async () => {
-      expectOk(await signOutOfCopilot(), 'Copilot sign-out did not complete. Please try again.')
+      expectOk(await signOutOfCopilot(), t('modal.errors.copilotSignOut'))
       await onAuthChanged()
     })
 
@@ -261,7 +262,7 @@ export default function AccountsModal({
       async () => {
         expectOk(
           await window.api.accounts.addFabric(tenant, fabric.projectId),
-          'Fabric sign-in did not complete. Please try again.'
+          t('modal.errors.fabricSignIn')
         )
         await Promise.all([Promise.resolve(onAuthChanged()), loadFabric()])
       },
@@ -269,14 +270,14 @@ export default function AccountsModal({
     )
   const fabricUse = (id: string): Promise<boolean> =>
     run(`fabric:use:${id}`, 'fabric', async () => {
-      expectOk(await window.api.accounts.useFabric(id), 'Could not switch Fabric accounts.')
+      expectOk(await window.api.accounts.useFabric(id), t('modal.errors.fabricSwitch'))
       await Promise.all([Promise.resolve(onAuthChanged()), loadFabric()])
     })
   const fabricSignOut = (id: string): Promise<boolean> =>
     run(`fabric:out:${id}`, 'fabric', async () => {
       expectOk(
         await window.api.accounts.signOutFabric(id, fabric.projectId),
-        'Fabric sign-out did not complete. Please try again.'
+        t('modal.errors.fabricSignOut')
       )
       await Promise.all([Promise.resolve(onAuthChanged()), loadFabric()])
     })
@@ -286,10 +287,7 @@ export default function AccountsModal({
       'az:in',
       'az',
       async () => {
-        expectOk(
-          await window.api.auth.loginAz(tenant),
-          'Azure sign-in did not complete. Please try again.'
-        )
+        expectOk(await window.api.auth.loginAz(tenant), t('azureSignInFailed'))
         await Promise.all([Promise.resolve(onAuthChanged()), loadAzure()])
       },
       'login:az'
@@ -298,7 +296,7 @@ export default function AccountsModal({
     run(`az:use:${user}`, 'az', async () => {
       expectOk(
         await window.api.accounts.useAzure(user, subscription),
-        'Could not switch Azure accounts.'
+        t('modal.errors.azureSwitch')
       )
       await Promise.all([Promise.resolve(onAuthChanged()), loadAzure()])
     })
@@ -306,19 +304,25 @@ export default function AccountsModal({
     run(`az:out:${user ?? ''}`, 'az', async () => {
       expectOk(
         user ? await window.api.accounts.signOutAzure(user) : await window.api.auth.logoutAz(),
-        'Azure sign-out did not complete. Please try again.'
+        t('modal.errors.azureSignOut')
       )
       await Promise.all([Promise.resolve(onAuthChanged()), loadAzure()])
     })
 
   const githubSwitch = (login: string): Promise<boolean> =>
     run(`github:use:${login}`, 'github', async () => {
-      expectOk(await window.api.github.switchAccount(login), `Could not switch to ${login}.`)
+      expectOk(
+        await window.api.github.switchAccount(login),
+        t('modal.errors.githubSwitch', { login })
+      )
       await loadGithub()
     })
   const githubSignOut = (login: string): Promise<boolean> =>
     run(`github:out:${login}`, 'github', async () => {
-      expectOk(await window.api.github.signOutAccount(login), `Could not sign out of ${login}.`)
+      expectOk(
+        await window.api.github.signOutAccount(login),
+        t('modal.errors.githubSignOut', { login })
+      )
       await loadGithub()
     })
   const githubAdd = (): Promise<boolean> =>
@@ -327,7 +331,7 @@ export default function AccountsModal({
       const known = new Set(
         (github?.accounts ?? []).filter((a) => a.signedIn).map((a) => a.login.toLowerCase())
       )
-      expectOk(await window.api.github.addAccount(), 'Could not start GitHub sign-in.')
+      expectOk(await window.api.github.addAccount(), t('modal.errors.githubSignIn'))
       if (!mountedRef.current) return
       setWaitingForGithub(true)
       const started = Date.now()
@@ -392,11 +396,11 @@ export default function AccountsModal({
   const azMissing = Boolean(azureAccounts && !azureAccounts.azInstalled)
   const ghMissing = Boolean(github && !github.ghInstalled)
   const fabricNote = [
-    fabric.signingIn ? 'Finish signing in in the browser window that opened.' : '',
-    fabric.canSignIn ? '' : FABRIC_SIGN_IN_NEEDS_PROJECT,
+    fabric.signingIn ? t('modal.fabricNote.browser') : '',
+    fabric.canSignIn ? '' : t('fabricNeedsProject'),
     fabricAccounts?.sharedTokenStore &&
     (fabricAccounts.accounts.length > 1 || otherFabric.length > 0)
-      ? 'On this Mac, signing out of one Fabric account signs all of them out until you sign in again.'
+      ? t('modal.fabricNote.shared')
       : ''
   ]
     .filter(Boolean)
@@ -413,16 +417,18 @@ export default function AccountsModal({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>Accounts</h2>
-          <button className="btn btn--sm btn--ghost" onClick={onClose} aria-label="Close accounts">
+          <h2 id={titleId}>{t('modal.title')}</h2>
+          <button
+            className="btn btn--sm btn--ghost"
+            onClick={onClose}
+            aria-label={t('modal.close')}
+          >
             ✕
           </button>
         </div>
 
         <div className="modal-body accounts-body">
-          <p className="modal-sub accounts-lead">
-            The accounts Fabricator uses on this computer. Changes apply to all your projects.
-          </p>
+          <p className="modal-sub accounts-lead">{t('modal.lead')}</p>
 
           {errors.general && (
             <div className="alert alert--error" role="alert">
@@ -434,13 +440,14 @@ export default function AccountsModal({
             <div className="acct-warn" role="note">
               <Codicon name="warning" className="acct-warn-ico" />
               <div className="acct-warn-text">
-                <p className="acct-warn-title">
-                  Fabric and the Azure CLI are in different organizations
-                </p>
+                <p className="acct-warn-title">{t('modal.mismatch.title')}</p>
                 <p>
-                  Fabric uses <strong>{fabricTenant}</strong> and the Azure CLI uses{' '}
-                  <strong>{azureTenant}</strong>. Sharing an app and connecting data look people
-                  up through the Azure CLI, so use one organization for both.
+                  <Trans
+                    t={t}
+                    i18nKey="modal.mismatch.text"
+                    values={{ fabricTenant, azureTenant }}
+                    components={{ b: <strong /> }}
+                  />
                 </p>
                 {matchingAzure ? (
                   <button
@@ -449,8 +456,8 @@ export default function AccountsModal({
                     onClick={() => void azureUse(matchingAzure.user, matchingAzure.subscription)}
                   >
                     {action === `az:use:${matchingAzure.user}`
-                      ? 'Switching…'
-                      : `Use ${matchingAzure.user} in the Azure CLI`}
+                      ? t('switching')
+                      : t('modal.mismatch.useAzure', { user: matchingAzure.user })}
                   </button>
                 ) : (
                   !azMissing && (
@@ -459,7 +466,9 @@ export default function AccountsModal({
                       disabled={busy}
                       onClick={() => setAdding({ service: 'az', tenant: rayfin.tenant })}
                     >
-                      Sign in to {fabricOrg ?? 'Fabric’s organization'} in the Azure CLI
+                      {fabricOrg
+                        ? t('modal.mismatch.signInOrg', { org: fabricOrg })
+                        : t('modal.mismatch.signInFabricOrg')}
                     </button>
                   )
                 )}
@@ -470,7 +479,7 @@ export default function AccountsModal({
           <AccountCard
             icon={<CopilotLogo />}
             title="GitHub Copilot"
-            purpose="Writes and edits your app’s code."
+            purpose={t('modal.copilot.purpose')}
             state={copilotState}
             action={
               !copilot.signedIn &&
@@ -478,24 +487,27 @@ export default function AccountsModal({
                 <button
                   className="btn btn--sm btn--primary"
                   disabled={busy}
-                  aria-label="Sign in to GitHub Copilot"
+                  aria-label={t('modal.copilot.signIn')}
                   onClick={() => void copilotIn()}
                 >
-                  {action === 'copilot:in' ? 'Waiting for GitHub…' : 'Sign in'}
+                  {action === 'copilot:in' ? t('modal.copilot.waiting') : t('actions.signIn')}
                 </button>
               )
             }
           >
             {copilot.signedIn && (
-              <Row name={copilot.user ?? 'Signed in'} meta={copilot.host?.replace(/^https:\/\//, '')}>
+              <Row
+                name={copilot.user ?? t('state.ok')}
+                meta={copilot.host?.replace(/^https:\/\//, '')}
+              >
                 <button
                   className="btn btn--xs btn--ghost acct-quiet"
                   disabled={busy}
-                  aria-label="Sign out of GitHub Copilot"
-                  title="To use a different GitHub account, sign out, then sign in with that account."
+                  aria-label={t('modal.copilot.signOut')}
+                  title={t('modal.copilot.signOutTitle')}
                   onClick={() => void copilotOut()}
                 >
-                  {action === 'copilot:out' ? 'Signing out…' : 'Sign out'}
+                  {action === 'copilot:out' ? t('signingOut') : t('actions.signOut')}
                 </button>
               </Row>
             )}
@@ -511,9 +523,9 @@ export default function AccountsModal({
           <AccountCard
             icon={<img className="brand-glyph" src={fabricSvg} alt="" />}
             title="Microsoft Fabric"
-            purpose="Publishes, hosts, and shares your apps."
+            purpose={t('modal.fabric.purpose')}
             state={rayfin.unverified ? 'error' : fabricState}
-            stateLabels={rayfin.unverified ? { error: 'Couldn’t confirm' } : undefined}
+            stateLabels={rayfin.unverified ? { error: t('modal.fabric.unconfirmed') } : undefined}
             action={
               rayfin.signedIn
                 ? adding?.service !== 'fabric' && (
@@ -526,21 +538,21 @@ export default function AccountsModal({
                     <button
                       className="btn btn--sm btn--primary"
                       disabled={fabricBusy || !fabric.canSignIn}
-                      aria-label="Sign in to Microsoft Fabric"
+                      aria-label={t('modal.fabric.signIn')}
                       onClick={fabric.onSignIn}
                     >
-                      {fabric.signingIn ? 'Signing in…' : 'Sign in'}
+                      {fabric.signingIn ? t('signingIn') : t('actions.signIn')}
                     </button>
                   )
             }
           >
             {rayfin.signedIn && (
               <Row
-                name={rayfin.user ?? 'Signed in'}
+                name={rayfin.user ?? t('state.ok')}
                 meta={fabricTenant}
                 title={rayfin.tenant}
-                badge="In use"
-                badgeTitle="Publishing, workspace lists, sharing, and secrets use this account."
+                badge={t('modal.inUse')}
+                badgeTitle={t('modal.fabric.inUseTitle')}
               >
                 {fabric.canRefresh && (
                   <button
@@ -548,21 +560,21 @@ export default function AccountsModal({
                     disabled={fabricBusy}
                     onClick={fabric.onRefresh}
                   >
-                    Refresh sign-in
+                    {t('modal.fabric.refresh')}
                   </button>
                 )}
                 <button
                   className="btn btn--xs btn--ghost acct-quiet"
                   disabled={fabricBusy}
-                  aria-label="Sign out of Microsoft Fabric"
+                  aria-label={t('modal.fabric.signOut')}
                   onClick={fabric.onSignOut}
                 >
-                  {fabric.signingOut ? 'Signing out…' : 'Sign out'}
+                  {fabric.signingOut ? t('signingOut') : t('actions.signOut')}
                 </button>
               </Row>
             )}
             {otherFabric.length > 0 && (
-              <ul className="acct-list" aria-label="Other Fabric accounts">
+              <ul className="acct-list" aria-label={t('modal.fabric.others')}>
                 {otherFabric.map((account) => (
                   <AccountRow
                     key={account.id}
@@ -589,7 +601,7 @@ export default function AccountsModal({
               {action === 'fabric:add' && <SignInProgress log={log} service="Microsoft" />}
               {adding?.service === 'fabric' && (
                 <AddAccountForm
-                  label="Add a Fabric account"
+                  label={t('modal.fabric.add')}
                   busy={fabricBusy || !fabric.canSignIn}
                   running={action === 'fabric:add'}
                   onSubmit={async (tenant) => {
@@ -605,12 +617,12 @@ export default function AccountsModal({
           <AccountCard
             icon={<img className="brand-glyph" src={azureSvg} alt="" />}
             title="Azure CLI"
-            purpose="Optional. Finds people when you share an app, reads the Power BI reports you migrate, sets up team workspaces, and lets your app read Fabric data while you build it. Shared with your terminal."
+            purpose={t('modal.azure.purpose')}
             state={azureState}
             action={
               azMissing ? (
                 <button className="btn btn--sm" disabled={busy} onClick={onReviewSetup}>
-                  Install from setup
+                  {t('installFromSetup')}
                 </button>
               ) : (
                 adding?.service !== 'az' &&
@@ -621,10 +633,10 @@ export default function AccountsModal({
                   <button
                     className="btn btn--sm"
                     disabled={busy}
-                    aria-label="Sign in to the Azure CLI"
+                    aria-label={t('modal.azure.signIn')}
                     onClick={() => setAdding({ service: 'az' })}
                   >
-                    Sign in
+                    {t('actions.signIn')}
                   </button>
                 ))
               )
@@ -632,24 +644,24 @@ export default function AccountsModal({
           >
             {az.signedIn && (
               <Row
-                name={az.user ?? 'Signed in'}
+                name={az.user ?? t('state.ok')}
                 meta={azureTenant}
                 title={az.tenant}
-                badge="In use"
-                badgeTitle="The Azure CLI uses this account now."
+                badge={t('modal.inUse')}
+                badgeTitle={t('modal.azure.inUseTitle')}
               >
                 <button
                   className="btn btn--xs btn--ghost acct-quiet"
                   disabled={busy}
-                  aria-label="Sign out of the Azure CLI"
+                  aria-label={t('modal.azure.signOut')}
                   onClick={() => void azureSignOut(az.user)}
                 >
-                  {action === `az:out:${az.user ?? ''}` ? 'Signing out…' : 'Sign out'}
+                  {action === `az:out:${az.user ?? ''}` ? t('signingOut') : t('actions.signOut')}
                 </button>
               </Row>
             )}
             {otherAzure.length > 0 && (
-              <ul className="acct-list" aria-label="Other Azure accounts">
+              <ul className="acct-list" aria-label={t('modal.azure.others')}>
                 {otherAzure.map((account) => (
                   <AccountRow
                     key={`${account.user}|${account.tenant}`}
@@ -676,7 +688,7 @@ export default function AccountsModal({
               {adding?.service === 'az' && (
                 <AddAccountForm
                   key={adding.tenant ?? ''}
-                  label="Add an Azure CLI account"
+                  label={t('modal.azure.add')}
                   defaultTenant={adding.tenant}
                   busy={busy}
                   running={action === 'az:in'}
@@ -692,12 +704,12 @@ export default function AccountsModal({
           <AccountCard
             icon={<Codicon name="github" />}
             title="GitHub"
-            purpose="Clones repositories and runs team workspaces. Optional, and shared with your terminal."
+            purpose={t('modal.github.purpose')}
             state={githubState}
             action={
               ghMissing ? (
                 <button className="btn btn--sm" disabled={busy} onClick={onReviewSetup}>
-                  Install from setup
+                  {t('installFromSetup')}
                 </button>
               ) : (
                 github &&
@@ -708,27 +720,27 @@ export default function AccountsModal({
                   <button
                     className="btn btn--sm"
                     disabled={busy}
-                    aria-label="Sign in to GitHub"
+                    aria-label={t('githubSignIn')}
                     onClick={() => void githubAdd()}
                   >
-                    Sign in
+                    {t('actions.signIn')}
                   </button>
                 ))
               )
             }
           >
             {github && !ghMissing && github.accounts.length > 0 && (
-              <ul className="acct-list" aria-label="GitHub accounts">
+              <ul className="acct-list" aria-label={t('modal.github.list')}>
                 {github.accounts.map((account) => (
                   <AccountRow
                     key={account.login}
                     name={account.login}
-                    badge={account.active ? 'Default' : undefined}
-                    badgeTitle="Clone from GitHub and your terminal use this account. Team workspaces remember their own."
-                    warning={account.signedIn ? undefined : 'Sign-in expired'}
-                    useLabel="Make default"
+                    badge={account.active ? t('modal.github.default') : undefined}
+                    badgeTitle={t('modal.github.defaultTitle')}
+                    warning={account.signedIn ? undefined : t('modal.github.expired')}
+                    useLabel={t('modal.github.makeDefault')}
                     canUse={!account.active && account.signedIn}
-                    signOutTitle="Also signs the GitHub CLI out in your terminal."
+                    signOutTitle={t('modal.github.signOutTitle')}
                     busy={busy}
                     using={action === `github:use:${account.login}`}
                     signingOut={action === `github:out:${account.login}`}
@@ -742,22 +754,14 @@ export default function AccountsModal({
               </ul>
             )}
             <Foot>
-              {ghMissing && (
-                <p className="acct-note">
-                  The GitHub CLI isn’t installed. You only need it to clone repositories or use team
-                  workspaces.
-                </p>
-              )}
+              {ghMissing && <p className="acct-note">{t('modal.github.missing')}</p>}
               {errorLine(errors.github ?? github?.error)}
               {waitingForGithub && (
                 <div className="acct-progress" role="status">
                   <span className="ws-spinner" aria-hidden="true" />
-                  <span>
-                    Finish signing in in the terminal window that opened. Your default account stays
-                    the same.
-                  </span>
+                  <span>{t('modal.github.waiting')}</span>
                   <button className="btn btn--xs btn--ghost" onClick={stopWaiting}>
-                    Stop waiting
+                    {t('stopWaiting')}
                   </button>
                 </div>
               )}
@@ -769,13 +773,13 @@ export default function AccountsModal({
 
         <div className="modal-footer">
           <button className="btn btn--sm btn--link accounts-help" onClick={() => openDocs('accounts')}>
-            Accounts help
+            {t('modal.help')}
           </button>
           <button className="btn btn--ghost" disabled={busy} onClick={() => void recheck()}>
-            {action === 'recheck' ? 'Checking…' : 'Re-check'}
+            {action === 'recheck' ? t('status.checking') : t('modal.recheck')}
           </button>
           <button className="btn btn--primary" onClick={onClose}>
-            Done
+            {t('actions.done')}
           </button>
         </div>
       </div>
@@ -784,10 +788,11 @@ export default function AccountsModal({
 }
 
 function AddButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }): JSX.Element {
+  const { t } = useTranslation('accounts')
   return (
     <button className="btn btn--sm btn--ghost acct-add-btn" disabled={disabled} onClick={onClick}>
       <Codicon name="add" />
-      Add account
+      {t('addAccount')}
     </button>
   )
 }
@@ -800,7 +805,7 @@ function AccountRow({
   badge,
   badgeTitle,
   warning,
-  useLabel = 'Use',
+  useLabel,
   canUse = true,
   signOutTitle,
   busy,
@@ -830,6 +835,8 @@ function AccountRow({
   onCancelSignOut: () => void
   onSignOut: () => void
 }): JSX.Element {
+  const { t } = useTranslation('accounts')
+  const use = useLabel ?? t('row.use')
   return (
     <Row
       as="li"
@@ -842,12 +849,12 @@ function AccountRow({
     >
       {confirming ? (
         <>
-          <span className="acct-confirm">Sign out of {name}?</span>
+          <span className="acct-confirm">{t('row.confirmSignOut', { name })}</span>
           <button className="btn btn--xs btn--danger" disabled={busy} onClick={onSignOut}>
-            Sign out
+            {t('actions.signOut')}
           </button>
           <button className="btn btn--xs btn--ghost" onClick={onCancelSignOut}>
-            Cancel
+            {t('actions.cancel')}
           </button>
         </>
       ) : (
@@ -856,20 +863,20 @@ function AccountRow({
             <button
               className="btn btn--xs btn--ghost"
               disabled={busy}
-              aria-label={`${useLabel}: ${name}`}
+              aria-label={t('row.useAccount', { action: use, name })}
               onClick={onUse}
             >
-              {using ? 'Switching…' : useLabel}
+              {using ? t('switching') : use}
             </button>
           )}
           <button
             className="btn btn--xs btn--ghost acct-quiet"
             disabled={busy}
-            aria-label={`Sign out of ${name}`}
+            aria-label={t('row.signOut', { name })}
             title={signOutTitle}
             onClick={onAskSignOut}
           >
-            {signingOut ? 'Signing out…' : 'Sign out'}
+            {signingOut ? t('signingOut') : t('actions.signOut')}
           </button>
         </>
       )}
@@ -898,6 +905,7 @@ function AddAccountForm({
   onSubmit: (tenant?: string) => Promise<void>
   onCancel: () => void
 }): JSX.Element {
+  const { t } = useTranslation('accounts')
   const [tenant, setTenant] = useState(defaultTenant ?? '')
   const inputId = useId()
 
@@ -909,7 +917,7 @@ function AddAccountForm({
   return (
     <form className="acct-add" aria-label={label} onSubmit={(event) => void submit(event)}>
       <label className="field-label" htmlFor={inputId}>
-        Organization (optional)
+        {t('addForm.organization')}
       </label>
       <input
         id={inputId}
@@ -920,19 +928,17 @@ function AddAccountForm({
         spellCheck={false}
         autoFocus
         value={tenant}
-        placeholder="contoso.onmicrosoft.com or a tenant ID"
+        placeholder={t('addForm.placeholder')}
         disabled={running}
         onChange={(event) => setTenant(event.target.value)}
       />
-      <span className="field-hint">
-        Leave it empty to use your account’s own organization, or enter one you’re a guest in.
-      </span>
+      <span className="field-hint">{t('addForm.hint')}</span>
       <div className="acct-add-actions">
         <button type="submit" className="btn btn--sm btn--primary" disabled={busy}>
-          {running ? 'Waiting for Microsoft…' : 'Continue'}
+          {running ? t('addForm.waiting') : t('actions.continue')}
         </button>
         <button type="button" className="btn btn--sm btn--ghost" disabled={running} onClick={onCancel}>
-          Cancel
+          {t('actions.cancel')}
         </button>
       </div>
     </form>
@@ -941,6 +947,7 @@ function AddAccountForm({
 
 /** A browser or device-code sign-in in progress: the code to enter, when there is one. */
 function SignInProgress({ log, service }: { log: string; service: string }): JSX.Element {
+  const { t } = useTranslation('accounts')
   const { code, url } = deviceCode(log)
   const details = log
     .split('\n')
@@ -953,21 +960,21 @@ function SignInProgress({ log, service }: { log: string; service: string }): JSX
       <span className="ws-spinner" aria-hidden="true" />
       {code ? (
         <div className="acct-code">
-          <span>Enter this code on {service}:</span>
+          <span>{t('progress.enterCode', { service })}</span>
           <code className="acct-code-value">{code}</code>
-          <CopyButton text={code} title="Copy code" />
+          <CopyButton text={code} title={t('progress.copyCode')} />
           {url && (
             <button className="btn btn--xs" onClick={() => void window.api.openExternal(url)}>
-              Open {service}
+              {t('progress.open', { service })}
             </button>
           )}
         </div>
       ) : (
-        <span>Finish signing in to {service} in your browser.</span>
+        <span>{t('progress.inBrowser', { service })}</span>
       )}
       {details && (
         <details className="acct-details">
-          <summary>Details</summary>
+          <summary>{t('actions.details')}</summary>
           <pre>{details}</pre>
         </details>
       )}

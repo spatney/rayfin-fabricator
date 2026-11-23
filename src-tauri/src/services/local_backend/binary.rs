@@ -22,7 +22,10 @@ pub const BLOCKED_DOCS_URL: &str =
   "https://spatney.github.io/rayfin-fabricator/docs/troubleshooting/preview#windows-blocked-rayfin-local";
 const EXE_NAME: &str = if cfg!(windows) { "rayfin-local.exe" } else { "rayfin-local" };
 const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
-const REINSTALL: &str = "Reinstall Fabricator to get it back.";
+
+fn reinstall() -> String {
+  t!("services.localBackend.reinstall")
+}
 
 /// How to run rayfin-local: its executable, or `node <script>` for a script
 /// (a stand-in for tests and development).
@@ -95,8 +98,8 @@ fn locate_in(env: Option<OsString>, exe: Option<PathBuf>) -> Result<Binary, Loca
     if !path.is_file() {
       return Err(problem(
         "binary-missing",
-        format!("{BIN_ENV} is set to {}, which isn't a file.", path.display()),
-        Some("Point it at a rayfin-local executable, or unset it to use the one that comes with Fabricator."),
+        t!("services.localBackend.binEnvNotFile", env = BIN_ENV, path = path.display()),
+        Some(&t!("services.localBackend.binEnvNotFileHint")),
       ));
     }
     let script = path.extension().and_then(OsStr::to_str).is_some_and(|e| ["js", "cjs", "mjs"].contains(&e));
@@ -108,10 +111,10 @@ fn locate_in(env: Option<OsString>, exe: Option<PathBuf>) -> Result<Binary, Loca
     path => Err(problem(
       "binary-missing",
       match path {
-        Some(path) => format!("The local backend (rayfin-local) that comes with Fabricator is missing from {}.", path.display()),
-        None => "Fabricator couldn't find the local backend (rayfin-local) that comes with it.".into(),
+        Some(path) => t!("services.localBackend.binaryMissingFrom", path = path.display()),
+        None => t!("services.localBackend.binaryNotFound"),
       },
-      Some(REINSTALL),
+      Some(&reinstall()),
     )),
   }
 }
@@ -192,11 +195,8 @@ fn judge(info: VersionInfo) -> Result<VersionInfo, LocalProblem> {
       details: Some(serde_json::json!({ "version": info.version, "contract": contract })),
       ..problem(
         "binary-incompatible",
-        format!(
-          "rayfin-local {} speaks host contract {contract}, but this Fabricator speaks contract {CONTRACT}.",
-          info.version
-        ),
-        Some("Update Fabricator, or use the rayfin-local that comes with it."),
+        t!("services.localBackend.binaryNewer", version = info.version, contract = contract, ours = CONTRACT),
+        Some(&t!("services.localBackend.binaryNewerHint")),
       )
     }),
     _ => Err(too_old(Some(&info.version), &CliOutput { code: Some(0), stdout: String::new(), stderr: String::new() })),
@@ -207,46 +207,44 @@ fn too_old(version_text: Option<&str>, output: &CliOutput) -> LocalProblem {
   let version = version_text
     .map(|t| t.trim().trim_start_matches("rayfin-local").trim().to_string())
     .filter(|v| !v.is_empty());
-  let named = version.as_deref().map(|v| format!(" ({v})")).unwrap_or_default();
   let detail = output.stderr.lines().map(str::trim).find(|l| !l.is_empty()).map(String::from);
+  let message = match version.as_deref() {
+    Some(version) => t!("services.localBackend.binaryTooOldVersion", version = version, contract = CONTRACT),
+    None => t!("services.localBackend.binaryTooOld", contract = CONTRACT),
+  };
   LocalProblem {
     details: Some(serde_json::json!({ "version": version, "output": detail })),
-    ..problem(
-      "binary-too-old",
-      format!(
-        "The bundled local backend is too old{named}. Fabricator needs a rayfin-local that speaks host contract {CONTRACT}."
-      ),
-      Some("Update Fabricator. If you build Fabricator yourself, fetch the pinned rayfin-local again or set FABRICATOR_RAYFIN_LOCAL_BIN to a newer one."),
-    )
+    ..problem("binary-too-old", message, Some(&t!("services.localBackend.binaryTooOldHint")))
   }
 }
 
 /// The problem with a rayfin-local that couldn't be started.
 pub fn spawn_problem(file: &Path, error: &io::Error) -> LocalProblem {
   if error.kind() == io::ErrorKind::NotFound {
-    return problem("binary-missing", format!("The local backend isn't at {}.", file.display()), Some(REINSTALL));
+    return problem("binary-missing", t!("services.localBackend.binaryNotAt", path = file.display()), Some(&reinstall()));
   }
   if error.kind() == io::ErrorKind::TimedOut {
     return problem(
       "binary-failed",
-      "The local backend (rayfin-local) didn't answer within 20 seconds.",
-      Some("An antivirus scan can hold it up the first time it runs. Try again in a minute."),
+      t!("services.localBackend.binaryTimeout"),
+      Some(&t!("services.localBackend.binaryTimeoutHint")),
     );
   }
   if blocked(error) {
-    let os = if cfg!(windows) { "Windows" } else if cfg!(target_os = "macos") { "macOS" } else { "The system" };
+    let os = if cfg!(windows) { Some("Windows") } else if cfg!(target_os = "macos") { Some("macOS") } else { None };
     return LocalProblem {
       details: Some(serde_json::json!({ "path": file.display().to_string(), "docs": BLOCKED_DOCS_URL })),
       ..problem(
         "binary-blocked",
-        format!("{os} blocked the local backend (rayfin-local): {error}"),
-        Some(&format!(
-          "Your antivirus or your organization's app control policy may not allow it. See {BLOCKED_DOCS_URL}"
-        )),
+        match os {
+          Some(os) => t!("services.localBackend.binaryBlocked", os = os, error = error),
+          None => t!("services.localBackend.binaryBlockedSystem", error = error),
+        },
+        Some(&t!("services.localBackend.binaryBlockedHint", url = BLOCKED_DOCS_URL)),
       )
     };
   }
-  problem("spawn-failed", format!("The local backend (rayfin-local) couldn't start: {error}"), None)
+  problem("spawn-failed", t!("services.localBackend.spawnFailed", error = error), None)
 }
 
 /// Access denied, or refused by policy or antivirus.
@@ -268,13 +266,13 @@ pub async fn doctor_status() -> ToolStatus {
 pub fn tool_status(result: Result<VersionInfo, LocalProblem>) -> ToolStatus {
   let mut status = ToolStatus {
     id: "rayfin-local".into(),
-    name: "Local backend".into(),
+    name: t!("services.localBackend.toolName"),
     found: true,
     satisfied: false,
     version: None,
     check_error: None,
     min_version: None,
-    install_hint: "Runs your apps and their data on this computer. It comes with Fabricator.".into(),
+    install_hint: t!("services.localBackend.toolHint"),
     install_url: None,
     auto_installable: false,
     required: false,
@@ -400,9 +398,9 @@ mod tests {
     assert_eq!(old.version.as_deref(), Some("0.1.0"));
     assert!(old.check_error.unwrap().contains("too old"));
 
-    let missing = tool_status(Err(problem("binary-missing", "Missing.", Some(REINSTALL))));
+    let missing = tool_status(Err(problem("binary-missing", "Missing.", Some(&reinstall()))));
     assert!(!missing.found && missing.check_error.is_none());
-    assert!(missing.install_hint.contains(REINSTALL));
+    assert!(missing.install_hint.contains(&reinstall()));
   }
 
   #[tokio::test]

@@ -1,0 +1,179 @@
+{
+  "common": {
+    "copilotError": "Copilot notificó un error."
+  },
+  "security": {
+    "signInRequired": "No has iniciado sesión en GitHub Copilot. Inicia sesión en Copilot en Fabricator y vuelve a hacer la comprobación.",
+    "timedOut": "Copilot no terminó en {{minutes}} minutos.",
+    "stopped": "Copilot se detuvo antes de terminar.",
+    "noReport": "Copilot terminó sin informar de lo que encontró.",
+    "summary": {
+      "danger": "Contiene código que podría dañar este dispositivo o tus datos.",
+      "caution": "Contiene elementos que conviene revisar antes de continuar.",
+      "clear": "No contiene nada que parezca arriesgado."
+    },
+    "cantMakeFolder": "Fabricator no pudo crear una carpeta para comprobarlo: {{error}}",
+    "invalidCheck": "Esa no es una comprobación que Fabricator pueda ejecutar.",
+    "unsupportedFile": "Fabricator comprueba archivos .fabricator, .rayfin y .zip.",
+    "fileMissing": "Ese archivo ya no existe.",
+    "alreadyRunning": "Esta comprobación ya se está ejecutando.",
+    "clear": {
+      "install": "No hay scripts de instalación.",
+      "agents": "No hay instrucciones ni herramientas para agentes de codificación."
+    },
+    "advice": {
+      "installScripts": "Lee qué hacen estos comandos antes de continuar. Las aplicaciones de Rayfin no necesitan comandos propios para instalarse.",
+      "packageSources": "Asegúrate de saber quién publica estos paquetes y por qué no proceden de npm.",
+      "packageAliases": "Comprueba que cada uno sea realmente el paquete al que sustituye.",
+      "packageHosts": "El registro de paquetes propio de una empresa no supone un problema. Si no es el caso, averigua por qué no usa el de npm.",
+      "npmSettings": "No continúes a menos que sepas por qué hace esto. Los proyectos no necesitan esta configuración.",
+      "gitSettings": "No continúes a menos que sepas por qué está ahí esta configuración. Un proyecto compartido contigo no la necesita.",
+      "unreadableSettings": "No continúes a menos que puedas ver qué configuran: npm o git podrían ejecutar igualmente los programas que indiquen.",
+      "gitDir": "No continúes a menos que sepas por qué está ahí. Un proyecto compartido contigo no lo necesita.",
+      "unreadableManifest": "No continúes a menos que puedas ver su contenido: npm podría ejecutar igualmente scripts o descargar paquetes a partir de ellos.",
+      "gitHooks": "Lee qué ejecutan los hooks antes de continuar.",
+      "editorTasks": "Comprueba qué ejecuta la tarea antes de abrir el proyecto en VS Code.",
+      "mcpServers": "Comprueba qué son estos programas antes de permitir que un agente de codificación los inicie.",
+      "programs": "Averigua para qué sirven antes de continuar.",
+      "aimedAtAi": "No confíes en la revisión que haga una IA de este paquete, incluida esta. Lee el código por tu cuenta o pregunta a quien te lo envió.",
+      "hiddenCode": "El código propio de una aplicación no tiene motivos para ocultar lo que hace. Pregunta a quien te lo envió qué es esto."
+    },
+    "checks": {
+      "list": {
+        "next": "{{items}}, {{next}}",
+        "last": "{{items}} y {{last}}",
+        "more_one": "{{items}} y {{count}} más",
+        "more_other": "{{items}} y {{count}} más"
+      },
+      "installScripts": {
+        "title": "Ejecuta comandos cuando se instalan sus paquetes",
+        "script": "{{script}}: {{command}}",
+        "scriptIn": "{{script}} en {{folder}}: {{command}}",
+        "nativeBuild": "{{command}} (para compilar código nativo)",
+        "nativeBuildIn": "{{command}} en {{folder}} (para compilar código nativo)",
+        "detail": "npm ejecuta {{list}} cuando Fabricator instala sus paquetes, antes de que se abra la aplicación."
+      },
+      "packageSources": {
+        "title": "Obtiene paquetes de fuera de npm",
+        "what": "{{name}} procede de {{source}}",
+        "detail": "{{list}}. npm no comprueba el código que procede de git, de un sitio web o de una carpeta, y ese código puede cambiar en cualquier momento."
+      },
+      "packageAliases": {
+        "title": "Instala paquetes con otros nombres",
+        "what": "{{name}} es en realidad {{target}}",
+        "detail": "{{list}}: npm instala un paquete con el nombre de otro."
+      },
+      "packageHosts": {
+        "title": "Descarga paquetes de otros servidores",
+        "registry": "{{file}} hace que npm use {{host}}",
+        "lockfile_one": "{{file}} obtiene {{count}} paquete de {{host}}",
+        "lockfile_other": "{{file}} obtiene {{count}} paquetes de {{host}}",
+        "detail": "{{list}}, en lugar del registro de npm."
+      },
+      "npmSettings": {
+        "title": "Cambia los programas que ejecuta npm",
+        "what": "{{file}} establece {{key}} en {{value}}",
+        "detail": "{{list}}. npm usaría estos valores al instalar paquetes y ejecutar scripts."
+      },
+      "gitSettings": {
+        "title": "Contiene configuración de git que ejecuta programas",
+        "detailProject": "Su configuración de git establece {{list}}. Git ejecuta esos programas cuando trabaja en la carpeta, algo que Fabricator hace cada vez que guarda una versión.",
+        "detailApp": "Su configuración de git establece {{list}}. Git ejecuta esos programas cuando trabaja en la carpeta."
+      },
+      "unreadableSettings": {
+        "title": "Contiene configuración que Fabricator no puede leer",
+        "detail_one": "Fabricator no puede leer {{list}}: es demasiado grande o no es texto sin formato, así que no puede saber qué ejecutarían npm o git a partir de él.",
+        "detail_other": "Fabricator no puede leer {{list}}: son demasiado grandes o no son texto sin formato, así que no puede saber qué ejecutarían npm o git a partir de ellos."
+      },
+      "gitDir": {
+        "title": "Redirige git a otra carpeta",
+        "pointsAt": "{{file}} redirige git a {{folder}}",
+        "pointsElsewhere": "{{file}} redirige git a otra carpeta",
+        "detail": "{{list}}. Git toma de allí su configuración y sus hooks, que pueden ejecutar programas cada vez que git trabaja en la carpeta.",
+        "hooks_one": "{{detail}} El hook que hay allí es {{hooks}}.",
+        "hooks_other": "{{detail}} Los hooks que hay allí son {{hooks}}."
+      },
+      "unreadableManifest": {
+        "title_one": "Contiene un archivo de npm que Fabricator no puede leer",
+        "title_other": "Contiene archivos de npm que Fabricator no puede leer",
+        "detail_one": "Fabricator no puede leer {{list}}: es demasiado grande o no es JSON válido, así que no puede saber qué ejecutaría o descargaría npm a partir de él.",
+        "detail_other": "Fabricator no puede leer {{list}}: son demasiado grandes o no son JSON válido, así que no puede saber qué ejecutaría o descargaría npm a partir de ellos."
+      },
+      "gitHooks": {
+        "title": "Configura hooks de git",
+        "detail": "Una vez instalados sus paquetes, git ejecuta {{list}} cada vez que se guarda una versión, y Fabricator guarda una después de cada turno de chat."
+      },
+      "editorTasks": {
+        "title": "Ejecuta una tarea al abrir la carpeta en VS Code",
+        "detail": "{{file}} inicia una tarea en cuanto se abre la carpeta en VS Code, si lo permites."
+      },
+      "mcpServers": {
+        "title": "Agrega servidores MCP para agentes de codificación",
+        "detail": "{{file}} inicia {{list}} para los agentes de codificación que lo usan."
+      },
+      "programs": {
+        "title": "Incluye programas",
+        "detail": "Contiene {{list}}. Las aplicaciones de Rayfin no necesitan programas propios, y Copilot no puede leerlos."
+      },
+      "aimedAtAi": {
+        "title": "Contiene texto dirigido a herramientas de IA",
+        "says": "{{file}} dice “{{text}}”",
+        "named": "{{file}} se llama “{{name}}”",
+        "detail": "{{list}}. Un texto que intenta influir en revisores de IA o agentes de codificación es una señal de alerta."
+      },
+      "hiddenCode": {
+        "title": "Contiene código oculto o codificado",
+        "what": "{{file}} ({{how}})",
+        "how": {
+          "obfuscatorNames": "nombres como {{example}}, propios de un ofuscador",
+          "decodesAndRuns": "ejecuta código que descodifica",
+          "charCodes": "genera código a partir de códigos de carácter",
+          "escapedBytes": "largas secuencias de bytes escapados"
+        },
+        "detail": "{{list}}: código escrito para que las personas no puedan leerlo."
+      }
+    }
+  },
+  "advisor": {
+    "projectNotFound": "No se encontró el proyecto.",
+    "invalidState": "Estado del Asesor no válido.",
+    "stateTooLarge": "El estado del Asesor es demasiado grande para guardarlo.",
+    "reviewIncomplete": "No se pudo completar la revisión: {{detail}}",
+    "reviewTimedOut": "No se pudo completar la revisión: se agotó el tiempo de espera tras 10 minutos.",
+    "reviewNoResults": "No se pudo completar la revisión: Copilot terminó sin notificar ningún resultado.",
+    "notEvaluated": "No se evaluó en esta revisión.",
+    "noIssues": "No se encontraron problemas en las reglas que revisó Copilot.",
+    "foundIssues_one": "Copilot encontró {{count}} problema.",
+    "foundIssues_other": "Copilot encontró {{count}} problemas.",
+    "stoppedTimedOut": "{{summary}} La revisión se detuvo antes de tiempo (se agotó el tiempo de espera), por lo que es posible que algunas reglas no se hayan comprobado.",
+    "stoppedError": "{{summary}} La revisión se detuvo antes de tiempo (Copilot notificó un error), por lo que es posible que algunas reglas no se hayan comprobado.",
+    "stoppedClosed": "{{summary}} La revisión se detuvo antes de tiempo (la sesión terminó), por lo que es posible que algunas reglas no se hayan comprobado.",
+    "timedOut": "Se agotó el tiempo de espera.",
+    "cantStartReview": "No se pudo iniciar la revisión. {{error}}",
+    "cantStartExplanation": "No se pudo iniciar la explicación. {{error}}",
+    "noExplanation": "Copilot terminó sin dar una explicación.",
+    "explanationIncomplete": "No se pudo completar la explicación. {{detail}}",
+    "cantStartVerification": "No se pudo iniciar la verificación. {{error}}",
+    "noVerdict": "Copilot terminó sin emitir un veredicto.",
+    "verificationIncomplete": "No se pudo completar la verificación. {{detail}}",
+    "reviewRunning": "Ya hay una revisión en curso para este proyecto.",
+    "explanationRunning": "Ya se está generando una explicación para este proyecto.",
+    "verificationRunning": "Ya hay una verificación en curso para este proyecto."
+  },
+  "help": {
+    "emptyQuestion": "Escribe primero una pregunta.",
+    "questionTooLong": "La pregunta es demasiado larga. Adjunta el archivo en lugar de pegar su contenido.",
+    "tookTooLong": "Tardó demasiado. Prueba a hacer una pregunta más concreta.",
+    "connectionClosed": "La conexión con Copilot se cerró antes de recibir una respuesta. Inténtalo de nuevo.",
+    "noAnswer": "No se recibió ninguna respuesta. Inténtalo de nuevo.",
+    "signInRequired": "Debes iniciar sesión en GitHub Copilot para usar Ayuda. Abre el menú de la cuenta en la barra de la aplicación, inicia sesión y vuelve a preguntar.",
+    "quotaUsed": "Ahora mismo has agotado tu cuota de Copilot, así que Ayuda no puede responder. Inténtalo de nuevo más tarde.",
+    "cantReachCopilot": "Ayuda no pudo conectar con Copilot: {{error}}",
+    "localOutput": {
+      "all": "Leer la salida del back-end local",
+      "from": "Leer la salida de {{source}} del back-end local",
+      "problems": "Leer la salida del back-end local (advertencias y errores)",
+      "fromProblems": "Leer la salida de {{source}} del back-end local (advertencias y errores)"
+    }
+  }
+}

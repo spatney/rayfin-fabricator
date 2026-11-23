@@ -1,6 +1,7 @@
 import { useState, type JSX } from 'react'
 import type { AppActionResult, InstalledApp } from '@shared/ipc'
 import { errorMessage } from '../errorReport'
+import { useTranslation } from '../i18n'
 import AppIcon from './AppIcon'
 
 interface Props {
@@ -16,6 +17,7 @@ interface Props {
  * window, or remove it with its data, after asking. Nothing shows until there's one.
  */
 export default function InstalledApps({ apps, onOpen, onRemove }: Props): JSX.Element | null {
+  const { t } = useTranslation('projects')
   const [confirming, setConfirming] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -28,27 +30,30 @@ export default function InstalledApps({ apps, onOpen, onRemove }: Props): JSX.El
     try {
       result = await onRemove(app.key)
     } catch (reason) {
-      result = { ok: false, error: errorMessage(reason, `Fabricator couldn’t remove ${app.name}.`) }
+      result = {
+        ok: false,
+        error: errorMessage(reason, t('installedApps.cantRemove', { name: app.name }))
+      }
     }
     setRemoving(null)
     setConfirming(null)
-    if (!result.ok) setError(result.error ?? `Fabricator couldn’t remove ${app.name}.`)
+    if (!result.ok) setError(result.error ?? t('installedApps.cantRemove', { name: app.name }))
   }
 
   return (
     <section className="home-recents" aria-labelledby="installed-apps-title">
       <div className="home-section-heading">
-        <h2 id="installed-apps-title">Installed apps</h2>
+        <h2 id="installed-apps-title">{t('installedApps.title')}</h2>
         <span className="home-project-count">
-          {apps.length} app{apps.length === 1 ? '' : 's'}
+          {t('installedApps.count', { count: apps.length })}
         </span>
       </div>
       <div className="home-project-list" role="list">
         {apps.map((app) => {
           const busy = removing === app.key
           const about = [
-            app.from ? `From ${app.from}` : null,
-            app.version ? `Version ${app.version}` : null
+            app.from ? t('parts.from', { from: app.from }) : null,
+            app.version ? t('parts.version', { version: app.version }) : null
           ]
             .filter(Boolean)
             .join(' · ')
@@ -62,7 +67,7 @@ export default function InstalledApps({ apps, onOpen, onRemove }: Props): JSX.El
               <button
                 type="button"
                 className="home-project-open"
-                aria-label={`Open ${app.name}`}
+                aria-label={t('installedApps.openName', { name: app.name })}
                 disabled={busy}
                 onClick={() => onOpen(app.key)}
               >
@@ -71,24 +76,24 @@ export default function InstalledApps({ apps, onOpen, onRemove }: Props): JSX.El
                   <span className="home-project-name">
                     <span className="home-project-title">{app.name}</span>
                     {app.open && (
-                      <span className="home-project-status home-project-status--active">Open</span>
+                      <span className="home-project-status home-project-status--active">
+                        {t('installedApps.isOpen')}
+                      </span>
                     )}
                   </span>
-                  <span className="home-project-path">
-                    {about || 'Installed from a .rayfin file'}
-                  </span>
+                  <span className="home-project-path">{about || t('installedApps.fromFile')}</span>
                 </span>
               </button>
               {confirming === app.key ? (
                 <span className="home-project-removal-actions">
-                  <span className="home-app-confirm">Remove it and its data?</span>
+                  <span className="home-app-confirm">{t('installedApps.confirm')}</span>
                   <button
                     type="button"
                     className="btn btn--sm btn--danger"
                     disabled={busy}
                     onClick={() => void remove(app)}
                   >
-                    {busy ? 'Removing…' : 'Remove'}
+                    {busy ? t('installedApps.removing') : t('actions.remove')}
                   </button>
                   <button
                     type="button"
@@ -96,15 +101,15 @@ export default function InstalledApps({ apps, onOpen, onRemove }: Props): JSX.El
                     disabled={busy}
                     onClick={() => setConfirming(null)}
                   >
-                    Keep
+                    {t('installedApps.keep')}
                   </button>
                 </span>
               ) : (
                 <button
                   type="button"
                   className="home-project-manage"
-                  aria-label={`Remove ${app.name}`}
-                  title="Remove"
+                  aria-label={t('installedApps.removeName', { name: app.name })}
+                  title={t('actions.remove')}
                   onClick={() => setConfirming(app.key)}
                 >
                   <span className="codicon codicon-trash" aria-hidden="true" />

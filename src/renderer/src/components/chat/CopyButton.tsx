@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
+import { useTranslation } from '../../i18n'
 import { CheckIcon } from '../icons'
 import { CopyIcon } from './icons'
 
@@ -6,14 +7,17 @@ import { CopyIcon } from './icons'
 export function CopyButton({
   text,
   className,
-  title = 'Copy message',
+  title,
   compact = false
 }: {
   text: string
   className?: string
+  /** What it copies (defaults to "Copy message"). */
   title?: string
   compact?: boolean
 }): JSX.Element {
+  const { t } = useTranslation('chat')
+  const label = title ?? t('copyButton.copyMessage')
   const [copied, setCopied] = useState(false)
   const timer = useRef<number | null>(null)
   useEffect(
@@ -37,11 +41,13 @@ export function CopyButton({
       type="button"
       className={`copy-btn${compact ? ' copy-btn--compact' : ''}${className ? ` ${className}` : ''}${copied ? ' copy-btn--done' : ''}`}
       onClick={copy}
-      title={copied ? 'Copied' : title}
-      aria-label={title}
+      title={copied ? t('actions.copied') : label}
+      aria-label={label}
     >
       {copied ? <CheckIcon /> : <CopyIcon />}
-      {!compact && <span className="copy-btn-label">{copied ? 'Copied' : 'Copy'}</span>}
+      {!compact && (
+        <span className="copy-btn-label">{copied ? t('actions.copied') : t('actions.copy')}</span>
+      )}
     </button>
   )
 }

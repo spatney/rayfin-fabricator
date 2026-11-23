@@ -1,6 +1,7 @@
 // What Search lists. Before anything is typed: suggestions, recent projects, its own
 // searches and questions for Help. Once something is: every kind of result ranked in
 // one list, then other ways to use what was typed, as a launcher does.
+import { translator } from '../../i18n'
 import { looksLikeQuestion, rank, type Prepared, type Range } from './rank'
 import {
   GROUP_LABELS,
@@ -60,32 +61,32 @@ const LIMITS: Record<SearchGroup, number> = { projects: 4, apps: 4, actions: 5, 
 export const VIEW_LIMIT = 60
 const RECENT = 5
 
-const ASK_SIGNED_OUT = 'Sign in to GitHub Copilot to ask Help'
-
 function itemEntry(item: SearchItem, ranges: Range[] = []): Entry {
   return { key: `item:${item.id}`, type: 'item', item, ranges }
 }
 
 /** Asking Help what's typed. */
 function askEntry(query: string, input: ResultsInput): Entry {
+  const t = translator('spotlight')
   return {
     key: 'ask:query',
     type: 'ask',
     question: query,
-    title: 'Ask Help',
-    subtitle: input.helpAvailable ? `“${query}”` : ASK_SIGNED_OUT,
+    title: t('ask.label'),
+    subtitle: input.helpAvailable ? t('ask.quoted', { text: query }) : t('ask.signedOut'),
     main: true
   }
 }
 
 function askSection(input: ResultsInput): Section {
+  const t = translator('spotlight')
   const entries: Entry[] = []
   if (input.lastQuestion) {
     entries.push({
       key: 'continue',
       type: 'continue',
-      title: 'Continue your Help conversation',
-      subtitle: `“${input.lastQuestion}”`
+      title: t('ask.continue'),
+      subtitle: t('ask.quoted', { text: input.lastQuestion })
     })
   }
   for (const q of input.questions) {
@@ -94,14 +95,15 @@ function askSection(input: ResultsInput): Section {
       type: 'ask',
       question: q.question,
       title: q.title ?? q.question,
-      subtitle: input.helpAvailable ? q.subtitle : ASK_SIGNED_OUT
+      subtitle: input.helpAvailable ? q.subtitle : t('ask.signedOut')
     })
   }
-  return { key: 'ask', label: 'Ask Help', entries }
+  return { key: 'ask', label: t('ask.label'), entries }
 }
 
 /** Before anything is typed. */
 function browse(input: ResultsInput): Section[] {
+  const t = translator('spotlight')
   const { scope } = input
   if (scope === 'help') return [askSection(input)].filter((s) => s.entries.length)
   if (scope !== 'all') {
@@ -110,7 +112,7 @@ function browse(input: ResultsInput): Section[] {
       ? [
           {
             key: scope,
-            label: GROUP_LABELS[scope],
+            label: t(GROUP_LABELS[scope]),
             count: items.length,
             entries: items.slice(0, VIEW_LIMIT).map((item) => itemEntry(item))
           }
@@ -124,17 +126,17 @@ function browse(input: ResultsInput): Section[] {
   const sections: Section[] = [
     {
       key: 'suggestions',
-      label: 'Suggestions',
+      label: t('sections.suggestions'),
       entries: input.suggestions.map((item) => itemEntry(item))
     },
     {
       key: 'recent',
-      label: 'Recent projects',
+      label: t('sections.recent'),
       entries: input.recentProjects.slice(0, RECENT).map((item) => itemEntry(item))
     },
     {
       key: 'views',
-      label: 'Search',
+      label: t('actions.search'),
       entries: views.map((view) => ({ key: `view:${view}`, type: 'view', view }))
     },
     askSection(input)
@@ -143,6 +145,7 @@ function browse(input: ResultsInput): Section[] {
 }
 
 export function buildResults(input: ResultsInput): Results {
+  const t = translator('spotlight')
   const query = input.query.trim()
   const { scope } = input
   // In Help, what's typed is a question to ask, not something to find.
@@ -169,7 +172,7 @@ export function buildResults(input: ResultsInput): Results {
       ? [
           {
             key: scope,
-            label: GROUP_LABELS[scope],
+            label: t(GROUP_LABELS[scope]),
             count: results.length,
             entries: results.slice(0, VIEW_LIMIT).map((r) => itemEntry(r.item, r.ranges))
           }
@@ -184,7 +187,7 @@ export function buildResults(input: ResultsInput): Results {
     .sort((a, b) => b.score - a.score)
   const use: Section = {
     key: 'use',
-    label: `Use “${query}” with…`,
+    label: t('sections.use', { query }),
     entries: [
       askEntry(query, input),
       ...ranked
@@ -199,7 +202,7 @@ export function buildResults(input: ResultsInput): Results {
   }
   const found: Section = {
     key: 'results',
-    label: 'Results',
+    label: t('sections.results'),
     entries: results.map((r) => itemEntry(r.item, r.ranges))
   }
   // A question goes to Help first; anything else, after what was found.

@@ -3,6 +3,7 @@ import type { PortConflict } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { openDocs } from '../docsLinks'
+import { Trans, translator, useTranslation } from '../i18n'
 import { Codicon } from './icons'
 
 /** `plan`: a turn is already running, so nothing can be pushed to Fabric yet. */
@@ -77,7 +78,10 @@ export function describeHolder(
     const app = owner('/.rayfin-local/')
     return {
       kind: 'app',
-      name: app?.name ?? folderBefore(commandLine, '/.rayfin-local/') ?? 'an app',
+      name:
+        app?.name ??
+        folderBefore(commandLine, '/.rayfin-local/') ??
+        translator('preview')('port.anApp'),
       self: Boolean(app && projectPath && folderPath(app.path) === folderPath(projectPath))
     }
   }
@@ -97,44 +101,36 @@ export function describeHolder(
 
 /** The sentence that says who holds the address. */
 function holderLead(holder: Holder): ReactNode {
+  const t = translator('preview')
+  const named = (
+    key:
+      | 'port.holder.backend'
+      | 'port.holder.preview'
+      | 'port.holder.earlierPreview'
+      | 'port.holder.appPreview'
+      | 'port.holder.devServerFor'
+      | 'port.holder.program',
+    name: string
+  ): JSX.Element => <Trans t={t} i18nKey={key} values={{ name }} components={{ b: <strong /> }} />
   switch (holder.kind) {
     case 'project':
-      return holder.what === 'backend' ? (
-        <>
-          <strong>{holder.name}</strong>, another app running on this computer, is using it.
-        </>
-      ) : (
-        <>
-          The live preview of <strong>{holder.name}</strong> is using it while Copilot works on that
-          app.
-        </>
+      return named(
+        holder.what === 'backend' ? 'port.holder.backend' : 'port.holder.preview',
+        holder.name
       )
     case 'app':
-      return holder.self ? (
-        <>
-          An earlier preview of <strong>{holder.name}</strong> is still running and using it.
-        </>
-      ) : (
-        <>
-          A preview of <strong>{holder.name}</strong> is using it.
-        </>
+      return named(
+        holder.self ? 'port.holder.earlierPreview' : 'port.holder.appPreview',
+        holder.name
       )
     case 'dev-server':
-      return holder.name ? (
-        <>
-          A dev server for <strong>{holder.name}</strong> is using it.
-        </>
-      ) : (
-        <>A dev server is using it.</>
-      )
+      return holder.name
+        ? named('port.holder.devServerFor', holder.name)
+        : t('port.holder.devServer')
     case 'program':
-      return (
-        <>
-          <strong>{holder.name}</strong>, another program on this computer, is using it.
-        </>
-      )
+      return named('port.holder.program', holder.name)
     default:
-      return <>Another program on this computer is using it, and Fabricator can’t tell which.</>
+      return t('port.holder.unknown')
   }
 }
 
@@ -143,35 +139,36 @@ function stopChoice(
   holder: Holder,
   holderWorking: boolean
 ): { title: string; detail: string; safe: boolean } {
+  const t = translator('preview')
   switch (holder.kind) {
     case 'project':
       return {
-        title: `Stop ${holder.name}`,
+        title: t('port.stop.named', { name: holder.name }),
         detail: holderWorking
-          ? `Copilot is working on ${holder.name} right now. It starts again when you open it.`
-          : 'It starts again when you open it.',
+          ? t('port.stop.appWorking', { name: holder.name })
+          : t('port.stop.appIdle'),
         safe: !holderWorking
       }
     case 'app':
       return {
-        title: holder.self ? 'Stop the earlier preview' : 'Stop that preview',
-        detail: 'Nothing is lost: it’s only a preview.',
+        title: holder.self ? t('port.stop.earlierPreview') : t('port.stop.preview'),
+        detail: t('port.stop.previewDetail'),
         safe: true
       }
     case 'dev-server':
       return {
-        title: 'Stop the dev server',
-        detail: 'Nothing is lost: you can start it again later.',
+        title: t('port.stop.devServer'),
+        detail: t('port.stop.devServerDetail'),
         safe: true
       }
     case 'program':
       return {
-        title: `Stop ${holder.name}`,
-        detail: `Anything unsaved in ${holder.name} is lost.`,
+        title: t('port.stop.named', { name: holder.name }),
+        detail: t('port.stop.programDetail', { name: holder.name }),
         safe: false
       }
     default:
-      return { title: 'Stop that program', detail: 'Anything unsaved in it is lost.', safe: false }
+      return { title: t('port.stop.unknown'), detail: t('port.stop.unknownDetail'), safe: false }
   }
 }
 
@@ -195,6 +192,7 @@ function Choice({
   disabled: boolean
   onClick: () => void
 }): JSX.Element {
+  const { t } = useTranslation('preview')
   const titleId = useId()
   const tagId = useId()
   const detailId = useId()
@@ -218,7 +216,7 @@ function Choice({
           </span>
           {recommended && (
             <span className="port-choice-tag" id={tagId}>
-              Recommended
+              {t('port.recommended')}
             </span>
           )}
         </span>
@@ -269,6 +267,7 @@ export default function PortConflictModal({
   onStop,
   onSkip
 }: Props): JSX.Element {
+  const { t } = useTranslation('preview')
   useSuppressPreview()
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
@@ -297,7 +296,7 @@ export default function PortConflictModal({
       detail={stop.detail}
       recommended={recommended === 'stop'}
       busy={busy === 'stop'}
-      busyTitle="Stopping…"
+      busyTitle={t('port.stopping')}
       disabled={working}
       onClick={onStop}
     />
@@ -306,15 +305,11 @@ export default function PortConflictModal({
     <Choice
       key="use"
       icon="arrow-swap"
-      title={`Use localhost:${next} instead`}
-      detail={
-        needsPush
-          ? 'Adds it to your app’s sign-in settings and updates them in Fabric. Takes a moment.'
-          : 'Adds it to your app’s sign-in settings. Sign-in accepts it once you publish.'
-      }
+      title={t('port.use', { port: next })}
+      detail={needsPush ? t('port.useDetailPush') : t('port.useDetail')}
       recommended={recommended === 'use'}
       busy={busy === 'register'}
-      busyTitle={needsPush ? 'Updating your sign-in settings…' : 'Updating rayfin.yml…'}
+      busyTitle={needsPush ? t('port.updatingSignIn') : t('port.updatingYml')}
       disabled={working}
       onClick={onUsePort}
     />
@@ -332,8 +327,8 @@ export default function PortConflictModal({
       >
         <div className="modal-header">
           <div>
-            <h2 id={titleId}>Your live preview needs localhost:{port}</h2>
-            <p className="modal-sub">It’s the address your app’s sign-in accepts.</p>
+            <h2 id={titleId}>{t('port.title', { port })}</h2>
+            <p className="modal-sub">{t('port.sub')}</p>
           </div>
         </div>
         <div className="modal-body">
@@ -344,11 +339,7 @@ export default function PortConflictModal({
             </div>
           )}
           {!usePort && next !== undefined && (
-            <p className="port-dialog-note">
-              Using localhost:{next} instead updates your app’s sign-in settings in Fabric, which
-              can’t happen while Copilot is working. Skip for now to choose it with your next
-              message.
-            </p>
+            <p className="port-dialog-note">{t('port.useLater', { port: next })}</p>
           )}
           {error && (
             <p className="confirm-error" role="alert">
@@ -356,21 +347,19 @@ export default function PortConflictModal({
             </p>
           )}
           {log.length > 0 && (
-            <pre className="deploy-log deploy-log--static" aria-label="Port registration log">
+            <pre className="deploy-log deploy-log--static" aria-label={t('port.log')}>
               {log.join('')}
             </pre>
           )}
           {occupant && (
             <details className="port-details">
-              <summary>Technical details</summary>
+              <summary>{t('port.technical')}</summary>
               <dl>
-                <dt>Program</dt>
-                <dd>
-                  {occupant.name} (PID {occupant.pid})
-                </dd>
+                <dt>{t('port.program')}</dt>
+                <dd>{t('port.process', { name: occupant.name, pid: occupant.pid })}</dd>
                 {(occupant.commandLine || occupant.path) && (
                   <>
-                    <dt>Command</dt>
+                    <dt>{t('port.command')}</dt>
                     <dd>
                       <code>{occupant.commandLine || occupant.path}</code>
                     </dd>
@@ -386,16 +375,16 @@ export default function PortConflictModal({
             className="btn btn--sm btn--link"
             onClick={() => openDocs('previewPorts')}
           >
-            Learn more
+            {t('actions.learnMore')}
           </button>
           <button
             type="button"
             className="btn btn--ghost"
             onClick={onSkip}
             disabled={working}
-            title="Copilot keeps working, and the preview shows your published app."
+            title={t('port.skipTitle')}
           >
-            Skip live preview
+            {t('port.skip')}
           </button>
         </div>
       </div>

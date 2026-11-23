@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react'
 import type { AppActionResult, InstalledApp, StudioProject, TeamWorkspace } from '@shared/ipc'
+import { useTranslation } from '../i18n'
 import { moveMenuFocus } from '../menuFocus'
 import type { ProjectRemoval } from '../projectRemovals'
 import { FabricatorMark } from './FabricatorMark'
@@ -28,6 +29,7 @@ function OpenExisting({
   onClone: () => void
   onImportProject?: () => void
 }): JSX.Element {
+  const { t } = useTranslation('home')
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -83,9 +85,11 @@ function OpenExisting({
           <FolderIcon className="home-action-svg" />
         </span>
         <span className="home-action-text">
-          <span className="home-action-label">{opening ? 'Opening folder…' : 'Open existing'}</span>
+          <span className="home-action-label">
+            {opening ? t('openExisting.opening') : t('openExisting.label')}
+          </span>
           <span className="home-action-hint">
-            {onImportProject ? 'From a folder, GitHub or a file' : 'From a folder or GitHub'}
+            {onImportProject ? t('openExisting.hintWithFile') : t('openExisting.hint')}
           </span>
         </span>
         <Codicon name="chevron-down" className="home-action-caret" />
@@ -95,7 +99,7 @@ function OpenExisting({
           ref={menuRef}
           className="mp-panel home-open-menu"
           role="menu"
-          aria-label="Open existing"
+          aria-label={t('openExisting.label')}
           onKeyDown={onKeyDown}
         >
           <button
@@ -106,15 +110,15 @@ function OpenExisting({
           >
             <FolderIcon className="home-open-icon" />
             <span className="mp-item-text">
-              <span className="mp-item-label">Open folder</span>
-              <span className="mp-item-desc">A project on this computer</span>
+              <span className="mp-item-label">{t('openExisting.folder')}</span>
+              <span className="mp-item-desc">{t('openExisting.folderDesc')}</span>
             </span>
           </button>
           <button type="button" role="menuitem" className="mp-item" onClick={() => choose(onClone)}>
             <BranchIcon className="home-open-icon" />
             <span className="mp-item-text">
-              <span className="mp-item-label">Clone from GitHub</span>
-              <span className="mp-item-desc">Bring a repository into Fabricator</span>
+              <span className="mp-item-label">{t('openExisting.clone')}</span>
+              <span className="mp-item-desc">{t('openExisting.cloneDesc')}</span>
             </span>
           </button>
           {onImportProject && (
@@ -126,8 +130,8 @@ function OpenExisting({
             >
               <PackageIcon className="home-open-icon" />
               <span className="mp-item-text">
-                <span className="mp-item-label">Import a project</span>
-                <span className="mp-item-desc">A .fabricator file someone sent you</span>
+                <span className="mp-item-label">{t('openExisting.import')}</span>
+                <span className="mp-item-desc">{t('openExisting.importDesc')}</span>
               </span>
             </button>
           )}
@@ -220,6 +224,7 @@ export default function HomeView({
   installedApps,
   team
 }: Props): JSX.Element {
+  const { t } = useTranslation('home')
   const teamNames = new Map((team?.workspaces ?? []).map((w) => [w.id, w.name]))
 
   return (
@@ -229,13 +234,11 @@ export default function HomeView({
           <div className="home-brand">
             <FabricatorMark className="home-mark" />
             <div className="home-brand-text">
-              <h1 className="home-title">Your projects</h1>
-              <p className="home-sub">
-                Start a new Rayfin app, open a local project, or pick up where you left off.
-              </p>
+              <h1 className="home-title">{t('homeView.title')}</h1>
+              <p className="home-sub">{t('homeView.sub')}</p>
             </div>
           </div>
-          <div className="home-actions" role="group" aria-label="Project actions">
+          <div className="home-actions" role="group" aria-label={t('homeView.projectActions')}>
             <button
               type="button"
               className="home-action home-action--primary"
@@ -245,8 +248,8 @@ export default function HomeView({
                 <AddIcon className="home-action-svg" />
               </span>
               <span className="home-action-text">
-                <span className="home-action-label">New project</span>
-                <span className="home-action-hint">Describe it and Copilot builds it</span>
+                <span className="home-action-label">{t('homeView.newProject')}</span>
+                <span className="home-action-hint">{t('homeView.newProjectHint')}</span>
               </span>
             </button>
             <OpenExisting
@@ -260,8 +263,8 @@ export default function HomeView({
                 <Codicon name="library" className="home-action-svg" />
               </span>
               <span className="home-action-text">
-                <span className="home-action-label">App gallery</span>
-                <span className="home-action-hint">Browse apps in Fabric</span>
+                <span className="home-action-label">{t('homeView.gallery')}</span>
+                <span className="home-action-hint">{t('homeView.galleryHint')}</span>
               </span>
             </button>
             {onMigrateReport && (
@@ -270,8 +273,8 @@ export default function HomeView({
                   <Codicon name="graph" className="home-action-svg" />
                 </span>
                 <span className="home-action-text">
-                  <span className="home-action-label">Migrate a Power BI report</span>
-                  <span className="home-action-hint">Turn a report into an app</span>
+                  <span className="home-action-label">{t('homeView.migrate')}</span>
+                  <span className="home-action-hint">{t('homeView.migrateHint')}</span>
                 </span>
               </button>
             )}
@@ -315,13 +318,13 @@ export default function HomeView({
         {workspaceRoot && (
           <section className="home-workspace" aria-labelledby="home-workspace-title">
             <span id="home-workspace-title" className="home-workspace-label">
-              New projects are saved in
+              {t('homeView.savedIn')}
             </span>
             <code className="home-workspace-path" title={workspaceRoot}>
               {displayPath(workspaceRoot)}
             </code>
             <button type="button" className="home-workspace-change" onClick={onChangeWorkspaceRoot}>
-              Change folder
+              {t('homeView.changeFolder')}
             </button>
           </section>
         )}
