@@ -258,6 +258,7 @@
     "cantPrepareWorkspacesHelper": "ワークスペース検索用のヘルパーを準備できませんでした: {{error}}",
     "cantPrepareCapacitiesHelper": "容量検索用のヘルパーを準備できませんでした: {{error}}",
     "cantPrepareCreateHelper": "ワークスペース作成用のヘルパーを準備できませんでした: {{error}}",
+    "chooseCapacity": "新しいワークスペースの容量を選択してください。",
     "unrecordedApps": "このプロジェクトの公開済みアプリの一部に、Fabric のワークスペースまたはアイテム ID が記録されていません。何も削除されませんでした。",
     "cantPrepareDeleteHelper": "削除用のヘルパーを準備できませんでした: {{error}}",
     "enterEmail": "共有先のメール アドレスを 1 つ以上入力してください。",

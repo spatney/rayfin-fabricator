@@ -30,6 +30,9 @@ const SETTINGS_PUSH_TIMEOUT_MS: u64 = 10 * 60_000;
 const DEPLOY_CHANNEL: &str = "deploy:run";
 /// The first Rayfin CLI whose `rayfin up` publishes to an app you name (`--item-name`).
 const ITEM_NAME_SINCE: semver::Version = semver::Version::new(1, 36, 0);
+/// The first Rayfin CLI whose `rayfin up` publishes to a Pro workspace, one with
+/// no Fabric or Premium capacity (the Publish to Pro workspaces experiment).
+pub(crate) const PRO_WORKSPACE_SINCE: semver::Version = semver::Version::new(2, 1, 0);
 
 static GUID_RE: Lazy<Regex> =
   Lazy::new(|| Regex::new(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap());
@@ -95,7 +98,7 @@ fn up_args(workspace: Option<&str>, item_name: Option<&str>) -> Vec<String> {
 }
 
 /// The version of a project's own Rayfin CLI, the one Fabricator runs.
-fn installed_cli_version(dir: &Path) -> Option<semver::Version> {
+pub(crate) fn installed_cli_version(dir: &Path) -> Option<semver::Version> {
   let text = std::fs::read_to_string(dir.join("node_modules/@microsoft/rayfin-cli/package.json")).ok()?;
   let package: serde_json::Value = serde_json::from_str(&text).ok()?;
   semver::Version::parse(package.get("version")?.as_str()?.trim()).ok()

@@ -132,6 +132,13 @@
     "otherCapacitySku": "La capacidad ({{sku}}) no es de Fabric (F-SKU) ni Premium (P-SKU)",
     "otherCapacity": "La capacidad no es de Fabric (F-SKU) ni Premium (P-SKU)",
     "noCapacity": "No tiene asignada ninguna capacidad de Fabric o Premium",
+    "proSku": "Pro",
+    "proSkuTitle": "Área de trabajo Pro, sin capacidad de Fabric ni Premium",
+    "proNeeds": "Las áreas de trabajo Pro requieren Rayfin {{needs}} o posterior",
+    "proNote": "Las áreas de trabajo Pro requieren Rayfin {{needs}} o posterior, y esta aplicación usa Rayfin {{version}}. Actualiza su versión de Rayfin para publicar en una.",
+    "proNoteNoCli": "Las áreas de trabajo Pro requieren Rayfin {{needs}} o posterior, y los paquetes de Rayfin de esta aplicación no están instalados.",
+    "personalNoCapacity": "“Mi área de trabajo” necesita una capacidad de Fabric o Premium; no se ofrece como área de trabajo Pro",
+    "proCapacity": "Sin capacidad (área de trabajo Pro)",
     "refusal": {
       "workspace": "Las aplicaciones de Fabric no estaban disponibles en {{workspace}} cuando publicaste allí antes, por lo que es probable que publicar aquí falle.",
       "capacity": "Las aplicaciones de Fabric no estaban disponibles en la capacidad de esta área de trabajo cuando publicaste antes, por lo que es probable que publicar aquí falle.",

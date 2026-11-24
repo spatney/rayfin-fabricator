@@ -8,6 +8,7 @@ import type {
   FabricCapacity,
   FabricWorkspace,
   FabricWorkspacesResult,
+  ProWorkspaces,
   UnsupportedWorkspace
 } from '@shared/ipc'
 
@@ -35,9 +36,21 @@ const SEARCH_THRESHOLD = 10
 /** How many of the workspaces your apps use most recently are listed first. */
 const RECENT_LIMIT = 5
 
+/** The capacity picked for a new workspace with no capacity: a Pro workspace. */
+const PRO = 'pro'
+
+/**
+ * A Pro workspace, which the Publish to Pro workspaces experiment offers: it's
+ * eligible when the app's Rayfin can publish to one.
+ */
+function isPro(w: FabricWorkspace): boolean {
+  return w.capacityKind === 'pro'
+}
+
 /** "F-SKU · F2" style label for a workspace's capacity. */
 function skuText(w: FabricWorkspace): string {
   if (w.capacityKind === 'unknown') return translator('publish')('create.unknownSku')
+  if (isPro(w)) return translator('publish')('create.proSku')
   const fam = w.capacityKind === 'fabric' ? 'F-SKU' : w.capacityKind === 'premium' ? 'P-SKU' : ''
   return fam + (w.sku ? ` · ${w.sku}` : '')
 }
@@ -47,15 +60,22 @@ function skuTitle(w: FabricWorkspace): string | undefined {
   if (w.capacityKind === 'unknown') {
     return translator('publish')('create.unknownSkuTitle')
   }
+  if (isPro(w)) return translator('publish')('create.proSkuTitle')
   return w.capacityName ? `${w.capacityName} (${w.sku})` : w.sku
 }
 
-/** Why a workspace can't host a Rayfin app — shown on greyed-out ineligible rows. */
-function reasonFor(w: FabricWorkspace): string {
+/**
+ * Why a workspace can't host a Rayfin app — shown on greyed-out ineligible rows.
+ * With Pro workspaces offered (`pro`), a Pro workspace says which Rayfin it
+ * needs, and My workspace why it isn't one of them.
+ */
+function reasonFor(w: FabricWorkspace, pro: ProWorkspaces | undefined): string {
   const t = translator('publish')
   if (w.capacityKind === 'other') {
     return w.sku ? t('create.otherCapacitySku', { sku: w.sku }) : t('create.otherCapacity')
   }
+  if (pro && isPro(w)) return t('create.proNeeds', { needs: pro.needs })
+  if (pro && w.type === 'Personal') return t('create.personalNoCapacity')
   return t('create.noCapacity')
 }
 
@@ -174,6 +194,9 @@ export default function DeploymentCreateForm({
   const [authExpired, setAuthExpired] = useState(false)
   const loginSeqRef = useRef(0)
   const loginBusyRef = useRef(false)
+  /** Pro workspaces, while their experiment is on, and whether this app can publish to one. */
+  const pro = wsResult?.ok ? wsResult.proWorkspaces : undefined
+  const proReady = Boolean(pro?.ready)
 
   /** Fabric turned down an app on this capacity, or in its region. */
   function capacityRefusal(c: FabricCapacity): Refusal | undefined {
@@ -215,11 +238,10 @@ export default function DeploymentCreateForm({
       const res = await window.api.fabric.listCapacities()
       const list = res.ok && res.capacities ? res.capacities : []
       setCaps(list)
+      const kept =
+        selectedCap === PRO && proReady ? PRO : list.find((c) => c.id === selectedCap)?.id
       setSelectedCap(
-        list.find((c) => c.id === selectedCap)?.id ??
-          list.find((c) => !capacityRefusal(c))?.id ??
-          list[0]?.id ??
-          ''
+        kept ?? list.find((c) => !capacityRefusal(c))?.id ?? list[0]?.id ?? (proReady ? PRO : '')
       )
       if (!res.ok) {
         setCreateErr(authErrorMessage(res.error, t('create.errors.capacities')))
@@ -227,7 +249,7 @@ export default function DeploymentCreateForm({
       }
     } catch (reason) {
       setCaps([])
-      setSelectedCap('')
+      setSelectedCap(proReady ? PRO : '')
       setCreateErr(authErrorMessage(reason, t('create.errors.capacities')))
     } finally {
       setLoadingCaps(false)
@@ -247,7 +269,9 @@ export default function DeploymentCreateForm({
     setCreatingBusy(true)
     setCreateErr(null)
     try {
-      const res = await window.api.fabric.createWorkspace(newWsName.trim(), selectedCap)
+      // No capacity makes a Pro workspace.
+      const capacityId = selectedCap === PRO ? '' : selectedCap
+      const res = await window.api.fabric.createWorkspace(newWsName.trim(), capacityId)
       if (!res.ok) {
         setCreateErr(res.error || t('create.errors.createWorkspace'))
         if (res.needsLogin) setAuthExpired(true)
@@ -446,6 +470,16 @@ export default function DeploymentCreateForm({
             </span>
           </div>
         )}
+        {pro && !pro.ready && (
+          <div className="ws-refused-note" role="note">
+            <Codicon name="info" />
+            <span className="ws-refused-note-text">
+              {pro.rayfin
+                ? t('create.proNote', { needs: pro.needs, version: pro.rayfin })
+                : t('create.proNoteNoCli', { needs: pro.needs })}
+            </span>
+          </div>
+        )}
         {creatingWs && (
           <div className="ws-create">
             <input
@@ -469,7 +503,7 @@ export default function DeploymentCreateForm({
                 <span className="ws-spinner" />
                 {t('create.loadingCapacities')}
               </div>
-            ) : caps && caps.length > 0 ? (
+            ) : caps && (caps.length > 0 || proReady) ? (
               <select
                 className="ws-input"
                 value={selectedCap}
@@ -485,6 +519,7 @@ export default function DeploymentCreateForm({
                     {capacityRefusal(c) ? ` · ${t('create.unavailable')}` : ''}
                   </option>
                 ))}
+                {proReady && <option value={PRO}>{t('create.proCapacity')}</option>}
               </select>
             ) : (
               <p className="ws-empty-sub">{t('create.noCapacities')}</p>
@@ -714,7 +749,7 @@ export default function DeploymentCreateForm({
                           type="button"
                           className="ws-item ws-item--ineligible"
                           disabled
-                          title={reasonFor(w)}
+                          title={reasonFor(w, pro)}
                         >
                           <span className="ws-item-main">
                             <span className="ws-item-name">{w.displayName}</span>
@@ -724,7 +759,7 @@ export default function DeploymentCreateForm({
                             className={`ws-sku ws-sku--${w.capacityKind}`}
                             title={w.capacityName ?? undefined}
                           >
-                            {w.sku ?? '—'}
+                            {isPro(w) ? t('create.proSku') : (w.sku ?? '—')}
                           </span>
                         </button>
                       ))}

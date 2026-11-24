@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::services::{exec, fabric_auth, paths, store};
 use crate::services::exec::RunOptions;
-use crate::types::{DeployTargetCheck, FabricDeleteResult, FabricDeployment, FabricWorkspacesResult};
+use crate::types::{DeployTargetCheck, FabricDeleteResult, FabricDeployment, FabricWorkspace, FabricWorkspacesResult, ProWorkspaces};
 use crate::types::{FabricCapacitiesResult, FabricCreateWorkspaceResult};
 use crate::types::{FabricShareResult, SemanticModelRef};
 use crate::types::FabricDirectoryResult;
@@ -473,6 +473,9 @@ async fn probe_once(project_dir: Option<&Path>) -> Result<(), ProbeFailure> {
 
 /// List the signed-in user's Fabric workspaces, each annotated with its
 /// capacity SKU and whether that capacity is eligible to host a Rayfin app.
+/// With the Publish to Pro workspaces experiment on, Pro workspaces are marked
+/// too, and eligible when the active project's Rayfin can publish to one
+/// ([`mark_pro_workspaces`], [`pro_readiness`]).
 #[tauri::command]
 pub async fn fabric_workspaces() -> FabricWorkspacesResult {
   let project_dir = store::active_project().map(|p| PathBuf::from(p.path));
@@ -484,6 +487,7 @@ pub async fn fabric_workspaces() -> FabricWorkspacesResult {
         workspaces: None,
         needs_login: None,
         error: Some(error),
+        pro_workspaces: None,
       }
     }
   };
@@ -496,6 +500,7 @@ pub async fn fabric_workspaces() -> FabricWorkspacesResult {
         workspaces: None,
         needs_login: None,
         error: Some(t!("commands.fabric.cantPrepareWorkspacesHelper", error = err)),
+        pro_workspaces: None,
       }
     }
   };
@@ -510,6 +515,7 @@ pub async fn fabric_workspaces() -> FabricWorkspacesResult {
       workspaces: None,
       needs_login: None,
       error: Some(t!("commands.shared.nodeMissing")),
+      pro_workspaces: None,
     };
   }
 
@@ -517,8 +523,15 @@ pub async fn fabric_workspaces() -> FabricWorkspacesResult {
   match fabric_auth::parse_helper_output::<FabricWorkspacesResult>(&res) {
     Ok(mut parsed) => {
       if parsed.ok {
+        if store::pro_workspaces_enabled() {
+          let pro = pro_readiness(project_dir.as_deref());
+          if let Some(ws) = parsed.workspaces.as_mut() {
+            mark_pro_workspaces(ws, pro.ready);
+          }
+          parsed.pro_workspaces = Some(pro);
+        }
         if let Some(ws) = parsed.workspaces.as_mut() {
-          // Eligible (Fabric / Premium) workspaces first, then alphabetically.
+          // Eligible workspaces first, then alphabetically.
           ws.sort_by(|a, b| {
             if a.eligible != b.eligible {
               if a.eligible {
@@ -543,8 +556,35 @@ pub async fn fabric_workspaces() -> FabricWorkspacesResult {
         workspaces: None,
         needs_login: Some(needs_login),
         error: Some(err),
+        pro_workspaces: None,
       }
     }
+  }
+}
+
+/// Marks the Pro workspaces for the Publish to Pro workspaces experiment:
+/// shared workspaces with no dedicated capacity. They're eligible when the app's
+/// Rayfin can publish to one (`ready`). My workspace (`Personal`) and Fabric's
+/// admin workspaces stay out, like workspaces on a capacity that can't host an app.
+fn mark_pro_workspaces(workspaces: &mut [FabricWorkspace], ready: bool) {
+  for workspace in workspaces.iter_mut() {
+    let shared = workspace.r#type.as_deref().is_none_or(|kind| kind.eq_ignore_ascii_case("Workspace"));
+    if workspace.capacity_kind == "none" && shared {
+      workspace.capacity_kind = "pro".into();
+      workspace.eligible = ready;
+    }
+  }
+}
+
+/// Whether the project in `dir` can publish to a Pro workspace: its Rayfin CLI
+/// is [`PRO_WORKSPACE_SINCE`](crate::commands::deploy::PRO_WORKSPACE_SINCE) or later.
+fn pro_readiness(dir: Option<&Path>) -> ProWorkspaces {
+  let since = crate::commands::deploy::PRO_WORKSPACE_SINCE;
+  let rayfin = dir.and_then(crate::commands::deploy::installed_cli_version);
+  ProWorkspaces {
+    ready: rayfin.as_ref().is_some_and(|version| *version >= since),
+    needs: since.to_string(),
+    rayfin: rayfin.map(|version| version.to_string()),
   }
 }
 
@@ -602,9 +642,19 @@ pub async fn fabric_capacities() -> FabricCapacitiesResult {
 }
 
 /// Create a new Fabric workspace and assign it to `capacity_id`. The region is
-/// inherited from the capacity. Returns the new workspace id on success.
+/// inherited from the capacity. Returns the new workspace id on success. An
+/// empty `capacity_id` creates a Pro workspace, with no capacity, which only
+/// the Publish to Pro workspaces experiment allows.
 #[tauri::command]
 pub async fn fabric_create_workspace(name: String, capacity_id: String) -> FabricCreateWorkspaceResult {
+  if capacity_id.trim().is_empty() && !store::pro_workspaces_enabled() {
+    return FabricCreateWorkspaceResult {
+      ok: false,
+      workspace_id: None,
+      needs_login: None,
+      error: Some(t!("commands.fabric.chooseCapacity")),
+    };
+  }
   let project_dir = store::active_project().map(|p| PathBuf::from(p.path));
   let auth_path = match project_auth_module(project_dir.as_deref()).await {
     Ok(p) => p,
@@ -1293,6 +1343,63 @@ mod tests {
     let ids: Vec<&str> = ws.iter().map(|w| w.id.as_str()).collect();
     // Eligible "beta" first, then non-eligible alphabetically (Alpha, Zeta).
     assert_eq!(ids, vec!["2", "3", "1"]);
+  }
+
+  /// The Pro workspaces experiment marks shared workspaces with no capacity,
+  /// and nothing else, eligible when the app's Rayfin is new enough.
+  #[test]
+  fn pro_workspaces_are_shared_ones_with_no_capacity() {
+    let ws = |id: &str, kind: Option<&str>, capacity_kind: &str, eligible: bool| FabricWorkspace {
+      id: id.into(),
+      display_name: id.into(),
+      r#type: kind.map(String::from),
+      capacity_id: None,
+      region: None,
+      sku: None,
+      capacity_name: None,
+      capacity_kind: capacity_kind.into(),
+      eligible,
+    };
+    let list = || {
+      vec![
+        ws("pro", Some("Workspace"), "none", false),
+        ws("untyped", None, "none", false),
+        ws("mine", Some("Personal"), "none", false),
+        ws("admin", Some("AdminWorkspace"), "none", false),
+        ws("ppu", Some("Workspace"), "other", false),
+        ws("fabric", Some("Workspace"), "fabric", true),
+      ]
+    };
+    let marked = |ready: bool| {
+      let mut list = list();
+      mark_pro_workspaces(&mut list, ready);
+      list.into_iter().map(|w| format!("{} {} {}", w.id, w.capacity_kind, w.eligible)).collect::<Vec<_>>()
+    };
+    assert_eq!(
+      marked(true),
+      ["pro pro true", "untyped pro true", "mine none false", "admin none false", "ppu other false", "fabric fabric true"]
+    );
+    assert_eq!(
+      marked(false),
+      ["pro pro false", "untyped pro false", "mine none false", "admin none false", "ppu other false", "fabric fabric true"]
+    );
+  }
+
+  /// A Pro workspace needs Rayfin 2.1.0 or later, as the app's own CLI says.
+  #[test]
+  fn publishing_to_a_pro_workspace_needs_rayfin_2_1() {
+    let dir = std::env::temp_dir().join(format!("fab-pro-ready-{}", std::process::id()));
+    let cli = dir.join("node_modules/@microsoft/rayfin-cli");
+    std::fs::create_dir_all(&cli).unwrap();
+    for (version, ready) in [("2.1.0", true), ("2.2.0-alpha.12", true), ("2.1.0-preview.3", false), ("2.0.1", false)] {
+      std::fs::write(cli.join("package.json"), format!(r#"{{"version":"{version}"}}"#)).unwrap();
+      let pro = pro_readiness(Some(&dir));
+      assert_eq!((pro.ready, pro.rayfin.as_deref()), (ready, Some(version)), "{version}");
+      assert_eq!(pro.needs, "2.1.0");
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(pro_readiness(Some(&dir)), ProWorkspaces { ready: false, needs: "2.1.0".into(), rayfin: None });
+    assert!(!pro_readiness(None).ready, "no active project");
   }
 
   #[test]

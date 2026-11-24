@@ -90,6 +90,10 @@
     "workIq": {
       "title": "Work IQ",
       "desc": "Fügt Work IQ zu den Plug-Ins des Chats hinzu. In einem Chat eingeschaltet, kann der Chat mit Work IQ von Microsoft deine Microsoft 365-E-Mails, Besprechungen, Dateien, Teams-Nachrichten und Personen nachschlagen und das Gefundene beim Erstellen verwenden. Nur Lesezugriff. Du meldest dich in deinem Browser mit deinem Geschäftskonto an. Erfordert eine Microsoft 365 Copilot-Lizenz und die Zustimmung deiner Organisation."
+    },
+    "proWorkspaces": {
+      "title": "In Pro-Arbeitsbereichen veröffentlichen",
+      "desc": "Veröffentliche Apps in Pro-Arbeitsbereichen, die keine Fabric- oder Power BI Premium-Kapazität haben. Die Arbeitsbereichsauswahl listet sie mit den anderen auf, und „+ Neuer Arbeitsbereich“ kann einen ohne Kapazität erstellen. Eine App braucht Rayfin 2.1.0 oder höher, um in einem davon zu veröffentlichen. „Mein Arbeitsbereich“ wird nicht angeboten."
     }
   },
   "about": {

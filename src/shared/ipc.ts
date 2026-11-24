@@ -924,12 +924,16 @@ export interface FabricWorkspace {
    * Capacity family inferred from the SKU prefix (F* = fabric, P* = premium).
    * 'unknown' = the workspace is on a dedicated capacity but its SKU isn't
    * visible to the signed-in user (they don't administer that capacity).
+   * 'none' = no dedicated capacity: My workspace, or a Pro workspace while the
+   * Publish to Pro workspaces experiment is off. 'pro' = a Pro workspace (shared,
+   * with no dedicated capacity) while the experiment is on.
    */
-  capacityKind: 'fabric' | 'premium' | 'other' | 'none' | 'unknown'
+  capacityKind: 'fabric' | 'premium' | 'other' | 'none' | 'unknown' | 'pro'
   /**
    * True when a Rayfin app can be created in this workspace — Fabric (F-SKU),
    * Power BI Premium (P-SKU), or 'unknown' (capacity present, SKU not visible)
-   * qualify; the deploy performs the final validation.
+   * qualify, and 'pro' when the app's Rayfin can publish to a Pro workspace
+   * ({@link ProWorkspaces.ready}); the deploy performs the final validation.
    */
   eligible: boolean
 }
@@ -941,6 +945,21 @@ export interface FabricWorkspacesResult {
   /** True when the failure was a missing/expired Fabric session. */
   needsLogin?: boolean
   error?: string
+  /**
+   * Set while the Publish to Pro workspaces experiment is on: whether the app
+   * being published can go to a Pro workspace.
+   */
+  proWorkspaces?: ProWorkspaces
+}
+
+/** What publishing to a Pro workspace needs, and whether the app has it. */
+export interface ProWorkspaces {
+  /** The app's Rayfin CLI is {@link needs} or later, so its Pro workspaces are eligible. */
+  ready: boolean
+  /** The first Rayfin version that publishes to a Pro workspace, e.g. '2.1.0'. */
+  needs: string
+  /** The app's Rayfin CLI version, when it's installed. */
+  rayfin?: string
 }
 
 /** A dedicated capacity the user can create a workspace on. */
@@ -1872,6 +1891,12 @@ export interface ExperimentFlags {
    * turned on there.
    */
   workIq?: boolean
+  /**
+   * Publish to Pro workspaces: the publish picker offers shared workspaces with
+   * no Fabric or Premium capacity (Pro workspaces), and + New workspace can
+   * create one, to apps on Rayfin 2.1.0 or later. My workspace stays out.
+   */
+  proWorkspaces?: boolean
 }
 
 /**
@@ -4049,7 +4074,11 @@ export interface RayfinStudioApi {
     listWorkspaces: () => Promise<FabricWorkspacesResult>
     /** List eligible (F-SKU / P-SKU) capacities the user can create a workspace on. */
     listCapacities: () => Promise<FabricCapacitiesResult>
-    /** Create + assign a new workspace to `capacityId`; region follows the capacity. */
+    /**
+     * Create + assign a new workspace to `capacityId`; region follows the
+     * capacity. An empty `capacityId` creates a Pro workspace, with no
+     * capacity, which only the Publish to Pro workspaces experiment allows.
+     */
     createWorkspace: (name: string, capacityId: string) => Promise<FabricCreateWorkspaceResult>
     /**
      * Delete the project's deployed app(s) from Fabric (the Fabric items behind

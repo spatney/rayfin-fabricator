@@ -237,6 +237,23 @@ pub struct FabricWorkspacesResult {
   pub needs_login: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
+  /// Set while the Publish to Pro workspaces experiment is on: whether the app
+  /// being published can go to a Pro workspace.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub pro_workspaces: Option<ProWorkspaces>,
+}
+
+/// What publishing to a Pro workspace needs, and whether the app has it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProWorkspaces {
+  /// The app's Rayfin CLI is `needs` or later, so its Pro workspaces are eligible.
+  pub ready: bool,
+  /// The first Rayfin version that publishes to a Pro workspace.
+  pub needs: String,
+  /// The app's Rayfin CLI version, when it's installed.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub rayfin: Option<String>,
 }
 
 /// A dedicated capacity the signed-in user can create a workspace on.
@@ -812,6 +829,12 @@ pub struct ExperimentFlags {
   /// default); each chat still has the plugin off until it's turned on there.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub work_iq: Option<bool>,
+  /// Publish to Pro workspaces: the publish picker offers shared workspaces with
+  /// no Fabric or Premium capacity (Pro workspaces), and + New workspace can
+  /// create one, to apps on Rayfin 2.1.0 or later. My workspace stays out.
+  /// Opt-in (off by default).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub pro_workspaces: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

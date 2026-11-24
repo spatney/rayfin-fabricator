@@ -579,3 +579,120 @@ describe('DeploymentCreateForm workspaces Fabric turned apps down in', () => {
     expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('cap-b')
   })
 })
+
+describe('DeploymentCreateForm Pro workspaces', () => {
+  /** The workspaces as listed with the Pro workspaces experiment on, for an app on Rayfin `rayfin`. */
+  const listed = (rayfin: string, ready: boolean): FabricWorkspacesResult => ({
+    ok: true,
+    proWorkspaces: { ready, needs: '2.1.0', rayfin },
+    workspaces: [
+      { id: 'w1', displayName: 'Finance', capacityKind: 'fabric', sku: 'F2', eligible: true },
+      {
+        id: 'w2',
+        displayName: 'Team space',
+        type: 'Workspace',
+        capacityKind: 'pro',
+        eligible: ready
+      },
+      {
+        id: 'w3',
+        displayName: 'My workspace',
+        type: 'Personal',
+        capacityKind: 'none',
+        eligible: false
+      }
+    ]
+  })
+  const workspaces = listed('2.1.0', true)
+
+  it('lists Pro workspaces with the eligible ones, and says why My workspace isn’t one', () => {
+    const onSubmit = vi.fn()
+    render(
+      <DeploymentCreateForm
+        wsResult={workspaces}
+        loadingWs={false}
+        onReload={vi.fn()}
+        onSubmit={onSubmit}
+      />
+    )
+    expect(screen.queryByRole('note')).toBeNull()
+    const pro = within(screen.getByRole('listbox')).getByText('Team space').closest('button')
+    expect(pro?.querySelector('.ws-sku')?.textContent).toBe('Pro')
+    fireEvent.click(pro as HTMLButtonElement)
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
+    expect(onSubmit).toHaveBeenCalledWith('Team space', 'w2', undefined)
+
+    fireEvent.click(screen.getByRole('button', { name: /Not eligible/ }))
+    expect(screen.getByText('My workspace').closest('button')?.title).toBe(
+      'My workspace needs a Fabric/Premium capacity; it isn’t offered as a Pro workspace'
+    )
+  })
+
+  it('offers no capacity after the capacities for a new workspace, and creates a Pro workspace', async () => {
+    vi.mocked(window.api.fabric.listCapacities).mockResolvedValueOnce({
+      ok: true,
+      capacities: [
+        { id: 'cap1', displayName: 'Capacity One', sku: 'F2', kind: 'fabric', eligible: true }
+      ]
+    })
+    render(
+      <DeploymentCreateForm
+        wsResult={workspaces}
+        loadingWs={false}
+        onReload={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: '+ New workspace' }))
+    const options = (await screen.findAllByRole('option')).map((o) => o.textContent)
+    expect(options).toEqual(['Capacity One · F2', 'No capacity (Pro workspace)'])
+    const capacity = screen.getByRole('combobox') as HTMLSelectElement
+    expect(capacity.value).toBe('cap1')
+    fireEvent.change(capacity, { target: { value: 'pro' } })
+    fireEvent.change(screen.getByPlaceholderText('New workspace name'), {
+      target: { value: 'Drafts' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
+    await waitFor(() =>
+      expect(window.api.fabric.createWorkspace).toHaveBeenCalledWith('Drafts', '')
+    )
+  })
+
+  it('picks no capacity when you have no capacities', async () => {
+    render(
+      <DeploymentCreateForm
+        wsResult={workspaces}
+        loadingWs={false}
+        onReload={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: '+ New workspace' }))
+    expect(((await screen.findByRole('combobox')) as HTMLSelectElement).value).toBe('pro')
+    expect(screen.queryByText('No eligible capacities available.')).toBeNull()
+  })
+
+  it('keeps Pro workspaces from an app on an earlier Rayfin, and says why', async () => {
+    render(
+      <DeploymentCreateForm
+        wsResult={listed('2.0.1', false)}
+        loadingWs={false}
+        onReload={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    )
+    expect(screen.getByRole('note').textContent).toContain(
+      'Pro workspaces need Rayfin 2.1.0 or later, and this app is on Rayfin 2.0.1. Update its Rayfin version to publish to one.'
+    )
+    expect(within(screen.getByRole('listbox')).queryByText('Team space')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Not eligible/ }))
+    const pro = screen.getByText('Team space').closest('button') as HTMLButtonElement
+    expect(pro.disabled).toBe(true)
+    expect(pro.title).toBe('Pro workspaces need Rayfin 2.1.0 or later')
+    expect(pro.querySelector('.ws-sku')?.textContent).toBe('Pro')
+
+    fireEvent.click(screen.getByRole('button', { name: '+ New workspace' }))
+    expect(await screen.findByText('No eligible capacities available.')).toBeTruthy()
+    expect(screen.queryByRole('option', { name: 'No capacity (Pro workspace)' })).toBeNull()
+  })
+})

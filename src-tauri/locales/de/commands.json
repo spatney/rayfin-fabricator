@@ -258,6 +258,7 @@
     "cantPrepareWorkspacesHelper": "Das Hilfsskript für die Suche nach Arbeitsbereichen konnte nicht vorbereitet werden: {{error}}",
     "cantPrepareCapacitiesHelper": "Das Hilfsskript für die Suche nach Kapazitäten konnte nicht vorbereitet werden: {{error}}",
     "cantPrepareCreateHelper": "Das Hilfsskript zum Erstellen von Arbeitsbereichen konnte nicht vorbereitet werden: {{error}}",
+    "chooseCapacity": "Wähle eine Kapazität für den neuen Arbeitsbereich aus.",
     "unrecordedApps": "Für einige veröffentlichte Apps dieses Projekts sind kein Fabric-Arbeitsbereich oder keine Element-ID gespeichert. Es wurde nichts gelöscht.",
     "cantPrepareDeleteHelper": "Das Hilfsskript zum Löschen konnte nicht vorbereitet werden: {{error}}",
     "enterEmail": "Gib mindestens eine E-Mail-Adresse ein, mit der geteilt werden soll.",

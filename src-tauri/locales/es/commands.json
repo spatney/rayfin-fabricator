@@ -258,6 +258,7 @@
     "cantPrepareWorkspacesHelper": "No se pudo preparar el script auxiliar de búsqueda de áreas de trabajo: {{error}}",
     "cantPrepareCapacitiesHelper": "No se pudo preparar el script auxiliar de búsqueda de capacidades: {{error}}",
     "cantPrepareCreateHelper": "No se pudo preparar el script auxiliar para crear áreas de trabajo: {{error}}",
+    "chooseCapacity": "Elige una capacidad para la nueva área de trabajo.",
     "unrecordedApps": "Algunas aplicaciones publicadas de este proyecto no tienen registrado un área de trabajo ni un id. de elemento de Fabric. No se eliminó nada.",
     "cantPrepareDeleteHelper": "No se pudo preparar el script auxiliar de eliminación: {{error}}",
     "enterEmail": "Escribe al menos un correo electrónico con el que compartir.",

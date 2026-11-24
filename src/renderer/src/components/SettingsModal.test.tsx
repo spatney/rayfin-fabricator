@@ -220,6 +220,19 @@ describe('SettingsModal Work IQ experiment', () => {
   })
 })
 
+describe('SettingsModal Pro workspaces experiment', () => {
+  it('is off by default and turns on through its own flag', async () => {
+    installApi()
+    const { onChange } = await renderModal()
+    fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
+    const row = screen.getByText('Publish to Pro workspaces').closest('label')
+    const checkbox = row?.querySelector('input[type="checkbox"]') as HTMLInputElement
+    expect(checkbox.checked).toBe(false)
+    fireEvent.click(checkbox)
+    expect(onChange).toHaveBeenCalledWith({ experiments: { proWorkspaces: true } })
+  })
+})
+
 describe('SettingsModal retired controls', () => {
   it.each([false, true])(
     'does not show retired controls with legacy flags set to %s',
@@ -264,10 +277,11 @@ describe('SettingsModal retired controls', () => {
       }
       expect(screen.queryByRole('dialog', { name: 'Restart required' })).toBeNull()
       expect(screen.queryByRole('checkbox', { name: /MCP servers/ })).toBeNull()
-      expect(screen.getAllByRole('checkbox')).toHaveLength(4)
+      expect(screen.getAllByRole('checkbox')).toHaveLength(5)
       expect(screen.getByText('Team workspaces')).toBeTruthy()
       expect(screen.getByText('Migrate Power BI reports')).toBeTruthy()
       expect(screen.getByText('Work IQ')).toBeTruthy()
+      expect(screen.getByText('Publish to Pro workspaces')).toBeTruthy()
       expect(screen.getByText('Full diagnostics')).toBeTruthy()
     }
   )

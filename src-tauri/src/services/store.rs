@@ -40,6 +40,7 @@ fn default_flags() -> ExperimentFlags {
     team_workspaces: Some(false),
     report_migration: Some(false),
     work_iq: Some(false),
+    pro_workspaces: Some(false),
   }
 }
 
@@ -193,6 +194,7 @@ fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: Experimen
   if let Some(v) = patch.team_workspaces { current.team_workspaces = Some(v); }
   if let Some(v) = patch.report_migration { current.report_migration = Some(v); }
   if let Some(v) = patch.work_iq { current.work_iq = Some(v); }
+  if let Some(v) = patch.pro_workspaces { current.pro_workspaces = Some(v); }
 }
 
 /// Each provider's models and the ones shown in the model pickers.
@@ -234,6 +236,17 @@ pub fn report_migration_enabled() -> bool {
       .experiments
       .as_ref()
       .and_then(|e| e.report_migration)
+      .unwrap_or(false)
+  })
+}
+
+/// True when the Publish to Pro workspaces experiment is on.
+pub fn pro_workspaces_enabled() -> bool {
+  with_cache(|c| {
+    c.settings
+      .experiments
+      .as_ref()
+      .and_then(|e| e.pro_workspaces)
       .unwrap_or(false)
   })
 }

@@ -258,6 +258,7 @@
     "cantPrepareWorkspacesHelper": "Could not prepare the workspace lookup helper: {{error}}",
     "cantPrepareCapacitiesHelper": "Could not prepare the capacities lookup helper: {{error}}",
     "cantPrepareCreateHelper": "Could not prepare the create-workspace helper: {{error}}",
+    "chooseCapacity": "Choose a capacity for the new workspace.",
     "unrecordedApps": "Some of this project's published apps have no Fabric workspace or item ID recorded. Nothing was deleted.",
     "cantPrepareDeleteHelper": "Could not prepare the delete helper: {{error}}",
     "enterEmail": "Enter at least one email to share with.",
