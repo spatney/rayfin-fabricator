@@ -14,7 +14,7 @@ use regex::Regex;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::commands::util::{annotate_project, is_rayfin_project, normalize, same_path};
-use crate::services::exec::{run, OnData, RunOptions, RunResult, Stream};
+use crate::services::exec::{run_npm, OnData, RunOptions, RunResult, Stream};
 use crate::services::rayfin_sdk::{self, Pinning};
 use crate::services::{emit, git, history, store, version_history};
 use crate::state::AppState;
@@ -490,8 +490,7 @@ async fn run_scaffolder(
 ) -> RunResult {
   let create_args = create_args(folder, request, release, skip_install);
   let arg_refs: Vec<&str> = create_args.iter().map(String::as_str).collect();
-  run(
-    "npm",
+  run_npm(
     &arg_refs,
     RunOptions {
       cwd: Some(root.to_path_buf()),

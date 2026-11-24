@@ -198,6 +198,7 @@
     "andMore_one": "{{names}} and {{count}} more",
     "andMore_other": "{{names}} and {{count}} more",
     "legacyPeers": "npm couldn't work out the packages' peer dependencies; retrying with --legacy-peer-deps...",
+    "registryDownloads": "Your npm registry serves its packages from {{host}}, and npm refused to download them from there (npm's allow-remote setting); retrying through the registry with replace-registry-host={{prefix}}... To fix this for npm outside Fabricator too, run: npm config set replace-registry-host {{prefix}}",
     "ciRejected": "npm ci was rejected; retrying with npm install...",
     "noPackageJson": "This Rayfin project has no package.json, so its dependencies cannot be installed.",
     "npmMissing": "npm was not found on PATH. Install Node.js (which includes npm), then retry.",

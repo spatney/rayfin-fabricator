@@ -731,16 +731,117 @@ where
   run_npm(args).await
 }
 
-/// `npm <args>` for an install (`install`, `ci` or `dedupe`), retried with
-/// `--legacy-peer-deps` when npm couldn't work out the packages' peer
-/// dependencies. Every npm install Fabricator runs in a project goes through it.
+/// npm's `replace-registry-host` setting, for the npm runs that need it.
+const REPLACE_REGISTRY_HOST: &str = "npm_config_replace_registry_host";
+
+/// Where this session's npm registry serves its packages from, once npm
+/// refused to download them from there and getting them through the registry
+/// worked. Later npm runs start that way.
+static REGISTRY_DOWNLOADS: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Where the registry serves the package npm refused to download for coming
+/// from a web address (`EALLOWREMOTE`): the address before
+/// `/<name>/-/<file>.tgz`, such as
+/// `https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry`.
+/// `None` when npm refused something else, or an address that isn't a
+/// registry's download of the package npm named, such as a package that is a
+/// web address or an `npm:` alias.
+fn refused_registry_download(result: &RunResult) -> Option<String> {
+  if result.ok {
+    return None;
+  }
+  let lines = npm_error_lines(result);
+  if !lines.contains(&"code EALLOWREMOTE") {
+    return None;
+  }
+  let refused = lines.iter().find_map(|line| line.strip_prefix("Refusing to fetch \"")?.strip_suffix('"'))?;
+  // `<name>@<address>`, where a scoped name starts with `@` too.
+  let at = refused.get(1..)?.find('@')? + 1;
+  let (name, address) = (&refused[..at], &refused[at + 1..]);
+  let address = address.split(['?', '#']).next()?;
+  let host_at = ["https://", "http://"].into_iter().find(|scheme| address.starts_with(*scheme))?.len();
+  let package = format!("/{name}/-/");
+  let package_at = address.rfind(&package)?;
+  let host = address.get(host_at..package_at)?.split('/').next()?;
+  let file = &address[package_at + package.len()..];
+  (!host.is_empty() && file.ends_with(".tgz")).then(|| address[..package_at].to_string())
+}
+
+/// The host of a web address: `ms-feed-25.pkgs.visualstudio.com` for
+/// `https://ms-feed-25.pkgs.visualstudio.com/1es-public`.
+fn host_of(address: &str) -> &str {
+  let rest = address.split_once("://").map_or(address, |(_, rest)| rest);
+  rest.split('/').next().unwrap_or(rest)
+}
+
+/// Run npm with `run_npm`, which takes where the registry serves its packages
+/// from when npm should get them through the registry instead. When npm
+/// refuses to download a registry's packages from where it serves them, run it
+/// once more getting them through the registry, saying so; once that works,
+/// later runs start that way (`learned`). A run refused somewhere else than
+/// where it started, such as a lockfile's addresses on registry.npmjs.org that
+/// npm's own `replace-registry-host` covers, tries that instead.
+///
+/// npm 12 doesn't download packages from web addresses (`allow-remote=none`)
+/// and tells a registry's own downloads apart only by the registry's address,
+/// so it refuses every package of a registry that serves them from another
+/// host, as packagefeedproxy.microsoft.io/npm does from
+/// ms-feed-25.pkgs.visualstudio.com (issue #102). npm's
+/// `replace-registry-host`, set to where they are, has npm download them from
+/// the registry's address instead. It still refuses packages that are web
+/// addresses.
+async fn retry_through_the_registry<F, Fut>(
+  learned: &std::sync::Mutex<Option<String>>,
+  on_data: Option<&OnData>,
+  mut run_npm: F,
+) -> RunResult
+where
+  F: FnMut(Option<String>) -> Fut,
+  Fut: std::future::Future<Output = RunResult>,
+{
+  let known = learned.lock().map(|known| known.clone()).unwrap_or_default();
+  let first = run_npm(known.clone()).await;
+  let Some(downloads) = refused_registry_download(&first).filter(|downloads| known.as_ref() != Some(downloads)) else {
+    return first;
+  };
+  if let Some(on) = on_data {
+    let said = t!("services.exec.registryDownloads", host = host_of(&downloads), prefix = downloads);
+    on(Stream::System, &format!("\n{said}\n"));
+  }
+  let retried = run_npm(Some(downloads.clone())).await;
+  if retried.ok {
+    if let Ok(mut known) = learned.lock() {
+      *known = Some(downloads);
+    }
+  }
+  retried
+}
+
+/// `npm <args>`, getting the registry's packages through the registry when npm
+/// refuses to download them from where the registry serves them (see
+/// [`retry_through_the_registry`]). Creating a project and every npm install
+/// Fabricator runs go through it.
+pub async fn run_npm(args: &[&str], options: RunOptions) -> RunResult {
+  let on_data = options.on_data.clone();
+  retry_through_the_registry(&REGISTRY_DOWNLOADS, on_data.as_ref(), |downloads| {
+    let mut options = options.clone();
+    options.env.extend(downloads.map(|downloads| (REPLACE_REGISTRY_HOST.to_string(), downloads)));
+    run("npm", args, options)
+  })
+  .await
+}
+
+/// `npm <args>` for an install (`install`, `ci` or `dedupe`) with [`run_npm`],
+/// retried with `--legacy-peer-deps` when npm couldn't work out the packages'
+/// peer dependencies. Every npm install Fabricator runs in a project goes
+/// through it.
 pub async fn npm_install(args: &[&str], options: RunOptions) -> RunResult {
   let on_data = options.on_data.clone();
   retry_with_legacy_peers(args, on_data.as_ref(), |args| {
     let options = options.clone();
     async move {
       let args: Vec<&str> = args.iter().map(String::as_str).collect();
-      run("npm", &args, options).await
+      run_npm(&args, options).await
     }
   })
   .await
@@ -1588,6 +1689,108 @@ mod tests {
     for (result, args) in once {
       let (_, calls, said) = install_with(vec![result], args).await;
       assert_eq!(calls.len(), 1, "{args:?}");
+      assert!(said.is_empty(), "{said}");
+    }
+  }
+
+  /// What npm 12.0.1 prints when it refuses every package of a registry that
+  /// serves them from another host (issue #102).
+  const REFUSED: &str = "npm error code EALLOWREMOTE\n\
+    npm error Fetching packages of type \"remote\" have been disabled\n\
+    npm error Refusing to fetch \"fs-constants@https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fs-constants/-/fs-constants-1.0.0.tgz\"\n\
+    npm error A complete log of this run can be found in: C:\\Users\\avery\\AppData\\Local\\npm-cache\\_logs\\2026-11-18T17_20_47_835Z-debug-0.log\n";
+
+  /// Where that registry serves its packages from.
+  const FEED: &str = "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry";
+
+  /// npm refusing to download `spec` for coming from a web address.
+  fn refusing(spec: &str) -> RunResult {
+    npm_failed(&format!(
+      "npm error code EALLOWREMOTE\nnpm error Fetching packages of type \"remote\" have been disabled\n\
+       npm error Refusing to fetch \"{spec}\"\n"
+    ))
+  }
+
+  #[test]
+  fn npm_refusals_of_registry_downloads_say_where_the_registry_serves_them() {
+    assert_eq!(refused_registry_download(&npm_failed(REFUSED)).as_deref(), Some(FEED));
+    // A scoped package, and a registry at the root of its host.
+    let scoped = format!("@microsoft/create-rayfin@{FEED}/@microsoft/create-rayfin/-/create-rayfin-2.0.0.tgz");
+    assert_eq!(refused_registry_download(&refusing(&scoped)).as_deref(), Some(FEED));
+    let npmjs = "is-number@https://registry.npmjs.org/is-number/-/is-number-7.0.0.tgz";
+    assert_eq!(refused_registry_download(&refusing(npmjs)).as_deref(), Some("https://registry.npmjs.org"));
+    // Not a registry's download of the package npm named: a package that is a web address, an
+    // `npm:` alias, and a file that isn't a package. Nor npm refusing a git repository.
+    for spec in [
+      "foo@https://example.com/downloads/foo-1.0.0.tgz",
+      "alias@https://example.com/@org/pkg/-/pkg-1.0.0.tgz",
+      "foo@https://example.com/foo/-/foo-1.0.0.zip",
+    ] {
+      assert_eq!(refused_registry_download(&refusing(spec)), None, "{spec}");
+    }
+    let git = "npm error code EALLOWGIT\nnpm error Refusing to fetch \"x@git+https://github.com/x/x.git\"\n";
+    assert_eq!(refused_registry_download(&npm_failed(git)), None);
+    assert_eq!(refused_registry_download(&npm_failed(EDGES_OUT)), None);
+  }
+
+  /// Run `retry_through_the_registry` against canned npm results, starting
+  /// from what the session `learned`: what it returned, where each npm run got
+  /// the registry's packages through the registry from, what it said, and what
+  /// the session learned.
+  async fn npm_with(
+    learned: Option<&str>,
+    results: Vec<RunResult>,
+  ) -> (RunResult, Vec<Option<String>>, String, Option<String>) {
+    let learned = std::sync::Mutex::new(learned.map(String::from));
+    let calls = std::sync::Mutex::new(Vec::new());
+    let results = std::sync::Mutex::new(std::collections::VecDeque::from(results));
+    let said = Arc::new(std::sync::Mutex::new(String::new()));
+    let capture = said.clone();
+    let on_data: OnData = Arc::new(move |_: Stream, chunk: &str| capture.lock().unwrap().push_str(chunk));
+    let result = retry_through_the_registry(&learned, Some(&on_data), |downloads| {
+      calls.lock().unwrap().push(downloads);
+      let next = results.lock().unwrap().pop_front().expect("one npm run too many");
+      async move { next }
+    })
+    .await;
+    let said = said.lock().unwrap().clone();
+    (result, calls.into_inner().unwrap(), said, learned.into_inner().unwrap())
+  }
+
+  #[tokio::test]
+  async fn npm_runs_get_refused_registry_downloads_through_the_registry() {
+    // A refused registry download runs once more through the registry, saying so and how to fix
+    // npm itself, and later runs start that way.
+    let (result, calls, said, learned) = npm_with(None, vec![npm_failed(REFUSED), npm_ok()]).await;
+    assert!(result.ok);
+    assert_eq!(calls, [None, Some(FEED.to_string())]);
+    assert!(said.contains("from ms-feed-25.pkgs.visualstudio.com"), "{said}");
+    assert!(said.contains(&format!("npm config set replace-registry-host {FEED}")), "{said}");
+    assert_eq!(learned.as_deref(), Some(FEED));
+    let (result, calls, said, _) = npm_with(Some(FEED), vec![npm_ok()]).await;
+    assert!(result.ok && said.is_empty(), "{said}");
+    assert_eq!(calls, [Some(FEED.to_string())]);
+
+    // A retry npm refuses too reports that, and later runs don't start that way.
+    let (result, calls, _, learned) = npm_with(None, vec![npm_failed(REFUSED), npm_failed(REFUSED)]).await;
+    assert_eq!((result.ok, calls.len(), learned), (false, 2, None));
+    assert!(result.stderr.contains("EALLOWREMOTE"));
+
+    // Refused from somewhere else than where it started, such as a lockfile's addresses on
+    // registry.npmjs.org, it tries that instead.
+    let npmjs = refusing("is-number@https://registry.npmjs.org/is-number/-/is-number-7.0.0.tgz");
+    let (result, calls, _, learned) = npm_with(Some(FEED), vec![npmjs, npm_ok()]).await;
+    assert!(result.ok);
+    assert_eq!(calls, [Some(FEED.to_string()), Some("https://registry.npmjs.org".to_string())]);
+    assert_eq!(learned.as_deref(), Some("https://registry.npmjs.org"));
+
+    // Anything else runs once: a success, another failure, a package that is a web address, and a
+    // refusal of where it already got them through the registry from.
+    let url = refusing("foo@https://example.com/downloads/foo-1.0.0.tgz");
+    let once = [(None, npm_ok()), (None, npm_failed(EDGES_OUT)), (None, url), (Some(FEED), npm_failed(REFUSED))];
+    for (learned, result) in once {
+      let (_, calls, said, _) = npm_with(learned, vec![result]).await;
+      assert_eq!(calls.len(), 1, "{learned:?}");
       assert!(said.is_empty(), "{said}");
     }
   }

@@ -197,6 +197,7 @@
     "installRunning": "このプロジェクトでは別のパッケージのインストールがまだ実行中です。完了してからもう一度お試しください。",
     "andMore_other": "{{names}} ほか {{count}} 個",
     "legacyPeers": "npm がパッケージのピア依存関係を解決できませんでした。--legacy-peer-deps を指定して再試行しています...",
+    "registryDownloads": "npm レジストリはパッケージを {{host}} から配信していますが、npm はそこからのダウンロードを拒否しました (npm の allow-remote 設定)。replace-registry-host={{prefix}} を指定し、レジストリ経由で再試行しています... Fabricator の外の npm でも修正するには、次を実行してください: npm config set replace-registry-host {{prefix}}",
     "ciRejected": "npm ci が拒否されました。npm install で再試行しています...",
     "noPackageJson": "この Rayfin プロジェクトには package.json がないため、依存関係をインストールできません。",
     "npmMissing": "PATH に npm が見つかりませんでした。Node.js (npm を含みます) をインストールしてから、もう一度お試しください。",

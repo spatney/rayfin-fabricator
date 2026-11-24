@@ -11,6 +11,9 @@
 //!     online (issue #28).
 //!   * [`for_user_shell`] gives a shell the user runs (the project terminal's)
 //!     the values Fabricator was launched with instead.
+//!   * [`crate::services::exec::run_npm`] adds `replace-registry-host` when npm
+//!     refuses to download a registry's packages from the host it serves them
+//!     from (issue #102), for the scaffolder and project installs only.
 
 use std::ffi::{OsStr, OsString};
 use std::path::Path;

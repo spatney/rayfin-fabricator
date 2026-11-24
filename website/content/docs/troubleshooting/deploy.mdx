@@ -159,6 +159,26 @@ Fabricator installs Rayfin from the npm registry your npm configuration names, s
 
 If it keeps failing, [Report a problem](/docs/troubleshooting/report-a-problem) and include npm's error.
 
+## npm refuses to download packages from your registry
+
+Creating a project fails with "Project creation failed (exit code 1).", or a project's packages don't install. **Show details** has npm's error `EALLOWREMOTE`, "Fetching packages of type "remote" have been disabled", and a line such as `Refusing to fetch "fs-constants@https://…/fs-constants-1.0.0.tgz"`.
+
+npm 12 doesn't download packages from web addresses by default, and it recognizes your npm registry's packages only when they download from the registry's own address. Some registries, such as company proxies, serve every package from another server, so npm refuses all of them.
+
+Fabricator 1.62.1 and later work around it: Fabricator runs npm again with npm's `replace-registry-host` setting, so npm downloads the packages through your registry. The output says "Your npm registry serves its packages from" and names the server.
+
+1. Update to the latest Fabricator version.
+2. Create the project again. For a project you already have, open it, and if it shows **Couldn't install project dependencies**, select **Retry installation**.
+3. To fix npm outside Fabricator too, in your terminal, for packages Copilot installs in chat, and for MCP servers that start with `npx`, run the `npm config set replace-registry-host` command the output shows. For a registry that serves its packages from `ms-feed-25.pkgs.visualstudio.com`, it's:
+
+   ```powershell
+   npm config set replace-registry-host https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry
+   ```
+
+   The address is the start of the refused download's address, up to the package's name.
+
+If it keeps failing, [Report a problem](/docs/troubleshooting/report-a-problem) and include npm's error.
+
 ## Recipients can't open the shared app
 
 You shared a published app, but another person cannot open it.
