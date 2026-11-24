@@ -89,6 +89,7 @@ fn options(opts: &RunOptions) -> RunOptions {
     timeout_ms: opts.timeout_ms,
     cancel: opts.cancel.clone(),
     stdin: opts.stdin.clone(),
+    on_spawn: opts.on_spawn.clone(),
   }
 }
 

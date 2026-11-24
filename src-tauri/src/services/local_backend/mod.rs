@@ -652,17 +652,20 @@ impl LocalBackends {
   /// Install the npm packages the project's backend reported missing
   /// (`packages-missing`): `npm install` in the folder it named, or, without
   /// one, what Fabricator installs when a project opens (the project's packages
-  /// with its pinned Rayfin CLI, and the functions folder's). Then `npm dedupe`
+  /// with its pinned Rayfin CLI, and the functions folder's), from scratch when
+  /// a package's compiled part didn't load (`reinstall`). Then `npm dedupe`
   /// there when the backend still wouldn't find `@microsoft/rayfin-core` (see
   /// [`hoist_rayfin_core`]). npm's output goes to the project's output.
   pub async fn install_packages(&self, project_id: &str, project: &Path) -> Result<(), LocalCommandError> {
     let rt = self.runtime(project_id);
     let output = install_output(rt.clone());
-    let reported = rt
-      .snapshot()
-      .error
-      .filter(|e| e.code == "packages-missing")
-      .and_then(|e| e.details)
+    let details = rt.snapshot().error.filter(|e| e.code == "packages-missing").and_then(|e| e.details);
+    let from_scratch = details
+      .as_ref()
+      .and_then(|details| details.get("reinstall"))
+      .and_then(serde_json::Value::as_bool)
+      .unwrap_or(false);
+    let reported = details
       .and_then(|details| details.get("dir").and_then(|dir| dir.as_str()).map(PathBuf::from))
       .and_then(|dir| folder_within(project, &dir));
     let (dir, installed) = match reported {
@@ -672,6 +675,9 @@ impl LocalBackends {
         (dir, installed)
       }
       None => {
+        if from_scratch {
+          crate::services::exec::reinstall_from_scratch(project);
+        }
         rt.log("fabricator", "info", &t!("services.localBackend.installing"), None);
         let installed = match crate::services::exec::ensure_project_dependencies(project, Some(output.clone())).await {
           Ok(()) => crate::commands::projects_impl::ensure_functions_dependencies(project, Some(output.clone())).await,

@@ -86,8 +86,15 @@ pub async fn download(app: &AppHandle, state: &UpdaterState) -> AppResult<Option
   Ok(Some(info))
 }
 
+/// How long an update waits for the npm installs Fabricator runs to end before
+/// it restarts, which would cut them off.
+const INSTALLS_GRACE: std::time::Duration = std::time::Duration::from_secs(300);
+
 /// Install the previously downloaded update, then restart the app.
 pub async fn install(app: &AppHandle, state: &UpdaterState) -> AppResult<()> {
+  // Restarting would cut off the npm installs Fabricator runs, maybe in the
+  // middle of a file (issue #98): they get to end first.
+  crate::services::exec::wait_for_installs(INSTALLS_GRACE).await;
   let update = state.update.lock().unwrap().clone();
   let bytes = state.bytes.lock().unwrap().take();
   let (Some(update), Some(bytes)) = (update, bytes) else {

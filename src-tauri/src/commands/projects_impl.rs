@@ -673,14 +673,25 @@ pub(crate) async fn ensure_functions_dependencies(project: &Path, on: Option<OnD
   let Some(functions) = rayfin_sdk::separate_functions_dir(project) else {
     return Ok(());
   };
-  if functions.join("node_modules").is_dir() {
+  let node_modules = functions.join("node_modules");
+  let cut_off = crate::services::exec::earlier_install_cut_off(&functions, on.as_ref()).await?;
+  if node_modules.is_dir() && !cut_off {
     return Ok(());
   }
   let lock = FUNCTIONS_INSTALL_LOCKS.lock().await.entry(functions.clone()).or_default().clone();
   let _guard = lock.lock().await;
   // Another request may have installed them while this one waited.
-  if functions.join("node_modules").is_dir() {
+  let cut_off = crate::services::exec::earlier_install_cut_off(&functions, on.as_ref()).await?;
+  if node_modules.is_dir() && !cut_off {
     return Ok(());
+  }
+  // An install that stopped part way can leave a package with a file cut
+  // short, which `npm install` keeps: start again from scratch.
+  if cut_off && node_modules.exists() {
+    let doomed = node_modules.clone();
+    if let Ok(Err(error)) = tokio::task::spawn_blocking(move || std::fs::remove_dir_all(doomed)).await {
+      log::warn!("Couldn't remove {}: {error}", node_modules.display());
+    }
   }
   let folder = functions.strip_prefix(project).unwrap_or(&functions).to_string_lossy().replace('\\', "/");
   if let Some(on) = &on {

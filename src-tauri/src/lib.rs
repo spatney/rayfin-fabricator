@@ -245,6 +245,7 @@ pub fn run() {
           }
         }
         services::new_project_cache::clean_up();
+        services::exec::clean_up();
         services::apps::clean_up();
         commands::security::clean_up();
       });

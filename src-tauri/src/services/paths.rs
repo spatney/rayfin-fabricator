@@ -183,6 +183,13 @@ pub fn package_checks_dir() -> PathBuf {
   cache_dir().join("checks")
 }
 
+/// Fabricator's notes of the npm installs it started and hasn't seen end, one
+/// file per folder they install in (see `exec::earlier_install_cut_off`). On
+/// this computer only, beside the other caches.
+pub fn npm_installs_dir() -> PathBuf {
+  cache_dir().join("npm-installs")
+}
+
 /// Storage left behind by the retired Design Studio experiment (drafts,
 /// receipts, imported assets). Removed best-effort at startup.
 pub fn retired_design_studio_dir() -> PathBuf {

@@ -92,6 +92,29 @@ fn newer_sdk(s: &LocalStatus) -> bool {
     .any(rayfin_sdk::is_newer_than_supported)
 }
 
+/// What the loaders of packages with a compiled part (napi-rs's, which
+/// rolldown's is) say when that part is missing or doesn't load.
+const NATIVE_BINDING: &str = "Cannot find native binding";
+
+/// `problem`, except when Vite couldn't start because a package's compiled
+/// part didn't load, as when an install was cut off in the middle of writing it
+/// (issue #98). Then the app's packages need installing again, from scratch:
+/// `packages-missing`, which the preview offers to install, with `reinstall`
+/// in its details.
+fn with_packages_to_reinstall(problem: &LocalProblem) -> LocalProblem {
+  let says = |text: &str| text.contains(NATIVE_BINDING);
+  let broken = problem.code == "vite-failed"
+    && (says(&problem.message)
+      || problem.hint.as_deref().is_some_and(says)
+      || problem.details.as_ref().is_some_and(|details| says(&details.to_string())));
+  if !broken {
+    return problem.clone();
+  }
+  let mut details = problem.details.clone().filter(serde_json::Value::is_object).unwrap_or_else(|| serde_json::json!({}));
+  details["reinstall"] = serde_json::Value::Bool(true);
+  LocalProblem { code: "packages-missing".into(), details: Some(details), ..problem.clone() }
+}
+
 pub struct Machine {
   status: LocalStatus,
   crashes: VecDeque<Instant>,
@@ -244,9 +267,10 @@ impl Machine {
         }
       }
       Event::Error(problem) => {
+        let problem = with_packages_to_reinstall(problem);
         s.error = Some(problem.clone());
         if problem.fatal {
-          self.fatal = Some(problem.clone());
+          self.fatal = Some(problem);
           s.state = State::Error;
           s.phase = None;
           outcome.fatal = true;
@@ -388,6 +412,21 @@ mod tests {
     assert_eq!(status.state, State::Error);
     assert_eq!(status.error.as_ref().unwrap().code, "schema-refused");
     assert_eq!(status.crashes, 0);
+  }
+
+  #[test]
+  fn vite_failing_on_a_package_s_native_binding_asks_for_the_packages_again() {
+    // As rayfin-local reported it after an install was cut off writing rolldown's binding (issue #98).
+    let mut machine = started();
+    machine.apply(&event(
+      r#"{"v":1,"type":"error","code":"vite-failed","message":"Vite failed to start: Cannot find native binding. npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). Please try `npm i` again after removing both package-lock.json and node_modules directory.","fatal":true}"#,
+    ));
+    let status = machine.status();
+    assert_eq!(status.state, State::Error);
+    let error = status.error.as_ref().unwrap();
+    assert_eq!(error.code, "packages-missing");
+    assert_eq!(error.details.as_ref().unwrap()["reinstall"], true);
+    assert!(error.message.contains("Cannot find native binding"), "{}", error.message);
   }
 
   #[test]

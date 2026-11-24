@@ -20,9 +20,12 @@ use std::time::{Duration, SystemTime};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{Mutex, Notify};
+
+use crate::services::paths;
 
 /// Serialize recovery installs per project. Fabric can request workspaces and
 /// capacities close together; running two `npm install`s in one project would
@@ -50,6 +53,9 @@ impl Stream {
 
 /// Streaming callback invoked with each output chunk.
 pub type OnData = Arc<dyn Fn(Stream, &str) + Send + Sync>;
+
+/// Callback invoked with the process id of each process a run starts.
+pub type OnSpawn = Arc<dyn Fn(u32) + Send + Sync>;
 
 /// Cooperative cancel handle for an in-flight process (e.g. a chat turn's stop
 /// button). Cloneable; cancelling kills the spawned child.
@@ -105,6 +111,8 @@ pub struct RunOptions {
   /// sensitive input (a secret's value) that must not appear in the arguments,
   /// which other processes on the machine can read. Without it stdin is empty.
   pub stdin: Option<String>,
+  /// Told the child's process id once it starts.
+  pub on_spawn: Option<OnSpawn>,
 }
 
 impl RunOptions {
@@ -834,17 +842,265 @@ pub async fn run_npm(args: &[&str], options: RunOptions) -> RunResult {
 /// `npm <args>` for an install (`install`, `ci` or `dedupe`) with [`run_npm`],
 /// retried with `--legacy-peer-deps` when npm couldn't work out the packages'
 /// peer dependencies. Every npm install Fabricator runs in a project goes
-/// through it.
-pub async fn npm_install(args: &[&str], options: RunOptions) -> RunResult {
+/// through it, noted on disk until npm ends (see [`InstallUnderWay`]).
+pub async fn npm_install(args: &[&str], mut options: RunOptions) -> RunResult {
+  let under_way = options.cwd.clone().map(|dir| {
+    // `npm ci` removes `node_modules` first; any install starts afresh without one.
+    let from_scratch = args.first() == Some(&"ci") || !dir.join("node_modules").exists();
+    let install = InstallUnderWay::start(&dir, from_scratch);
+    options.on_spawn = Some(install.on_spawn(&dir));
+    install
+  });
   let on_data = options.on_data.clone();
-  retry_with_legacy_peers(args, on_data.as_ref(), |args| {
+  let result = retry_with_legacy_peers(args, on_data.as_ref(), |args| {
     let options = options.clone();
     async move {
       let args: Vec<&str> = args.iter().map(String::as_str).collect();
       run_npm(&args, options).await
     }
   })
-  .await
+  .await;
+  if let Some(install) = under_way {
+    install.ended(result.ok);
+  }
+  result
+}
+
+/// The folders Fabricator is installing npm packages in, by [`install_key`],
+/// with how many of its installs are under way in each.
+static INSTALLS_UNDER_WAY: Lazy<std::sync::Mutex<HashMap<String, usize>>> = Lazy::new(Default::default);
+
+/// Fabricator's note that it's installing a folder's npm packages, kept until
+/// it sees npm end: the folder, the npm process, and when npm last wrote its
+/// record of the folder's packages before the install.
+#[derive(Serialize, Deserialize, Default)]
+struct InstallNote {
+  dir: PathBuf,
+  pid: Option<u32>,
+  record: Option<u128>,
+  /// An install in the folder stopped part way, and none from scratch has
+  /// worked since: one that runs on top of what it left keeps its broken files.
+  #[serde(default)]
+  cut_off: bool,
+}
+
+/// An npm install Fabricator runs in a folder. Its note stays on disk until npm
+/// ends, so a Fabricator that closed part way (to update, say) knows next time
+/// that the install may have been cut off in the middle of writing a file: npm
+/// writes a package's `package.json` before the rest of it, so a package can
+/// look installed with a file cut short, which `npm install` then keeps
+/// (issue #98). Once an install was cut off, the note stays until an install
+/// from scratch works.
+struct InstallUnderWay {
+  key: String,
+  note: PathBuf,
+  from_scratch: bool,
+  /// What the note says: an earlier install was cut off.
+  cut_off: bool,
+  /// npm ended, and whether it worked.
+  ended: Option<bool>,
+}
+
+impl InstallUnderWay {
+  fn start(dir: &Path, from_scratch: bool) -> Self {
+    let key = install_key(dir);
+    let note = install_note_file(&key);
+    let first = {
+      let mut under_way = INSTALLS_UNDER_WAY.lock().unwrap_or_else(|e| e.into_inner());
+      let count = under_way.entry(key.clone()).or_default();
+      *count += 1;
+      *count == 1
+    };
+    let mut cut_off = false;
+    if first {
+      // Fabricator runs none here, so a note is an earlier install's: one npm
+      // didn't get to the end of leaves broken files under this one.
+      cut_off = read_install_note(&note).is_some_and(|earlier| earlier.cut_off || !finished_since(&earlier, dir));
+      write_install_note(&note, &InstallNote { dir: dir.to_path_buf(), pid: None, record: npm_record_time(dir), cut_off });
+    }
+    Self { key, note, from_scratch, cut_off, ended: None }
+  }
+
+  /// Notes each npm process the install starts.
+  fn on_spawn(&self, dir: &Path) -> OnSpawn {
+    let (note, dir) = (self.note.clone(), dir.to_path_buf());
+    Arc::new(move |pid| {
+      let mut noted = read_install_note(&note).unwrap_or_else(|| InstallNote { dir: dir.clone(), ..Default::default() });
+      noted.pid = Some(pid);
+      write_install_note(&note, &noted);
+    })
+  }
+
+  /// npm ended, however it did.
+  fn ended(mut self, worked: bool) {
+    self.ended = Some(worked);
+  }
+}
+
+impl Drop for InstallUnderWay {
+  fn drop(&mut self) {
+    let last = {
+      let mut under_way = INSTALLS_UNDER_WAY.lock().unwrap_or_else(|e| e.into_inner());
+      let count = under_way.entry(self.key.clone()).or_default();
+      *count = count.saturating_sub(1);
+      let last = *count == 0;
+      if last {
+        under_way.remove(&self.key);
+      }
+      last
+    };
+    // One dropped before npm ended was cut off, and one on top of a cut-off
+    // install keeps its broken files: their notes stay.
+    let done = match self.ended {
+      Some(worked) => !self.cut_off || (self.from_scratch && worked),
+      None => false,
+    };
+    if last && done {
+      let _ = std::fs::remove_file(&self.note);
+    }
+  }
+}
+
+/// A folder as [`INSTALLS_UNDER_WAY`] and the notes know it: its full path, in
+/// lowercase, since Windows and macOS don't tell names apart by case.
+fn install_key(dir: &Path) -> String {
+  std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf()).to_string_lossy().to_lowercase()
+}
+
+/// The note of the folder with `key`.
+fn install_note_file(key: &str) -> PathBuf {
+  let digest = Sha256::digest(key.as_bytes());
+  let name: String = digest[..16].iter().map(|byte| format!("{byte:02x}")).collect();
+  let dir = if cfg!(test) { std::env::temp_dir().join("fabricator-test-npm-installs") } else { paths::npm_installs_dir() };
+  dir.join(format!("{name}.json"))
+}
+
+fn write_install_note(file: &Path, note: &InstallNote) {
+  let written = file
+    .parent()
+    .map_or(Ok(()), std::fs::create_dir_all)
+    .and_then(|()| std::fs::write(file, serde_json::to_vec(note).unwrap_or_default()));
+  if let Err(error) = written {
+    log::warn!("Couldn't note the npm install in {}: {error}", note.dir.display());
+  }
+}
+
+fn read_install_note(file: &Path) -> Option<InstallNote> {
+  serde_json::from_slice(&std::fs::read(file).ok()?).ok()
+}
+
+/// When npm last wrote its record of the packages installed in `dir`
+/// (`node_modules/.package-lock.json`, written as an install ends), in
+/// milliseconds.
+fn npm_record_time(dir: &Path) -> Option<u128> {
+  let written = std::fs::metadata(dir.join("node_modules").join(".package-lock.json")).ok()?.modified().ok()?;
+  Some(written.duration_since(SystemTime::UNIX_EPOCH).ok()?.as_millis())
+}
+
+/// What became of the last npm install Fabricator started in a folder.
+#[derive(Debug, PartialEq)]
+enum EarlierInstall {
+  /// It ended, one of Fabricator's runs now, or there wasn't one.
+  Settled,
+  /// Its npm still runs, left behind by a Fabricator that closed.
+  Running,
+  /// It stopped part way.
+  CutOff,
+}
+
+fn earlier_install(dir: &Path) -> EarlierInstall {
+  let key = install_key(dir);
+  if INSTALLS_UNDER_WAY.lock().unwrap_or_else(|e| e.into_inner()).contains_key(&key) {
+    return EarlierInstall::Settled;
+  }
+  let file = install_note_file(&key);
+  let Some(note) = read_install_note(&file) else {
+    return EarlierInstall::Settled;
+  };
+  if note.cut_off {
+    return EarlierInstall::CutOff;
+  }
+  if finished_since(&note, dir) {
+    let _ = std::fs::remove_file(&file);
+    return EarlierInstall::Settled;
+  }
+  if note.pid.is_some_and(npm_alive) {
+    return EarlierInstall::Running;
+  }
+  EarlierInstall::CutOff
+}
+
+/// Whether npm wrote its record of `dir`'s packages since `note`, as an npm
+/// that carried on after Fabricator closed does when it gets to the end.
+fn finished_since(note: &InstallNote, dir: &Path) -> bool {
+  let record = npm_record_time(dir);
+  record.is_some() && record != note.record
+}
+
+/// Whether process `pid` runs Node.js, as npm does. A process id the system
+/// gave to another program since doesn't count.
+fn npm_alive(pid: u32) -> bool {
+  use crate::services::local_backend::process;
+  process::is_alive(pid)
+    && process::image_path(pid)
+      .and_then(|path| path.file_stem().map(|stem| stem.to_string_lossy().to_lowercase()))
+      .is_some_and(|stem| stem == "node")
+}
+
+/// Whether the last npm install Fabricator started in `dir` stopped part way,
+/// so `dir`'s packages need installing again from scratch. When the npm a
+/// Fabricator that closed left behind still runs, it waits for it to end.
+pub async fn earlier_install_cut_off(dir: &Path, on_data: Option<&OnData>) -> Result<bool, String> {
+  let started = tokio::time::Instant::now();
+  let mut announced = false;
+  loop {
+    let probe = dir.to_path_buf();
+    match tokio::task::spawn_blocking(move || earlier_install(&probe)).await.unwrap_or(EarlierInstall::Settled) {
+      EarlierInstall::Settled => return Ok(false),
+      EarlierInstall::CutOff => return Ok(true),
+      EarlierInstall::Running => {}
+    }
+    if started.elapsed() >= QUIET_LIMIT {
+      return Err(t!("services.exec.installRunning"));
+    }
+    if !announced {
+      announced = true;
+      if let Some(on) = on_data {
+        // Stays English: the deploy screen's progress (deployProgress.ts) reads it.
+        on(Stream::System, "Waiting for changes to this project's packages to finish...\n");
+      }
+    }
+    tokio::time::sleep(QUIET_CHECK).await;
+  }
+}
+
+/// Have the next [`ensure_project_dependencies`] install `dir`'s packages
+/// again from scratch, as after an install that was cut off: for a package
+/// that's installed but broken, which `npm install` would leave as it is.
+pub fn reinstall_from_scratch(dir: &Path) {
+  let note = InstallNote { dir: dir.to_path_buf(), pid: None, record: npm_record_time(dir), cut_off: true };
+  write_install_note(&install_note_file(&install_key(dir)), &note);
+}
+
+/// Wait, up to `limit`, until no npm install Fabricator runs is under way.
+pub async fn wait_for_installs(limit: Duration) {
+  let started = tokio::time::Instant::now();
+  while !INSTALLS_UNDER_WAY.lock().unwrap_or_else(|e| e.into_inner()).is_empty() && started.elapsed() < limit {
+    tokio::time::sleep(Duration::from_millis(500)).await;
+  }
+}
+
+/// Forget the notes of folders that are gone, such as the folder of a spare
+/// whose install stopped part way, which startup deletes. For startup.
+pub fn clean_up() {
+  let Ok(entries) = std::fs::read_dir(paths::npm_installs_dir()) else {
+    return;
+  };
+  for entry in entries.flatten() {
+    if read_install_note(&entry.path()).is_none_or(|note| !note.dir.exists()) {
+      let _ = std::fs::remove_file(entry.path());
+    }
+  }
 }
 
 /// Lines npm prints with every failure that don't say what went wrong.
@@ -940,7 +1196,8 @@ async fn run_npm_install(project_dir: &Path, subcommand: &str, on_data: Option<O
 /// the rest. This makes the project's pinned CLI the source of truth and is a
 /// no-op once it is ready.
 pub async fn ensure_project_dependencies(project_dir: &Path, on_data: Option<OnData>) -> Result<(), String> {
-  if project_rayfin_cli_installed(project_dir) && find_incomplete_packages(project_dir).await.is_empty() {
+  let cut_off = earlier_install_cut_off(project_dir, on_data.as_ref()).await?;
+  if !cut_off && project_rayfin_cli_installed(project_dir) && find_incomplete_packages(project_dir).await.is_empty() {
     return Ok(());
   }
 
@@ -953,8 +1210,9 @@ pub async fn ensure_project_dependencies(project_dir: &Path, on_data: Option<OnD
   };
   let _install_guard = install_lock.lock().await;
   // Another request may have completed the install while this one waited.
-  let incomplete = quiet_incomplete_packages(project_dir, on_data.as_ref()).await?;
-  if incomplete.is_empty() && project_rayfin_cli_installed(project_dir) {
+  let cut_off = earlier_install_cut_off(project_dir, on_data.as_ref()).await?;
+  let incomplete = if cut_off { Vec::new() } else { quiet_incomplete_packages(project_dir, on_data.as_ref()).await? };
+  if !cut_off && incomplete.is_empty() && project_rayfin_cli_installed(project_dir) {
     return Ok(());
   }
 
@@ -962,8 +1220,16 @@ pub async fn ensure_project_dependencies(project_dir: &Path, on_data: Option<OnD
     return Err(t!("services.exec.noPackageJson"));
   }
 
-  // Stays English: the deploy screen's progress (deployProgress.ts) reads both lines.
-  if incomplete.is_empty() {
+  // Stays English: the deploy screen's progress (deployProgress.ts) reads these lines.
+  if cut_off {
+    log::warn!("An npm install in {} stopped part way; installing its packages again", project_dir.display());
+    if let Some(on) = &on_data {
+      on(
+        Stream::System,
+        "Project dependencies are missing or incomplete (an earlier install stopped part way); reinstalling them with npm...\n",
+      );
+    }
+  } else if incomplete.is_empty() {
     if let Some(on) = &on_data {
       on(Stream::System, "Project dependencies are missing; installing them with npm...\n");
     }
@@ -980,15 +1246,23 @@ pub async fn ensure_project_dependencies(project_dir: &Path, on_data: Option<OnD
     }
   }
 
+  // An install that stopped part way can leave any package with a file cut
+  // short, which `npm install` keeps, so it starts again from scratch.
+  let has_lockfile = project_dir.join("package-lock.json").is_file();
+  let node_modules = project_dir.join("node_modules");
+  if cut_off && node_modules.exists() {
+    let doomed = node_modules.clone();
+    if let Ok(Err(error)) = tokio::task::spawn_blocking(move || std::fs::remove_dir_all(doomed)).await {
+      log::warn!("Couldn't remove {}: {error}", node_modules.display());
+    }
+  }
+
   // A lockfile and no `node_modules` (a fresh clone) → `npm ci` is fastest and
   // fully deterministic (skips resolution and installs the locked tree).
   // Otherwise (no lockfile, or a partial `node_modules`) fall back to
   // `npm install`, allowing stale registry metadata to refresh.
   // Both skip the slow audit/fund passes.
-  let use_ci = use_npm_ci(
-    project_dir.join("package-lock.json").is_file(),
-    project_dir.join("node_modules").exists(),
-  );
+  let use_ci = use_npm_ci(has_lockfile, node_modules.exists());
   let mut result = run_npm_install(project_dir, if use_ci { "ci" } else { "install" }, on_data.clone()).await;
 
   // `npm ci` aborts when the lockfile and package.json are out of sync (e.g. a
@@ -1175,6 +1449,9 @@ async fn spawn_and_run(resolved: Resolved, args: &[&str], opts: RunOptions) -> R
       };
     }
   };
+  if let (Some(on_spawn), Some(pid)) = (&opts.on_spawn, child.id()) {
+    on_spawn(pid);
+  }
 
   let out_buf = Arc::new(Mutex::new(String::new()));
   let err_buf = Arc::new(Mutex::new(String::new()));
@@ -1462,6 +1739,76 @@ mod tests {
     let error = ensure_project_dependencies(&dir, None).await.unwrap_err();
     assert!(error.contains("no package.json"), "{error}");
 
+    // So does one Fabricator never saw end, though every package looks installed.
+    std::fs::write(&manifest, "{}").unwrap();
+    assert!(ensure_project_dependencies(&dir, None).await.is_ok());
+    drop(InstallUnderWay::start(&dir, false));
+    let error = ensure_project_dependencies(&dir, None).await.unwrap_err();
+    assert!(error.contains("no package.json"), "{error}");
+
+    forget_install(&dir);
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  /// Forget `dir`'s install note, at the end of a test.
+  fn forget_install(dir: &Path) {
+    let _ = std::fs::remove_file(install_note_file(&install_key(dir)));
+  }
+
+  #[tokio::test]
+  async fn an_install_fabricator_never_saw_end_was_cut_off() {
+    let dir = temp_project("cut-off");
+    install_packages(&dir, &["node_modules/commander"]);
+    let record = dir.join("node_modules").join(".package-lock.json");
+    std::fs::write(&record, "{}").unwrap();
+
+    // An install whose npm ended leaves no note.
+    InstallUnderWay::start(&dir, false).ended(true);
+    assert_eq!(earlier_install(&dir), EarlierInstall::Settled);
+
+    // One dropped before npm ended, as when Fabricator closes part way, was cut
+    // off, though not while Fabricator installs there again.
+    drop(InstallUnderWay::start(&dir, false));
+    assert_eq!(earlier_install(&dir), EarlierInstall::CutOff);
+    let again = InstallUnderWay::start(&dir, false);
+    assert_eq!(earlier_install(&dir), EarlierInstall::Settled);
+    // One on top of what it left keeps its broken files; one from scratch that works doesn't.
+    again.ended(true);
+    assert_eq!(earlier_install(&dir), EarlierInstall::CutOff);
+    InstallUnderWay::start(&dir, true).ended(false);
+    assert_eq!(earlier_install(&dir), EarlierInstall::CutOff);
+    InstallUnderWay::start(&dir, true).ended(true);
+    assert_eq!(earlier_install(&dir), EarlierInstall::Settled);
+
+    // An npm left behind is waited for, and finished it once it writes its record.
+    let mut npm = std::process::Command::new("node").args(["-e", "setTimeout(() => {}, 60000)"]).spawn().unwrap();
+    let left_behind = |pid: u32| {
+      let install = InstallUnderWay::start(&dir, false);
+      (install.on_spawn(&dir))(pid);
+      drop(install);
+    };
+    left_behind(npm.id());
+    assert_eq!(earlier_install(&dir), EarlierInstall::Running);
+    let later = SystemTime::now() + Duration::from_secs(5);
+    std::fs::File::options().write(true).open(&record).unwrap().set_modified(later).unwrap();
+    assert_eq!(earlier_install(&dir), EarlierInstall::Settled);
+    // One that stops without writing it was cut off.
+    left_behind(npm.id());
+    let waiting = {
+      let dir = dir.clone();
+      tokio::spawn(async move { earlier_install_cut_off(&dir, None).await })
+    };
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(!waiting.is_finished(), "waits for it");
+    npm.kill().unwrap();
+    npm.wait().unwrap();
+    assert_eq!(waiting.await.unwrap(), Ok(true));
+    // A process id the system gave to another program isn't npm's.
+    forget_install(&dir);
+    left_behind(std::process::id());
+    assert_eq!(earlier_install(&dir), EarlierInstall::CutOff);
+
+    forget_install(&dir);
     let _ = std::fs::remove_dir_all(&dir);
   }
 
