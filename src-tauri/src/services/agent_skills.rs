@@ -684,10 +684,10 @@ Keep it short: a sentence or two, or a few bullets. Use headings only for long a
 /// proves the connection.
 const CONNECT_MODEL_SKILL: &str = r#"---
 name: connect-semantic-model
-description: "Find and connect the Power BI / Fabric semantic model (dataset) behind a report or app. Use when this app needs to read data from an existing Power BI report, app, dataset, or semantic model — when the user pastes a Power BI link or id, or describes the data by name or topic and you need to find the model and wire it into the app's data."
+description: "Find and connect the Power BI / Fabric semantic model (dataset) behind a report or app. Use when this app needs to read data from an existing Power BI report, app, dataset, or semantic model — when the user pastes a Power BI link or id, or describes the data by name or topic and you need to find the model and wire it into the app's data. Also use when `rayfin connector invoke` can't query a model, such as when Power BI answers 401."
 metadata:
   author: Fabricator
-  version: 2.1.0
+  version: 2.2.0
 ---
 # Connect a Power BI / Fabric semantic model
 
@@ -784,9 +784,11 @@ const FABRIC_CONNECT_NOTE: &str = r#"- After wiring a connection, check your vis
   validate-headless skill); Fabricator deploys the app.
 "#;
 
-/// What to do when `rayfin connector invoke` can't get a Power BI token: the
-/// Rayfin CLI needs the user's one-time consent for Power BI, which only an
-/// interactive run asks for.
+/// What to do when `rayfin connector invoke` can't query a model: the Rayfin
+/// CLI needs the user's one-time consent for Power BI, which only an
+/// interactive run asks for. Rayfin 1.x's CLI also queries a model through its
+/// workspace, which Power BI turns down with an empty 401 for anyone who has no
+/// role there, and its hint then points at the token, which reads as consent.
 const INVOKE_CONSENT: &str = r#"## When `rayfin connector invoke` can't sign in
 
 `npx rayfin connector invoke` queries a semantic model with the user's Rayfin CLI sign-in, which
@@ -797,6 +799,17 @@ consent or a token's audience, ask the user to run the same command once in a te
 project folder and finish signing in, then try again. A tenant administrator can consent for
 everyone instead. It isn't about the user's access to the model: don't send them to check
 permissions, app registrations or Entra.
+
+The exception is "Power BI returned HTTP 401 with an empty body." in an app on Rayfin 1.x (the
+`version` in `node_modules/@microsoft/rayfin-cli/package.json`), whatever its hint says about the
+token. Rayfin 1.x's CLI queries the model through its workspace, and Power BI turns that down for
+anyone who has no role in the model's workspace, even with Read and Build on the model. Consent
+doesn't change that, so don't ask the user or an administrator to consent. Read the values with
+`FabricIQ-ExecuteQuery` instead, with the model's item id as `artifactId` (call
+`fabricator_connect_fabric_iq` if its tools aren't listed). Then tell the user that
+`connector invoke` can query the model once the app is on Rayfin 2.0, which they get by selecting
+Rayfin in the status bar and choosing **Update with Copilot**, or once they have a role in the
+model's workspace.
 "#;
 
 /// The connect-semantic-model skill of a set.
@@ -817,7 +830,7 @@ name: migrate-powerbi-report
 description: "Rebuild a Power BI report as this Rayfin app, page by page, from the migration material Fabricator saved under .fabricator/migration/, with Graphein for the visuals. Use when the message asks to migrate a Power BI report or one of its pages, or names a .fabricator/migration folder."
 metadata:
   author: Fabricator
-  version: 1.3.0
+  version: 1.4.0
 ---
 # Migrate a Power BI report
 
@@ -1428,9 +1441,14 @@ mod tests {
         "## When `rayfin connector invoke` can't sign in",
         "`--json`, so it can ask",
         "no Power BI token could be acquired without an interactive prompt",
+        // Rayfin 1.x's empty 401 is a missing workspace role, not consent.
+        "\"Power BI returned HTTP 401 with an empty body.\" in an app on Rayfin 1.x",
+        "no role in the model's workspace",
+        "don't ask the user or an administrator to consent",
       ] {
         assert!(skill.contains(marker), "{guidance:?} connect skill should mention {marker}");
       }
+      assert!(skill.contains("Also use when `rayfin connector invoke` can't query a model"));
     }
     let local = connect_model_skill(Guidance::Local);
     for marker in [
@@ -1465,6 +1483,8 @@ mod tests {
         "rayfin connector invoke <alias> executeQuery --file <query>.json",
         "## Running queries",
         "## When `rayfin connector invoke` can't sign in",
+        "\"Power BI returned HTTP 401 with an empty body.\" in an app on Rayfin 1.x",
+        "`fabricator_connect_fabric_iq` if its tools aren't listed",
         "**every**",
         "saved selections",
         "holds data values",

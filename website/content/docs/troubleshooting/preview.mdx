@@ -184,6 +184,8 @@ Data from a semantic model doesn't load in your app on this computer. Your app's
 
 On this computer, your app queries semantic models as you. When Power BI turns down your Azure sign-in, the local backend uses your Rayfin CLI sign-in instead. The Rayfin CLI can query Power BI for you only after you consent to it once, and signing in to Fabric doesn't ask for that. Usually, your access to the model is fine.
 
+If the message is "Power BI returned HTTP 401 with an empty body.", consent doesn't help: see [Power BI returns HTTP 401 with an empty body](/docs/troubleshooting/preview#power-bi-returns-http-401-with-an-empty-body).
+
 1. If a browser window opened asking you to sign in, or to let the Rayfin CLI access Power BI for you, finish signing in and accept. Then reload the preview.
 2. If no window opened, or you closed it, consent from a terminal:
    1. Open a terminal, such as PowerShell, in the app's project folder. New apps are in `RayfinProjects` in your home folder unless you changed it in **Settings → Workspace folder**.
@@ -204,6 +206,18 @@ On this computer, your app queries semantic models as you. When Power BI turns d
 4. If it still fails, check that your account can query the semantic model. You need Build permission on it, with an account in the model's tenant.
 
 If Power BI still turns down your sign-in, [Report a problem](/docs/troubleshooting/report-a-problem).
+
+## Power BI returns HTTP 401 with an empty body
+
+Copilot reports that `npx rayfin connector invoke` failed with "Power BI returned HTTP 401 with an empty body.", or, in Fabricator 1.59.0 or earlier, your app shows it on this computer and the data from a semantic model doesn't load. You have Read and Build permission on the model, and coworkers can query it.
+
+Power BI turns down queries sent through a semantic model's workspace from anyone who has no role in that workspace, even with Read and Build permission on the model. Consent to the Rayfin CLI, yours or a tenant administrator's, doesn't change that.
+
+1. Update Fabricator to the latest release. From Fabricator 1.59.1, your app on this computer queries the model directly, so its data loads. See [Updates](/docs/start/install#updates).
+2. Update the app to Rayfin 2.0. Apps on Rayfin 1.x send `npx rayfin connector invoke`, which Copilot uses to read query values, through the model's workspace; Rayfin 2.0 queries the model directly. Select the Rayfin version in the status bar, then **Update with Copilot**. See [Rayfin versions](/docs/ship/rayfin-versions#update-with-copilot).
+3. If you can't update the app yet, ask an admin of the model's workspace to give you a role in it.
+
+If it still fails, [Report a problem](/docs/troubleshooting/report-a-problem).
 
 ## Windows blocked rayfin-local
 
