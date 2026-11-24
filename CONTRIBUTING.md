@@ -191,10 +191,10 @@ npm run check:docs   # content lint
 
 ## Translations
 
-Fabricator comes in English, Spanish (`es`), German (`de`) and Japanese (`ja`). English is the source: when you add or change text people read, update its translations in the same pull request.
+Fabricator comes in English, Spanish (`es`), German (`de`), Japanese (`ja`) and Brazilian Portuguese (`pt-BR`). English is the source: when you add or change text people read, update its translations in the same pull request.
 
 - **Renderer.** The interface's text lives in i18next catalogs, `src/renderer/src/i18n/locales/<language>/<namespace>.json`: one namespace for each part of the app (`chat`, `publish`, `settings`, …), and `common` for words many parts use, such as **Cancel**. Components call `useTranslation('<namespace>')` from `src/renderer/src/i18n`; other code calls `translator('<namespace>')` when it needs the text, never when its module loads. Keys are typed, so `npm run typecheck` catches a key the English catalog doesn't have. A new namespace goes in `src/renderer/src/i18n/resources.ts` and gets a file in every language.
-- **Plurals, numbers, dates and lists.** Pass a `count` and write the `_one` and `_other` forms (Japanese has only `_other`); `{{count, number}}` formats the number for the language. Format dates with `formatLocale()` and lists with `formatList()`.
+- **Plurals, numbers, dates and lists.** Pass a `count` and write the `_one` and `_other` forms (Japanese has only `_other`, and Brazilian Portuguese also uses `_one` for 0); `{{count, number}}` formats the number for the language. Format dates with `formatLocale()` and lists with `formatList()`.
 - **Rust core.** The core's messages (errors, progress, the titles of its dialogs) live in `src-tauri/locales/<language>/<area>.json`, compiled into the app, and are read with `t!("area.key", name = value)` from `src-tauri/src/i18n.rs`. The areas are `team`, `commands`, `assist` and `services`.
 - **Advisor rules.** `src/shared/advisor/rules.json` stays in English, because the core builds the deep review's prompt from it. Each translation's `advisorRules.json` translates it by rule id.
 - **What stays in English.** Prompts, tool descriptions and tool results for Copilot; logs, telemetry and diagnostics; bug reports; text written into projects, repositories and commits; and any text that code matches or parses, such as CLI output. Product names such as Fabricator, Rayfin, Microsoft Fabric and GitHub Copilot are never translated.

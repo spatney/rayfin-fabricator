@@ -1,0 +1,177 @@
+{
+  "hero": {
+    "eyebrow": "Boas-vindas ao",
+    "tagline": "Crie e publique aplicativos Rayfin conversando com um agente de IA."
+  },
+  "progress": {
+    "checking": "Verificando o que você já tem…",
+    "ready": "Tudo pronto. Você já pode começar a criar.",
+    "start": "Vamos configurar o Fabricator. Isso costuma levar um minuto.",
+    "left_one": "Falta {{count}} item para configurar.",
+    "left_other": "Faltam {{count}} itens para configurar."
+  },
+  "problem": {
+    "askHelp": "Perguntar à Ajuda",
+    "showDetails": "Mostrar detalhes",
+    "hideDetails": "Ocultar detalhes"
+  },
+  "problems": {
+    "busy": {
+      "title": "Outra instalação já está em andamento neste computador.",
+      "fix": "Aguarde a conclusão — uma atualização do Windows costuma causar isso — e tente novamente."
+    },
+    "permission": {
+      "title": "O Fabricator não tem permissão para instalar isto.",
+      "fix": "Feche o Fabricator, clique nele com o botão direito, escolha “Executar como administrador” e tente novamente. Se o seu computador for gerenciado pela sua empresa, talvez a equipe de TI precise fazer a instalação para você."
+    },
+    "offline": {
+      "title": "O Fabricator não conseguiu acessar a internet para baixar isto.",
+      "fix": "Verifique sua conexão e tente novamente. Se você estiver em uma rede corporativa ou VPN, ela pode estar bloqueando o download."
+    },
+    "diskFull": {
+      "title": "Não há espaço livre suficiente para instalar isto.",
+      "fix": "Libere espaço em disco e tente novamente."
+    },
+    "noWinget": {
+      "title": "Este computador não tem o instalador de pacotes do Windows (winget).",
+      "fix": "Instale-o pela Microsoft Store pesquisando “Instalador de Aplicativo” ou use o link de download para instalar a ferramenta por conta própria."
+    },
+    "noHomebrew": {
+      "title": "Este Mac não tem o Homebrew, que o Fabricator usa para instalar ferramentas.",
+      "fix": "Instale o Homebrew pelo site brew.sh ou use o link de download para instalar a ferramenta por conta própria."
+    },
+    "cancelled": {
+      "title": "A instalação foi cancelada.",
+      "fix": "Tente novamente quando quiser."
+    },
+    "sso": {
+      "title": "Sua organização exige que você entre primeiro por meio dela.",
+      "fix": "Conclua o processo de entrada que foi aberto no navegador, incluindo qualquer etapa adicional da organização, e tente novamente."
+    },
+    "noCopilot": {
+      "title": "Esta conta não tem o GitHub Copilot disponível.",
+      "fix": "Entre com uma conta que tenha o Copilot ou configure-o em github.com/features/copilot."
+    },
+    "notOnPath": {
+      "title": "A ferramenta foi instalada, mas este computador ainda não a reconhece.",
+      "fix": "Reinicie o Fabricator para que ele reconheça a nova ferramenta."
+    },
+    "unknownFix": "Se isso continuar acontecendo, pergunte à Ajuda — ela pode ler o que deu errado e explicar para você."
+  },
+  "relaunch": {
+    "message": "<strong>Quase lá.</strong> Reinicie para concluir a configuração das ferramentas que acabaram de ser instaladas.",
+    "restartNow": "Reiniciar agora"
+  },
+  "copilot": {
+    "title": "Conectar o GitHub Copilot",
+    "note": "A IA que cria seu aplicativo — e que responde às suas perguntas enquanto você configura o resto",
+    "subtitle": "Entre para começar a criar e para liberar a Ajuda",
+    "helpReady": "A Ajuda já está disponível. Se algo abaixo der errado, selecione <strong>Ajuda</strong> e ela vai ler o que aconteceu.",
+    "ownModels": "Usar seus próprios modelos em vez disso",
+    "ownModelsHint": "Não tem o GitHub Copilot? Adicione modelos do OpenRouter, do Ollama ou com suas próprias chaves de API, e o Fabricator cria com eles.",
+    "ownModelsSummary": "Usando seus próprios modelos",
+    "ownModelsDone": "Concluído"
+  },
+  "tools": {
+    "title": "Instalar as ferramentas",
+    "note": "Ferramentas gratuitas que o Fabricator usa nos bastidores. Ele pode instalá-las para você.",
+    "allInstalled_one": "Ferramenta instalada",
+    "allInstalled_other": "Todas as {{count}} instaladas",
+    "requiredInstalled_one": "Ferramenta necessária instalada",
+    "requiredInstalled_other": "Todas as {{count}} ferramentas necessárias instaladas",
+    "installAll": "Instalar tudo",
+    "installing": "Instalando…",
+    "updating": "Atualizando…",
+    "getIt": "Obter",
+    "needsInternet": "A instalação requer conexão com a internet",
+    "resolveChecks": "Resolva primeiro os erros de verificação da CLI",
+    "offline": "Você está offline, então o Fabricator ainda não pode baixá-las. Reconecte-se e selecione <strong>Verificar novamente</strong>.",
+    "purpose": {
+      "node": "Executa seu aplicativo neste computador enquanto você o cria",
+      "npm": "Baixa os componentes que formam seu aplicativo",
+      "git": "Mantém um histórico do seu aplicativo para que você sempre possa voltar atrás",
+      "az": "Permite que o Fabricator entre no Azure por você",
+      "gh": "Permite que o Fabricator trabalhe com seu código no GitHub",
+      "fallback": "Usada pelo Fabricator nos bastidores"
+    },
+    "versionNeedsMin": "Versão {{version}} — o Fabricator precisa da {{min}} ou posterior",
+    "versionNeedsNewer": "Versão {{version}} — o Fabricator precisa de uma versão mais recente",
+    "unknownVersionNeedsMin": "Versão desconhecida — o Fabricator precisa da {{min}} ou posterior",
+    "unknownVersionNeedsNewer": "Versão desconhecida — o Fabricator precisa de uma versão mais recente",
+    "state": {
+      "ready": "Pronto",
+      "needsUpdating": "Precisa de atualização",
+      "optional": "Opcional",
+      "missing": "Ausente"
+    }
+  },
+  "azure": {
+    "title": "Entrar no Azure",
+    "note": "Opcional. Permite compartilhar aplicativos, adicionar dados do Fabric e migrar relatórios do Power BI. Você também pode entrar depois.",
+    "optional": "Opcional",
+    "subtitle": "Acesse seus recursos do Azure",
+    "installCliFirst": "Instale a Azure CLI primeiro"
+  },
+  "account": {
+    "signedIn": "Conta conectada",
+    "checking": "Verificando",
+    "connected": "Conectado",
+    "signOutOf": "Sair de {{name}}",
+    "signingOut": "Saindo…",
+    "waiting": "Aguardando…"
+  },
+  "finish": {
+    "allSet": "Tudo pronto",
+    "almostThere": "Quase lá",
+    "restart": "Reinicie o Fabricator para concluir a configuração das ferramentas que acabaram de ser instaladas.",
+    "ready": "Suas ferramentas estão instaladas e suas contas estão conectadas.",
+    "readyWithoutAzure": "Suas ferramentas estão instaladas e o GitHub Copilot está conectado. Entre no Azure quando precisar.",
+    "readyOwnModels": "Suas ferramentas estão instaladas e seus próprios modelos estão configurados. Entre no Azure quando precisar.",
+    "stepsLeft_one": "Conclua a etapa acima para continuar.",
+    "stepsLeft_other": "Conclua as {{count}} etapas acima para continuar.",
+    "enter": "Ir para o Fabricator"
+  },
+  "log": {
+    "empty": "A saída do processo aparecerá aqui.",
+    "manualInstall": "Conclua a instalação na página que foi aberta e clique em “Reiniciar”."
+  },
+  "section": {
+    "hide": "Ocultar"
+  },
+  "actionBar": {
+    "help": "Ajuda",
+    "helpTitle": "Pergunte à Ajuda sobre qualquer coisa que não esteja funcionando",
+    "helpOfflineTitle": "Obtenha ajuda com a configuração inicial — incluindo a documentação",
+    "showLog": "Mostrar log",
+    "hideLog": "Ocultar log",
+    "checking": "Verificando…",
+    "signingOut": "Saindo…",
+    "recheckRequired": "É preciso verificar novamente",
+    "stepsLeft_one": "Falta {{count}} etapa",
+    "stepsLeft_other": "Faltam {{count}} etapas",
+    "back": "Voltar ao Fabricator"
+  },
+  "recheck": {
+    "button": "Verificar novamente",
+    "tool": "Verificar {{name}} novamente"
+  },
+  "signingIn": {
+    "label": "Entrando",
+    "title": "Entrando na sua conta…",
+    "finalizing": "Preparando tudo…",
+    "browser": "Termine de entrar no {{provider}} pelo navegador ou siga as instruções do código de dispositivo abaixo."
+  },
+  "run": {
+    "copilotSignIn": "Entrar no GitHub Copilot",
+    "copilotSignOut": "Sair do GitHub Copilot",
+    "azureSignIn": "Entrar no Azure",
+    "azureSignOut": "Sair do Azure",
+    "installAll": "Instalar tudo",
+    "install": "Instalar {{name}}",
+    "update": "Atualizar {{name}}",
+    "failed": "A ação “{{action}}” não foi concluída. Tente novamente.",
+    "installFailed": "A ação “{{action}}” não foi concluída. Verifique a saída do processo.",
+    "verifyFailed": "Não foi possível verificar o status da conta: {{error}}",
+    "recheckFailed": "Não foi possível verificar o ambiente novamente: {{error}}"
+  }
+}

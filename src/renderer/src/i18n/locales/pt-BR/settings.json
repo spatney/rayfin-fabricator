@@ -1,0 +1,112 @@
+{
+  "title": "Configurações",
+  "close": "Fechar as configurações",
+  "general": {
+    "title": "Geral",
+    "accounts": {
+      "title": "Contas",
+      "desc": "Veja com quais contas você entrou no GitHub Copilot, no Microsoft Fabric, na Azure CLI e no GitHub, e entre ou saia.",
+      "action": "Gerenciar contas"
+    },
+    "apiKeys": {
+      "title": "Provedores de modelos",
+      "desc": "Use modelos da Anthropic, OpenAI, xAI, Google e OpenRouter com suas próprias chaves de API, ou do Ollama e de outros servidores que você executa. Você pode usá-los sem o GitHub Copilot.",
+      "action": "Gerenciar provedores de modelos"
+    },
+    "mcpServers": {
+      "title": "Servidores MCP",
+      "desc": "Adicione os servidores MCP que o chat pode ativar em Plug-ins, como um comando executado neste computador ou a URL de um servidor.",
+      "action": "Gerenciar servidores MCP"
+    },
+    "chatDefaults": {
+      "title": "Padrões do chat",
+      "desc": "O modelo e os plug-ins com que o chat de um novo projeto começa.",
+      "action": "Gerenciar padrões do chat"
+    },
+    "customInstructions": {
+      "title": "Instruções personalizadas",
+      "desc": "O que o Copilot segue em todo aplicativo que você cria, como “Use o tema do sistema por padrão.”",
+      "action": "Editar instruções"
+    },
+    "setup": {
+      "title": "Configuração inicial",
+      "desc": "Verifique as ferramentas de que o Fabricator precisa e instale as que faltam, como a GitHub CLI.",
+      "action": "Abrir a configuração inicial"
+    },
+    "workspaceFolder": {
+      "title": "Pasta de projetos",
+      "desc": "Os novos projetos são criados aqui."
+    }
+  },
+  "appearance": {
+    "title": "Aparência",
+    "theme": {
+      "title": "Tema",
+      "desc": "Sistema segue o modo claro ou escuro do seu computador.",
+      "system": "Sistema",
+      "dark": "Escuro",
+      "light": "Claro"
+    },
+    "language": {
+      "title": "Idioma",
+      "desc": "Sistema usa o idioma do seu computador quando o Fabricator está disponível nele e, caso contrário, o inglês.",
+      "system": "Sistema",
+      "systemNamed": "Sistema ({{language}})"
+    },
+    "textSize": {
+      "title": "Tamanho do texto",
+      "desc": "Ajuste a escala de toda a interface: maior em monitores grandes, menor para caber mais conteúdo na tela de um notebook."
+    }
+  },
+  "diagnostics": {
+    "title": "Diagnóstico",
+    "usage": {
+      "title": "Estatísticas de uso",
+      "desc": "Enviamos o domínio da sua conta e um hash do seu email para entender como o produto é usado. Seu email, seu código e seus aplicativos ficam neste dispositivo."
+    },
+    "full": {
+      "title": "Diagnóstico completo",
+      "desc": "Também captura os prompts, as respostas e a saída das ferramentas de cada turno do chat. Desativado por padrão — só metadados leves (tempos, ferramentas usadas, erros) são registrados. Ative para incluir mais detalhes em um relatório de bug."
+    },
+    "logs": {
+      "title": "Logs",
+      "desc": "O diagnóstico das suas sessões de chat fica salvo neste dispositivo. Exporte-o para anexar a um relatório de bug.",
+      "export": "Exportar diagnóstico",
+      "exporting": "Exportando…",
+      "openFolder": "Abrir pasta de logs"
+    }
+  },
+  "experiments": {
+    "title": "Experimentos",
+    "desc": "Estes recursos são experimentais e ficam desativados por padrão. Eles podem ser instáveis, mudar ou ser removidos em uma atualização futura.",
+    "teamWorkspaces": {
+      "title": "Workspaces de equipe",
+      "desc": "Crie aplicativos com sua equipe em um repositório privado do GitHub. Cada pessoa trabalha na própria cópia, e um pipeline publica no Fabric com uma identidade de implantação que o Fabricator configura. Aplicativos de equipe nunca são implantados a partir deste computador. Requer a GitHub CLI."
+    },
+    "reportMigration": {
+      "title": "Migrar relatórios do Power BI",
+      "desc": "Transforme um relatório do Power BI em um novo aplicativo na tela Início. O aplicativo lê o modelo semântico do relatório em tempo real, e o Copilot recria as páginas, os visuais e os filtros do relatório, uma página por vez. Requer a Azure CLI."
+    },
+    "workIq": {
+      "title": "Work IQ",
+      "desc": "Adicione o Work IQ aos plug-ins do chat. Quando ativado em um chat, ele permite que o chat consulte seus emails, reuniões, arquivos, mensagens do Teams e pessoas do Microsoft 365, com o Work IQ da Microsoft, e use o que encontrar enquanto cria. Somente leitura. Você entra com sua conta corporativa no navegador. Requer uma licença do Microsoft 365 Copilot e a aprovação da sua organização."
+    },
+    "proWorkspaces": {
+      "title": "Publicar em workspaces Pro",
+      "desc": "Publique aplicativos em workspaces Pro, que não têm capacidade do Fabric nem do Power BI Premium. O seletor de workspaces os mostra junto com os demais, e + Novo workspace pode criar um sem capacidade. Um aplicativo precisa do Rayfin 2.1.0 ou posterior para publicar em um deles. Meu workspace não está entre as opções."
+    }
+  },
+  "about": {
+    "title": "Sobre",
+    "version": "Versão {{version}}",
+    "copyVersion": "Copiar informações da versão",
+    "copilotBundled": "{{version}} (versão incluída {{bundled}})",
+    "unknownVersion": "desconhecida",
+    "help": {
+      "title": "Ajuda",
+      "desc": "Guias para cada parte do Fabricator e soluções para problemas comuns.",
+      "docs": "Documentação",
+      "troubleshooting": "Solução de problemas"
+    }
+  }
+}

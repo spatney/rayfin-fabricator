@@ -1,0 +1,163 @@
+{
+  "tenantShort": "Locatário {{id}}…",
+  "fabricNeedsProject": "Para entrar no Fabric, o Fabricator usa a CLI do Rayfin de um projeto, então crie ou abra um projeto primeiro.",
+  "azureSignInFailed": "A entrada no Azure não foi concluída. Tente novamente.",
+  "copilotSignInFailed": "A entrada no Copilot não foi concluída. Tente novamente.",
+  "signingIn": "Entrando…",
+  "signingOut": "Saindo…",
+  "switching": "Trocando…",
+  "addAccount": "Adicionar conta",
+  "installFromSetup": "Instalar pela configuração inicial",
+  "stopWaiting": "Parar de esperar",
+  "githubSignIn": "Entrar no GitHub",
+  "state": {
+    "ok": "Conectado",
+    "off": "Não conectado",
+    "error": "Requer atenção"
+  },
+  "host": {
+    "label": "Host do GitHub",
+    "placeholder": "github.com ou empresa.ghe.com",
+    "hint": "Use github.com ou o host do seu Enterprise Cloud (empresa.ghe.com). Uma URL https:// também é aceita."
+  },
+  "copilotNotice": {
+    "title": "O Copilot precisa da sua atenção",
+    "signInHere": "Entre no GitHub Copilot aqui e depois reenvie sua mensagem.",
+    "signingIn": "Entrando no Copilot…",
+    "signIn": "Entrar no Copilot",
+    "ownModels": "Usar seus próprios modelos",
+    "help": "Ajuda para entrar",
+    "inBrowser": "Conclua a entrada no navegador ou siga as instruções do código de dispositivo abaixo."
+  },
+  "menu": {
+    "refreshTitle": "Limpar as credenciais compartilhadas da CLI do Rayfin e entrar novamente",
+    "refreshing": "Atualizando a autenticação…",
+    "refresh": "Atualizar a autenticação do Fabric",
+    "accountChecking": "Conta: verificando se você entrou",
+    "accountUser": "Conta: {{user}}",
+    "account": "Conta",
+    "checkingTitle": "Verificando sua conta do Microsoft Fabric…",
+    "signedInAs": "Você entrou no Fabric como {{user}}",
+    "signedIn": "Você entrou no Fabric",
+    "unconfirmed": "Não foi possível confirmar agora",
+    "signIn": "Entrar no Fabric",
+    "settingsAndAccounts": "Configurações e contas",
+    "checkingFabric": "Verificando sua conta do Fabric…",
+    "notSignedIn": "Você não entrou no Fabric",
+    "refreshHint": "A atualização limpa as credenciais obsoletas e depois faz você entrar novamente.",
+    "fabricAccount": "Conta do Fabric",
+    "settingsTitle": "Tema, tamanho do texto, experimentos e mais",
+    "settings": "Configurações"
+  },
+  "modal": {
+    "title": "Contas",
+    "close": "Fechar contas",
+    "lead": "As contas que o Fabricator usa neste computador. As alterações valem para todos os seus projetos.",
+    "errors": {
+      "listFabric": "Não foi possível listar suas contas do Fabric.",
+      "listAzure": "Não foi possível listar suas contas do Azure. Tente novamente.",
+      "listGithub": "Não foi possível listar suas contas do GitHub. Tente novamente.",
+      "generic": "Não funcionou. Tente novamente.",
+      "copilotSignOut": "A saída do Copilot não foi concluída. Tente novamente.",
+      "fabricSignIn": "A entrada no Fabric não foi concluída. Tente novamente.",
+      "fabricSwitch": "Não foi possível trocar de conta do Fabric.",
+      "fabricSignOut": "A saída do Fabric não foi concluída. Tente novamente.",
+      "azureSwitch": "Não foi possível trocar de conta do Azure.",
+      "azureSignOut": "A saída do Azure não foi concluída. Tente novamente.",
+      "githubSwitch": "Não foi possível trocar para {{login}}.",
+      "githubSignOut": "Não foi possível sair de {{login}}.",
+      "githubSignIn": "Não foi possível iniciar a entrada no GitHub."
+    },
+    "fabricNote": {
+      "browser": "Termine de entrar na janela do navegador que foi aberta.",
+      "shared": "Neste Mac, sair de uma conta do Fabric desconecta todas elas até você entrar novamente."
+    },
+    "mismatch": {
+      "title": "O Fabric e a Azure CLI estão em organizações diferentes",
+      "text": "O Fabric usa <b>{{fabricTenant}}</b> e a Azure CLI usa <b>{{azureTenant}}</b>. Para compartilhar um aplicativo e conectar dados, as pessoas são buscadas pela Azure CLI, então use a mesma organização nos dois.",
+      "useAzure": "Usar {{user}} na Azure CLI",
+      "signInOrg": "Entrar em {{org}} na Azure CLI",
+      "signInFabricOrg": "Entrar na organização do Fabric na Azure CLI"
+    },
+    "inUse": "Em uso",
+    "copilot": {
+      "purpose": "Escreve e edita o código do seu aplicativo.",
+      "signIn": "Entrar no GitHub Copilot",
+      "waiting": "Aguardando o GitHub…",
+      "signOut": "Sair do GitHub Copilot",
+      "signOutTitle": "Para usar outra conta do GitHub, saia e depois entre com essa conta."
+    },
+    "fabric": {
+      "purpose": "Publica, hospeda e compartilha seus aplicativos.",
+      "unconfirmed": "Não foi possível confirmar",
+      "signIn": "Entrar no Microsoft Fabric",
+      "inUseTitle": "A publicação, as listas de workspaces, o compartilhamento e os segredos usam esta conta.",
+      "refresh": "Atualizar entrada",
+      "signOut": "Sair do Microsoft Fabric",
+      "others": "Outras contas do Fabric",
+      "add": "Adicionar uma conta do Fabric"
+    },
+    "azure": {
+      "purpose": "Opcional. Encontra pessoas quando você compartilha um aplicativo, lê os relatórios do Power BI que você migra, configura workspaces de equipe e permite que seu aplicativo leia dados do Fabric enquanto você o cria. A conta é compartilhada com seu terminal.",
+      "signIn": "Entrar na Azure CLI",
+      "inUseTitle": "A Azure CLI usa esta conta agora.",
+      "signOut": "Sair da Azure CLI",
+      "others": "Outras contas do Azure",
+      "add": "Adicionar uma conta da Azure CLI"
+    },
+    "github": {
+      "purpose": "Clona repositórios e executa workspaces de equipe. Opcional; a conta é compartilhada com seu terminal.",
+      "list": "Contas do GitHub",
+      "default": "Padrão",
+      "defaultTitle": "Esta conta é usada ao clonar do GitHub e no seu terminal. Cada workspace de equipe guarda a própria conta.",
+      "expired": "Sessão expirada",
+      "makeDefault": "Tornar padrão",
+      "signOutTitle": "Também desconecta a GitHub CLI no seu terminal.",
+      "missing": "A GitHub CLI não está instalada. Você só precisa dela para clonar repositórios ou usar workspaces de equipe.",
+      "waiting": "Termine de entrar na janela do terminal que foi aberta. Sua conta padrão continua a mesma."
+    },
+    "help": "Ajuda sobre contas",
+    "recheck": "Verificar novamente"
+  },
+  "row": {
+    "use": "Usar",
+    "confirmSignOut": "Sair de {{name}}?",
+    "useAccount": "{{action}}: {{name}}",
+    "signOut": "Sair de {{name}}"
+  },
+  "addForm": {
+    "organization": "Organização (opcional)",
+    "placeholder": "contoso.onmicrosoft.com ou uma ID de locatário",
+    "hint": "Deixe em branco para usar a organização da sua conta ou insira uma em que você tenha acesso de convidado.",
+    "waiting": "Aguardando a Microsoft…"
+  },
+  "progress": {
+    "enterCode": "Insira este código para entrar com sua conta {{service}}:",
+    "copyCode": "Copiar código",
+    "open": "Abrir {{service}}",
+    "inBrowser": "Termine de entrar com sua conta {{service}} no navegador."
+  },
+  "githubRepo": {
+    "errors": {
+      "listAccounts": "Não foi possível listar suas contas do GitHub.",
+      "listOwners": "Não foi possível listar onde você pode criar repositórios.",
+      "signIn": "Não foi possível iniciar a entrada no GitHub."
+    },
+    "finishInTerminal": "Termine de entrar na janela do terminal que foi aberta. Isto se atualiza automaticamente.",
+    "checking": "Verificando suas contas do GitHub…",
+    "noCli": "O Fabricator cria o repositório com a GitHub CLI, que não está instalada.",
+    "signInFirst": "Entre no GitHub para criar o repositório.",
+    "waiting": "Aguardando…",
+    "account": "Conta do GitHub",
+    "owner": "Proprietário",
+    "you": "{{login}} (você)",
+    "visibility": "Visibilidade",
+    "private": "Privado",
+    "public": "Público",
+    "privateBlocked": "{{owner}} não permite que você crie repositórios privados. Escolha Público ou outro proprietário.",
+    "name": "Nome do repositório",
+    "invalidName": "Use apenas letras, números, hifens, sublinhados e pontos no nome do repositório.",
+    "noName": "Insira um nome para o repositório.",
+    "taken": "Esse nome já está em uso."
+  }
+}

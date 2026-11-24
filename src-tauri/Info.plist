@@ -21,6 +21,7 @@
     <string>es</string>
     <string>de</string>
     <string>ja</string>
+    <string>pt-BR</string>
   </array>
   <key>CFBundleDocumentTypes</key>
   <array>

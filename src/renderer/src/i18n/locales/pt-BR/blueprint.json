@@ -1,0 +1,383 @@
+{
+  "tab": {
+    "views": "Exibições do Blueprint",
+    "architecture": "Arquitetura",
+    "dataModel": "Modelo de dados",
+    "fabricConnections": "Conexões do Fabric",
+    "dataExplorer": "Explorador de dados",
+    "reading": "Lendo seu aplicativo…",
+    "cantDraw": "Não foi possível desenhar o aplicativo",
+    "openYml": "Abrir rayfin.yml",
+    "metadataTooLarge": "O arquivo metadata.json é grande demais para ser lido.",
+    "firstFiles": "Foram lidos os primeiros {{max}} de {{total}} arquivos em {{dir}}/."
+  },
+  "identity": {
+    "user": "Identidade do usuário",
+    "app": "Identidade do aplicativo",
+    "key": "Uma chave"
+  },
+  "port": {
+    "user": "Usa a identidade do usuário",
+    "app": "Usa a identidade do aplicativo",
+    "key": "Usa uma chave"
+  },
+  "portAria": {
+    "user": "{{part}}, usa a identidade do usuário",
+    "app": "{{part}}, usa a identidade do aplicativo",
+    "key": "{{part}}, usa uma chave"
+  },
+  "appIdentity": {
+    "firstPublisher": "A conta que o publicou primeiro",
+    "nextPublisher": "Quem o publicar primeiro"
+  },
+  "model": {
+    "cantRead": "O Fabricator não conseguiu ler rayfin/rayfin.yml.",
+    "invalidYaml": "O arquivo rayfin/rayfin.yml não é um YAML válido, então não é possível mostrar as partes do aplicativo.",
+    "people": {
+      "signInOff": "A entrada está desativada, então o aplicativo não tem como diferenciar quem é quem.",
+      "publicPages": "As páginas do aplicativo carregam antes da entrada, então qualquer pessoa com o link pode baixar o HTML, o JavaScript e o CSS delas. Para acessar os dados, ainda é preciso entrar.",
+      "entraThroughFabric": "Microsoft Entra ID, por meio do Fabric",
+      "entra": "Microsoft Entra ID",
+      "noSignIn": "Sem entrada"
+    },
+    "website": {
+      "title": "Site",
+      "summary": "Hospedado no Fabric",
+      "assetAccessUnset": "`assetAccess` não está definido. Escolha `protected` ou `public` antes de publicar.",
+      "public": "As páginas carregam antes da entrada",
+      "protected": "As páginas carregam após a entrada",
+      "unset": "Acesso às páginas não definido",
+      "embeddedOnly": "Abre somente dentro do Fabric"
+    },
+    "signin": {
+      "title": "Entrada",
+      "externalEntra": "Também aceita tokens do Entra de outros aplicativos",
+      "addresses_one": "Permite a entrada a partir de {{count}} endereço",
+      "addresses_other": "Permite a entrada a partir de {{count}} endereços",
+      "off": "A entrada está desativada."
+    },
+    "database": {
+      "title": "Banco de dados",
+      "tables_one": "{{count}} tabela",
+      "tables_other": "{{count}} tabelas",
+      "relationships_one": "{{count}} relação",
+      "relationships_other": "{{count}} relações",
+      "noTables": "Nenhuma tabela ainda",
+      "scoped_one": "{{count}} filtrada por linha",
+      "scoped_other": "{{count}} filtradas por linha",
+      "signedIn_one": "{{count}} para usuários conectados",
+      "signedIn_other": "{{count}} para usuários conectados",
+      "public_one": "{{count}} pública",
+      "public_other": "{{count}} públicas",
+      "readable_one": "{{count}} tabela pode ser lida sem entrar.",
+      "readable_other": "{{count}} tabelas podem ser lidas sem entrar."
+    },
+    "storage": {
+      "title": "Armazenamento de arquivos",
+      "summary": "Arquivos que as pessoas carregam · experimental",
+      "needsDatabase": "O armazenamento depende do banco de dados, que está desativado."
+    },
+    "functions": {
+      "authType": "`services.functions.auth.type` é `{{authType}}`; o Rayfin 1.36 exige `application`.",
+      "noAuthType": "As funções estão ativadas, mas não definem `services.functions.auth.type: application`, que o Rayfin 1.36 exige.",
+      "turnedOff": "As funções foram escritas, mas estão desativadas no rayfin.yml.",
+      "unsupportedAudience": "`AudienceType.{{audience}}` não é um público-alvo disponível publicamente no Rayfin 1.36.2.",
+      "title": "Funções",
+      "count_one": "{{count}} função do lado do servidor",
+      "count_other": "{{count}} funções do lado do servidor",
+      "none": "Nenhuma função ainda",
+      "reaches": "Acessa {{list}}"
+    },
+    "secrets": {
+      "undeclared_one": "{{names}} é lido como `ctx.Secrets`, mas não está declarado no rayfin.yml, o que gera um erro de TypeScript. Adicione-o em Código → Segredos, que o declara no rayfin.yml.",
+      "undeclared_other": "{{names}} são lidos como `ctx.Secrets`, mas não estão declarados no rayfin.yml, o que gera um erro de TypeScript. Adicione-os em Código → Segredos, que os declara no rayfin.yml.",
+      "legacy_one": "{{names}} é lido com `ctx.getSecret()`, que está obsoleto no Rayfin 1.36. Leia `ctx.Secrets.<NAME>` em vez disso.",
+      "legacy_other": "{{names}} são lidos com `ctx.getSecret()`, que está obsoleto no Rayfin 1.36. Leia `ctx.Secrets.<NAME>` em vez disso.",
+      "functionsOff": "Somente as funções leem segredos, e elas estão desativadas no rayfin.yml.",
+      "title": "Segredos",
+      "summary_one": "{{count}} segredo, armazenado com o aplicativo",
+      "summary_other": "{{count}} segredos, armazenados com o aplicativo"
+    },
+    "connectors": {
+      "title": "Conectores",
+      "summary_one": "{{count}} conector para dados do Fabric",
+      "summary_other": "{{count}} conectores para dados do Fabric",
+      "kinds_one": "{{count}} tipo de fonte",
+      "kinds_other": "{{count}} tipos de fonte"
+    },
+    "kinds": {
+      "warehouse": "Warehouse",
+      "sqlDatabase": "Banco de dados SQL",
+      "sqlEndpoint": "Ponto de extremidade SQL do Lakehouse",
+      "semanticModel": "Modelo semântico",
+      "kqlDatabase": "Banco de dados KQL"
+    },
+    "kindsInList": {
+      "warehouse": "warehouse",
+      "sqlDatabase": "banco de dados SQL",
+      "sqlEndpoint": "ponto de extremidade SQL do lakehouse",
+      "semanticModel": "modelo semântico",
+      "kqlDatabase": "banco de dados KQL"
+    },
+    "functionConnection": "Conexão de função",
+    "hostTypes": {
+      "webApi": "API Web",
+      "storage": "Armazenamento",
+      "sql": "SQL",
+      "aiService": "Serviço de IA",
+      "database": "Banco de dados"
+    },
+    "abilities": {
+      "readsAndWrites": "Lê e grava",
+      "kqlCommands": "Executa consultas e comandos KQL",
+      "daxQueries": "Executa consultas DAX",
+      "kqlQueries": "Executa consultas KQL",
+      "queries": "Executa consultas",
+      "readOnly": "Somente leitura",
+      "connected": "Conectado"
+    },
+    "auth": {
+      "missing": "Falta `auth.type`. O Rayfin 1.36 exige `delegated` ou `application`.",
+      "invalid": "`auth.type: {{value}}` não é válido. Use `delegated` ou `application`.",
+      "lowercase": "`auth.type` deve estar em minúsculas: `{{lower}}`; o `rayfin up` rejeita `{{raw}}`.",
+      "delegatedOnly": "Conectores do tipo {{kind}} só permitem `delegated`; o `rayfin up` rejeita `application`."
+    },
+    "audiences": {
+      "sql": {
+        "detail": "Lakehouses, warehouses, bancos de dados SQL e Azure SQL",
+        "grant": "Acesso a cada banco de dados que ele consulta, como uma função de workspace ou uma função do SQL."
+      },
+      "storage": {
+        "detail": "Arquivos do OneLake e Armazenamento de Blobs, Tabelas ou Filas do Azure",
+        "grant": "Uma função de workspace para o OneLake ou uma função de dados de armazenamento, como Leitor de Dados do Blob de Armazenamento."
+      },
+      "fabric": {
+        "detail": "APIs REST do Microsoft Fabric",
+        "grant": "Uma função nos workspaces e itens que ele chama. Verifique se cada API dá suporte a identidades de aplicativo."
+      },
+      "azureAi": {
+        "detail": "Pontos de extremidade do Azure AI Foundry e do Azure OpenAI",
+        "grant": "A função que o recurso do Azure AI exige, como Usuário dos Serviços Cognitivos."
+      },
+      "ado": {
+        "detail": "APIs REST do Azure DevOps",
+        "grant": "Acesso à organização e ao projeto do Azure DevOps que ele chama."
+      },
+      "other": {
+        "detail": "Acessado a partir de funções",
+        "grant": "Acesso ao recurso que ele chama."
+      }
+    },
+    "hardcoded_one": "Parece haver uma chave escrita no código: {{where}}. Qualquer pessoa que possa ler o código pode usá-la. Armazene-a como segredo em Código → Segredos e leia-a de `ctx.Secrets`.",
+    "hardcoded_other": "Parece haver {{count}} chaves escritas no código: {{where}}. Qualquer pessoa que possa ler o código pode usá-las. Armazene-as como segredos em Código → Segredos e leia-as de `ctx.Secrets`.",
+    "hardcodedIn": "{{names}} em `{{file}}`"
+  },
+  "view": {
+    "zone": {
+      "appWorkspace": "Workspace deste aplicativo",
+      "fabricWorkspace": "Workspace do Fabric",
+      "id": "ID {{id}}…",
+      "webApis": "APIs Web",
+      "calledFromFunctions": "Chamadas feitas pelas funções"
+    },
+    "search": "Pesquisar no aplicativo e nas conexões dele",
+    "clearSearch": "Limpar pesquisa",
+    "openApp": "Abrir o aplicativo",
+    "openInPortal": "Abrir o aplicativo no portal do Fabric",
+    "openInFabric": "Abrir no Fabric",
+    "zoom": "Zoom",
+    "zoomOut": "Reduzir",
+    "zoomIn": "Ampliar",
+    "fit": "Ajustar à tela",
+    "people": {
+      "aria": "Pessoas que usam o aplicativo",
+      "title": "Pessoas",
+      "subtitle": "que usam o aplicativo",
+      "signIn": "Entram com o Microsoft Entra ID",
+      "signInOff": "A entrada está desativada"
+    },
+    "app": {
+      "aria": "{{name}}, o aplicativo do Fabric",
+      "inWorkspace": "Aplicativo do Fabric em {{workspace}}",
+      "fabricApp": "Aplicativo do Fabric"
+    },
+    "appIdentityAria": "Identidade do aplicativo: {{who}}",
+    "serviceAria": "{{title}}: {{summary}}",
+    "sourceAria": "{{name}}, {{type}}",
+    "ghost": {
+      "title": "Nenhum dado externo ainda",
+      "body": "Adicione um warehouse, um banco de dados SQL, um lakehouse ou um modelo semântico do Fabric, ou chame serviços do Azure a partir de funções.",
+      "add": "Adicionar dados do Fabric…"
+    },
+    "connections_one": "{{count}} conexão",
+    "connections_other": "{{count}} conexões",
+    "calledBy": "Chamado por {{functions}}"
+  },
+  "inspector": {
+    "panelAria": "Detalhes de {{title}}",
+    "close": "Fechar detalhes",
+    "closeTitle": "Fechar (Esc)",
+    "signs": {
+      "user": "Acesso delegado: é executado como a pessoa conectada, com o próprio acesso dela ao Fabric.",
+      "app": "Acesso de aplicativo: é executado como {{who}}, igual para todos.",
+      "key": "Uma chave ou um token que a própria função envia, em vez da autenticação do Fabric."
+    },
+    "who": {
+      "servicePrincipal": "a entidade de serviço {{who}}",
+      "owner": "o proprietário do aplicativo do Fabric"
+    },
+    "nothingYet": "Nada ainda",
+    "grantFabric": "Uma função no workspace do Fabric dele ou uma permissão no item.",
+    "secretCount_one": "{{count}} segredo",
+    "secretCount_other": "{{count}} segredos",
+    "notSetYet": "Ainda não definido",
+    "notSet": "não definido",
+    "opensEverywhere": "No próprio endereço e dentro do Fabric",
+    "moveKeys": "Mover chaves para segredos",
+    "fixWithCopilot": "Corrigir com o Copilot",
+    "facts": {
+      "signIn": "Entrada",
+      "pages": "Páginas",
+      "opens": "Onde abre",
+      "address": "Endereço",
+      "workspace": "Workspace",
+      "lastPublished": "Última publicação",
+      "project": "Projeto",
+      "clientId": "ID do cliente",
+      "setting": "Configuração",
+      "buildOutput": "Saída da compilação",
+      "provider": "Provedor",
+      "externalTokens": "Tokens do Entra de outros aplicativos",
+      "access": "Acesso",
+      "usedBy": "Usado por",
+      "addresses_one": "Endereço",
+      "addresses_other": "Endereços",
+      "capacity": "Capacidade",
+      "model": "Modelo",
+      "modelOwner": "Proprietário do modelo",
+      "workspaceId": "ID do workspace",
+      "itemId": "ID do item",
+      "connector": "Conector",
+      "type": "Tipo"
+    },
+    "docs": {
+      "signInPeople": "Como as pessoas entram",
+      "secrets": "Segredos em funções",
+      "identities": "Acesso delegado e de aplicativo",
+      "hosting": "Hospedagem estática",
+      "permissions": "Permissões e segurança em nível de linha",
+      "storage": "Armazenamento",
+      "connections": "Conexões de função",
+      "connectorAuth": "Autenticação de conectores"
+    },
+    "people": {
+      "kicker": "Quem usa",
+      "lead": "As pessoas abrem o aplicativo no endereço dele ou dentro do Fabric e entram com a conta corporativa. Para dar acesso a alguém, selecione <strong>Compartilhar</strong> na barra do aplicativo.",
+      "loadBefore": "Carregam antes da entrada",
+      "loadAfter": "Carregam após a entrada",
+      "onlyInPortal": "Somente dentro do portal do Fabric"
+    },
+    "app": {
+      "lead": "O Rayfin executa o aplicativo como um único item de aplicativo do Fabric: páginas, entrada, banco de dados e funções, configurados a partir de <code>rayfin/rayfin.yml</code>.",
+      "notPublished": "Ainda não publicado",
+      "parts": "Partes"
+    },
+    "identity": {
+      "kicker": "Identidade",
+      "keyLead": "Essas chamadas não usam a autenticação do Fabric. A função envia a própria chave ou token (ou nenhum, no caso de uma API pública), então qualquer pessoa que tenha essa chave tem o mesmo acesso, independentemente de quem esteja usando o aplicativo.",
+      "reachedWithKey": "Acessados com uma chave",
+      "secretsUsed": "Segredos que as funções usam",
+      "noSecrets": "Nenhum. Adicione chaves em Código → <strong>Segredos</strong> e leia-as de <code>ctx.Secrets</code>, para que elas nunca fiquem no código.",
+      "userLead": "Essas conexões são <strong>delegadas</strong>: cada consulta é executada como a pessoa que usa o aplicativo, por meio de uma troca de tokens em nome dela (on-behalf-of). O Fabric verifica as permissões dessa pessoa, então cada um só vê o que tem permissão para ver.",
+      "everyoneNeeds": "Todos que usam o aplicativo precisam de acesso a",
+      "userNote": "Dê às pessoas, ou a um grupo do qual elas façam parte, uma função em cada workspace ou uma permissão em cada item. Sem isso, elas recebem um erro de autorização.",
+      "askGrant": "Perguntar ao Copilot o que conceder",
+      "appLeadVia": "Essas conexões usam acesso <strong>de aplicativo</strong>: uma única identidade compartilhada, a do proprietário do item de aplicativo do Fabric. Nessas fontes, todos veem os mesmos dados, e as regras por pessoa não têm como diferenciar quem é quem.",
+      "appLead": "As conexões que usam a identidade do aplicativo têm acesso <strong>de aplicativo</strong>: uma única identidade compartilhada, a do proprietário do item de aplicativo do Fabric. Nessas fontes, todos veem os mesmos dados, e as regras por pessoa não têm como diferenciar quem é quem.",
+      "whose": "Credenciais usadas",
+      "whoServicePrincipal": "Entidade de serviço que publica o aplicativo",
+      "whoAccount": "Sua conta do Fabric, que publica este aplicativo",
+      "whoOwner": "Proprietário do item de aplicativo do Fabric",
+      "previews": "As visualizações são executadas como <strong>{{who}}</strong>, que as implanta a partir de pull requests.",
+      "ownerNote": "O proprietário é a conta que criou o aplicativo ao publicá-lo pela primeira vez. Se outra pessoa o publicou primeiro, ele é executado como essa pessoa.",
+      "grantTo": "Conceda a ela acesso a",
+      "localNote": "Quando o aplicativo é executado no seu computador, as funções usam a sua própria conta, então uma chamada que funciona localmente ainda pode falhar depois que o aplicativo for publicado."
+    },
+    "website": {
+      "lead": "As páginas do aplicativo: o HTML, o JavaScript e o CSS gerados a partir do código dele e servidos pelo aplicativo do Fabric.",
+      "pagesLoad": "Carregamento das páginas",
+      "before": "Antes da entrada",
+      "after": "Após a entrada",
+      "onlyInFabric": "Somente dentro do Fabric",
+      "publicNote": "Qualquer pessoa com o link pode baixar os arquivos das páginas, mas não os dados do aplicativo: para acessá-los, ainda é preciso entrar, e as regras das entidades decidem o que cada pessoa vê. Isso é comum em aplicativos Web. Para carregar as páginas somente depois que a pessoa entrar no Fabric, defina <code>assetAccess: protected</code>.",
+      "protectedNote": "Os arquivos das páginas só carregam para quem está conectado ao Fabric.",
+      "readsInBrowser": "Lê no navegador"
+    },
+    "signin": {
+      "lead": "As pessoas entram com a conta corporativa do Microsoft Entra ID. O aplicativo recebe uma sessão que informa quem elas são.",
+      "accepted": "Aceitos",
+      "notAccepted": "Não aceitos",
+      "addresses": "Endereços de entrada",
+      "more_one": "e mais {{count}}",
+      "more_other": "e mais {{count}}"
+    },
+    "database": {
+      "lead": "As tabelas do próprio aplicativo, no banco de dados SQL do Fabric dele. Leituras e gravações usam a <strong>identidade do usuário</strong>, e as regras de cada tabela decidem quais linhas cada pessoa pode ver e alterar.",
+      "tables_one": "{{count}} tabela",
+      "tables_other": "{{count}} tabelas",
+      "harden": "Proteger o acesso",
+      "openModel": "Abrir o modelo de dados"
+    },
+    "storage": {
+      "lead": "Armazenamento de blobs para os arquivos que as pessoas carregam. Antes do Rayfin 2.0, ele é experimental e não está disponível em todas as regiões do Fabric."
+    },
+    "functions": {
+      "lead": "Código do lado do servidor. As chamadas a serviços externos usam a <strong>identidade do aplicativo</strong>; a leitura dos dados do próprio aplicativo continua usando a identidade do usuário que chamou a função.",
+      "count_one": "{{count}} função",
+      "count_other": "{{count}} funções",
+      "none": "Nenhuma função encontrada ainda.",
+      "reaches": "Acessa",
+      "openCode": "Abrir o código"
+    },
+    "connectors": {
+      "lead": "Dados existentes do Fabric que o aplicativo lê e grava por meio de conectores do Rayfin. Cada um usa a identidade do usuário ou a identidade do aplicativo, conforme o <code>auth.type</code> em <code>rayfin/rayfin.yml</code>."
+    },
+    "secrets": {
+      "manage": "Gerenciar segredos",
+      "readTyped": "Ler como ctx.Secrets",
+      "lead": "Chaves de API, senhas e cadeias de conexão para as funções. Os valores ficam fora do código: o aplicativo publicado guarda os dele, e o seu computador também guarda valores próprios quando o aplicativo é executado nele. O <code>rayfin.yml</code> guarda apenas os nomes e as descrições, e as funções os leem como <code>ctx.Secrets.NAME</code>.",
+      "noValue_one": "O aplicativo publicado não tem valor para {{names}}, então uma função que o leia falha lá.",
+      "noValue_other": "O aplicativo publicado não tem valor para {{names}}, então uma função que os leia falha lá.",
+      "readBy": "Lido por {{functions}}",
+      "readIn": "Lido em {{files}}",
+      "unread": "Nenhuma função o lê",
+      "undeclared": "{{readBy}} · não está no rayfin.yml",
+      "publishedOnly": "Somente no aplicativo publicado",
+      "status": {
+        "loading": "Verificando quais valores o aplicativo publicado tem…",
+        "notDeployed": "Os valores do aplicativo publicado podem ser adicionados depois que ele for publicado.",
+        "team": "Mostra os valores do aplicativo publicado. O aplicativo publicado e a visualização de cada pessoa têm valores próprios.",
+        "updateRayfin": "Atualize a versão do Rayfin do aplicativo para ver quais valores estão definidos.",
+        "errorSignIn": "Não foi possível verificar os valores do aplicativo publicado. Sua sessão do Fabric pode ter expirado.",
+        "error": "Não foi possível verificar os valores do aplicativo publicado.",
+        "ready": "Os valores são somente gravação: o Fabricator mostra se um valor está definido, mas nunca qual é."
+      },
+      "calledFrom": "Chamados pelo mesmo código",
+      "localNote": "Quando o aplicativo é executado no seu computador, as funções dele leem os valores locais em vez dos valores do aplicativo publicado."
+    },
+    "source": {
+      "useApp": "Usar a identidade do aplicativo",
+      "viewModel": "Ver o modelo",
+      "viewTables": "Ver as tabelas",
+      "useUser": "Usar a identidade do usuário",
+      "audienceLead": "{{detail}}, que as funções acessam por meio de <code>ctx.Tokens.{{audience}}</code>.",
+      "apiLead": "Uma API Web que as funções chamam. O Rayfin não autentica essas chamadas: o código envia a própria chave ou token.",
+      "suggested": "O Rayfin pode acessar {{title}} com a identidade do aplicativo por meio de <code>AudienceType.{{audience}}</code>, então as funções não precisam de uma chave para isso.",
+      "alwaysUser": "Conectores do tipo {{kind}} sempre usam a identidade do usuário.",
+      "sameRows": "Todos veem as mesmas linhas, então as regras por pessoa nas tabelas dele não têm como diferenciar quem é quem.",
+      "ownAccess": "Vale o próprio acesso de cada pessoa ao Fabric, e as regras por pessoa nas tabelas dele podem levar em conta quem ela é.",
+      "details": "Detalhes",
+      "grantApp": "Conceda ao aplicativo"
+    }
+  }
+}

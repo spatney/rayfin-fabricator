@@ -1,0 +1,255 @@
+{
+  "view": {
+    "title": "Explorador de dados",
+    "localData": "Dados locais",
+    "summary": "{{entities}} · {{rows}}",
+    "backend": "Back-end local",
+    "reading": "Lendo os dados locais…",
+    "readError": "Não foi possível ler os dados locais",
+    "oldBackend": "Esta versão do back-end local não compartilha os dados com o Fabricator.",
+    "oldBackendHint": "Atualize o Fabricator e tente novamente.",
+    "noEntitiesTitle": "Nenhuma entidade ainda",
+    "noEntitiesSub": "Quando o modelo de dados do aplicativo tiver entidades, as linhas delas aparecerão aqui."
+  },
+  "backend": {
+    "unreachable": "Não foi possível se conectar ao back-end local",
+    "unsupported": "Esta versão do Fabricator não consegue ler dados locais.",
+    "checking": "Verificando o back-end local…",
+    "stoppedTitle": "O back-end local não está em execução",
+    "stoppedMessage": "Inicie-o para ver os dados locais do aplicativo.",
+    "starting": "O back-end local está sendo iniciado",
+    "restarting": "O back-end local está sendo reiniciado",
+    "startingMessage": "Os dados locais do aplicativo aparecerão aqui quando o back-end estiver em execução.",
+    "start": "Iniciar",
+    "startBusy": "Iniciando…"
+  },
+  "side": {
+    "entities": "Entidades",
+    "noEntities": "Nenhuma entidade",
+    "entityItem_one": "{{name}}, {{count, number}} linha",
+    "entityItem_other": "{{name}}, {{count, number}} linhas",
+    "storage": "Armazenamento",
+    "storageError": "Não foi possível ler os arquivos armazenados",
+    "noFolders": "Nenhuma pasta de armazenamento",
+    "folderItem_one": "{{name}}, {{count, number}} arquivo",
+    "folderItem_other": "{{name}}, {{count, number}} arquivos"
+  },
+  "toolbar": {
+    "note": "Dados locais neste computador. A publicação não os copia para o Fabric.",
+    "notePublished": "Dados locais neste computador, separados dos dados do aplicativo publicado.",
+    "refreshTitle": "Ler os dados locais novamente",
+    "loadSeedTitle": "Substituir os dados locais pelos dados iniciais de rayfin/seed",
+    "noSeedTitle": "Este aplicativo ainda não tem dados iniciais em rayfin/seed. Salve os dados locais como dados iniciais ou peça ao Copilot para adicionar alguns.",
+    "saveSeedTitle": "Salvar os dados locais em rayfin/seed para que qualquer pessoa que abrir o projeto possa carregá-los",
+    "reset": "Redefinir dados locais"
+  },
+  "seed": {
+    "load": "Carregar dados iniciais",
+    "save": "Salvar como dados iniciais",
+    "loaded": "Dados iniciais carregados: {{amount}}.",
+    "saved": "Dados salvos em rayfin/seed: {{amount}}.",
+    "savedSkipped_one": "Dados salvos em rayfin/seed: {{amount}}. Não foi possível salvar {{count, number}} arquivo armazenado: {{files}}",
+    "savedSkipped_other": "Dados salvos em rayfin/seed: {{amount}}. Não foi possível salvar {{count, number}} arquivos armazenados: {{files}}",
+    "rowsIn_one": "{{count, number}} linha em {{entities}}",
+    "rowsIn_other": "{{count, number}} linhas em {{entities}}",
+    "nothing": "nenhuma linha ou arquivo"
+  },
+  "notices": {
+    "fallback": "{{reason}} O Explorador de dados mostra somente dados locais.",
+    "unreadLabel": "Alteração do modelo de dados não lida",
+    "unread": "Não foi possível ler a alteração mais recente do modelo de dados do aplicativo, então o back-end local dele ainda usa o modelo de dados anterior.",
+    "unreadNoEntities": "Nenhuma entidade é exibida porque não foi possível ler a alteração mais recente do modelo de dados do aplicativo. O back-end local dele ainda usa o modelo de dados anterior, que não tem nenhuma."
+  },
+  "seedProblems": {
+    "title_one": "Os dados iniciais têm {{count, number}} problema",
+    "title_other": "Os dados iniciais têm {{count, number}} problemas",
+    "intro": "Nada foi carregado, então os dados locais continuam como estavam. Corrija estes problemas e carregue os dados novamente:",
+    "fix": "Corrigir com o Copilot",
+    "fixRequest": "Corrija os problemas dos dados iniciais"
+  },
+  "rows": {
+    "reading": "Lendo as linhas…",
+    "readError": "Não foi possível ler as linhas",
+    "clearSorting": "Limpar classificação",
+    "emptyTitle": "Nenhuma linha ainda",
+    "emptySub": "Os dados são adicionados pelas próprias páginas do aplicativo. Use o aplicativo na visualização e depois atualize.",
+    "sortBy": "Classificar por {{column}}",
+    "keyType": "{{type}} · chave",
+    "clear": "Limpar linhas"
+  },
+  "users": {
+    "title": "Usuários locais",
+    "readError": "Não foi possível ler os usuários locais",
+    "notListed": "O back-end local não os listou.",
+    "emptyTitle": "Nenhum usuário local ainda",
+    "emptySub": "Os usuários locais aparecem aqui quando alguém entra no aplicativo neste computador.",
+    "username": "Nome de usuário",
+    "email": "Email",
+    "signsInWith": "Entra com",
+    "created": "Criado em",
+    "developer": "Desenvolvedor",
+    "password": "Senha",
+    "fabricatorOnly": "Somente pelo Fabricator",
+    "deleteLabel": "Excluir {{username}}"
+  },
+  "files": {
+    "reading": "Lendo os arquivos…",
+    "readError": "Não foi possível ler os arquivos",
+    "emptyTitle": "Nenhum arquivo ainda",
+    "emptySub": "Os arquivos que o aplicativo armazena nesta pasta aparecem aqui. Use o aplicativo na visualização e depois atualize.",
+    "regionLabel": "Arquivos de {{folder}}",
+    "folderNameTitle": "O nome da pasta no código do aplicativo",
+    "orphan": "Não está no aplicativo",
+    "orphanTitle": "O aplicativo não tem mais esta pasta de armazenamento. Os arquivos dela ficam aqui até você limpá-los.",
+    "meta_one": "{{count, number}} arquivo · {{size}}",
+    "meta_other": "{{count, number}} arquivos · {{size}}",
+    "clear": "Limpar arquivos",
+    "previewLabel": "Visualizar {{path}}",
+    "deleteLabel": "Excluir {{path}}",
+    "signedOutUpload": "Carregado sem estar conectado",
+    "anonymous": "Anônimo"
+  },
+  "fields": {
+    "name": "Nome",
+    "path": "Caminho",
+    "type": "Tipo",
+    "size": "Tamanho",
+    "owner": "Proprietário",
+    "uploaded": "Carregado em",
+    "updated": "Atualizado em",
+    "actions": "Ações"
+  },
+  "preview": {
+    "label": "Visualização de {{path}}",
+    "save": "Salvar uma cópia",
+    "saveTitle": "Salvar uma cópia do arquivo neste computador",
+    "saved": "Uma cópia de {{name}} foi salva em {{where}}.",
+    "saveError": "Não foi possível salvar uma cópia",
+    "close": "Fechar a visualização",
+    "error": "Não foi possível visualizar o arquivo",
+    "pdfError": "Não foi possível renderizar este PDF: {{reason}}",
+    "noneTitle": "Sem visualização",
+    "noneSub": "O Fabricator não consegue mostrar arquivos {{type}}. Salve uma cópia para abri-lo em outro aplicativo.",
+    "drawingPdf": "Renderizando o PDF…",
+    "reading": "Lendo o arquivo…",
+    "textClipped": "Mostrando os primeiros {{size}}. Salve uma cópia para ver o arquivo inteiro.",
+    "pdfClipped": "Mostrando as primeiras {{shown}} de {{total}} páginas. Salve uma cópia para ver todas.",
+    "page": "Página {{page}} de {{name}}",
+    "fieldTitle": "Um campo que o aplicativo armazena com o arquivo"
+  },
+  "confirm": {
+    "cantUndo": "Esta ação não pode ser desfeita.",
+    "cantUndoPublished": "Os dados do aplicativo publicado não são afetados. Esta ação não pode ser desfeita.",
+    "clearing": "Limpando…",
+    "resetting": "Redefinindo…",
+    "refused": "Outras linhas ainda fazem referência a estas, então elas não podem ser limpas sozinhas. Limpe aquelas primeiro ou redefina todos os dados locais.",
+    "refusedNamed": "Linhas de {{names}} ainda fazem referência a estas, então elas não podem ser limpas sozinhas. Limpe {{names}} primeiro ou redefina todos os dados locais.",
+    "clear": {
+      "title": "Limpar todas as linhas de {{entity}}?",
+      "message_one": "Isso exclui a única linha de {{entity}} dos dados locais do aplicativo neste computador. As outras entidades, os usuários locais e os arquivos armazenados permanecem.",
+      "message_other": "Isso exclui todas as {{count, number}} linhas de {{entity}} dos dados locais do aplicativo neste computador. As outras entidades, os usuários locais e os arquivos armazenados permanecem."
+    },
+    "reset": {
+      "title": "Redefinir os dados locais?",
+      "intro": "Isso exclui os dados locais do aplicativo neste computador:",
+      "allRows_one": "A única linha de {{entities}}",
+      "allRows_other": "Todas as {{count, number}} linhas de {{entities}}",
+      "itsEntities_one": "sua única entidade",
+      "itsEntities_other": "suas {{count, number}} entidades",
+      "everyRowOf": "Todas as linhas de {{entities}}",
+      "everyRow": "Todas as linhas de todas as entidades",
+      "users_one": "O único usuário local e as sessões dele",
+      "users_other": "Os {{count, number}} usuários locais e as sessões deles",
+      "usersAny": "Os usuários locais e as sessões deles",
+      "files_one": "O único arquivo armazenado",
+      "files_other": "Os {{count, number}} arquivos armazenados",
+      "filesAny": "Os arquivos armazenados",
+      "schemaWaiting": "Em seguida, a alteração do modelo de dados que aguarda sua decisão é aplicada."
+    },
+    "clearFiles": {
+      "title": "Excluir todos os arquivos de {{folder}}?",
+      "message_one": "Isso exclui o único arquivo da pasta de armazenamento {{folder}} dos dados locais do aplicativo neste computador. As linhas das entidades, os usuários locais e os arquivos de outras pastas permanecem.",
+      "message_other": "Isso exclui todos os {{count, number}} arquivos da pasta de armazenamento {{folder}} dos dados locais do aplicativo neste computador. As linhas das entidades, os usuários locais e os arquivos de outras pastas permanecem."
+    },
+    "deleteFile": {
+      "title": "Excluir {{name}}?",
+      "message": "Isso exclui {{path}} da pasta de armazenamento {{folder}} dos dados locais do aplicativo neste computador.",
+      "action": "Excluir arquivo"
+    },
+    "loadSeed": {
+      "title": "Carregar os dados iniciais?",
+      "intro": "Isso substitui os dados locais do aplicativo neste computador pelos dados iniciais de rayfin/seed:",
+      "noRows": "Nenhuma linha",
+      "deletesAll": "As linhas e os arquivos armazenados atuais do aplicativo são excluídos. Os usuários locais permanecem, e os usuários citados nos dados iniciais são adicionados.",
+      "deletesRows": "As linhas atuais do aplicativo são excluídas. Os usuários locais permanecem, e os usuários citados nos dados iniciais são adicionados."
+    },
+    "saveSeed": {
+      "title": "Salvar os dados locais como dados iniciais?",
+      "intro": "Isso salva os dados locais do aplicativo em rayfin/seed, no projeto, substituindo os dados iniciais que estão lá:",
+      "rows_one": "{{count, number}} linha de {{entities}}, em rayfin/seed/data",
+      "rows_other": "{{count, number}} linhas de {{entities}}, em rayfin/seed/data",
+      "files_one": "{{count, number}} arquivo armazenado, em rayfin/seed/storage",
+      "files_other": "{{count, number}} arquivos armazenados, em rayfin/seed/storage",
+      "ids": "Qualquer pessoa que abrir o projeto poderá carregá-los. Os IDs de usuário passam a ser <code>{{developer}}</code> (você) e <code>{{user}}</code> (os usuários locais). O Fabricator salva a alteração como uma versão no Histórico."
+    },
+    "deleteUser": {
+      "title": "Excluir {{username}}?",
+      "message": "Isso exclui {{username}} dos usuários locais do aplicativo e encerra a sessão dessa pessoa no aplicativo neste computador.",
+      "action": "Excluir usuário"
+    }
+  },
+  "pager": {
+    "range": "{{first, number}}–{{last, number}} de {{total, number}}",
+    "previous": "Anterior",
+    "previousPage": "Página anterior",
+    "nextPage": "Próxima página"
+  },
+  "cell": {
+    "emptyText": "Texto vazio"
+  },
+  "size": {
+    "bytes_one": "{{count, number}} byte",
+    "bytes_other": "{{count, number}} bytes",
+    "kilobytes": "{{size}} KB",
+    "megabytes": "{{size}} MB",
+    "gigabytes": "{{size}} GB"
+  },
+  "counts": {
+    "rows_one": "{{count, number}} linha",
+    "rows_other": "{{count, number}} linhas",
+    "entities_one": "{{count, number}} entidade",
+    "entities_other": "{{count, number}} entidades",
+    "files_one": "{{count, number}} arquivo",
+    "files_other": "{{count, number}} arquivos",
+    "storedFiles_one": "{{count, number}} arquivo armazenado",
+    "storedFiles_other": "{{count, number}} arquivos armazenados",
+    "users_one": "{{count, number}} usuário",
+    "users_other": "{{count, number}} usuários"
+  },
+  "access": {
+    "anySignedIn": "Qualquer usuário conectado",
+    "public": "Público",
+    "scoped": "Política em nível de linha",
+    "mixed": "Política mista",
+    "defaultDetail": "Não há decorador de acesso, então esta entidade usa o padrão do Rayfin, `authenticated: *` — todo usuário conectado pode ler e gravar todas as linhas.",
+    "publicDetail": "Uma concessão `@anonymous` expõe as linhas a chamadores não autenticados (ações: {{actions}}).",
+    "scopedDetail": "Para usuários conectados, o acesso é restringido por um retorno de chamada `policy` em nível de linha.",
+    "mixedDetail": "Algumas concessões para usuários conectados usam uma política em nível de linha, e outras não.",
+    "authenticatedDetail": "Qualquer usuário conectado pode acessar todas as linhas (não há `policy` em nível de linha).",
+    "customDetail": "Concessões de funções personalizadas: {{grants}}."
+  },
+  "schema": {
+    "noImport": "A entidade “{{name}}” está listada em {{schema}}, mas não é importada.",
+    "notAFile": "A entidade “{{name}}” é importada de “{{module}}”, que não é um arquivo deste aplicativo.",
+    "unreadable": "Não foi possível ler o arquivo de entidade {{file}} de “{{name}}”.",
+    "noEntityClass": "Não foi encontrada nenhuma classe @entity em {{file}} para “{{name}}”.",
+    "noEntities": "{{schema}} ainda não declara nenhuma entidade."
+  },
+  "sqlSource": {
+    "notDiscovered": "{{file}} lê a tabela {{table}}, que não está entre as tabelas descobertas.",
+    "notDiscoveredAny": "{{file}} lê uma tabela que não está entre as tabelas descobertas.",
+    "unreadable": "Não foi possível ler {{name}}.",
+    "wrongShape": "{{name}} não está no formato que o Rayfin grava, então foi ignorado.",
+    "grantWithPolicy": "{{role}}: {{actions}} (política de linha)"
+  }
+}

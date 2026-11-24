@@ -1,0 +1,231 @@
+{
+  "diagram": {
+    "clearSearch": "Limpar pesquisa",
+    "clearFocus": "Limpar foco",
+    "focusing": "Em foco: {{name}}",
+    "zoom": "Zoom",
+    "zoomOut": "Reduzir",
+    "zoomIn": "Ampliar",
+    "fit": "Ajustar à tela",
+    "expand": "Expandir",
+    "collapse": "Recolher",
+    "relationships_one": "{{count}} relação",
+    "relationships_other": "{{count}} relações",
+    "cardinality": {
+      "one": "um",
+      "many": "muitos"
+    }
+  },
+  "signIn": {
+    "signingIn": "Entrando…",
+    "fabric": "Entrar no Fabric",
+    "azure": "Entrar no Azure",
+    "failed": "Falha ao entrar",
+    "incomplete": "A entrada não foi concluída. Tente novamente."
+  },
+  "semantic": {
+    "title": "Conexões do Fabric",
+    "types": {
+      "semanticModel": "Modelo semântico",
+      "warehouse": "Warehouse",
+      "sqlDatabase": "Banco de dados SQL",
+      "sqlEndpoint": "Ponto de extremidade SQL do Lakehouse"
+    },
+    "tables_one": "{{count}} tabela",
+    "tables_other": "{{count}} tabelas",
+    "discovered": "descobertas em {{date}}",
+    "empty": {
+      "noSources": "Não há conexões do Fabric para desenhar.",
+      "noTablesTitle": "Nenhuma tabela para desenhar ainda",
+      "noneFound": "O Rayfin não encontrou tabelas em {{source}} na última vez que procurou.",
+      "noneFoundOn": "O Rayfin não encontrou tabelas em {{source}} na última vez que procurou ({{date}}).",
+      "noMetadata": "O Fabricator desenha as tabelas de uma fonte com base no <code>metadata.json</code> que o Rayfin grava ao adicionar o conector e nos arquivos de entidade do aplicativo. <code>{{dir}}/</code> ainda não tem nenhum dos dois.",
+      "noModelTitle": "Este modelo semântico não tem tabelas",
+      "noModelDesc": "O modelo conectado não retornou nenhuma tabela. Talvez ele ainda esteja carregando dados no Fabric."
+    },
+    "discover": "Descobrir as tabelas com o Copilot",
+    "discoverChat": "Descubra as tabelas de {{source}}",
+    "useChat": "Use as tabelas de {{source}}",
+    "useWithCopilot": "Usá-las com o Copilot",
+    "loading": "Lendo seu modelo semântico…",
+    "signInFabric": {
+      "title": "Entre para ver o modelo semântico",
+      "desc": "O modelo semântico é lido diretamente do Fabric, então você precisa de uma sessão ativa no Fabric."
+    },
+    "signInAzure": {
+      "title": "Entre no Azure para ver o modelo semântico",
+      "desc": "O Fabricator lê as tabelas, as medidas e as relações do modelo no Fabric usando a sua conta do Azure."
+    },
+    "error": {
+      "title": "Não foi possível ler o modelo semântico",
+      "read": "Não foi possível ler o modelo semântico."
+    },
+    "legend": {
+      "primaryKey": "chave primária",
+      "foreignKey": "chave estrangeira",
+      "inactive": "inativa"
+    },
+    "notice": {
+      "unused": "O aplicativo ainda não usa estas tabelas.",
+      "entitiesOnly": "As tabelas descobertas pelo Rayfin (metadata.json) não estão no projeto, então aqui aparecem somente as tabelas descritas nos arquivos de entidade do aplicativo."
+    },
+    "search": {
+      "sqlPlaceholder": "Pesquisar tabelas e colunas",
+      "sqlLabel": "Pesquisar tabelas e colunas",
+      "placeholder": "Pesquisar tabelas, colunas e medidas",
+      "label": "Pesquisar tabelas, colunas e medidas"
+    },
+    "filter": {
+      "label": "Tabelas",
+      "used": "Usadas pelo aplicativo",
+      "all": "Todas as tabelas"
+    },
+    "expandAll": "Expandir todas as tabelas",
+    "collapseAll": "Recolher todas as tabelas",
+    "openMetadata": "Abrir metadata.json",
+    "refresh": "Atualizar a partir do Fabric",
+    "card": {
+      "expand": "Expandir tabela",
+      "collapse": "Recolher tabela",
+      "hidden": "oculta",
+      "focus": "Focar nesta tabela",
+      "focusTitle": "Focar nas tabelas relacionadas",
+      "columns_one": "{{count}} coluna",
+      "columns_other": "{{count}} colunas",
+      "measures_one": "{{count}} medida",
+      "measures_other": "{{count}} medidas",
+      "noColumns": "Nenhuma coluna.",
+      "measuresHead": "Medidas",
+      "showDax": "Mostrar DAX",
+      "showFewer": "Mostrar menos",
+      "showAll": "Mostrar todas as {{total}}",
+      "storageMode": "Modo de armazenamento: {{mode}}",
+      "openFile": "Abrir {{file}}",
+      "unused": "Não usada pelo aplicativo"
+    },
+    "column": {
+      "typeNullable": "{{type}}, pode ficar vazia",
+      "typeRequired": "{{type}}, obrigatória",
+      "primaryKey": "chave primária",
+      "references": "referencia {{target}}",
+      "generated": "preenchida pelo banco de dados",
+      "generatedBy": "preenchida pelo banco de dados ({{how}})",
+      "unmapped": "não está na entidade do aplicativo",
+      "calculated": "Calculada: {{expression}}"
+    },
+    "measure": {
+      "label": "DAX de {{name}}",
+      "formatTitle": "Cadeia de caracteres de formato — como o valor desta medida é exibido",
+      "format": "Formato",
+      "folderTitle": "Pasta de exibição no modelo",
+      "folder": "Pasta",
+      "description": "Descrição",
+      "copy": "Copiar DAX",
+      "noDax": "Nenhuma expressão DAX disponível."
+    }
+  },
+  "model": {
+    "loading": "Lendo seu modelo de dados…",
+    "title": "Modelo de dados",
+    "empty": {
+      "title": "Nenhum modelo de dados ainda",
+      "desc": "As entidades do Rayfin ficam em <code>{{dataDir}}/</code> e são listadas em <code>{{schemaFile}}</code>. Quando você adicionar algumas, esta guia as desenhará como um diagrama entidade‑relacionamento com indicadores de acesso por entidade.",
+      "add": "Adicionar um modelo de dados com o Copilot",
+      "addChat": "Adicione um modelo de dados"
+    },
+    "noEntities": {
+      "title": "Seu esquema não tem entidades",
+      "desc": "<code>{{file}}</code> existe, mas a matriz <code>schema</code> dele está vazia.",
+      "add": "Adicionar uma entidade com o Copilot"
+    },
+    "entities_one": "{{count}} entidade",
+    "entities_other": "{{count}} entidades",
+    "legend": {
+      "access": "Acesso",
+      "scoped": "Filtrado por linha",
+      "signedIn": "Usuários conectados",
+      "public": "Público"
+    },
+    "search": {
+      "placeholder": "Pesquisar entidades e campos",
+      "label": "Pesquisar entidades e campos"
+    },
+    "expandAll": "Expandir todas as entidades",
+    "collapseAll": "Recolher todas as entidades",
+    "resetLayout": "Redefinir layout",
+    "card": {
+      "expand": "Expandir entidade",
+      "collapse": "Recolher entidade",
+      "nameTitle": "{{detail}} · Abrir {{file}}",
+      "fields_one": "{{count}} campo",
+      "fields_other": "{{count}} campos",
+      "linked_one": "{{count}} vínculo",
+      "linked_other": "{{count}} vínculos",
+      "references": "Referencia {{target}}",
+      "primaryKey": "Chave primária",
+      "required": "Obrigatório",
+      "optional": "Opcional",
+      "unique": "Único",
+      "toOne": "↦ um",
+      "toMany": "↦ muitos",
+      "noFields": "Nenhum campo reconhecido.",
+      "grants": "Concessões de acesso",
+      "noRoles": "nenhuma função explícita",
+      "rowPolicy": "{{grant}} (política em nível de linha)",
+      "policy": "política",
+      "harden": "Proteger",
+      "focus": "Focar",
+      "unfocus": "Remover foco"
+    },
+    "hardenChat": "Proteja o acesso a {{name}}"
+  },
+  "connect": {
+    "title": "Adicionar dados do Fabric",
+    "subtitle": "Escolha dados de qualquer workspace que você possa abrir. Eles entram na sua mensagem e, quando você a enviar, o Copilot conecta cada um a este aplicativo como um conector do Rayfin.",
+    "signInBanner": "Entre no Fabric para ver seus workspaces e os dados deles.",
+    "signInRetry": "Entrar e tentar novamente",
+    "azureFinish": "Termine de entrar no Azure no seu navegador.",
+    "azureWhy": "Seu aplicativo lê os dados do Fabric com a sua conta do Azure enquanto você o cria.",
+    "workspaces": {
+      "search": "Pesquisar workspaces",
+      "loading": "Carregando seus workspaces…",
+      "none": "Você ainda não tem nenhum workspace do Fabric.",
+      "label": "Workspaces",
+      "recent": "Recentes",
+      "all": "Todos os workspaces",
+      "noMatch": "Nenhum workspace corresponde a “{{query}}”.",
+      "thisApp": "Este aplicativo"
+    },
+    "picked_one": "{{count}} selecionado",
+    "picked_other": "{{count}} selecionados",
+    "pickedAcross_one": "{{count}} selecionado em todos os workspaces",
+    "pickedAcross_other": "{{count}} selecionados em todos os workspaces",
+    "data": {
+      "choose": "Escolha um workspace para ver os dados dele.",
+      "kinds": "Tipo de dados",
+      "all": "Todos",
+      "search": "Pesquisar em {{workspace}}",
+      "loading": "Carregando {{workspace}}…",
+      "empty": "{{workspace}} não tem modelos semânticos, warehouses, bancos de dados SQL nem lakehouses.",
+      "noMatch": "Nada corresponde a “{{query}}”.",
+      "none": "{{workspace}} não tem dados.",
+      "label": "Dados em {{workspace}}",
+      "connected": "Conectado",
+      "noneOf": {
+        "semanticmodel": "{{workspace}} não tem modelos semânticos.",
+        "warehouse": "{{workspace}} não tem warehouses.",
+        "sqldatabase": "{{workspace}} não tem bancos de dados SQL.",
+        "lakehouse": "{{workspace}} não tem lakehouses."
+      }
+    },
+    "pickHint": "Escolha dados de um ou mais workspaces.",
+    "add": "Adicionar ao chat",
+    "errors": {
+      "workspaces": "Não foi possível listar seus workspaces.",
+      "workspacesRetry": "Não foi possível listar seus workspaces. Tente novamente.",
+      "data": "Não foi possível listar os dados deste workspace.",
+      "dataRetry": "Não foi possível listar os dados deste workspace. Tente novamente.",
+      "signIn": "A entrada no Fabric não foi concluída. Tente novamente."
+    }
+  }
+}

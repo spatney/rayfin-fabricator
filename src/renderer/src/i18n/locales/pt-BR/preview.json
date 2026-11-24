@@ -1,0 +1,321 @@
+{
+  "localState": {
+    "starting": "Iniciando…",
+    "restarting": "Reiniciando…",
+    "running": "Em execução",
+    "stopped": "Parado",
+    "runningProblems_one": "Em execução · {{count}} problema",
+    "runningProblems_other": "Em execução · {{count}} problemas"
+  },
+  "runningProblem": {
+    "analysis": "Não foi possível ler a última alteração do modelo de dados do seu aplicativo, então ele continua usando o modelo de dados anterior.",
+    "schema": "Não foi possível aplicar a última alteração do modelo de dados do seu aplicativo ao banco de dados local, então ele continua usando o modelo de dados anterior.",
+    "functions": "As funções do seu aplicativo não foram compiladas, então chamá-las falha ou executa a versão compilada anterior.",
+    "vite": "O servidor de desenvolvimento Vite do seu aplicativo parou e não pôde ser reiniciado, então a visualização não consegue mostrar o aplicativo."
+  },
+  "fallback": {
+    "published": {
+      "newerVersion": "Este aplicativo usa o Rayfin {{version}}, que é mais recente que as versões do Rayfin que o Fabricator executa neste computador e não pôde ser iniciado aqui, então a visualização usa o back-end do seu aplicativo publicado.",
+      "newer": "A versão mais nova do Rayfin que este aplicativo usa não pôde ser iniciada neste computador, então a visualização usa o back-end do seu aplicativo publicado.",
+      "oldVersion": "Este aplicativo usa o Rayfin {{version}}, que o Fabricator não consegue executar neste computador, então a visualização usa o back-end do seu aplicativo publicado.",
+      "old": "A versão do Rayfin que este aplicativo usa não pode ser executada neste computador, então a visualização usa o back-end do seu aplicativo publicado.",
+      "connector": "O conector {{name}} só é executado no Fabric, então a visualização usa o back-end do seu aplicativo publicado.",
+      "connectors": "Os conectores {{names}} só são executados no Fabric, então a visualização usa o back-end do seu aplicativo publicado."
+    },
+    "team": {
+      "newerVersion": "Este aplicativo usa o Rayfin {{version}}, que é mais recente que as versões do Rayfin que o Fabricator executa neste computador e não pôde ser iniciado aqui, então a visualização usa a implantação da equipe no Fabric.",
+      "newer": "A versão mais nova do Rayfin que este aplicativo usa não pôde ser iniciada neste computador, então a visualização usa a implantação da equipe no Fabric.",
+      "oldVersion": "Este aplicativo usa o Rayfin {{version}}, que o Fabricator não consegue executar neste computador, então a visualização usa a implantação da equipe no Fabric.",
+      "old": "A versão do Rayfin que este aplicativo usa não pode ser executada neste computador, então a visualização usa a implantação da equipe no Fabric.",
+      "connector": "O conector {{name}} só é executado no Fabric, então a visualização usa a implantação da equipe no Fabric.",
+      "connectors": "Os conectores {{names}} só são executados no Fabric, então a visualização usa a implantação da equipe no Fabric."
+    }
+  },
+  "sdkWarning": {
+    "newerVersion": "Este aplicativo usa o Rayfin {{version}}, que é mais recente que as versões do Rayfin que o Fabricator executa neste computador, então algumas coisas podem não funcionar como esperado.",
+    "newer": "Este aplicativo usa uma versão do Rayfin mais recente que as que o Fabricator executa neste computador, então algumas coisas podem não funcionar como esperado.",
+    "olderVersion": "Este aplicativo usa o Rayfin {{version}}, que não é uma das versões do Rayfin que o Fabricator executa neste computador, então algumas coisas podem não funcionar como esperado.",
+    "older": "A versão do Rayfin que este aplicativo usa não é uma das que o Fabricator executa neste computador, então algumas coisas podem não funcionar como esperado."
+  },
+  "problem": {
+    "couldntStart": "Não foi possível iniciar seu aplicativo neste computador",
+    "stopped": "O back-end local dele parou.",
+    "schemaRefused": {
+      "title": "Esta alteração excluiria dados locais",
+      "message": "O modelo de dados mudou de um jeito que exclui dados armazenados neste computador, então seu aplicativo aguarda sua decisão."
+    },
+    "packagesMissing": {
+      "title": "Os pacotes do seu aplicativo não estão instalados",
+      "hint": "Instale-os e o Fabricator vai iniciar seu aplicativo novamente."
+    },
+    "nodeMissing": {
+      "title": "O Node.js não está instalado",
+      "message": "Seu aplicativo é executado no Node.js, e o Fabricator não o encontrou neste computador.",
+      "hint": "Configure-o e tente novamente."
+    },
+    "nodeTooOld": {
+      "title": "O Node.js precisa ser atualizado",
+      "messageVersion": "Seu aplicativo precisa do Node.js 20 ou posterior, e este computador tem a versão {{version}}.",
+      "message": "Seu aplicativo precisa do Node.js 20 ou posterior.",
+      "hint": "Atualize-o e tente novamente."
+    },
+    "alreadyServing": {
+      "title": "Este aplicativo já está em execução",
+      "messagePid": "Outro programa está executando este aplicativo neste computador (processo {{pid}}), como o rayfin-local em um terminal.",
+      "message": "Outro programa está executando este aplicativo neste computador, como o rayfin-local em um terminal.",
+      "hint": "Pare esse programa e o Fabricator vai executar seu aplicativo aqui."
+    },
+    "crashed": "Seu aplicativo continua parando"
+  },
+  "starting": {
+    "restarted": "O aplicativo parou inesperadamente, então o Fabricator está reiniciando-o.",
+    "analysis": "Lendo o modelo de dados do seu aplicativo",
+    "schema": "Atualizando o banco de dados",
+    "functions": "Compilando as funções",
+    "vite": "Iniciando o servidor de desenvolvimento",
+    "restarting": "Reiniciando o aplicativo neste computador",
+    "starting": "Preparando o aplicativo neste computador"
+  },
+  "seed": {
+    "row": "linha {{row}}",
+    "label": "Dados iniciais",
+    "problems_one": "Os dados iniciais têm {{count, number}} problema, por isso não foram carregados.",
+    "problems_other": "Os dados iniciais têm {{count, number}} problemas, por isso não foram carregados.",
+    "fixRequest": "Corrija os problemas dos dados iniciais",
+    "fix": "Corrigir com o Copilot",
+    "offer": "<b>Este aplicativo vem com dados iniciais</b> ({{amount}}). Os dados locais dele estão vazios: carregue os dados iniciais para começar com eles.",
+    "offerEmpty": "<b>Este aplicativo vem com dados iniciais</b>. Os dados locais dele estão vazios: carregue os dados iniciais para começar com eles.",
+    "rows_one": "{{count, number}} linha",
+    "rows_other": "{{count, number}} linhas",
+    "files_one": "{{count, number}} arquivo",
+    "files_other": "{{count, number}} arquivos",
+    "rowsAndFiles": "{{rows}} e {{files}}",
+    "load": "Carregar dados iniciais"
+  },
+  "notes": {
+    "backend": "Back-end da visualização",
+    "rayfinVersion": "Versão do Rayfin",
+    "schemaWaiting": "Alteração do modelo de dados pendente",
+    "schemaWaitingText": "<b>Há uma alteração do modelo de dados pendente.</b> Ela excluiria dados armazenados neste computador, então seu aplicativo continua usando o modelo de dados anterior."
+  },
+  "output": {
+    "running": "Seu aplicativo está em execução neste computador, com back-end e dados próprios.",
+    "starting": "Seu aplicativo está sendo iniciado neste computador.",
+    "couldntStart": "Não foi possível iniciar seu aplicativo neste computador.",
+    "notRunning": "Seu aplicativo não está em execução neste computador.",
+    "problems_one": "{{count}} problema",
+    "problems_other": "{{count}} problemas",
+    "label": "Saída: {{state}}",
+    "show": "{{explanation}} Selecione para ver a saída.",
+    "hide": "{{explanation}} Selecione para ocultar a saída."
+  },
+  "info": {
+    "label": "Sobre Local e Publicado",
+    "freshTitle": "{{name}} agora é executado neste computador, com dados próprios. Selecione para saber mais.",
+    "title": "{{name}} é executado em dois lugares",
+    "local": "<b>Local</b> é seu aplicativo neste computador, com dados próprios, separados dos dados do aplicativo publicado. As alterações do Copilot aparecem aqui primeiro.",
+    "localEmpty": "<b>Local</b> é seu aplicativo neste computador, com dados próprios, separados dos dados do aplicativo publicado. Esses dados começam vazios. As alterações do Copilot aparecem aqui primeiro.",
+    "publishedTeam": "<b>Publicado</b> é o aplicativo que sua equipe usa no Microsoft Fabric, com os dados dele. Suas alterações chegam a ele quando você as publica.",
+    "published": "<b>Publicado</b> é seu aplicativo no Microsoft Fabric, com os dados dele. Suas alterações chegam a ele quando você as publica."
+  },
+  "statePanel": {
+    "viewOutput": "Ver saída",
+    "noPages": "{{name}} não tem páginas para mostrar. O back-end dele está em execução em {{url}}.",
+    "notRunning": "{{name}} não está em execução neste computador.",
+    "start": "Iniciar",
+    "starting": "Iniciando…",
+    "installing": "Instalando…",
+    "install": "Instalar dependências",
+    "stopping": "Parando…",
+    "stopOther": "Parar o outro",
+    "setUpNode": "Configurar o Node.js",
+    "allowHelp": "Saiba como permitir",
+    "whyTitle": "Abrir a Ajuda, que lê o que aconteceu e explica para você",
+    "why": "Descobrir o motivo"
+  },
+  "schema": {
+    "title": "Esta alteração excluiria dados locais",
+    "lead": "O modelo de dados de <b>{{name}}</b> mudou. Aplicar a alteração exclui estes dados, armazenados neste computador:",
+    "deletes": "Dados que a alteração exclui",
+    "unknown": "Não se sabe quais dados ela exclui.",
+    "choices": {
+      "default": "<b>Excluir estes dados e aplicar</b> exclui apenas o que está listado. <b>Redefinir dados locais</b> exclui todos os dados locais do aplicativo, os usuários de teste e os arquivos e depois aplica a alteração. <b>Manter a versão atual</b> mantém seus dados e o modelo de dados que você tem agora.",
+      "atStart": "<b>Excluir estes dados e aplicar</b> exclui apenas o que está listado. <b>Redefinir dados locais</b> exclui todos os dados locais do aplicativo, os usuários de teste e os arquivos e depois aplica a alteração. <b>Manter a versão atual</b> mantém seus dados e o modelo de dados que você tem agora, e o aplicativo não é iniciado até você escolher.",
+      "published": "<b>Excluir estes dados e aplicar</b> exclui apenas o que está listado. <b>Redefinir dados locais</b> exclui todos os dados locais do aplicativo, os usuários de teste e os arquivos e depois aplica a alteração. <b>Manter a versão atual</b> mantém seus dados e o modelo de dados que você tem agora. Seu aplicativo publicado e os dados dele não são afetados.",
+      "atStartPublished": "<b>Excluir estes dados e aplicar</b> exclui apenas o que está listado. <b>Redefinir dados locais</b> exclui todos os dados locais do aplicativo, os usuários de teste e os arquivos e depois aplica a alteração. <b>Manter a versão atual</b> mantém seus dados e o modelo de dados que você tem agora, e o aplicativo não é iniciado até você escolher. Seu aplicativo publicado e os dados dele não são afetados."
+    },
+    "keep": "Manter a versão atual",
+    "resetting": "Redefinindo…",
+    "reset": "Redefinir dados locais",
+    "applying": "Aplicando…",
+    "apply": "Excluir estes dados e aplicar",
+    "review": "Revisar a alteração"
+  },
+  "rayfinWarning": {
+    "prerelease": "Ainda não é a versão oficial mais recente do Rayfin, então pode ser instável.",
+    "unsupported": "O Fabricator ainda não executa essa versão neste computador, então algumas coisas podem não funcionar como esperado aqui."
+  },
+  "devices": {
+    "desktop": "Desktop",
+    "tablet": "Tablet",
+    "phone": "Celular"
+  },
+  "port": {
+    "anApp": "um aplicativo",
+    "holder": {
+      "backend": "<b>{{name}}</b>, outro aplicativo em execução neste computador, está usando esse endereço.",
+      "preview": "A visualização ao vivo de <b>{{name}}</b> está usando esse endereço enquanto o Copilot trabalha nesse aplicativo.",
+      "earlierPreview": "Uma visualização anterior de <b>{{name}}</b> ainda está em execução e usando esse endereço.",
+      "appPreview": "Uma visualização de <b>{{name}}</b> está usando esse endereço.",
+      "devServerFor": "Um servidor de desenvolvimento de <b>{{name}}</b> está usando esse endereço.",
+      "devServer": "Um servidor de desenvolvimento está usando esse endereço.",
+      "program": "<b>{{name}}</b>, outro programa neste computador, está usando esse endereço.",
+      "unknown": "Outro programa neste computador está usando esse endereço, e o Fabricator não consegue identificar qual."
+    },
+    "stop": {
+      "named": "Parar {{name}}",
+      "appWorking": "O Copilot está trabalhando em {{name}} agora. O aplicativo volta a ser iniciado quando você o abrir.",
+      "appIdle": "Ele volta a ser iniciado quando você o abrir.",
+      "earlierPreview": "Parar a visualização anterior",
+      "preview": "Parar essa visualização",
+      "previewDetail": "Nada é perdido: é só uma visualização.",
+      "devServer": "Parar o servidor de desenvolvimento",
+      "devServerDetail": "Nada é perdido: você pode iniciá-lo novamente mais tarde.",
+      "programDetail": "Tudo o que não foi salvo em {{name}} será perdido.",
+      "unknown": "Parar esse programa",
+      "unknownDetail": "Tudo o que não foi salvo nele será perdido."
+    },
+    "recommended": "Recomendado",
+    "stopping": "Parando…",
+    "use": "Usar localhost:{{port}} em vez disso",
+    "useDetailPush": "Adiciona esse endereço às configurações de entrada do seu aplicativo e as atualiza no Fabric. Leva um momento.",
+    "useDetail": "Adiciona esse endereço às configurações de entrada do seu aplicativo. A entrada nesse endereço funciona depois que você publicar.",
+    "updatingSignIn": "Atualizando suas configurações de entrada…",
+    "updatingYml": "Atualizando o rayfin.yml…",
+    "title": "Sua visualização ao vivo precisa de localhost:{{port}}",
+    "sub": "É o endereço em que a entrada no seu aplicativo funciona.",
+    "useLater": "Usar localhost:{{port}} em vez disso atualiza as configurações de entrada do seu aplicativo no Fabric, o que não é possível enquanto o Copilot está trabalhando. Pule por enquanto para escolher essa opção com sua próxima mensagem.",
+    "log": "Log de registro da porta",
+    "technical": "Detalhes técnicos",
+    "program": "Programa",
+    "command": "Comando",
+    "process": "{{name}} (PID {{pid}})",
+    "skip": "Pular visualização ao vivo",
+    "skipTitle": "O Copilot continua trabalhando, e a visualização mostra seu aplicativo publicado."
+  },
+  "previewAs": {
+    "title": "Visualizar como",
+    "label": "Visualizar como: {{label}}",
+    "sub": "Com qual conta o aplicativo entra neste computador",
+    "you": "Você",
+    "youTip": "Sua conta do Microsoft Entra se você estiver conectado ao Azure; caso contrário, uma conta local de desenvolvedor",
+    "signedOut": "Desconectado",
+    "noOne": "Nenhum usuário conectado",
+    "testUser": "Usuário de teste",
+    "testUsers": "Usuários de teste",
+    "whoTitle": {
+      "you": "A visualização está conectada como você. Escolha com qual conta ela entra.",
+      "signedOut": "A visualização não está conectada. Escolha com qual conta ela entra.",
+      "user": "A visualização está conectada como {{name}}. Escolha com qual conta ela entra."
+    },
+    "chooseTitle": "Escolha com qual conta o aplicativo entra na visualização.",
+    "couldntSwitch": "Não foi possível trocar a conta com que a visualização entra: {{message}}",
+    "reload": {
+      "you": "Recarregue a visualização para ver o aplicativo como você.",
+      "signedOut": "Recarregue a visualização para ver o aplicativo desconectado.",
+      "user": "Recarregue a visualização para ver o aplicativo como {{name}}."
+    },
+    "progress": {
+      "reloading": "Recarregando a visualização…",
+      "signingOut": "Saindo…",
+      "adding": "Adicionando {{name}}…",
+      "signingInYou": "Entrando como você…",
+      "signingIn": "Entrando como {{name}}…"
+    },
+    "account": {
+      "unknown": "Sua conta do Microsoft Entra ou uma conta local",
+      "entra": "{{name}} · Microsoft Entra ID",
+      "local": "{{name}} · conta local"
+    },
+    "email": {
+      "label": "Email do usuário de teste",
+      "empty": "Insira um endereço de email.",
+      "invalid": "Insira um endereço de email, como ana@example.com.",
+      "yours": "Essa é a sua própria conta. Escolha a opção Você.",
+      "exists": "{{name}} já é um usuário de teste."
+    },
+    "addUser": "Adicionar usuário de teste…",
+    "addForm": "Adicionar um usuário de teste",
+    "adding": "Adicionando…",
+    "hint": "Usuários de teste não têm senha: eles entram aqui, pelo menu Visualizar como.",
+    "note": "A troca limpa o armazenamento do navegador da visualização e a recarrega."
+  },
+  "pane": {
+    "status": {
+      "publishing": "Publicando…",
+      "published": "Publicado",
+      "failed": "Falha ao publicar",
+      "notPublished": "Não publicado",
+      "updating": "Publicado · atualizando",
+      "title": "Mostrando o aplicativo publicado: o que todos da equipe veem."
+    },
+    "fabric": {
+      "unavailable": "A exibição no portal do Fabric não está disponível para este aplicativo publicado",
+      "local": "A exibição no portal do Fabric mostra seu aplicativo publicado, não esta visualização no seu computador",
+      "exit": "Exibindo dentro do portal do Fabric — clique para voltar à exibição direta do aplicativo",
+      "enter": "Exibir o aplicativo dentro do portal do Fabric, onde ele funciona por completo"
+    },
+    "forward": "Avançar",
+    "reload": "Recarregar",
+    "views": {
+      "label": "Aplicativo exibido",
+      "local": "Local",
+      "localTitle": "Seu aplicativo neste computador, com os dados locais",
+      "published": "Publicado",
+      "publishedTitle": "Seu aplicativo publicado no Microsoft Fabric, com os dados dele"
+    },
+    "data": {
+      "published": "Dados publicados",
+      "publishedTitle": "Ele usa os dados do aplicativo publicado, então as alterações que você fizer nele são reais.",
+      "none": "Ainda sem dados",
+      "noneTitle": "Nada foi publicado ainda, então ele é executado sem dados."
+    },
+    "url": {
+      "local": "Seu aplicativo, em execução neste computador em {{url}}, com back-end e dados locais próprios: as alterações do Copilot aparecem aqui à medida que ele as faz. Clique para abri-lo no navegador.",
+      "teamPublishedData": "Seu aplicativo, em execução neste computador em {{url}} com a implantação da equipe no Fabric: as alterações do Copilot aparecem aqui à medida que ele as faz. Ele usa os dados do aplicativo publicado, então as alterações que você fizer nele são reais. Clique para abri-lo no navegador.",
+      "teamNoData": "Seu aplicativo, em execução neste computador em {{url}} com a implantação da equipe no Fabric: as alterações do Copilot aparecem aqui à medida que ele as faz. Nada foi publicado ainda, então ele é executado sem dados. Clique para abri-lo no navegador.",
+      "teamOwnData": "Seu aplicativo, em execução neste computador em {{url}} com a implantação da equipe no Fabric: as alterações do Copilot aparecem aqui à medida que ele as faz. Ele usa os dados da sua visualização. Clique para abri-lo no navegador.",
+      "manual": "Seu aplicativo, em execução neste computador em {{url}} com o back-end do seu aplicativo publicado. Enquanto os turnos do chat não publicarem, ele mostra suas alterações mais recentes sempre que o aplicativo estiver aberto. Clique para abri-lo no navegador.",
+      "published": "Seu aplicativo, em execução neste computador em {{url}} com o back-end do seu aplicativo publicado enquanto o Copilot trabalha, para que as alterações dele apareçam à medida que ele as faz. Clique para abri-lo no navegador."
+    },
+    "device": {
+      "label": "Largura da visualização",
+      "width": "Largura: {{device}}",
+      "fixed": "{{device}} — {{width}} px de largura",
+      "fill": "{{device}} — preencher o painel"
+    },
+    "pick": {
+      "publishing": "{{feature}} volta a funcionar quando a publicação terminar.",
+      "waiting": "{{feature}} funciona quando seu aplicativo aparecer aqui."
+    },
+    "focus": {
+      "exit": "Sair do foco",
+      "enter": "Foco",
+      "exitTitle": "Sair do foco — mostrar o chat novamente",
+      "enterTitle": "Focar na visualização — ocultar o chat"
+    },
+    "publishUnfinished": "A publicação não foi concluída.",
+    "workspace": {
+      "title": "Escolha onde publicar",
+      "text": "<b>{{name}}</b> ainda não foi publicado. Selecione <b>Publicar</b> no cabeçalho acima para dar um nome a ele e escolher o workspace do Fabric em que ele será publicado."
+    },
+    "empty": {
+      "teamFailed": "O pipeline da equipe não conseguiu publicar esta versão. Abra o menu da equipe no cabeçalho para ver o que aconteceu.",
+      "region": "Escolha um workspace em uma capacidade de outra região e publique novamente.",
+      "failed": "Revise o erro e os logs acima e publique novamente.",
+      "team": "O aplicativo publicado aparece aqui quando sua equipe o publicar.",
+      "local": "Seu aplicativo publicado aparece aqui quando você o publicar.",
+      "default": "Seu aplicativo publicado será exibido aqui após um <code>rayfin up</code> completo. Peça ao Copilot para criar algo ou selecione <b>Publicar</b>."
+    }
+  }
+}

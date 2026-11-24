@@ -1,0 +1,154 @@
+{
+  "effort": {
+    "none": {
+      "label": "Nenhum",
+      "hint": "Responde sem raciocínio adicional."
+    },
+    "low": {
+      "label": "Baixo",
+      "hint": "Rápido — bom para alterações pequenas e claras."
+    },
+    "medium": {
+      "label": "Médio",
+      "hint": "Equilíbrio entre velocidade e cuidado."
+    },
+    "high": {
+      "label": "Alto",
+      "hint": "Pensa por mais tempo — bom para alterações complicadas."
+    },
+    "xhigh": {
+      "label": "Muito alto",
+      "hint": "Pensa muito mais em problemas difíceis."
+    },
+    "max": {
+      "label": "Máximo",
+      "hint": "O máximo de raciocínio — o mais lento, para o trabalho mais difícil."
+    }
+  },
+  "context": {
+    "standard": "Padrão",
+    "long": "Longa"
+  },
+  "picker": {
+    "model": "Modelo",
+    "auto": "Auto",
+    "autoHint": "O Copilot escolhe o modelo para cada solicitação.",
+    "autoHintFusion": "O Copilot escolhe os modelos para cada solicitação.",
+    "effort": "Esforço",
+    "optimizedFor": "Otimizado para",
+    "contextWindow": "Janela de contexto",
+    "default": "Padrão",
+    "models": "Modelos",
+    "search": "Pesquisar modelos",
+    "missing": "Não está mais disponível. Escolha outro modelo.",
+    "runsOnKey": "Usa sua chave de API de {{provider}}",
+    "fast": "Rápido",
+    "yourKeys": "Seus modelos",
+    "addKeyModels": "Adicionar seus próprios modelos…",
+    "more": "Mais modelos",
+    "loading": "Carregando modelos…",
+    "loadFailed": "Não foi possível carregar os modelos. Feche e abra novamente para tentar outra vez.",
+    "noMatch": "Nenhum modelo corresponde a “{{query}}”",
+    "tokens": "{{tokens}} tokens",
+    "longWindow": "Com uma janela longa, o modelo vê mais do seu aplicativo e da conversa.",
+    "fusionNote": "Os níveis High e Max podem usar mais de um modelo, como um para revisar o trabalho de outro, então uma solicitação pode demorar e custar mais.",
+    "fusionDocs": "Saiba mais sobre o Copilot Fusion",
+    "busy": "Não é possível trocar o modelo enquanto o assistente está trabalhando",
+    "pill": "{{label}}: {{choice}}",
+    "pillOnKey": "{{label}}: {{choice}} — com sua chave de API de {{provider}}",
+    "manageKeys": "Gerenciar provedores de modelos…",
+    "runsOnServer": "Executado no {{provider}}",
+    "pillOnServer": "{{label}}: {{choice}} — no {{provider}}",
+    "yourServer": "Seu servidor",
+    "ownOnly": "Você não está conectado ao GitHub Copilot, então os chats usam seus próprios modelos."
+  },
+  "providers": {
+    "state": {
+      "ok": "Chave salva",
+      "off": "Sem chave",
+      "error": "Requer atenção"
+    },
+    "serverState": {
+      "ok": "Conectado",
+      "off": "Não configurado"
+    },
+    "errors": {
+      "read": "Não foi possível ler seus provedores de modelos.",
+      "generic": "Não funcionou. Tente novamente.",
+      "saveModels": "Não foi possível salvar sua escolha de modelos."
+    },
+    "title": "Provedores de modelos",
+    "sub": "Use mais modelos no chat da guia Criar, no Consultor e em “Apontar e editar”: desses provedores, com suas próprias chaves de API, que cobram de você pelo uso, ou do Ollama e de outros servidores que você executa. Você não precisa do GitHub Copilot para usá-los.",
+    "unsupported": "O Fabricator ainda não consegue guardar chaves de API com segurança neste sistema operacional.",
+    "purpose": "{{description}}, cobrados na sua conta {{name}}.",
+    "addKeyLabel": "Adicionar sua chave de API de {{name}}",
+    "addKey": "Adicionar chave",
+    "apiKey": "Chave de API",
+    "savedIn": "Salva no {{store}}",
+    "confirmRemove": "Remover sua chave de {{name}}?",
+    "checkTitle": "Verificar a chave com {{name}} novamente e atualizar os modelos",
+    "checkAgain": "Verificar novamente",
+    "replace": "Substituir",
+    "removeLabel": "Remover sua chave de API de {{name}}",
+    "removing": "Removendo…",
+    "inPickers": "Nos seletores de modelo",
+    "enabledCount": "{{enabled}} de {{total}}",
+    "pickerList": "Modelos de {{name}} nos seletores de modelo",
+    "images": "imagens",
+    "recommended": "Recomendado",
+    "retiringTitle": "{{name}} vai desativar este modelo",
+    "retiring": "Será desativado",
+    "showAll": "Mostrar todos os {{total}} modelos",
+    "keyLabel": "Chave de API de {{name}}",
+    "newKeyLabel": "Nova chave de API de {{name}}",
+    "keyHint": "O Fabricator a verifica com {{name}} e depois a guarda no {{store}} neste computador.",
+    "getKey": "Obter uma chave",
+    "replaceKey": "Substituir chave",
+    "saveKey": "Salvar chave",
+    "purposeLocal": "{{description}}. Eles são executados no seu próprio hardware, sem custo por uso.",
+    "purposeServer": "{{description}}.",
+    "connect": "Conectar",
+    "connectLabel": "Conectar {{name}}",
+    "addressLabel": "Endereço do {{name}}",
+    "optionalKey": "Chave de API (opcional)",
+    "ollamaHint": "O endereço do Ollama neste computador é http://localhost:11434. O Fabricator lista os modelos que você baixou e que podem chamar ferramentas.",
+    "ollamaContext": "O agente do Fabricator precisa de um comprimento de contexto de pelo menos 64k. Defina “Context length” como 64k ou mais nas configurações do Ollama.",
+    "serverHint": "O endereço da API compatível com OpenAI do servidor, como http://localhost:1234/v1 para o LM Studio. A chave que você adicionar fica guardada no {{store}}.",
+    "serverHintAgain": "O endereço da API compatível com OpenAI do servidor. Insira a chave de API dele novamente, se ele precisar de uma. Ela fica guardada no {{store}}.",
+    "getOllama": "Obter o Ollama",
+    "change": "Alterar",
+    "removeServerLabel": "Remover {{name}}",
+    "confirmRemoveServer": "Remover {{name}} e os modelos dele?",
+    "keySavedIn": "Chave de API salva no {{store}}",
+    "noKeyUsed": "Sem chave de API",
+    "checkServerTitle": "Verificar {{name}} novamente e atualizar os modelos",
+    "filterLabel": "Localizar um modelo de {{name}}",
+    "filterPlaceholder": "Localizar um modelo",
+    "noMatches": "Nenhum modelo encontrado."
+  },
+  "chatDefaults": {
+    "title": "Padrões do chat",
+    "close": "Fechar os padrões do chat",
+    "sub": "O chat de um novo projeto começa com estes padrões. Depois disso, o chat de cada projeto mantém os seus, que você altera no próprio chat.",
+    "model": "Modelo",
+    "modelHint": "No modo Auto, o Copilot escolhe um modelo para cada solicitação.",
+    "defaultModel": "Modelo padrão",
+    "plugins": "Plug-ins",
+    "mcpServers": "Servidores MCP",
+    "noServers": "Nenhum servidor MCP ainda",
+    "noServersHint": "Adicione os servidores MCP que o chat pode usar e escolha com quais os novos chats começam.",
+    "manageServers": "Gerenciar servidores MCP"
+  },
+  "instructions": {
+    "title": "Instruções personalizadas",
+    "close": "Fechar as instruções personalizadas",
+    "sub": "Diga ao Copilot o que você quer em todos os aplicativos que criar, como um tema, um estilo de texto ou um layout. O chat de cada aplicativo as segue a partir da próxima mensagem, e o que você pedir no chat tem prioridade. Elas ficam no Fabricator: não são salvas nos seus aplicativos.",
+    "label": "Instruções",
+    "hint": "Seja breve: o Copilot as lê a cada mensagem.",
+    "examples": {
+      "theme": "Use o tema claro ou escuro do sistema por padrão.",
+      "case": "Use maiúscula apenas na primeira palavra de títulos, rótulos e botões.",
+      "dates": "Mostre as datas como 5 de mar. de 2026."
+    }
+  }
+}

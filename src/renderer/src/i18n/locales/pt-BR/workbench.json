@@ -1,0 +1,167 @@
+{
+  "preview": {
+    "title": "Visualização local",
+    "updateFailed": "Não foi possível atualizar a visualização local.",
+    "stopped": "A visualização local parou.",
+    "stoppedTitle": "Visualização local interrompida",
+    "startFailed": "Não foi possível iniciar o servidor Vite local.",
+    "startFailedTitle": "Falha na visualização local"
+  },
+  "remove": {
+    "trashedAndAppDeleted": "A pasta do projeto está na lixeira do sistema, e o aplicativo publicado foi excluído.",
+    "trashed": "A pasta do projeto está na lixeira do sistema. Você pode restaurá-la de lá.",
+    "removed": "{{name}} removido",
+    "failed": "Não foi possível remover {{name}}"
+  },
+  "publish": {
+    "closedBeforeStart": "O projeto foi fechado antes de a publicação começar.",
+    "waitForAuth": "Aguarde a autenticação do Fabric terminar e publique novamente.",
+    "paused": "Publicação pausada",
+    "didNotFinishRetry": "A publicação não foi concluída. Tente novamente.",
+    "signInFirst": "Entre no Fabric antes de publicar novamente.",
+    "didNotFinish": "A publicação não foi concluída.",
+    "failedTitle": "Não foi possível publicar",
+    "refreshFailed": "Não foi possível atualizar o projeto após a publicação.",
+    "waitForTurn": "O Copilot ainda está trabalhando neste aplicativo. Publique-o quando o turno terminar.",
+    "waitForTurnTitle": "A publicação aguarda o Copilot"
+  },
+  "team": {
+    "unpublished": "{{name}} tem alterações não publicadas. Elas estão salvas no GitHub; publique-as quando quiser.",
+    "notPublished": "Ainda não publicado",
+    "notOnGitHub": "Ainda não está no GitHub",
+    "savingToGitHub": "Salvando no GitHub — o envio será retomado em instantes",
+    "moveFailed": "Não foi possível mover o projeto.",
+    "moved": "{{name}} agora está no workspace de equipe.",
+    "movedTitle": "Movido"
+  },
+  "auth": {
+    "verifyFailedTitle": "Falha ao verificar a entrada",
+    "fabricSignInFailed": "A entrada no Fabric não foi concluída. Tente novamente.",
+    "fabricSignOutFailed": "A saída do Fabric não foi concluída. Tente novamente.",
+    "signOutFailedTitle": "Falha ao sair",
+    "signInFailedTitle": "Falha ao entrar"
+  },
+  "project": {
+    "refreshFailedTitle": "Falha ao atualizar o projeto",
+    "beingRemoved": "{{name}} está sendo removido.",
+    "pinFailed": "Não foi possível fixar {{name}}.",
+    "unpinFailed": "Não foi possível desafixar {{name}}.",
+    "revealFailed": "Não foi possível mostrar a pasta de {{name}}.",
+    "openFolderFailed": "Não foi possível abrir essa pasta.",
+    "openFileFailed": "Não foi possível abrir esse arquivo.",
+    "importedWhere": "Está em {{path}}.",
+    "imported": "{{name}} importado",
+    "renameFailed": "Não foi possível renomear o projeto.",
+    "renameFailedRetry": "Não foi possível renomear o projeto. Tente novamente.",
+    "gone": "Esse projeto não está mais no Fabricator."
+  },
+  "port": {
+    "skipped": "localhost:{{port}} está em uso, então este turno mostra seu aplicativo publicado. O Fabricator vai perguntar novamente na sua próxima mensagem.",
+    "skippedTitle": "Visualização ao vivo ignorada",
+    "registerFailed": "Não foi possível registrar a porta.",
+    "stillInUse": "localhost:{{port}} ainda está em uso. Tente novamente ou use outro endereço.",
+    "stopFailed": "Não foi possível parar isso."
+  },
+  "packages": {
+    "installing": "Instalando os pacotes e reiniciando seu aplicativo…",
+    "changedTitle": "Os pacotes do seu aplicativo mudaram",
+    "installed": "Seu aplicativo já está usando os novos pacotes.",
+    "installedTitle": "Pacotes instalados",
+    "failedTitle": "Não foi possível instalar os pacotes do seu aplicativo"
+  },
+  "turn": {
+    "refreshFailed": "Não foi possível atualizar o projeto após as alterações no código.",
+    "saveChatFailed": "Não foi possível salvar a conversa.",
+    "saveChatFailedTitle": "Falha ao salvar o histórico do chat",
+    "versionCheckFailed": "Não foi possível verificar a versão do Rayfin.",
+    "versionCheckFailedTitle": "Falha ao verificar a versão",
+    "changesCheckFailed": "Não foi possível verificar se há alterações para publicar.",
+    "autoPublishCheckFailed": "{{error}} Selecione Publicar para publicar suas alterações.",
+    "autoPublishFailedTitle": "Não foi possível publicar automaticamente"
+  },
+  "rayfin": {
+    "updateTo": "Atualizar o Rayfin para {{version}}",
+    "noUpdate": "O Fabricator não encontrou nenhuma atualização do Rayfin para {{name}} no momento."
+  },
+  "authRefresh": {
+    "busy": "Aguarde a publicação ou a entrada atual terminar e tente novamente.",
+    "failed": "Não foi possível atualizar a autenticação do Fabric. Tente novamente.",
+    "verified": "A autenticação do Fabric foi verificada. Publique novamente para tentar de novo.",
+    "verifiedTitle": "Autenticação do Fabric atualizada",
+    "title": "Atualizar a autenticação do Fabric",
+    "confirm": "Limpar credenciais e entrar",
+    "busyLabel": "Atualizando a autenticação…",
+    "message": "Isto executa <code>rayfin logout</code> e <code>rayfin login</code> com a CLI de <strong>{{name}}</strong> e depois verifica a nova credencial do Fabric. Assim, o Rayfin pode liberar bloqueios obsoletos do cache de tokens e substituir credenciais expiradas.",
+    "shared": "As credenciais da CLI do Rayfin são compartilhadas entre projetos. Isso não desconecta você do Copilot, da Azure CLI nem do navegador da visualização, e não publica seu aplicativo novamente. Atualize projetos mais antigos para o Rayfin 1.35.1 ou posterior com o controle de versão do Rayfin.",
+    "log": "Log da atualização da autenticação"
+  },
+  "diagnostics": {
+    "savedForReport": "Um arquivo de diagnóstico foi salvo e a pasta de logs foi aberta — anexe-o ao seu relatório de bug.",
+    "saved": "Um arquivo de diagnóstico foi salvo e a pasta de logs foi aberta.",
+    "exportedTitle": "Diagnóstico exportado",
+    "writeFailed": "Não foi possível gravar o arquivo de diagnóstico.",
+    "exportFailedTitle": "Não foi possível exportar o diagnóstico"
+  },
+  "migration": {
+    "title": "Migração de relatório",
+    "waitPublish": "Aguardando a publicação terminar.",
+    "waitSave": "Aguardando o salvamento no GitHub.",
+    "waitCopilot": "Aguardando o Copilot terminar.",
+    "waitDependencies": "Aguardando as dependências do aplicativo.",
+    "modelFailed": "Não foi possível definir o modelo do Copilot para a migração.",
+    "startFailed": "Não foi possível começar a migrar o relatório.",
+    "fromPowerBi": "Do Power BI"
+  },
+  "editor": {
+    "openedFolderInstead": "O VS Code não está instalado, então abrimos a pasta do projeto.",
+    "openFailed": "O Fabricator não conseguiu abrir o VS Code.",
+    "loading": "Carregando o editor…"
+  },
+  "appBar": {
+    "returnTo": "Voltar para {{name}}",
+    "returnToProjects": "Voltar para seus projetos",
+    "searchTitle": "Pesquise projetos, ações e documentação, ou pergunte à Ajuda ({{shortcut}})"
+  },
+  "divider": {
+    "label": "Redimensionar o chat e a visualização",
+    "title": "Arraste para redimensionar · clique duas vezes para redefinir"
+  },
+  "loading": {
+    "label": "Carregando o projeto",
+    "project": "Carregando {{name}}…"
+  },
+  "statusBar": {
+    "teamRepoBranch": "Workspace de equipe {{repo}}. Branch de trabalho: {{branch}}",
+    "teamRepoNoBranch": "Workspace de equipe {{repo}}. Branch de trabalho: nenhum",
+    "teamBranch": "Workspace de equipe. Branch de trabalho: {{branch}}",
+    "teamNoBranch": "Workspace de equipe. Branch de trabalho: nenhum",
+    "team": "Equipe",
+    "zoomTitle": "Zoom da interface — ajusta a escala de toda a interface (inclusive do Apontar e editar na visualização)",
+    "zoom": "Zoom da interface",
+    "version": "Versão do Rayfin Fabricator",
+    "terminalTitle": "Terminal — execute comandos na pasta de {{name}} ({{shortcut}})",
+    "terminal": "Terminal",
+    "running_one": "{{count}} em execução",
+    "running_other": "{{count}} em execução",
+    "helpTitle": "Pergunte à Ajuda — depure um erro, consulte a documentação ou relate um problema ({{shortcut}})",
+    "help": "Ajuda"
+  },
+  "export": {
+    "waitForTurn": "O Copilot ainda está trabalhando em {{name}}. Exporte-o quando o turno terminar.",
+    "waitForPublish": "{{name}} está sendo publicado. Exporte-o quando terminar."
+  },
+  "deployGuard": {
+    "title": "Há alterações que você precisa obter primeiro",
+    "getLatest": "Obter alterações primeiro",
+    "gettingLatest": "Obtendo alterações…",
+    "publishAnyway": "Publicar mesmo assim",
+    "pullFailed": "Não foi possível obter as alterações mais recentes.",
+    "message_one": "O repositório remoto tem <strong>{{count}} alteração</strong> que você ainda não baixou. Se publicar agora, sua versão atual será enviada sem ela.",
+    "message_other": "O repositório remoto tem <strong>{{count}} alterações</strong> que você ainda não baixou. Se publicar agora, sua versão atual será enviada sem elas."
+  },
+  "signOut": {
+    "label": "Saindo",
+    "title": "Saindo da sua conta…",
+    "detail": "Encerrando sua sessão do Fabric com segurança"
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "panel": {
+    "label": "Verificação de segurança",
+    "title": "Verificar riscos de segurança",
+    "sub": "O Copilot lê o código, sem executar nada, e diz o que esse código poderia fazer neste computador.",
+    "check": "Verificar",
+    "checking": "Verificando riscos de segurança…",
+    "elapsed": "Tempo decorrido",
+    "partial": "Algumas áreas não foram verificadas: {{error}}",
+    "found": "O que foi encontrado",
+    "steps_one": "{{count}} etapa",
+    "steps_other": "{{count}} etapas",
+    "checkAgain": "Verificar novamente"
+  },
+  "meta": {
+    "running": "Copilot (Auto)",
+    "checkedBy": "Verificado pelo Copilot (Auto)",
+    "files_one": "{{count}} arquivo",
+    "files_other": "{{count}} arquivos"
+  },
+  "live": {
+    "unpacking": "Descompactando, sem executar nada…",
+    "starting": "Iniciando o Copilot (Auto)…",
+    "thinking": "Pensando…"
+  },
+  "outcome": {
+    "stopped": "Verificação interrompida",
+    "stoppedFound_one": "Até ser interrompida, a verificação encontrou {{count}} ponto de atenção.",
+    "stoppedFound_other": "Até ser interrompida, a verificação encontrou {{count}} pontos de atenção.",
+    "stoppedNothing": "Até ser interrompida, a verificação não tinha encontrado nada.",
+    "fabricatorCouldnt": "O Fabricator não conseguiu verificá-lo",
+    "copilotCouldnt": "O Copilot não conseguiu verificá-lo",
+    "ownChecksFound_one": "As verificações do próprio Fabricator encontraram {{count}} ponto de atenção.",
+    "ownChecksFound_other": "As verificações do próprio Fabricator encontraram {{count}} pontos de atenção.",
+    "ownChecksNothing": "As verificações do próprio Fabricator não encontraram nada arriscado, mas elas não leem o código como o Copilot.",
+    "serious_one": "{{count}} risco grave encontrado",
+    "serious_other": "{{count}} riscos graves encontrados",
+    "advisesAgainst": "O Copilot não recomenda",
+    "found_one": "{{count}} ponto de atenção encontrado",
+    "found_other": "{{count}} pontos de atenção encontrados",
+    "worthALook": "Vale a pena revisar antes",
+    "clear": "Nenhum risco de segurança encontrado",
+    "clearToImport": "Nada nele parece arriscado para importar.",
+    "clearToInstall": "Nada nele parece arriscado para instalar."
+  },
+  "strip": {
+    "label": "O que é verificado",
+    "found_one": "{{count}} ponto de atenção",
+    "found_other": "{{count}} pontos de atenção",
+    "clear": "nada arriscado",
+    "medium": "vale a pena revisar",
+    "waiting": "ainda sem verificação",
+    "skipped": "sem verificação",
+    "tip": "{{about}}. {{note}}"
+  },
+  "areas": {
+    "install": {
+      "label": "Scripts de instalação",
+      "about": "O que o npm executa ao instalar os pacotes"
+    },
+    "packages": {
+      "label": "Pacotes",
+      "about": "De onde vêm os pacotes"
+    },
+    "network": {
+      "label": "Dados enviados",
+      "about": "O que é enviado e para onde"
+    },
+    "hidden": {
+      "label": "Código oculto",
+      "about": "Código escrito para esconder o que faz"
+    },
+    "system": {
+      "label": "Acesso ao sistema",
+      "about": "O que acessa recursos fora do aplicativo"
+    },
+    "agents": {
+      "label": "Instruções para o Copilot",
+      "about": "O que ele manda o Copilot fazer enquanto você cria"
+    }
+  },
+  "severity": {
+    "high": "Alta",
+    "medium": "Média",
+    "low": "Baixa",
+    "note": "Observação"
+  },
+  "finding": {
+    "assessment": "Segundo o Copilot:",
+    "alsoIn": "Também em",
+    "advice": "O que fazer:",
+    "byFabricator": "Encontrado pelas verificações do próprio Fabricator",
+    "byCopilot": "Encontrado pelo Copilot, citado do arquivo"
+  },
+  "steps": {
+    "label": "O que o Copilot leu"
+  },
+  "errors": {
+    "cantCheck": "O Fabricator não conseguiu verificar este arquivo."
+  }
+}

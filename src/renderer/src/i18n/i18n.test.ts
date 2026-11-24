@@ -192,6 +192,8 @@ describe('matchLanguage', () => {
     [['fr-FR', 'de-CH', 'ja'], 'de'],
     [['ja_JP'], 'ja'],
     [['EN-gb'], 'en'],
+    [['pt-BR'], 'pt-BR'],
+    [['fr', 'pt_PT'], 'pt-BR'],
     [['fr', 'it'], undefined],
     [[], undefined]
   ])('matches %j to %s', (tags, language) => {
@@ -229,10 +231,12 @@ describe('switching language', () => {
   })
 
   it('formats in the computer’s region of the interface’s language', async () => {
-    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-GB', 'de-AT'])
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-GB', 'de-AT', 'pt-PT'])
     expect(formatLocale()).toBe('en-GB')
     await setLanguage('de')
     expect(formatLocale()).toBe('de-AT')
+    await setLanguage('pt-BR')
+    expect(formatLocale()).toBe('pt-PT')
     await setLanguage('ja')
     expect(formatLocale()).toBe('ja')
   })

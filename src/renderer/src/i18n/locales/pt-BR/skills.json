@@ -1,0 +1,150 @@
+{
+  "filters": {
+    "all": "Todas",
+    "on": "Ativadas",
+    "off": "Desativadas"
+  },
+  "groups": {
+    "alwaysOn": "Sempre ativadas",
+    "alwaysOnHint": "Orientações essenciais gerenciadas pelo Rayfin.",
+    "library": "Sua biblioteca de habilidades",
+    "libraryHint": "Suas habilidades reutilizáveis. Ao ativar uma, ela é copiada para este aplicativo.",
+    "app": "Adicionadas neste aplicativo",
+    "appHint": "Habilidades que existem só neste aplicativo, como as que vieram com o template dele.",
+    "more": "Outras"
+  },
+  "skill": {
+    "alwaysOn": "Sempre ativada",
+    "updateAvailable": "Atualização disponível",
+    "on": "Ativada",
+    "off": "Desativada",
+    "managed": "Gerenciada pelo Rayfin. Sempre ativada.",
+    "use": "Usar {{title}} neste aplicativo",
+    "updating": "Atualizando…"
+  },
+  "kicker": {
+    "rayfin": "Gerenciada pelo Rayfin",
+    "library": "Sua biblioteca",
+    "app": "Este aplicativo",
+    "builtIn": "Integrada",
+    "builtInCategory": "Integrada · {{category}}"
+  },
+  "toasts": {
+    "turnedOn": "“{{title}}” foi ativada. Alteração salva neste aplicativo.",
+    "turnedOff": "“{{title}}” foi desativada. Alteração salva neste aplicativo.",
+    "updated": "“{{title}}” foi atualizada.",
+    "updateFailed": "Não foi possível atualizar “{{title}}”.",
+    "updatedCount_one": "{{count}} habilidade atualizada.",
+    "updatedCount_other": "{{count}} habilidades atualizadas.",
+    "saved": "Salvo nas suas habilidades.",
+    "savedToLibrary": "“{{title}}” foi salva na sua biblioteca de habilidades.",
+    "deleted": "“{{title}}” foi excluída da sua biblioteca de habilidades.",
+    "removed": "“{{title}}” foi removida deste aplicativo."
+  },
+  "view": {
+    "title": "Habilidades",
+    "subtitle": "Orientações que o Copilot segue ao criar este aplicativo",
+    "search": "Pesquisar habilidades",
+    "clearSearch": "Limpar pesquisa",
+    "show": "Mostrar",
+    "newSkillTitle": "Escrever ou carregar sua própria habilidade",
+    "newSkill": "Nova habilidade"
+  },
+  "empty": {
+    "noMatch": "Nenhuma habilidade corresponde a “{{query}}”",
+    "noneOn": "Nenhuma habilidade ativada",
+    "allOn": "Todas as habilidades estão ativadas",
+    "showAll": "Mostrar todas as habilidades"
+  },
+  "deleteDialog": {
+    "title": "Excluir a habilidade personalizada?",
+    "message": "Excluir “{{title}}” da sua biblioteca de habilidades? Os aplicativos que já a usam mantêm a própria cópia. Isso só a remove da sua biblioteca reutilizável."
+  },
+  "removeDialog": {
+    "title": "Remover a habilidade deste aplicativo?",
+    "message": "O Copilot deixará de usar “{{title}}” neste aplicativo. Ela não está na sua biblioteca de habilidades, então, para recuperá-la, você teria que restaurá-la pelo Histórico.",
+    "messageSaveFirst": "O Copilot deixará de usar “{{title}}” neste aplicativo. Ela não está na sua biblioteca de habilidades, então, para recuperá-la, você teria que restaurá-la pelo Histórico. Se quiser reutilizá-la, salve-a antes na sua biblioteca.",
+    "removing": "Removendo…"
+  },
+  "inspector": {
+    "readError": "Não foi possível ler esta habilidade.",
+    "label": "Detalhes de {{title}}",
+    "close": "Fechar detalhes",
+    "closeTitle": "Fechar (Esc)",
+    "managedNote": "O Rayfin gerencia esta habilidade. Ela está sempre ativada e é atualizada com a CLI do Rayfin.",
+    "appNote": "Esta habilidade existe só neste aplicativo. Salve-a na sua biblioteca para usá-la em outros aplicativos.",
+    "appNoteLocked": "Esta habilidade existe só neste aplicativo. Ela não pode ser salva na sua biblioteca com o nome atual.",
+    "use": "Usar neste aplicativo",
+    "useOn": "O Copilot passa a segui-la a partir da sua próxima mensagem.",
+    "useOff": "Adiciona a habilidade a este aplicativo. Cada alteração é salva no Histórico.",
+    "newer": "Há uma versão mais recente desta habilidade.",
+    "whenHeading": "Quando o Copilot a usa",
+    "triggers": "Palavras-gatilho",
+    "fewer": "Menos",
+    "more_one": "Mais {{count}}",
+    "more_other": "Mais {{count}}",
+    "noTriggers": "O Copilot decide com base nas instruções da habilidade.",
+    "teachesHeading": "O que ela ensina",
+    "showAll": "Mostrar tudo",
+    "fileHeading": "Arquivo",
+    "notInstalled": "É adicionada a este aplicativo quando você ativa a habilidade.",
+    "viewSource": "Ver SKILL.md",
+    "saveToLibrary": "Salvar na biblioteca"
+  },
+  "overview": {
+    "label": "Sobre habilidades",
+    "howTitle": "Como as habilidades funcionam",
+    "how1": "Ative uma habilidade. O Fabricator adiciona as instruções dela a este aplicativo e salva a alteração no Histórico.",
+    "how2": "Quando uma solicitação corresponde à habilidade, o Copilot a lê e segue as orientações dela.",
+    "how3": "Desative-a quando quiser. Selecione uma habilidade para ver o que ela ensina.",
+    "inThisApp": "Neste aplicativo",
+    "alwaysOn": "Sempre ativadas",
+    "builtIn": "Habilidades integradas",
+    "onOf": "{{on}} de {{total}} ativadas",
+    "library": "Sua biblioteca",
+    "appOnly": "Adicionadas neste aplicativo",
+    "updates": "Atualizações",
+    "updatesText_one": "Uma habilidade integrada deste aplicativo tem uma versão mais recente.",
+    "updatesText_other": "{{count}} habilidades integradas deste aplicativo têm uma versão mais recente.",
+    "updateAll_one": "Atualizar",
+    "updateAll_other": "Atualizar todas as {{count}}",
+    "ownTitle": "Suas próprias habilidades",
+    "ownText": "Selecione <strong>Nova habilidade</strong> para escrever uma para sua marca, o vocabulário dos seus dados ou a lista de verificação de revisão da sua equipe, ou para carregar uma habilidade que você já tem.",
+    "learnMore": "Saiba mais sobre habilidades"
+  },
+  "custom": {
+    "titleEdit": "Editar habilidade personalizada",
+    "titleAdd": "Adicionar uma habilidade personalizada",
+    "tabs": "Como adicionar uma habilidade",
+    "write": "Escrever",
+    "upload": "Carregar",
+    "libraryTitle": "Salvar na minha biblioteca de habilidades",
+    "libraryHint": "Guarde-a também na sua biblioteca para reutilizá-la em outros aplicativos.",
+    "titleLabel": "Título",
+    "titlePlaceholder": "ex.: Estilo da nossa marca",
+    "iconLabel": "Ícone",
+    "iconAria": "Ícone de emoji",
+    "descriptionLabel": "Descrição curta",
+    "descriptionPlaceholder": "Uma linha exibida no cartão da habilidade",
+    "instructions": "Instruções da habilidade (SKILL.md)",
+    "hint": "O campo <code>description</code> do frontmatter diz ao agente quando usar esta habilidade; o corpo traz as orientações que ele segue.",
+    "references_one": "Inclui {{count}} arquivo de referência",
+    "references_other": "Inclui {{count}} arquivos de referência",
+    "chooseDifferent": "Escolher outra",
+    "previewLabel": "SKILL.md (visualização)",
+    "reviewHint": "Revise a habilidade e depois adicione-a a este aplicativo.",
+    "uploadLead": "Carregue uma habilidade que você já tem para visualizá-la e depois adicione-a a este aplicativo. Ela precisa de um <code>SKILL.md</code> com <code>name</code> e <code>description</code> no frontmatter; os arquivos em <code>references/</code> também são incluídos.",
+    "chooseFolder": "Escolher uma pasta…",
+    "chooseFile": "Escolher um arquivo (.md ou .zip)…",
+    "reading": "Lendo…",
+    "saveChanges": "Salvar alterações",
+    "addSkill": "Adicionar habilidade"
+  },
+  "editor": {
+    "loading": "Carregando o editor…"
+  },
+  "preview": {
+    "notInstalled": "ainda não está neste aplicativo",
+    "close": "Fechar visualização"
+  }
+}

@@ -1704,7 +1704,7 @@ export type ThemePreference = 'dark' | 'light' | 'system'
  * the source; the others are translations of it. Must match `i18n::LANGUAGES`
  * in Rust and the folders in `src/renderer/src/i18n/locales/`.
  */
-export type Language = 'en' | 'es' | 'de' | 'ja'
+export type Language = 'en' | 'es' | 'de' | 'ja' | 'pt-BR'
 
 /** A {@link Language}, or 'system' to follow the computer's language. */
 export type LanguagePreference = Language | 'system'

@@ -1,0 +1,320 @@
+{
+  "groups": {
+    "projects": "Projetos",
+    "apps": "Aplicativos do Fabric",
+    "actions": "Ações",
+    "docs": "Documentação",
+    "files": "Arquivos"
+  },
+  "kinds": {
+    "projects": "Projeto",
+    "apps": "Aplicativo do Fabric",
+    "actions": "Ação",
+    "docs": "Documentação",
+    "files": "Arquivo"
+  },
+  "verbs": {
+    "projects": "Abrir projeto",
+    "apps": "Abrir aplicativo",
+    "actions": "Executar ação",
+    "files": "Abrir no Código",
+    "continue": "Continuar conversa"
+  },
+  "views": {
+    "projects": {
+      "title": "Pesquisar projetos",
+      "placeholder": "Pesquisar projetos…"
+    },
+    "apps": {
+      "title": "Pesquisar aplicativos do Fabric",
+      "placeholder": "Pesquisar os aplicativos que você pode abrir no Fabric…"
+    },
+    "actions": {
+      "title": "Pesquisar ações",
+      "placeholder": "Pesquisar ações…"
+    },
+    "docs": {
+      "title": "Pesquisar na documentação",
+      "placeholder": "Pesquisar na documentação…"
+    },
+    "files": {
+      "title": "Pesquisar arquivos",
+      "placeholder": "Pesquisar arquivos…"
+    },
+    "help": {
+      "title": "Perguntar à Ajuda",
+      "placeholder": "Pergunte qualquer coisa à Ajuda…"
+    }
+  },
+  "ask": {
+    "label": "Perguntar à Ajuda",
+    "signedOut": "Entre no GitHub Copilot para perguntar à Ajuda",
+    "quoted": "“{{text}}”",
+    "continue": "Continuar sua conversa com a Ajuda"
+  },
+  "sections": {
+    "suggestions": "Sugestões",
+    "recent": "Projetos recentes",
+    "results": "Resultados",
+    "use": "Usar “{{query}}” com…"
+  },
+  "placeholder": {
+    "all": "Pesquisar projetos, ações e documentação…",
+    "followUp": "Faça outra pergunta…",
+    "files": "Pesquisar arquivos em {{name}}…",
+    "filesHere": "Pesquisar arquivos neste projeto…"
+  },
+  "count": {
+    "results_one": "{{count}} resultado",
+    "results_other": "{{count}} resultados"
+  },
+  "announce": {
+    "results_one": "{{count}} resultado.",
+    "results_other": "{{count}} resultados.",
+    "answering": "A Ajuda está respondendo.",
+    "answered": "A Ajuda respondeu."
+  },
+  "notify": {
+    "failed": "{{title}} não funcionou. Tente novamente.",
+    "copiedAnswer": "Resposta copiada",
+    "copyFailed": "Não foi possível copiar a resposta"
+  },
+  "panel": {
+    "title": "Ações",
+    "openInHelp": "Abrir na Ajuda",
+    "copyAnswer": "Copiar resposta",
+    "stop": "Parar de responder",
+    "suggests": "Sugestões da Ajuda",
+    "sources": "Fontes",
+    "newConversation": "Nova conversa",
+    "help": "Ajuda",
+    "noMatch": "Nenhuma ação correspondente",
+    "search": "Pesquisar ações",
+    "searchPlaceholder": "Pesquisar ações…"
+  },
+  "empty": {
+    "listingFiles": "Listando os arquivos…",
+    "loadingDocs": "Carregando a documentação…",
+    "nothing": "Ainda não há nada aqui",
+    "none": {
+      "projects": "Ainda não há projetos",
+      "apps": "Ainda não há aplicativos",
+      "actions": "Ainda não há ações",
+      "docs": "Ainda não há documentação",
+      "files": "Ainda não há arquivos"
+    },
+    "noMatch": {
+      "projects": "Nenhum projeto corresponde a “{{text}}”",
+      "apps": "Nenhum aplicativo corresponde a “{{text}}”",
+      "actions": "Nenhuma ação corresponde a “{{text}}”",
+      "docs": "Nada na documentação corresponde a “{{text}}”",
+      "files": "Nenhum arquivo corresponde a “{{text}}”"
+    },
+    "askInstead": "Ou pressione <tab/> para perguntar à Ajuda"
+  },
+  "bar": {
+    "backTitle": "Voltar (Esc)"
+  },
+  "foot": {
+    "files": "Arquivos de {{name}}",
+    "answering": "Respondendo…",
+    "followUp": "Fazer outra pergunta"
+  },
+  "sources": {
+    "team": "Equipe",
+    "teamWorkspace": "{{team}} · workspace de equipe",
+    "openNow": "Aberto agora",
+    "missing": "Não encontrado",
+    "openInVsCode": "Abrir no VS Code",
+    "copyPath": "Copiar caminho",
+    "copied": "Copiado: {{text}}",
+    "manageProject": "Gerenciar projeto",
+    "workspace": "Workspace",
+    "openOverview": "Abrir visão geral",
+    "copyRepository": "Copiar repositório",
+    "openInFabric": "Abrir no Fabric",
+    "openInFabricator": "Abrir no Fabricator",
+    "copyLink": "Copiar link",
+    "copiedLink": "Link copiado",
+    "onThisComputer": "{{workspace}} · neste computador",
+    "projectFolder": "Pasta do projeto"
+  },
+  "suggest": {
+    "advisor_one": "Revisar {{count}} problema do Consultor",
+    "advisor_other": "Revisar {{count}} problemas do Consultor",
+    "advisorOpen": "{{name}} tem problemas de gravidade alta e média em aberto",
+    "advisorOpenHere": "Este aplicativo tem problemas de gravidade alta e média em aberto",
+    "deployFailed": "Descobrir por que a publicação falhou",
+    "couldNotPublish": "Não foi possível publicar {{name}}"
+  },
+  "act": {
+    "current": "Atual",
+    "viewBuild": {
+      "title": "Criar",
+      "subtitle": "Converse com o Copilot e visualize {{name}}"
+    },
+    "viewCode": {
+      "title": "Código",
+      "subtitle": "Navegue pelos arquivos de {{name}}"
+    },
+    "viewBlueprint": {
+      "title": "Blueprint",
+      "subtitle": "Do que {{name}} é feito, incluindo o modelo de dados"
+    },
+    "viewAdvisor": {
+      "title": "Consultor",
+      "subtitle": "Verifique se há problemas em {{name}} antes de compartilhá-lo"
+    },
+    "history": {
+      "title": "Histórico",
+      "subtitle": "Todas as versões de {{name}} e o que mudou"
+    },
+    "skills": {
+      "title": "Habilidades",
+      "subtitle": "Orientações que o Copilot segue ao criar este aplicativo"
+    },
+    "secrets": {
+      "title": "Segredos",
+      "subtitle": "Chaves e senhas usadas pelas funções do seu aplicativo"
+    },
+    "terminal": {
+      "title": "Terminal",
+      "subtitle": "Execute comandos na pasta de {{name}}",
+      "hide": "Ocultar terminal",
+      "hideSubtitle": "Oculte o terminal; os shells continuam em execução"
+    },
+    "newTerminal": {
+      "title": "Novo terminal",
+      "subtitle": "Inicie outro shell na pasta de {{name}}"
+    },
+    "deploy": {
+      "title": "Publicar",
+      "changes": "Publicar alterações",
+      "files_one": "Publicar {{count}} alteração",
+      "files_other": "Publicar {{count}} alterações",
+      "subtitle": "Publique {{name}} novamente",
+      "changesSubtitle": "Suas alterações mais recentes ainda não estão em {{name}}",
+      "filesSubtitle_one": "{{count}} arquivo alterado desde a publicação de {{name}}",
+      "filesSubtitle_other": "{{count}} arquivos alterados desde a publicação de {{name}}"
+    },
+    "share": {
+      "title": "Compartilhar",
+      "subtitle": "Dê às pessoas acesso a {{name}}"
+    },
+    "autoDeploy": {
+      "on": "Ativar “Publicar após cada turno do chat”",
+      "off": "Desativar “Publicar após cada turno do chat”",
+      "onSubtitle": "Publique as alterações de cada turno do chat assim que ele terminar",
+      "offSubtitle": "Mantenha as alterações do chat neste computador até publicá-las"
+    },
+    "home": {
+      "title": "Todos os projetos",
+      "subtitle": "Mostre todos os projetos na tela Início"
+    },
+    "newProject": {
+      "title": "Novo projeto",
+      "subtitle": "Descreva o que você quer e o Copilot cria"
+    },
+    "openFolder": {
+      "title": "Abrir pasta",
+      "subtitle": "Use um projeto local existente"
+    },
+    "clone": {
+      "title": "Clonar do GitHub",
+      "subtitle": "Traga um repositório para o Fabricator"
+    },
+    "importProject": {
+      "title": "Importar um projeto",
+      "subtitle": "Abra um arquivo .fabricator que alguém enviou para você"
+    },
+    "migrate": {
+      "title": "Migrar um relatório do Power BI",
+      "subtitle": "Transforme um relatório em um aplicativo"
+    },
+    "gallery": {
+      "title": "Galeria de aplicativos",
+      "subtitle": "Navegue por todos os aplicativos que você pode abrir no Fabric"
+    },
+    "manageProject": {
+      "title": "Gerenciar {{name}}",
+      "subtitle": "Renomeie, exporte ou remova do Fabricator"
+    },
+    "exportProject": {
+      "title": "Exportar {{name}}",
+      "subtitle": "Salve como um arquivo que outra pessoa possa importar"
+    },
+    "overview": {
+      "title": "Visão geral do workspace",
+      "subtitle": "Todos os aplicativos, alterações e implantações de {{name}}",
+      "subtitleHere": "Todos os aplicativos, alterações e implantações deste workspace de equipe"
+    },
+    "theme": {
+      "dark": "Tema escuro",
+      "light": "Tema claro",
+      "system": "Tema do sistema",
+      "appearance": "Aparência",
+      "systemSubtitle": "Segue o modo claro ou escuro do seu computador"
+    },
+    "textSize": {
+      "title": "Tamanho do texto {{percent}}%",
+      "subtitle": "Ajuste a escala de toda a interface"
+    },
+    "settings": {
+      "title": "Configurações",
+      "subtitle": "Tema, tamanho do texto, experimentos e mais"
+    },
+    "accounts": {
+      "title": "Gerenciar contas",
+      "subtitle": "Veja e altere todas as contas que o Fabricator usa"
+    },
+    "apiKeys": {
+      "title": "Gerenciar provedores de modelos",
+      "subtitle": "Use modelos do OpenRouter, do Ollama ou com suas próprias chaves de API"
+    },
+    "mcpServers": {
+      "title": "Gerenciar servidores MCP",
+      "subtitle": "Adicione os servidores MCP que o chat pode ativar em Plug-ins"
+    },
+    "chatDefaults": {
+      "title": "Gerenciar padrões do chat",
+      "subtitle": "O modelo e os plug-ins iniciais do chat de um novo projeto"
+    },
+    "customInstructions": {
+      "title": "Editar instruções personalizadas",
+      "subtitle": "O que o Copilot segue em todos os aplicativos que você cria"
+    },
+    "fabricRefresh": {
+      "title": "Atualizar a autenticação do Fabric",
+      "subtitle": "Limpe as credenciais compartilhadas da CLI do Rayfin e entre novamente"
+    },
+    "fabricSignIn": {
+      "title": "Entrar no Fabric",
+      "subtitle": "O Microsoft Fabric hospeda os aplicativos que você publica"
+    },
+    "setup": {
+      "title": "Abrir a configuração inicial",
+      "subtitle": "Verifique as ferramentas de que o Fabricator precisa e instale as que faltarem"
+    },
+    "help": {
+      "title": "Abrir a Ajuda",
+      "subtitle": "Investigue um erro, consulte a documentação ou relate um problema"
+    },
+    "docs": {
+      "title": "Documentação",
+      "subtitle": "Abra a documentação do Fabricator no navegador"
+    },
+    "reportIssue": {
+      "title": "Relatar um problema",
+      "subtitle": "Abra um relatório de bug no GitHub com os detalhes da sua versão"
+    },
+    "exportDiagnostics": {
+      "title": "Exportar diagnóstico",
+      "subtitle": "Salve um arquivo de diagnóstico para anexar a um relatório de bug"
+    },
+    "openLogs": {
+      "title": "Abrir a pasta de logs",
+      "subtitle": "Os logs do Fabricator neste computador",
+      "verb": "Abrir pasta"
+    }
+  }
+}

@@ -21,7 +21,7 @@ use serde_json::Value;
 
 /// The languages Fabricator comes in, English (the source) first. The renderer
 /// lists the same ones (`LANGUAGES` in src/renderer/src/i18n/languages.ts).
-pub const LANGUAGES: [&str; 4] = ["en", "es", "de", "ja"];
+pub const LANGUAGES: [&str; 5] = ["en", "es", "de", "ja", "pt-BR"];
 
 /// The parts of the core with a catalog of their own (`locales/<language>/<area>.json`):
 /// Team, the other commands, the ones where Copilot assists (Help, the security review,
@@ -36,6 +36,7 @@ macro_rules! area {
       ("es", $area, include_str!(concat!("../locales/es/", $area, ".json"))),
       ("de", $area, include_str!(concat!("../locales/de/", $area, ".json"))),
       ("ja", $area, include_str!(concat!("../locales/ja/", $area, ".json"))),
+      ("pt-BR", $area, include_str!(concat!("../locales/pt-BR/", $area, ".json"))),
     ]
   };
 }
@@ -92,13 +93,18 @@ fn supported(language: &str) -> Option<&'static str> {
 }
 
 /// The first of `tags` (BCP 47, most preferred first) in a language Fabricator
-/// comes in. A tag matches by its language alone, so es-MX and de-CH match es
-/// and de.
+/// comes in. A tag matches by its language alone, so es-MX, de-CH and pt-PT
+/// match es, de and pt-BR.
 pub fn match_language<S: AsRef<str>>(tags: impl IntoIterator<Item = S>) -> Option<&'static str> {
   tags.into_iter().find_map(|tag| {
-    let primary = tag.as_ref().trim().split(['-', '_']).next()?.to_ascii_lowercase();
-    supported(&primary)
+    let primary = primary_language(tag.as_ref());
+    LANGUAGES.iter().copied().find(|language| primary_language(language) == primary)
   })
+}
+
+/// A BCP 47 tag's language subtag, lowercased: `pt` for `pt-BR` or `pt_PT`.
+fn primary_language(tag: &str) -> String {
+  tag.trim().split(['-', '_']).next().unwrap_or_default().to_ascii_lowercase()
 }
 
 /// The language the computer's settings ask for, of the ones Fabricator comes
@@ -186,13 +192,15 @@ fn lookup<'a>(catalogs: &'a HashMap<&str, Texts>, language: &str, key: &str, cou
 
 /// The CLDR plural form `n` takes in `language`, of the forms Fabricator's
 /// languages have: Japanese has one form; English and German, one and other;
-/// Spanish also has many, for whole millions.
+/// Spanish also has many, for whole millions; Brazilian Portuguese is like
+/// Spanish, but its one form takes every number below 2, 0 included.
 fn plural_form(language: &str, n: f64) -> &'static str {
   let whole = n.fract() == 0.0;
   match language {
     "ja" => "other",
+    "pt-BR" if n.abs() < 2.0 => "one",
     _ if whole && n.abs() == 1.0 => "one",
-    "es" if whole && n != 0.0 && n % 1_000_000.0 == 0.0 => "many",
+    "es" | "pt-BR" if whole && n != 0.0 && n % 1_000_000.0 == 0.0 => "many",
     _ => "other",
   }
 }
@@ -263,6 +271,7 @@ mod tests {
       ("en", &[("t.files_zero", "No files"), ("t.files_one", "{{count}} file"), ("t.files_other", "{{count}} files")]),
       ("es", &[("t.files_one", "{{count}} archivo"), ("t.files_other", "{{count}} archivos")]),
       ("ja", &[("t.files_other", "{{count}} 個のファイル")]),
+      ("pt-BR", &[("t.files_one", "{{count}} arquivo"), ("t.files_other", "{{count}} arquivos")]),
     ]);
     let files = |language: &str, n: &dyn Display| text_in(&catalogs, language, "t.files", &[("count", n)]);
     assert_eq!(files("en", &1), "1 file");
@@ -272,6 +281,11 @@ mod tests {
     // Spanish's many reads as its other form, which the catalog has.
     assert_eq!(files("es", &1_000_000), "1000000 archivos");
     assert_eq!(files("ja", &1), "1 個のファイル");
+    // Brazilian Portuguese's one form takes 0 too.
+    assert_eq!(files("pt-BR", &0), "0 arquivo");
+    assert_eq!(files("pt-BR", &1), "1 arquivo");
+    assert_eq!(files("pt-BR", &2), "2 arquivos");
+    assert_eq!(files("pt-BR", &1_000_000), "1000000 arquivos");
   }
 
   #[test]
@@ -285,6 +299,8 @@ mod tests {
     assert_eq!(match_language(["es-MX"]), Some("es"));
     assert_eq!(match_language(["fr-FR", "de-CH", "ja"]), Some("de"));
     assert_eq!(match_language(["ja_JP"]), Some("ja"));
+    assert_eq!(match_language(["pt-BR"]), Some("pt-BR"));
+    assert_eq!(match_language(["fr", "pt_PT"]), Some("pt-BR"));
     assert_eq!(match_language(["fr", "it"]), None);
     assert!(LANGUAGES.contains(&system_language()));
   }

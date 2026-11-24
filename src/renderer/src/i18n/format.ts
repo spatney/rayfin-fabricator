@@ -1,6 +1,6 @@
 import i18next from 'i18next'
 import type { Language } from '@shared/ipc'
-import { isLanguage } from './languages'
+import { isLanguage, primaryLanguage } from './languages'
 
 /** The language the interface is in. */
 export function currentLanguage(): Language {
@@ -21,8 +21,9 @@ export function formatLocale(): string {
         ? navigator.languages
         : [navigator.language]
   return (
-    own.find((tag) => typeof tag === 'string' && tag.toLowerCase().split(/[-_]/)[0] === language) ??
-    language
+    own.find(
+      (tag) => typeof tag === 'string' && primaryLanguage(tag) === primaryLanguage(language)
+    ) ?? language
   )
 }
 

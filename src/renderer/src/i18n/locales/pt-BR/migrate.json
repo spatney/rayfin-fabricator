@@ -1,0 +1,94 @@
+{
+  "myWorkspace": "Meu workspace",
+  "dataFrom": "dados de “{{name}}”",
+  "pages_one": "{{count}} página",
+  "pages_other": "{{count}} páginas",
+  "screen": {
+    "title": "Migrar um relatório do Power BI",
+    "sub": "Escolha um relatório. O Fabricator o transforma em um novo aplicativo que lê os dados do relatório em tempo real, e o Copilot recria as páginas dele, uma por vez.",
+    "find": "Localizar um relatório",
+    "placeholder": "Pesquise pelo nome ou cole o link de um relatório",
+    "pressEnter": "Pressione Enter para ler este relatório ou <read>leia agora</read>.",
+    "accountHint": "Relatórios que você pode abrir como {{user}}, pela Azure CLI.",
+    "hint": "Relatórios que você pode abrir, pela Azure CLI.",
+    "workspaces": "Workspaces",
+    "searchResults": "Resultados da pesquisa",
+    "reports": "Relatórios",
+    "loadingWorkspaces": "Carregando workspaces…",
+    "loadingReports": "Carregando relatórios…",
+    "noMatches": "Nenhum relatório encontrado.",
+    "noReports": "Este workspace não tem relatórios."
+  },
+  "azure": {
+    "pick": "O Fabricator lê seus relatórios do Power BI com sua conta do Azure. Entre no Azure para escolher um.",
+    "reports": "Entre no Azure para ver os relatórios.",
+    "read": "Entre no Azure para ler este relatório.",
+    "finish": "Termine de entrar no Azure no navegador.",
+    "signingIn": "Entrando…",
+    "signIn": "Entrar no Azure"
+  },
+  "inspect": {
+    "reading": "Lendo o relatório…",
+    "about": "Sobre {{name}}",
+    "workspace": "Workspace",
+    "pages_one": "{{count}} página: {{names}}",
+    "pages_other": "{{count}} páginas: {{names}}",
+    "more": "{{names}} e mais {{rest}}",
+    "checks": {
+      "definition": "Definição",
+      "model": "Modelo de dados",
+      "images": "Imagens das páginas"
+    }
+  },
+  "card": {
+    "label": "Migração do Power BI",
+    "title": "Migrando “{{name}}” do Power BI",
+    "progress_one": "{{done}} de {{count}} página",
+    "progress_other": "{{done}} de {{count}} páginas",
+    "drawing": "Renderizando as páginas",
+    "reading": "Lendo o relatório",
+    "stages": {
+      "definition": "Definição do relatório",
+      "model": "Modelo de dados",
+      "export": "Exportação das páginas",
+      "images": "Imagens das páginas"
+    },
+    "stageStatus": {
+      "done": "Concluído",
+      "skipped": "Ignorado",
+      "failed": "Indisponível",
+      "waiting": "Aguardando"
+    },
+    "pageStatus": {
+      "pending": "Não iniciada",
+      "running": "Migrando",
+      "done": "Migrada",
+      "failed": "Precisa de nova tentativa"
+    },
+    "stageFailed": "{{stage}}: {{message}}",
+    "page": "{{n}}. {{name}}: {{status}}",
+    "pageTitle": "{{name}}: {{status}}",
+    "finished": "Todas as páginas foram migradas. O MIGRATION.md lista o que ficou aproximado.",
+    "running": "O Copilot está migrando “{{name}}”.",
+    "runningRest": "O Copilot está migrando “{{name}}”. As demais vêm em seguida, uma página por vez.",
+    "next": "Próxima: “{{name}}”.",
+    "exportTime": "A exportação leva cerca de 20 segundos por página.",
+    "skipImages": "Pular as imagens das páginas",
+    "stopRest": "Parar após esta página",
+    "migrateNext": "Migrar a próxima página",
+    "migrateRest": "Migrar o restante"
+  },
+  "turn": {
+    "first": "Migre “{{report}}” do Power BI",
+    "page": "Migre a página {{n}} de {{total}}: {{name}}"
+  },
+  "errors": {
+    "workspaces": "Não foi possível listar seus workspaces.",
+    "reports": "Não foi possível listar os relatórios.",
+    "search": "Não foi possível pesquisar relatórios.",
+    "inspect": "Não foi possível ler o relatório.",
+    "load": "Não foi possível carregar a migração do relatório.",
+    "save": "Não foi possível salvar a migração.",
+    "dismiss": "Não foi possível fechar o cartão de migração."
+  }
+}

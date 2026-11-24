@@ -1,0 +1,236 @@
+{
+  "verbs": {
+    "read": {
+      "running": "Lendo",
+      "done": "Leu"
+    },
+    "edit": {
+      "running": "Editando",
+      "done": "Editou"
+    },
+    "create": {
+      "running": "Criando",
+      "done": "Criou"
+    },
+    "delete": {
+      "running": "Removendo",
+      "done": "Removeu"
+    },
+    "search": {
+      "running": "Pesquisando",
+      "done": "Pesquisou"
+    },
+    "find": {
+      "running": "Procurando arquivos correspondentes a",
+      "done": "Encontrou arquivos correspondentes a"
+    },
+    "run": {
+      "running": "Executando",
+      "done": "Executou"
+    },
+    "shellIo": {
+      "running": "Verificando um comando",
+      "done": "Verificou um comando"
+    },
+    "web": {
+      "running": "Lendo",
+      "done": "Leu"
+    },
+    "webSearch": {
+      "running": "Pesquisando na web por",
+      "done": "Pesquisou na web por"
+    },
+    "skill": {
+      "running": "Carregando a habilidade",
+      "done": "Usou a habilidade"
+    },
+    "todo": {
+      "running": "Atualizando a lista de tarefas",
+      "done": "Atualizou a lista de tarefas"
+    },
+    "agent": {
+      "running": "Delegando",
+      "done": "Delegou"
+    },
+    "deploy": {
+      "running": "Publicando o aplicativo",
+      "done": "Publicou o aplicativo"
+    },
+    "navigate": {
+      "running": "Abrindo na visualização",
+      "done": "Abriu na visualização"
+    },
+    "screenshot": {
+      "running": "Fazendo uma captura de tela",
+      "done": "Fez uma captura de tela"
+    },
+    "console": {
+      "running": "Lendo o console da visualização",
+      "done": "Leu o console da visualização"
+    },
+    "scroll": {
+      "running": "Rolando a visualização",
+      "done": "Rolou a visualização"
+    },
+    "model": {
+      "running": "Consultando um modelo semântico",
+      "done": "Consultou um modelo semântico"
+    },
+    "localStatus": {
+      "running": "Verificando o back-end local",
+      "done": "Verificou o back-end local"
+    },
+    "localCall": {
+      "running": "Chamando",
+      "done": "Chamou"
+    },
+    "localSeed": {
+      "running": "Verificando os dados iniciais",
+      "done": "Verificou os dados iniciais"
+    },
+    "fabricIq": {
+      "running": "Pesquisando no Fabric IQ",
+      "done": "Pesquisou no Fabric IQ"
+    },
+    "workIq": {
+      "running": "Pesquisando no Work IQ",
+      "done": "Pesquisou no Work IQ"
+    },
+    "mcp": {
+      "running": "Usando",
+      "done": "Usou"
+    },
+    "other": {
+      "running": "Usando",
+      "done": "Usou"
+    }
+  },
+  "bareVerbs": {
+    "read": {
+      "running": "Lendo um arquivo",
+      "done": "Leu um arquivo"
+    },
+    "edit": {
+      "running": "Editando arquivos",
+      "done": "Editou arquivos"
+    },
+    "create": {
+      "running": "Criando um arquivo",
+      "done": "Criou um arquivo"
+    },
+    "delete": {
+      "running": "Removendo um arquivo",
+      "done": "Removeu um arquivo"
+    },
+    "search": {
+      "running": "Pesquisando no projeto",
+      "done": "Pesquisou no projeto"
+    },
+    "find": {
+      "running": "Procurando arquivos",
+      "done": "Encontrou arquivos"
+    },
+    "run": {
+      "running": "Executando um comando",
+      "done": "Executou um comando"
+    },
+    "web": {
+      "running": "Lendo uma página da web",
+      "done": "Leu uma página da web"
+    },
+    "webSearch": {
+      "running": "Pesquisando na web",
+      "done": "Pesquisou na web"
+    },
+    "skill": {
+      "running": "Carregando uma habilidade",
+      "done": "Usou uma habilidade"
+    },
+    "agent": {
+      "running": "Delegando uma tarefa",
+      "done": "Delegou uma tarefa"
+    },
+    "localCall": {
+      "running": "Chamando o aplicativo",
+      "done": "Chamou o aplicativo"
+    }
+  },
+  "shellIoVerbs": {
+    "write": {
+      "running": "Enviando entrada para um comando",
+      "done": "Enviou entrada para um comando"
+    },
+    "stop": {
+      "running": "Parando um comando",
+      "done": "Parou um comando"
+    },
+    "list": {
+      "running": "Listando os comandos em execução",
+      "done": "Listou os comandos em execução"
+    }
+  },
+  "agentIoVerbs": {
+    "read": {
+      "running": "Aguardando um agente",
+      "done": "Verificou um agente"
+    },
+    "write": {
+      "running": "Enviando uma mensagem para um agente",
+      "done": "Enviou uma mensagem para um agente"
+    },
+    "list": {
+      "running": "Listando os agentes",
+      "done": "Listou os agentes"
+    }
+  },
+  "seedLoad": {
+    "running": "Carregando os dados iniciais",
+    "done": "Carregou os dados iniciais"
+  },
+  "phases": {
+    "read": "Lendo arquivos",
+    "edit": "Editando código",
+    "create": "Criando arquivos",
+    "delete": "Removendo arquivos",
+    "search": "Pesquisando no projeto",
+    "run": "Executando um comando",
+    "web": "Lendo páginas da web",
+    "webSearch": "Pesquisando na web",
+    "skill": "Carregando uma habilidade",
+    "todo": "Atualizando a lista de tarefas",
+    "agent": "Delegando uma tarefa",
+    "deploy": "Publicando o aplicativo",
+    "navigate": "Abrindo a visualização",
+    "screenshot": "Fazendo uma captura de tela",
+    "console": "Lendo o console da visualização",
+    "scroll": "Rolando a visualização",
+    "model": "Consultando um modelo semântico",
+    "localStatus": "Verificando o back-end local",
+    "localCall": "Chamando o aplicativo",
+    "localSeed": "Verificando os dados iniciais",
+    "fabricIq": "Consultando dados do Power BI",
+    "workIq": "Consultando o Microsoft 365",
+    "mcp": "Usando um servidor MCP",
+    "other": "Trabalhando",
+    "server": "Usando {{server}}"
+  },
+  "label": {
+    "withTarget": "{{verb}} {{target}}",
+    "quoted": "“{{text}}”",
+    "fromServer": "{{tool}} de {{server}}"
+  },
+  "summary": {
+    "read_one": "Leu {{count}} arquivo",
+    "read_other": "Leu {{count}} arquivos",
+    "edit_one": "Fez {{count}} edição",
+    "edit_other": "Fez {{count}} edições",
+    "create_one": "Criou {{count}} arquivo",
+    "create_other": "Criou {{count}} arquivos",
+    "run_one": "Executou {{count}} comando",
+    "run_other": "Executou {{count}} comandos",
+    "search_one": "Fez {{count}} pesquisa",
+    "search_other": "Fez {{count}} pesquisas",
+    "web_one": "Leu {{count}} página da web",
+    "web_other": "Leu {{count}} páginas da web"
+  }
+}
