@@ -578,11 +578,12 @@ fn mark_pro_workspaces(workspaces: &mut [FabricWorkspace], ready: bool) {
 
 /// Whether the project in `dir` can publish to a Pro workspace: its Rayfin CLI
 /// is [`PRO_WORKSPACE_SINCE`](crate::commands::deploy::PRO_WORKSPACE_SINCE) or later.
+/// That release's alphas count, such as `2.1.0-alpha.2324`: they publish to one too.
 fn pro_readiness(dir: Option<&Path>) -> ProWorkspaces {
   let since = crate::commands::deploy::PRO_WORKSPACE_SINCE;
   let rayfin = dir.and_then(crate::commands::deploy::installed_cli_version);
   ProWorkspaces {
-    ready: rayfin.as_ref().is_some_and(|version| *version >= since),
+    ready: rayfin.as_ref().is_some_and(|v| (v.major, v.minor, v.patch) >= (since.major, since.minor, since.patch)),
     needs: since.to_string(),
     rayfin: rayfin.map(|version| version.to_string()),
   }
@@ -1386,12 +1387,19 @@ mod tests {
   }
 
   /// A Pro workspace needs Rayfin 2.1.0 or later, as the app's own CLI says.
+  /// 2.1.0's alphas publish to one too.
   #[test]
   fn publishing_to_a_pro_workspace_needs_rayfin_2_1() {
     let dir = std::env::temp_dir().join(format!("fab-pro-ready-{}", std::process::id()));
     let cli = dir.join("node_modules/@microsoft/rayfin-cli");
     std::fs::create_dir_all(&cli).unwrap();
-    for (version, ready) in [("2.1.0", true), ("2.2.0-alpha.12", true), ("2.1.0-preview.3", false), ("2.0.1", false)] {
+    for (version, ready) in [
+      ("2.1.0", true),
+      ("2.1.0-alpha.2324", true),
+      ("2.2.0-alpha.12", true),
+      ("2.0.1", false),
+      ("2.0.1-alpha.3", false),
+    ] {
       std::fs::write(cli.join("package.json"), format!(r#"{{"version":"{version}"}}"#)).unwrap();
       let pro = pro_readiness(Some(&dir));
       assert_eq!((pro.ready, pro.rayfin.as_deref()), (ready, Some(version)), "{version}");
