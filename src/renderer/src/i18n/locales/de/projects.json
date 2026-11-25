@@ -53,13 +53,22 @@
       "descNoWorkspace": "Löscht {{name}} und alle App-Daten im zugehörigen Fabric-Arbeitsbereich.",
       "warn": "Dies kann nicht rückgängig gemacht werden."
     },
+    "supporting": {
+      "title": "Unterstützende Elemente in Fabric",
+      "badge": "Endgültig",
+      "desc": "Löscht {{items}} aus {{workspace}}: die semantischen Modelle und Lakehouses, die Copilot für diese App erstellt hat.",
+      "descNoWorkspace": "Löscht {{items}} aus Fabric: die semantischen Modelle und Lakehouses, die Copilot für diese App erstellt hat.",
+      "warn": "Berichte und Apps, die sie lesen, funktionieren dann nicht mehr. Dies kann nicht rückgängig gemacht werden."
+    },
     "note": {
       "noApp": "Mit diesem Projekt ist keine veröffentlichte Fabric-App verknüpft.",
       "keepsWorkspace": "Dein Fabric-Arbeitsbereich bleibt erhalten.",
-      "keepsApp": "Die veröffentlichte App und ihre Daten bleiben in Fabric."
+      "keepsApp": "Die veröffentlichte App und ihre Daten bleiben in Fabric.",
+      "keepsSupporting": "Die unterstützenden Elemente bleiben in Fabric."
     },
     "confirmBoth": "Ordner in Papierkorb & App löschen",
-    "confirmFolder": "Ordner in Papierkorb verschieben"
+    "confirmFolder": "Ordner in Papierkorb verschieben",
+    "confirmFabric": "Ordner in Papierkorb & in Fabric löschen"
   },
   "manage": {
     "title": "Projekt verwalten",
@@ -243,6 +252,7 @@
     "waitingSignIn": "Es wird auf deine Anmeldung bei Fabric gewartet…",
     "deletingApp": "Die veröffentlichte App wird gelöscht…",
     "deletingAppFrom": "Die veröffentlichte App wird aus {{workspace}} gelöscht…",
+    "deletingSupporting": "Die unterstützenden Elemente werden in Fabric gelöscht…",
     "trashing": "Der Ordner wird in den Papierkorb verschoben…",
     "counting": "Dateien werden gezählt… {{processed, number}}",
     "moving_one": "{{count, number}} Datei wird in den Papierkorb verschoben…",
@@ -253,6 +263,9 @@
     "cantDeleteApp": "Die veröffentlichte App konnte nicht gelöscht werden.",
     "cantDeleteAppRetry": "Die veröffentlichte App konnte nicht gelöscht werden. Versuche es erneut.",
     "tooLong": "Das Löschen der veröffentlichten App dauert zu lange. Möglicherweise ist die Verbindung langsam. Versuche es erneut.",
+    "supportingTooLong": "Das Löschen der unterstützenden Elemente dauert zu lange. Möglicherweise ist die Verbindung langsam. Versuche es erneut.",
+    "cantDeleteSupporting": "Die unterstützenden Elemente konnten in Fabric nicht gelöscht werden. Versuche es erneut.",
+    "cantDeleteSupportingItem": "{{name}} konnte in Fabric nicht gelöscht werden: {{error}}",
     "cantTrash": "Der Ordner konnte nicht in den Papierkorb verschoben werden. Versuche es erneut.",
     "signInUnfinished": "Die Fabric-Anmeldung wurde nicht abgeschlossen. Versuche es erneut.",
     "cantConfirmSignIn": "Die Fabric-Anmeldung konnte nicht bestätigt werden. Versuche es erneut.",

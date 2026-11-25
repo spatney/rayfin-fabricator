@@ -108,7 +108,7 @@ import { useMigration, type MigrationControl } from '../migration/useMigration'
 import { writeCodeTab, type CodeTab } from '../components/codeTab'
 import { useToast } from '../toast'
 import { authErrorMessage } from '../authErrors'
-import { useProjectRemovals, withoutProject } from '../projectRemovals'
+import { useProjectRemovals, withoutProject, type RemovalChoice } from '../projectRemovals'
 import { reportIssue as runReportIssue } from './reportIssue'
 import { branchLabel } from './statusbar'
 import { openDocs } from '../docsLinks'
@@ -753,12 +753,17 @@ export default function Workbench({
         terminals ? window.api.terminal.killAll(project.id).catch(() => undefined) : undefined
       ])
     },
-    onRemoved: (project, next, appDeleted) => {
+    onRemoved: (project, next, appDeleted, supportingDeleted) => {
       const t = translator('workbench')
       setProjects((current) => (current ? withoutProject(current, project.id) : next))
-      toast.success(appDeleted ? t('remove.trashedAndAppDeleted') : t('remove.trashed'), {
-        title: t('remove.removed', { name: project.name })
-      })
+      const said = supportingDeleted
+        ? appDeleted
+          ? t('remove.trashedAndAllDeleted')
+          : t('remove.trashedAndSupportingDeleted')
+        : appDeleted
+          ? t('remove.trashedAndAppDeleted')
+          : t('remove.trashed')
+      toast.success(said, { title: t('remove.removed', { name: project.name }) })
     },
     onFailed: (project, error) =>
       toast.error(error, {
@@ -2236,9 +2241,9 @@ export default function Workbench({
    * Remove a project in the background, so you can keep working (and remove
    * others) meanwhile. An open project closes first: its files are going.
    */
-  async function removeProject(p: StudioProject, deleteApp: boolean): Promise<void> {
+  async function removeProject(p: StudioProject, choice: RemovalChoice): Promise<void> {
     await closeIfOpen(p.id)
-    removals.start(p, { deleteApp })
+    removals.start(p, choice)
   }
 
   /** Try a stopped removal again. Its project may have been opened since, so it closes first too. */
@@ -3954,7 +3959,7 @@ export default function Workbench({
       {confirmDelete && (
         <DeleteProjectModal
           project={confirmDelete}
-          onConfirm={(p, choice) => void removeProject(p, choice.deleteApp)}
+          onConfirm={(p, choice) => void removeProject(p, choice)}
           onClose={() => setConfirmDelete(null)}
         />
       )}

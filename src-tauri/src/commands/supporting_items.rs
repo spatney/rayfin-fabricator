@@ -388,9 +388,91 @@ pub async fn supporting_items_delete(project_id: String, key: String, remove_fol
   Ok(view_of(&project, &dir))
 }
 
+/// What deleting an app's supporting items from Fabric did, when its project
+/// is removed.
+#[derive(Serialize, Default, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SupportingDeleteAll {
+  /// Every supporting item the app created is gone from Fabric.
+  pub ok: bool,
+  /// The app's Fabric account has to sign in again.
+  pub needs_sign_in: bool,
+  /// The items Fabric didn't delete, and why.
+  pub failures: Vec<SupportingDeleteFailure>,
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SupportingDeleteFailure {
+  pub name: String,
+  pub error: String,
+}
+
+/// The order to delete an app's supporting items in: semantic models before
+/// the lakehouses they read.
+fn deletion_order(state: &AppliedState) -> Vec<(String, supporting::AppliedItem)> {
+  let mut items: Vec<_> = state.items.iter().map(|(key, item)| (key.clone(), item.clone())).collect();
+  items.sort_by_key(|(_, item)| item.item_type == LAKEHOUSE);
+  items
+}
+
+/// Delete every supporting item the app created from Fabric, when the user
+/// removes its project and chose to. Each one is forgotten as it goes, so a
+/// retry only tries what's left. Their folders go to the trash with the
+/// project's.
+#[tauri::command]
+pub async fn supporting_items_delete_all(project_id: String) -> Result<SupportingDeleteAll, String> {
+  let (_, dir) = project_dir(&project_id)?;
+  let mut state = load_state(&dir)?;
+  if state.items.is_empty() {
+    return Ok(SupportingDeleteAll { ok: true, ..Default::default() });
+  }
+  let ws = state.workspace.clone().filter(|ws| is_guid(&ws.id)).ok_or_else(|| t!("commands.supportingItems.noWorkspace"))?;
+  let account = fabric::Account::of(&dir).map_err(|f| f.message)?;
+  let mut out = SupportingDeleteAll::default();
+  for (key, item) in deletion_order(&state) {
+    match fabric::delete(&account, &ws.id, &item.item_id).await {
+      Ok(()) => {
+        state.items.remove(&key);
+      }
+      Err(f) if f.signs_in() => {
+        out.needs_sign_in = true;
+        break;
+      }
+      Err(f) => out.failures.push(SupportingDeleteFailure { name: item.display_name.clone(), error: f.message }),
+    }
+  }
+  if state.items.is_empty() {
+    state.workspace = None;
+  }
+  save_state(&dir, &state).map_err(|e| t!("commands.supportingItems.saveFailed", error = e))?;
+  out.ok = !out.needs_sign_in && out.failures.is_empty();
+  crate::services::telemetry::track_supporting(
+    crate::commands::auth::get_cached_identity().as_ref(),
+    "deleteAll",
+    if out.ok { "succeeded" } else { "failed" },
+    &[],
+  );
+  Ok(out)
+}
 #[cfg(test)]
 mod tests {
   use super::*;
+  #[test]
+  fn removing_a_project_deletes_its_models_before_the_lakehouses_they_read() {
+    let item = |name: &str, item_type: &str| supporting::AppliedItem {
+      item_id: format!("{name}-id"),
+      item_type: item_type.into(),
+      display_name: name.into(),
+      ..Default::default()
+    };
+    let mut state = AppliedState::default();
+    state.items.insert("a".into(), item("Retail", LAKEHOUSE));
+    state.items.insert("b".into(), item("Retail sales", "SemanticModel"));
+    state.items.insert("c".into(), item("Budget", "SemanticModel"));
+    let order: Vec<String> = deletion_order(&state).into_iter().map(|(_, item)| item.display_name).collect();
+    assert_eq!(order, ["Retail sales", "Budget", "Retail"]);
+  }
 
   fn ws(id: &str, name: &str) -> Workspace {
     Workspace { id: id.into(), name: name.into() }

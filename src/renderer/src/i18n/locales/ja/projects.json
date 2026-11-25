@@ -49,13 +49,22 @@
       "descNoWorkspace": "{{name}} と、その Fabric ワークスペース内のすべてのアプリ データを削除します。",
       "warn": "この操作は元に戻せません。"
     },
+    "supporting": {
+      "title": "Fabric の補助アイテム",
+      "badge": "完全削除",
+      "desc": "{{workspace}} から {{items}} を削除します。Copilot がこのアプリのために作成したセマンティック モデルとレイクハウスです。",
+      "descNoWorkspace": "Fabric から {{items}} を削除します。Copilot がこのアプリのために作成したセマンティック モデルとレイクハウスです。",
+      "warn": "これらを読み取るレポートやアプリは動作しなくなります。この操作は元に戻せません。"
+    },
     "note": {
       "noApp": "このプロジェクトにリンクされている公開済みの Fabric アプリはありません。",
       "keepsWorkspace": "Fabric ワークスペースは残ります。",
-      "keepsApp": "公開済みのアプリとそのデータは Fabric に残ります。"
+      "keepsApp": "公開済みのアプリとそのデータは Fabric に残ります。",
+      "keepsSupporting": "補助アイテムは Fabric に残ります。"
     },
     "confirmBoth": "フォルダーをごみ箱に移動してアプリを削除",
-    "confirmFolder": "フォルダーをごみ箱に移動"
+    "confirmFolder": "フォルダーをごみ箱に移動",
+    "confirmFabric": "フォルダーをごみ箱に移動して Fabric で削除"
   },
   "manage": {
     "title": "プロジェクトの管理",
@@ -238,6 +247,7 @@
     "waitingSignIn": "Fabric へのサインインを待っています…",
     "deletingApp": "公開済みのアプリを削除しています…",
     "deletingAppFrom": "{{workspace}} から公開済みのアプリを削除しています…",
+    "deletingSupporting": "Fabric の補助アイテムを削除しています…",
     "trashing": "フォルダーをごみ箱に移動しています…",
     "counting": "ファイルを数えています… {{processed, number}}",
     "moving_other": "{{count, number}} 個のファイルをごみ箱に移動しています…",
@@ -246,6 +256,9 @@
     "cantDeleteApp": "公開済みのアプリを削除できませんでした。",
     "cantDeleteAppRetry": "公開済みのアプリを削除できませんでした。もう一度お試しください。",
     "tooLong": "公開済みのアプリの削除に時間がかかりすぎています。接続が遅い可能性があります。もう一度お試しください。",
+    "supportingTooLong": "補助アイテムの削除に時間がかかりすぎています。接続が遅い可能性があります。もう一度お試しください。",
+    "cantDeleteSupporting": "Fabric の補助アイテムを削除できませんでした。もう一度お試しください。",
+    "cantDeleteSupportingItem": "Fabric で {{name}} を削除できませんでした: {{error}}",
     "cantTrash": "フォルダーをごみ箱に移動できませんでした。もう一度お試しください。",
     "signInUnfinished": "Fabric へのサインインが完了しませんでした。もう一度お試しください。",
     "cantConfirmSignIn": "Fabric へのサインインを確認できませんでした。もう一度お試しください。",

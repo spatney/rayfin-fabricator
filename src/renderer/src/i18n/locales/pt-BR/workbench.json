@@ -9,6 +9,8 @@
   },
   "remove": {
     "trashedAndAppDeleted": "A pasta do projeto está na lixeira do sistema, e o aplicativo publicado foi excluído.",
+    "trashedAndSupportingDeleted": "A pasta do projeto está na lixeira do sistema, e os itens de apoio foram excluídos do Fabric.",
+    "trashedAndAllDeleted": "A pasta do projeto está na lixeira do sistema, e o aplicativo publicado e os itens de apoio foram excluídos.",
     "trashed": "A pasta do projeto está na lixeira do sistema. Você pode restaurá-la de lá.",
     "removed": "{{name}} removido",
     "failed": "Não foi possível remover {{name}}"

@@ -53,13 +53,22 @@
       "descNoWorkspace": "Delete {{name}} and all app data in its Fabric workspace.",
       "warn": "This cannot be undone."
     },
+    "supporting": {
+      "title": "Supporting items in Fabric",
+      "badge": "Permanent",
+      "desc": "Delete {{items}} from {{workspace}}: the semantic models and lakehouses Copilot created for this app.",
+      "descNoWorkspace": "Delete {{items}} from Fabric: the semantic models and lakehouses Copilot created for this app.",
+      "warn": "Reports and apps that read them stop working. This cannot be undone."
+    },
     "note": {
       "noApp": "No published Fabric app is linked to this project.",
       "keepsWorkspace": "Your Fabric workspace will be kept.",
-      "keepsApp": "The published app and its data stay in Fabric."
+      "keepsApp": "The published app and its data stay in Fabric.",
+      "keepsSupporting": "Its supporting items stay in Fabric."
     },
     "confirmBoth": "Trash folder & delete app",
-    "confirmFolder": "Move folder to trash"
+    "confirmFolder": "Move folder to trash",
+    "confirmFabric": "Trash folder & delete in Fabric"
   },
   "manage": {
     "title": "Manage project",
@@ -243,6 +252,7 @@
     "waitingSignIn": "Waiting for you to sign in to Fabric…",
     "deletingApp": "Deleting the published app…",
     "deletingAppFrom": "Deleting the published app from {{workspace}}…",
+    "deletingSupporting": "Deleting its supporting items in Fabric…",
     "trashing": "Moving the folder to trash…",
     "counting": "Counting files… {{processed, number}}",
     "moving_one": "Moving {{count, number}} files to trash…",
@@ -253,6 +263,9 @@
     "cantDeleteApp": "Couldn’t delete the published app.",
     "cantDeleteAppRetry": "Couldn’t delete the published app. Please try again.",
     "tooLong": "Deleting the published app is taking too long. It may be a slow connection; try again.",
+    "supportingTooLong": "Deleting its supporting items is taking too long. It may be a slow connection; try again.",
+    "cantDeleteSupporting": "Couldn’t delete its supporting items in Fabric. Please try again.",
+    "cantDeleteSupportingItem": "Couldn’t delete {{name}} in Fabric: {{error}}",
     "cantTrash": "Couldn’t move the folder to trash. Please try again.",
     "signInUnfinished": "Fabric sign-in didn’t finish. Please try again.",
     "cantConfirmSignIn": "Couldn’t confirm the Fabric sign-in. Please try again.",

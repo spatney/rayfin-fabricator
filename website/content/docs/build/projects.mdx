@@ -177,9 +177,10 @@ To make Fabricator forget a project without changing its files, published apps, 
 1. Select **Manage**.
 2. Next to **Remove project**, select **Review options**.
 3. **Local project folder** is always selected. If the project has a published app, **Published Fabric app** is selected too; clear it to keep the app.
-4. Select **Move folder to trash** or **Trash folder & delete app**.
+4. If Fabricator created [supporting items](/docs/build/supporting-items) for the app, such as a semantic model or a lakehouse, **Supporting items in Fabric** lists them. Select it to delete them too.
+5. Select **Move folder to trash**, **Trash folder & delete app**, or **Trash folder & delete in Fabric**.
 
-Moving the folder uses your system trash, so you can restore it there. An app that ran on this computer keeps its local data in the folder, so that goes to the trash too. If you also delete the published app, Fabricator removes it and its data from its Fabric workspace, and that can't be undone. The Fabric workspace itself is kept.
+Moving the folder uses your system trash, so you can restore it there. An app that ran on this computer keeps its local data in the folder, so that goes to the trash too. If you also delete the published app, Fabricator removes it and its data from its Fabric workspace, and that can't be undone. The Fabric workspace itself is kept. Supporting items stay in Fabric unless you select them, because reports and other apps may read them. Deleting a lakehouse deletes its files and tables too.
 
 The removal runs in the background, so you can keep working and remove other projects at the same time. If the project is open, it closes first. Until the removal finishes, the project's row on **Your projects** shows **Removing** and what's happening, such as how many files are moving to the trash. When it's done, the project leaves the list, and a notification says its folder is in your system trash.
 

@@ -53,13 +53,22 @@
       "descNoWorkspace": "Elimina {{name}} y todos los datos de la aplicación en su área de trabajo de Fabric.",
       "warn": "Esta acción no se puede deshacer."
     },
+    "supporting": {
+      "title": "Elementos de apoyo en Fabric",
+      "badge": "Permanente",
+      "desc": "Elimina {{items}} de {{workspace}}: los modelos semánticos y lakehouses que Copilot creó para esta aplicación.",
+      "descNoWorkspace": "Elimina {{items}} de Fabric: los modelos semánticos y lakehouses que Copilot creó para esta aplicación.",
+      "warn": "Los informes y aplicaciones que los leen dejarán de funcionar. Esta acción no se puede deshacer."
+    },
     "note": {
       "noApp": "No hay ninguna aplicación de Fabric publicada vinculada a este proyecto.",
       "keepsWorkspace": "Tu área de trabajo de Fabric se conservará.",
-      "keepsApp": "La aplicación publicada y sus datos se quedan en Fabric."
+      "keepsApp": "La aplicación publicada y sus datos se quedan en Fabric.",
+      "keepsSupporting": "Sus elementos de apoyo se quedan en Fabric."
     },
     "confirmBoth": "Mover a la papelera y eliminar aplicación",
-    "confirmFolder": "Mover carpeta a la papelera"
+    "confirmFolder": "Mover carpeta a la papelera",
+    "confirmFabric": "Mover a la papelera y eliminar en Fabric"
   },
   "manage": {
     "title": "Administrar proyecto",
@@ -243,6 +252,7 @@
     "waitingSignIn": "Esperando a que inicies sesión en Fabric…",
     "deletingApp": "Eliminando la aplicación publicada…",
     "deletingAppFrom": "Eliminando la aplicación publicada de {{workspace}}…",
+    "deletingSupporting": "Eliminando sus elementos de apoyo en Fabric…",
     "trashing": "Moviendo la carpeta a la papelera…",
     "counting": "Contando archivos… {{processed, number}}",
     "moving_one": "Moviendo {{count, number}} archivo a la papelera…",
@@ -253,6 +263,9 @@
     "cantDeleteApp": "No se pudo eliminar la aplicación publicada.",
     "cantDeleteAppRetry": "No se pudo eliminar la aplicación publicada. Inténtalo de nuevo.",
     "tooLong": "Eliminar la aplicación publicada está tardando demasiado. Puede que la conexión sea lenta; inténtalo de nuevo.",
+    "supportingTooLong": "Eliminar sus elementos de apoyo está tardando demasiado. Puede que la conexión sea lenta; inténtalo de nuevo.",
+    "cantDeleteSupporting": "No se pudieron eliminar sus elementos de apoyo en Fabric. Inténtalo de nuevo.",
+    "cantDeleteSupportingItem": "No se pudo eliminar {{name}} en Fabric: {{error}}",
     "cantTrash": "No se pudo mover la carpeta a la papelera. Inténtalo de nuevo.",
     "signInUnfinished": "El inicio de sesión en Fabric no terminó. Inténtalo de nuevo.",
     "cantConfirmSignIn": "No se pudo confirmar el inicio de sesión en Fabric. Inténtalo de nuevo.",

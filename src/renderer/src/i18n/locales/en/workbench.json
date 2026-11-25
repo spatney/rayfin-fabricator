@@ -9,6 +9,8 @@
   },
   "remove": {
     "trashedAndAppDeleted": "Its folder is in your system trash, and its published app is deleted.",
+    "trashedAndSupportingDeleted": "Its folder is in your system trash, and its supporting items are deleted from Fabric.",
+    "trashedAndAllDeleted": "Its folder is in your system trash, and its published app and supporting items are deleted.",
     "trashed": "Its folder is in your system trash. You can restore it from there.",
     "removed": "Removed {{name}}",
     "failed": "Couldn’t remove {{name}}"

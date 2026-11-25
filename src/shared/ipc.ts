@@ -1407,6 +1407,16 @@ export interface SupportingItemsView {
   error?: string
 }
 
+/** What deleting an app's supporting items from Fabric did, as its project is removed. */
+export interface SupportingDeleteAll {
+  /** Every supporting item the app created is gone from Fabric. */
+  ok: boolean
+  /** The app's Fabric account has to sign in again. */
+  needsSignIn: boolean
+  /** The items Fabric didn't delete, and why. */
+  failures: { name: string; error: string }[]
+}
+
 /** What Fabric says about a supporting item the app created. */
 export interface SupportingFabricState {
   key: string
@@ -4937,6 +4947,8 @@ export interface RayfinStudioApi {
     fabric: (projectId: string) => Promise<SupportingFabricState[]>
     /** Delete an item the app created from Fabric, and with `removeFolder`, move its folder to the trash. */
     remove: (projectId: string, key: string, removeFolder: boolean) => Promise<SupportingItemsView>
+    /** Delete every item the app created from Fabric, as its project is removed. */
+    removeAll: (projectId: string) => Promise<SupportingDeleteAll>
   }
 
   screenshot: {

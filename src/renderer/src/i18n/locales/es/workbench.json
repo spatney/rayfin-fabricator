@@ -9,6 +9,8 @@
   },
   "remove": {
     "trashedAndAppDeleted": "Su carpeta está en la papelera del sistema y su aplicación publicada se eliminó.",
+    "trashedAndSupportingDeleted": "Su carpeta está en la papelera del sistema y sus elementos de apoyo se eliminaron de Fabric.",
+    "trashedAndAllDeleted": "Su carpeta está en la papelera del sistema, y su aplicación publicada y sus elementos de apoyo se eliminaron.",
     "trashed": "Su carpeta está en la papelera del sistema. Puedes restaurarla desde allí.",
     "removed": "Se quitó {{name}}",
     "failed": "No se pudo quitar {{name}}"

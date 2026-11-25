@@ -3,15 +3,18 @@ import type {
   DeleteProgressEvent,
   FabricDeleteResult,
   ProjectsState,
-  StudioProject
+  StudioProject,
+  SupportingDeleteAll
 } from '@shared/ipc'
 import { authErrorMessage } from './authErrors'
 import { translator } from './i18n'
 
 /**
  * A project being removed in the background, or one whose removal stopped. The
- * folder always moves to the system trash; the published app is deleted first
- * when chosen. Removals run side by side, so the app stays usable meanwhile.
+ * folder always moves to the system trash; when chosen, its supporting items
+ * and then its published app are deleted from Fabric first, while the folder
+ * still says what they are. Removals run side by side, so the app stays usable
+ * meanwhile.
  */
 export interface ProjectRemoval {
   project: StudioProject
@@ -19,8 +22,12 @@ export interface ProjectRemoval {
   deleteApp: boolean
   /** The app is gone already, so a retry only trashes the folder. */
   appDeleted: boolean
+  /** The supporting items Fabricator created for the app are deleted from Fabric too. */
+  deleteSupporting?: boolean
+  /** They're gone already, so a retry doesn't try them again. */
+  supportingDeleted?: boolean
   /** The step running, or the one that failed. */
-  step: 'app' | 'signin' | 'folder'
+  step: 'supporting' | 'app' | 'signin' | 'folder'
   /** Why the removal stopped. The project stays until it's tried again. */
   error?: string
   /** The folder's live file count while it moves to trash. */
@@ -33,11 +40,17 @@ export interface ProjectRemovals {
   /** Removals running or stopped, by project id. */
   removals: Readonly<Record<string, ProjectRemoval>>
   /** Start removing a project in the background. */
-  start: (project: StudioProject, choice: { deleteApp: boolean }) => void
+  start: (project: StudioProject, choice: RemovalChoice) => void
   /** Run a stopped removal again from the step that failed. */
   retry: (projectId: string) => void
   /** Forget a stopped removal; the project stays. */
   dismiss: (projectId: string) => void
+}
+
+/** What removing a project deletes in Fabric besides trashing its folder. */
+export interface RemovalChoice {
+  deleteApp: boolean
+  deleteSupporting?: boolean
 }
 
 interface Options {
@@ -45,14 +58,24 @@ interface Options {
   onSignedIn?: () => Promise<void> | void
   /** Free whatever holds the project's files (a live preview) before the folder moves. */
   beforeTrash?: (project: StudioProject) => Promise<void> | void
-  /** The project is gone. `appDeleted` is true when its published app was deleted too. */
-  onRemoved: (project: StudioProject, next: ProjectsState, appDeleted: boolean) => void
+  /**
+   * The project is gone. `appDeleted` is true when its published app was
+   * deleted too, and `supportingDeleted` when its supporting items were.
+   */
+  onRemoved: (
+    project: StudioProject,
+    next: ProjectsState,
+    appDeleted: boolean,
+    supportingDeleted: boolean
+  ) => void
   /** The removal stopped; the project stays. */
   onFailed?: (project: StudioProject, error: string) => void
 }
 
 /** Deleting the published app gives up after this long, so it can't hang. */
 const APP_TIMEOUT_MS = 130_000
+/** And so does deleting the supporting items, one after another. */
+const SUPPORTING_TIMEOUT_MS = 130_000
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -76,6 +99,15 @@ function appFailure(result: FabricDeleteResult): string {
   return result.failures[0]?.error ?? result.error ?? t('removals.cantDeleteApp')
 }
 
+function supportingFailure(result: SupportingDeleteAll): string {
+  const t = translator('projects')
+  if (result.needsSignIn) return t('removals.sessionExpired')
+  const first = result.failures[0]
+  return first
+    ? t('removals.cantDeleteSupportingItem', { name: first.name, error: first.error })
+    : t('removals.cantDeleteSupporting')
+}
+
 /**
  * The projects without one that's been removed. It's applied to the current
  * state rather than the removal's own snapshot, which can predate other changes
@@ -94,6 +126,7 @@ export function removalStatus(removal: ProjectRemoval, now: number): string {
   if (removal.error) return removal.error
   const t = translator('projects')
   if (removal.step === 'signin') return t('removals.waitingSignIn')
+  if (removal.step === 'supporting') return t('removals.deletingSupporting')
   if (removal.step === 'app') {
     return removal.project.workspaceName
       ? t('removals.deletingAppFrom', { workspace: removal.project.workspaceName })
@@ -205,6 +238,51 @@ export function useProjectRemovals(options: Options): ProjectRemovals {
         optionsRef.current.onFailed?.(project, error)
       }
       try {
+        if (entry.deleteSupporting && !entry.supportingDeleted) {
+          patch(id, { step: 'supporting', error: undefined })
+          const signIns = signInsRef.current
+          let result: SupportingDeleteAll
+          try {
+            result = await withTimeout(
+              window.api.supportingItems.removeAll(id),
+              SUPPORTING_TIMEOUT_MS
+            )
+            if (!mountedRef.current) return
+            if (!result.ok && result.needsSignIn) {
+              // The same Fabric account deletes the app: one sign-in serves both.
+              if (signInsRef.current === signIns) {
+                patch(id, { step: 'signin' })
+                const signInError = await signIn()
+                if (!mountedRef.current) return
+                if (signInError) {
+                  fail('supporting', signInError)
+                  return
+                }
+              }
+              patch(id, { step: 'supporting' })
+              result = await withTimeout(
+                window.api.supportingItems.removeAll(id),
+                SUPPORTING_TIMEOUT_MS
+              )
+              if (!mountedRef.current) return
+            }
+          } catch (reason) {
+            if (!mountedRef.current) return
+            fail(
+              'supporting',
+              reason instanceof Error && reason.message === 'timeout'
+                ? translator('projects')('removals.supportingTooLong')
+                : authErrorMessage(reason, translator('projects')('removals.cantDeleteSupporting'))
+            )
+            return
+          }
+          if (!result.ok) {
+            fail('supporting', supportingFailure(result))
+            return
+          }
+          patch(id, { supportingDeleted: true })
+        }
+
         if (entry.deleteApp && !entry.appDeleted) {
           patch(id, { step: 'app', error: undefined })
           const signIns = signInsRef.current
@@ -261,8 +339,9 @@ export function useProjectRemovals(options: Options): ProjectRemovals {
         }
         if (!mountedRef.current) return
         const appDeleted = entriesRef.current[id]?.appDeleted ?? false
+        const supportingDeleted = entriesRef.current[id]?.supportingDeleted ?? false
         write(id, null)
-        optionsRef.current.onRemoved(project, next, appDeleted)
+        optionsRef.current.onRemoved(project, next, appDeleted, supportingDeleted)
       } finally {
         runningRef.current.delete(id)
       }
@@ -271,14 +350,17 @@ export function useProjectRemovals(options: Options): ProjectRemovals {
   )
 
   const start = useCallback(
-    (project: StudioProject, choice: { deleteApp: boolean }): void => {
+    (project: StudioProject, choice: RemovalChoice): void => {
       if (runningRef.current.has(project.id)) return
+      const deleteSupporting = choice.deleteSupporting ?? false
       write(project.id, {
         project,
         deleteApp: choice.deleteApp,
-        // Started again after it stopped: an app it already deleted stays deleted.
+        // Started again after it stopped: what it already deleted stays deleted.
         appDeleted: entriesRef.current[project.id]?.appDeleted ?? false,
-        step: choice.deleteApp ? 'app' : 'folder'
+        deleteSupporting,
+        supportingDeleted: entriesRef.current[project.id]?.supportingDeleted ?? false,
+        step: deleteSupporting ? 'supporting' : choice.deleteApp ? 'app' : 'folder'
       })
       void run(project.id)
     },

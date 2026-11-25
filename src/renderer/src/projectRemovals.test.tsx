@@ -1,6 +1,11 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { FabricDeleteResult, ProcResult, ProjectsState } from '@shared/ipc'
+import type {
+  FabricDeleteResult,
+  ProcResult,
+  ProjectsState,
+  SupportingDeleteAll
+} from '@shared/ipc'
 import { removalStatus, useProjectRemovals, type ProjectRemoval } from './projectRemovals'
 import { setLanguage } from './i18n'
 import { makeProject } from '../test/harness'
@@ -14,12 +19,14 @@ function installApi(api: {
   deleteApps?: (id: string) => Promise<FabricDeleteResult>
   loginRayfin?: () => Promise<ProcResult>
   remove?: (id: string, deleteFiles?: boolean) => Promise<ProjectsState>
+  removeAll?: (id: string) => Promise<SupportingDeleteAll>
 }): void {
   ;(window as unknown as { api: unknown }).api = {
     onDeleteProgress: vi.fn(() => () => {}),
     fabric: { deleteApps: api.deleteApps ?? vi.fn() },
     auth: { loginRayfin: api.loginRayfin ?? vi.fn() },
-    projects: { remove: api.remove ?? vi.fn() }
+    projects: { remove: api.remove ?? vi.fn() },
+    supportingItems: { removeAll: api.removeAll ?? vi.fn() }
   }
 }
 
@@ -61,7 +68,12 @@ describe('useProjectRemovals', () => {
 
     // Each finishes on its own.
     await act(async () => trashed.p2.resolve(state))
-    expect(onRemoved).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2' }), state, true)
+    expect(onRemoved).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'p2' }),
+      state,
+      true,
+      false
+    )
     expect(Object.keys(result.current.removals)).toEqual(['p1'])
     await act(async () => trashed.p1.resolve(state))
     expect(onRemoved).toHaveBeenCalledTimes(2)
@@ -148,7 +160,54 @@ describe('useProjectRemovals', () => {
     await waitFor(() => expect(onRemoved).toHaveBeenCalledTimes(1))
     expect(deleteApps).toHaveBeenCalledTimes(1)
     expect(remove).toHaveBeenCalledTimes(2)
-    expect(onRemoved).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), state, true)
+    expect(onRemoved).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'p1' }),
+      state,
+      true,
+      false
+    )
+  })
+
+  it('deletes the supporting items first, with the same sign-in, and a retry skips what went', async () => {
+    const removeAll = vi
+      .fn<(id: string) => Promise<SupportingDeleteAll>>()
+      .mockResolvedValueOnce({ ok: false, needsSignIn: true, failures: [] })
+      .mockResolvedValueOnce({
+        ok: false,
+        needsSignIn: false,
+        failures: [{ name: 'Retail', error: 'Fabric is busy.' }]
+      })
+      .mockResolvedValue({ ok: true, needsSignIn: false, failures: [] })
+    const deleteApps = vi.fn().mockResolvedValue(deleted)
+    const loginRayfin = vi.fn().mockResolvedValue({ ok: true, exitCode: 0 })
+    const remove = vi.fn().mockResolvedValue(state)
+    installApi({ deleteApps, loginRayfin, remove, removeAll })
+    const onRemoved = vi.fn()
+    const { result } = renderHook(() => useProjectRemovals({ onRemoved }))
+
+    act(() => result.current.start(makeProject('p1'), { deleteApp: true, deleteSupporting: true }))
+    // Signed in once and tried again; one item didn't go, so nothing else is deleted.
+    await waitFor(() =>
+      expect(result.current.removals.p1).toMatchObject({
+        step: 'supporting',
+        error: 'Couldn’t delete Retail in Fabric: Fabric is busy.'
+      })
+    )
+    expect(loginRayfin).toHaveBeenCalledTimes(1)
+    expect(deleteApps).not.toHaveBeenCalled()
+    expect(remove).not.toHaveBeenCalled()
+
+    act(() => result.current.retry('p1'))
+    await waitFor(() => expect(onRemoved).toHaveBeenCalledTimes(1))
+    expect(onRemoved).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), state, true, true)
+    expect(removeAll).toHaveBeenCalledTimes(3)
+    expect(deleteApps).toHaveBeenCalledTimes(1)
+    expect(
+      removalStatus(
+        { project: makeProject('p1'), deleteApp: true, appDeleted: false, step: 'supporting' },
+        0
+      )
+    ).toBe('Deleting its supporting items in Fabric…')
   })
 })
 

@@ -9,6 +9,8 @@
   },
   "remove": {
     "trashedAndAppDeleted": "フォルダーはシステムのごみ箱に移動され、公開済みのアプリは削除されました。",
+    "trashedAndSupportingDeleted": "フォルダーはシステムのごみ箱に移動され、補助アイテムは Fabric から削除されました。",
+    "trashedAndAllDeleted": "フォルダーはシステムのごみ箱に移動され、公開済みのアプリと補助アイテムは削除されました。",
     "trashed": "フォルダーはシステムのごみ箱に移動されました。そこから復元できます。",
     "removed": "{{name}} を削除しました",
     "failed": "{{name}} を削除できませんでした"

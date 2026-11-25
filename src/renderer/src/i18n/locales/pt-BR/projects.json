@@ -53,13 +53,22 @@
       "descNoWorkspace": "Exclui {{name}} e todos os dados do aplicativo no workspace do Fabric em que ele está.",
       "warn": "Não é possível desfazer essa ação."
     },
+    "supporting": {
+      "title": "Itens de apoio no Fabric",
+      "badge": "Permanente",
+      "desc": "Exclui {{items}} de {{workspace}}: os modelos semânticos e lakehouses que o Copilot criou para este app.",
+      "descNoWorkspace": "Exclui {{items}} do Fabric: os modelos semânticos e lakehouses que o Copilot criou para este app.",
+      "warn": "Relatórios e apps que os leem deixam de funcionar. Não é possível desfazer essa ação."
+    },
     "note": {
       "noApp": "Nenhum aplicativo publicado no Fabric está vinculado a este projeto.",
       "keepsWorkspace": "Seu workspace do Fabric será mantido.",
-      "keepsApp": "O aplicativo publicado e os dados dele continuam no Fabric."
+      "keepsApp": "O aplicativo publicado e os dados dele continuam no Fabric.",
+      "keepsSupporting": "Os itens de apoio continuam no Fabric."
     },
     "confirmBoth": "Mover pasta para a lixeira e excluir aplicativo",
-    "confirmFolder": "Mover pasta para a lixeira"
+    "confirmFolder": "Mover pasta para a lixeira",
+    "confirmFabric": "Mover pasta para a lixeira e excluir no Fabric"
   },
   "manage": {
     "title": "Gerenciar projeto",
@@ -243,6 +252,7 @@
     "waitingSignIn": "Aguardando você entrar no Fabric…",
     "deletingApp": "Excluindo o aplicativo publicado…",
     "deletingAppFrom": "Excluindo o aplicativo publicado de {{workspace}}…",
+    "deletingSupporting": "Excluindo os itens de apoio no Fabric…",
     "trashing": "Movendo a pasta para a lixeira…",
     "counting": "Contando arquivos… {{processed, number}}",
     "moving_one": "Movendo {{count, number}} arquivo para a lixeira…",
@@ -253,6 +263,9 @@
     "cantDeleteApp": "Não foi possível excluir o aplicativo publicado.",
     "cantDeleteAppRetry": "Não foi possível excluir o aplicativo publicado. Tente novamente.",
     "tooLong": "A exclusão do aplicativo publicado está demorando demais. A conexão pode estar lenta; tente novamente.",
+    "supportingTooLong": "A exclusão dos itens de apoio está demorando demais. A conexão pode estar lenta; tente novamente.",
+    "cantDeleteSupporting": "Não foi possível excluir os itens de apoio no Fabric. Tente novamente.",
+    "cantDeleteSupportingItem": "Não foi possível excluir {{name}} no Fabric: {{error}}",
     "cantTrash": "Não foi possível mover a pasta para a lixeira. Tente novamente.",
     "signInUnfinished": "A entrada no Fabric não foi concluída. Tente novamente.",
     "cantConfirmSignIn": "Não foi possível confirmar a entrada no Fabric. Tente novamente.",

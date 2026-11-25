@@ -483,7 +483,8 @@ export const api: RayfinStudioApi = {
       invoke('supporting_items_schema', { projectId, folder }),
     fabric: (projectId: string) => invoke('supporting_items_fabric', { projectId }),
     remove: (projectId: string, key: string, removeFolder: boolean) =>
-      invoke('supporting_items_delete', { projectId, key, removeFolder })
+      invoke('supporting_items_delete', { projectId, key, removeFolder }),
+    removeAll: (projectId: string) => invoke('supporting_items_delete_all', { projectId })
   },
 
   screenshot: {

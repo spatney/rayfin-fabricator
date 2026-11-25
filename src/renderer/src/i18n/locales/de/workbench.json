@@ -9,6 +9,8 @@
   },
   "remove": {
     "trashedAndAppDeleted": "Der Ordner befindet sich im Papierkorb deines Systems, und die veröffentlichte App wurde gelöscht.",
+    "trashedAndSupportingDeleted": "Der Ordner befindet sich im Papierkorb deines Systems, und die unterstützenden Elemente wurden in Fabric gelöscht.",
+    "trashedAndAllDeleted": "Der Ordner befindet sich im Papierkorb deines Systems, und die veröffentlichte App und die unterstützenden Elemente wurden gelöscht.",
     "trashed": "Der Ordner befindet sich im Papierkorb deines Systems. Du kannst ihn von dort wiederherstellen.",
     "removed": "{{name}} wurde entfernt",
     "failed": "{{name}} konnte nicht entfernt werden"

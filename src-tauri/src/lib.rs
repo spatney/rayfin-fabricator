@@ -523,6 +523,7 @@ pub fn run() {
       commands::supporting_items::supporting_items_schema,
       commands::supporting_items::supporting_items_fabric,
       commands::supporting_items::supporting_items_delete,
+      commands::supporting_items::supporting_items_delete_all,
       // suggestions
       commands::suggest::chat_suggest,
       commands::suggest::chat_suggest_cancel,
