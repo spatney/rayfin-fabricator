@@ -68,7 +68,9 @@ describe('AddMenu', () => {
 })
 
 describe('PluginsMenu', () => {
-  function renderPlugins(over: { on?: string[]; workIq?: boolean; disabled?: boolean } = {}) {
+  function renderPlugins(
+    over: { on?: string[]; workIq?: boolean; disabled?: boolean; supportingItems?: boolean } = {}
+  ) {
     const onToggle = vi.fn()
     const onLearnMore = vi.fn()
     render(
@@ -76,6 +78,7 @@ describe('PluginsMenu', () => {
         plugins={offeredPlugins({ workIq: over.workIq })}
         servers={[]}
         on={over.on ?? []}
+        supportingItems={over.supportingItems}
         disabled={over.disabled}
         onToggle={onToggle}
         onLearnMore={onLearnMore}
@@ -83,6 +86,36 @@ describe('PluginsMenu', () => {
     )
     return { onToggle, onLearnMore }
   }
+
+  it('offers Supporting items on their own, as changing Fabric with approval, only while offered', () => {
+    const { onToggle } = renderPlugins({ supportingItems: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Plugins' }))
+    const supporting = screen.getByRole('menuitemcheckbox', { name: /Supporting items/ })
+    expect(supporting.getAttribute('aria-checked')).toBe('false')
+    // It shipped: no longer marked as an experiment.
+    expect(supporting.textContent).not.toContain('Experiment')
+    expect(screen.getByText('Changes Fabric')).toBeTruthy()
+    expect(screen.getByText('Asks you first')).toBeTruthy()
+    fireEvent.click(supporting)
+    expect(onToggle).toHaveBeenLastCalledWith('supporting-items', true)
+
+    // On, the pill names it beside the plugins that read.
+    cleanup()
+    renderPlugins({ supportingItems: true, on: ['fabric-iq', 'supporting-items'] })
+    fireEvent.click(screen.getByRole('button', { name: 'Plugins: Fabric IQ, Supporting items' }))
+    expect(
+      screen
+        .getByRole('menuitemcheckbox', { name: /Supporting items/ })
+        .getAttribute('aria-checked')
+    ).toBe('true')
+
+    // Not offered (a team app): neither shown nor named, even when on.
+    cleanup()
+    renderPlugins({ on: ['supporting-items'] })
+    fireEvent.click(screen.getByRole('button', { name: 'Plugins' }))
+    expect(screen.queryByRole('menuitemcheckbox', { name: /Supporting items/ })).toBeNull()
+    expect(screen.queryByText('Changes Fabric')).toBeNull()
+  })
 
   it('offers Fabric IQ, off to start, and Work IQ only while its experiment is on', () => {
     const { onToggle } = renderPlugins()

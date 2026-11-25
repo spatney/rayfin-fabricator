@@ -35,6 +35,7 @@ pub mod security;
 pub mod settings;
 pub mod skills;
 pub mod suggest;
+pub mod supporting_items;
 pub mod team;
 pub mod terminal;
 pub mod transient;

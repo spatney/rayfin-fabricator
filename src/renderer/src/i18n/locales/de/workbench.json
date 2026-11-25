@@ -77,7 +77,8 @@
     "versionCheckFailedTitle": "Versionsprüfung fehlgeschlagen",
     "changesCheckFailed": "Es konnte nicht geprüft werden, ob es Änderungen zum Veröffentlichen gibt.",
     "autoPublishCheckFailed": "{{error}} Wähle „Veröffentlichen“ aus, um deine Änderungen zu veröffentlichen.",
-    "autoPublishFailedTitle": "Automatisches Veröffentlichen nicht möglich"
+    "autoPublishFailedTitle": "Automatisches Veröffentlichen nicht möglich",
+    "continueSupporting": "Weitermachen, jetzt mit „Unterstützende Elemente“"
   },
   "rayfin": {
     "updateTo": "Rayfin auf {{version}} aktualisieren",

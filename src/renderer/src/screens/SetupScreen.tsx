@@ -356,6 +356,7 @@ export default function SetupScreen({
 
           {problem && (
             <div className="setup-problem" role="alert">
+              <Codicon name="error" className="setup-problem-ico" />
               <div className="setup-problem-main">
                 <p className="setup-problem-title">{problem.title}</p>
                 <p className="setup-problem-fix">{problem.fix}</p>

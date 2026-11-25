@@ -252,6 +252,7 @@ describe('SettingsModal retired controls', () => {
           mcpServers: enabled,
           appExport: enabled,
           parallelUi: enabled,
+          supportingItems: enabled,
           teamWorkspaces: true
         }
       }
@@ -271,7 +272,8 @@ describe('SettingsModal retired controls', () => {
         'Performance',
         'Ray',
         'Check for updates',
-        'Parallel UI builder'
+        'Parallel UI builder',
+        'Supporting items'
       ]) {
         expect(screen.queryByText(label)).toBeNull()
       }

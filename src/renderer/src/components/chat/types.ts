@@ -15,6 +15,8 @@ export interface UIChatMessage extends ChatMessage {
   notice?: string
   /** Transient error from answering a standalone Agent-mode question; not persisted. */
   questionError?: string
+  /** Transient error from answering a supporting items card, by its id; not persisted. */
+  supportingError?: { id: string; text: string }
   /** This live turn's authentication error has been resolved by in-app sign-in. */
   authResolved?: boolean
 }

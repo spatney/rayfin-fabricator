@@ -305,11 +305,16 @@
   margin: 10px 0 0 22px;
   padding: 8px 10px;
   border: 1px solid var(--border);
-  border-left: 2px solid var(--danger);
   border-radius: var(--radius-sm);
   background: var(--bg-elev);
   color: var(--text);
   font-size: 12px;
+}
+
+.help-err .codicon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--danger);
 }
 
 /* ----------------------------- working dots ----------------------------- */
@@ -476,11 +481,9 @@
   transform: none;
 }
 
-/* The recommended step: accent rule and icon, not a filled block, so two
-   offered actions never compete as equals. */
+/* The recommended step: an accent icon and a stronger label, not a filled
+   block, so two offered actions never compete as equals. */
 .help-action.is-primary {
-  border-color: var(--border);
-  border-left: 2px solid var(--accent);
   color: var(--text);
 }
 
@@ -488,8 +491,8 @@
   color: var(--accent);
 }
 
-.help-action.is-primary:hover {
-  border-color: var(--accent);
+.help-action.is-primary .help-action-label {
+  font-weight: 600;
 }
 
 .help-cites {
@@ -985,8 +988,11 @@
 }
 
 .help-offline-item.is-primary {
-  border-left: 2px solid var(--accent);
   color: var(--text);
+}
+
+.help-offline-item.is-primary .help-offline-title {
+  font-weight: 600;
 }
 
 .help-offline-icon {

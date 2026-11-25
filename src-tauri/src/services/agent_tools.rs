@@ -57,12 +57,21 @@ use crate::types::{
 /// Build the Fabricator in-process tool set for one project's chat session.
 /// The local backend tools come with the Local guidance only: other apps'
 /// backends run on Microsoft Fabric. The tool that shows a followed custom
-/// instruction comes only while the user has some (`custom_instructions`).
-pub fn fabricator_tools(app: AppHandle, project_id: String, guidance: Guidance, custom_instructions: bool) -> Vec<Tool> {
+/// instruction comes only while the user has some (`custom_instructions`), and
+/// the supporting items tools as the app's chat has them (`supporting`, see
+/// [`crate::services::supporting_items::in_chat`]).
+pub fn fabricator_tools(
+  app: AppHandle,
+  project_id: String,
+  guidance: Guidance,
+  custom_instructions: bool,
+  supporting: crate::services::supporting_items::InChat,
+) -> Vec<Tool> {
   let mut tools = vec![connect_fabric_iq_tool(app.clone(), project_id.clone())];
   if custom_instructions {
     tools.push(followed_instruction_tool());
   }
+  tools.extend(crate::services::supporting_items::tools::tools(app.clone(), project_id.clone(), supporting));
   if guidance == Guidance::Local {
     tools.push(local_status_tool(app.clone(), project_id.clone()));
     tools.push(local_call_tool(app.clone(), project_id.clone()));
@@ -87,7 +96,7 @@ pub(crate) fn failure(message: impl Into<String>) -> ToolResult {
 pub(crate) const CONNECT_FABRIC_IQ_TOOL: &str = "fabricator_connect_fabric_iq";
 
 /// The choice on the card that leaves Fabric IQ as it is.
-fn not_now() -> String {
+pub(crate) fn not_now() -> String {
   t!("services.agentTools.notNow")
 }
 
@@ -150,7 +159,7 @@ impl ToolHandler for ConnectFabricIqTool {
 
 /// The agent's `reason`, as the user sees it in a sentence: on one line, without
 /// a closing period, and short.
-fn shown_reason(reason: &str) -> String {
+pub(crate) fn shown_reason(reason: &str) -> String {
   let reason = reason.split_whitespace().collect::<Vec<_>>().join(" ");
   let reason = reason.trim_end_matches('.');
   match reason.char_indices().nth(REASON_CHARS) {
@@ -306,7 +315,7 @@ async fn connect_fabric_iq(app: &AppHandle, project_id: &str, session_id: &str, 
 }
 
 /// How often a question waiting for another one to be answered looks again.
-const QUESTION_POLL: Duration = Duration::from_millis(300);
+pub(crate) const QUESTION_POLL: Duration = Duration::from_millis(300);
 
 /// One Fabric IQ connection at a time in a project, so a second call (from a
 /// subagent, or made in parallel) waits, then finds it connected rather than
@@ -330,9 +339,9 @@ fn remember_declined(project_id: &str, turn_id: &str, ask: FabricIqAsk) {
 }
 
 /// A question for the user, and the choices on its card.
-struct Card {
-  question: String,
-  choices: Vec<String>,
+pub(crate) struct Card {
+  pub(crate) question: String,
+  pub(crate) choices: Vec<String>,
 }
 
 /// Asks the user on a question card in the turn, the way `ask_user` does, and
@@ -340,7 +349,7 @@ struct Card {
 /// come one at a time: it waits for any other question to be answered before
 /// it asks, and when another one replaces it (an `ask_user` card, say), it
 /// takes its card back and asks again once that one's answered.
-async fn ask_on_card(
+pub(crate) async fn ask_on_card(
   gate: &PlanGate,
   session_id: &str,
   plan_context: bool,

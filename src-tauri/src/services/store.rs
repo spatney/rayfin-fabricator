@@ -195,6 +195,7 @@ fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: Experimen
   if let Some(v) = patch.report_migration { current.report_migration = Some(v); }
   if let Some(v) = patch.work_iq { current.work_iq = Some(v); }
   if let Some(v) = patch.pro_workspaces { current.pro_workspaces = Some(v); }
+
 }
 
 /// Each provider's models and the ones shown in the model pickers.
@@ -250,6 +251,7 @@ pub fn pro_workspaces_enabled() -> bool {
       .unwrap_or(false)
   })
 }
+
 
 /// The MCP servers the user added, in the order they were added.
 pub fn mcp_servers() -> Vec<McpServerEntry> {
@@ -550,7 +552,7 @@ mod tests {
   #[test]
   fn obsolete_experiment_flags_still_load_and_are_dropped() {
     let flags: ExperimentFlags = serde_json::from_value(serde_json::json!({
-      "appGallery":true,"mcpServers":true,"appExport":true,"goals":true,"parallelUi":true,"workIq":true
+      "appGallery":true,"mcpServers":true,"appExport":true,"goals":true,"parallelUi":true,"supportingItems":true,"workIq":true
     })).unwrap();
     assert_eq!(serde_json::to_value(flags).unwrap(), serde_json::json!({"workIq":true}));
   }

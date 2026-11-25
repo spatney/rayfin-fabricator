@@ -505,6 +505,7 @@ pub fn run() {
       commands::chat::chat_reset,
       commands::chat::chat_resolve_plan,
       commands::chat::chat_resolve_question,
+      commands::chat::chat_resolve_supporting_review,
       commands::chat::chat_export_plan,
       commands::chat::chat_pick_paths,
       commands::chat::chat_inspect_paths,
@@ -516,6 +517,12 @@ pub fn run() {
       commands::chat::chat_auto_tiers,
       commands::chat::chat_usage,
       commands::chat::chat_quota,
+      // supporting items
+      commands::supporting_items::supporting_items_list,
+      commands::supporting_items::supporting_items_workspaces,
+      commands::supporting_items::supporting_items_schema,
+      commands::supporting_items::supporting_items_fabric,
+      commands::supporting_items::supporting_items_delete,
       // suggestions
       commands::suggest::chat_suggest,
       commands::suggest::chat_suggest_cancel,

@@ -24,6 +24,7 @@
     "build/migrate-power-bi",
     "build/app-gallery",
     "build/fabric-iq-and-work-iq",
+    "build/supporting-items",
     "build/mcp-servers",
     "build/skills",
     "build/secrets",

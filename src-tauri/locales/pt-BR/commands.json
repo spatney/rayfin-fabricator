@@ -132,7 +132,9 @@
     "cantSavePlan": "Não foi possível salvar o plano: {{error}}",
     "pickPathsTitle": "Escolha arquivos ou pastas para o Copilot ler",
     "unknownPlugin": "O Fabricator não tem o plug-in {{plugin}}.",
-    "serverGone": "Esse servidor MCP não está mais no Fabricator."
+    "serverGone": "Esse servidor MCP não está mais no Fabricator.",
+    "supportingItemsTeam": "Os itens de apoio não estão disponíveis em aplicativos de equipe.",
+    "noPendingReview": "Este cartão não está mais esperando uma resposta."
   },
   "chatTools": {
     "localCall": {
@@ -544,5 +546,15 @@
   "transient": {
     "cantReach": "Não foi possível se conectar ao modelo.",
     "cantSend": "Não foi possível enviar a solicitação ao modelo."
+  },
+  "supportingItems": {
+    "noFolder": "supporting-items/{{folder}} não é um dos itens de apoio deste aplicativo.",
+    "notCreated": "O Fabricator não criou este item, então não pode excluí-lo.",
+    "noWorkspace": "O supporting-items/applied.json não informa em qual workspace os itens estão.",
+    "signIn": "Entre no Fabric novamente (com Atualizar a autenticação do Fabric no menu da conta) e tente novamente.",
+    "deleteFailed": "O Fabric não conseguiu excluí-lo: {{error}}",
+    "saveFailed": "Ele foi excluído do Fabric, mas o Fabricator não conseguiu atualizar o supporting-items/applied.json: {{error}}",
+    "trashFailed": "Ele foi excluído do Fabric, mas não foi possível mover a pasta dele para a lixeira: {{error}}",
+    "notAModel": "{{folder}} é um lakehouse, não um modelo semântico, então não há modelo para mostrar."
   }
 }

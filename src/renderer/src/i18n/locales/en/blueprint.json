@@ -9,7 +9,8 @@
     "cantDraw": "Couldn’t draw the app",
     "openYml": "Open rayfin.yml",
     "metadataTooLarge": "metadata.json is too large to read.",
-    "firstFiles": "Read the first {{max}} of {{total}} files in {{dir}}/."
+    "firstFiles": "Read the first {{max}} of {{total}} files in {{dir}}/.",
+    "supportingItems": "Supporting items"
   },
   "identity": {
     "user": "User’s identity",
@@ -211,7 +212,9 @@
     },
     "connections_one": "{{count}} connection",
     "connections_other": "{{count}} connections",
-    "calledBy": "Called by {{functions}}"
+    "calledBy": "Called by {{functions}}",
+    "supportingTag": "Supporting",
+    "supportingTitle": "A supporting item: Fabricator created it for this app. It isn't part of the Rayfin app."
   },
   "inspector": {
     "panelAria": "{{title}} details",
@@ -378,6 +381,12 @@
       "ownAccess": "Each person’s own Fabric access applies, and per-person rules on its tables can use who they are.",
       "details": "Details",
       "grantApp": "Grant the app"
+    },
+    "supporting": {
+      "title": "Supporting item",
+      "lead": "Fabricator created this semantic model for the app from {{folder}}, when you approved it in the chat. It isn't part of the Rayfin app, and Publish doesn't change it.",
+      "openDefinition": "Open definition",
+      "lakehouse": "It reads its data from the {{name}} lakehouse with Direct Lake: a supporting item too, which Fabricator loads from files in the app’s folder."
     }
   }
 }

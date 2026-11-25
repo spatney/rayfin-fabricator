@@ -77,7 +77,8 @@
     "versionCheckFailedTitle": "Version check failed",
     "changesCheckFailed": "Could not check for changes to publish.",
     "autoPublishCheckFailed": "{{error}} Select Publish to publish your changes.",
-    "autoPublishFailedTitle": "Couldn’t publish automatically"
+    "autoPublishFailedTitle": "Couldn’t publish automatically",
+    "continueSupporting": "Continue, now that Supporting items are on"
   },
   "rayfin": {
     "updateTo": "Update Rayfin to {{version}}",

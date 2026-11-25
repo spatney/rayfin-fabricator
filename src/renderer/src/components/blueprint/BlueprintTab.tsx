@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type JSX } from 'react'
-import type { FileNode, StudioProject, TeamManifest } from '@shared/ipc'
+import type {
+  FileNode,
+  StudioProject,
+  SupportingItemsView as SupportingItems,
+  TeamManifest
+} from '@shared/ipc'
 import { translator, useTranslation } from '../../i18n'
 import { emptyDataModel, parseProjectDataModel, type DataModel } from '../../model/parseSchema'
 import { loadProjectFabricConfig } from '../../model/fabricConfig'
@@ -20,6 +25,7 @@ import {
 } from '../../model/sqlSource'
 import ModelView from '../ModelView'
 import SemanticModelView from '../SemanticModelView'
+import SupportingItemsView from '../supporting/SupportingItemsView'
 import { Codicon } from '../icons'
 import ArchitectureView from './ArchitectureView'
 import DataView from './DataView'
@@ -41,10 +47,17 @@ interface Props {
   teamManifest?: TeamManifest
   /** Open Code → Secrets. */
   onOpenSecrets?: () => void
+  /** Sign in to Fabric again, as the account menu's Refresh Fabric authentication does. */
+  onRefreshAuth?: () => void
+  /** A view turned a plugin on in the app's chat. */
+  onPluginsChanged?: () => void
 }
 
-/** `data` is the Data model view; `local-data` the Data explorer, which shows the local data. */
-export type BlueprintView = 'architecture' | 'data' | 'local-data' | 'fabric'
+/**
+ * `data` is the Data model view; `local-data` the Data explorer, which shows the
+ * local data; `supporting` the Supporting items view.
+ */
+export type BlueprintView = 'architecture' | 'data' | 'local-data' | 'fabric' | 'supporting'
 
 const VIEW_PREF_PREFIX = 'rayfin.model.view.'
 /** Enough for any real functions folder; a runaway tree doesn't stall the tab. */
@@ -57,7 +70,13 @@ function readViewPref(projectId: string): BlueprintView | null {
     const v = localStorage.getItem(VIEW_PREF_PREFIX + projectId)
     // The Fabric connections view was called Semantic model before it drew SQL sources too.
     if (v === 'semantic') return 'fabric'
-    return v === 'architecture' || v === 'data' || v === 'local-data' || v === 'fabric' ? v : null
+    return v === 'architecture' ||
+      v === 'data' ||
+      v === 'local-data' ||
+      v === 'fabric' ||
+      v === 'supporting'
+      ? v
+      : null
   } catch {
     return null
   }
@@ -210,7 +229,10 @@ async function loadBlueprint(projectId: string, projectName: string): Promise<Lo
  *    `fabric.yaml` or a connector, and the tables of its SQL database,
  *    warehouse and lakehouse connectors, read from the project;
  *  - **Data explorer**: the rows, stored files and local users the app's local
- *    backend keeps on this computer, with clearing and deleting them.
+ *    backend keeps on this computer, with clearing and deleting them;
+ *  - **Supporting items** (an experiment): the Fabric items the app relies on
+ *    that aren't part of the Rayfin app, as `supporting-items/` defines them,
+ *    and where each stands in Fabric.
  *
  * The chosen view is remembered per project.
  */
@@ -223,7 +245,9 @@ export default function BlueprintTab({
   onSignedIn,
   fabricUser,
   teamManifest,
-  onOpenSecrets
+  onOpenSecrets,
+  onRefreshAuth,
+  onPluginsChanged
 }: Props): JSX.Element {
   const { t, i18n } = useTranslation('blueprint')
   const [loaded, setLoaded] = useState<Loaded | null>(null)
@@ -263,6 +287,20 @@ export default function BlueprintTab({
     }
   }, [project.id, project.name, refreshKey, language])
 
+  // The app's supporting items: what `supporting-items/` defines, which Fabricator
+  // creates and changes in Fabric with the user's approval (an experiment).
+  const [supporting, setSupporting] = useState<SupportingItems | null>(null)
+  useEffect(() => {
+    let alive = true
+    window.api.supportingItems?.list(project.id).then(
+      (next) => alive && setSupporting(next),
+      () => alive && setSupporting(null)
+    )
+    return () => {
+      alive = false
+    }
+  }, [project.id, refreshKey, project.plugins])
+
   const pick = useCallback(
     (next: BlueprintView): void => {
       setView(next)
@@ -279,8 +317,37 @@ export default function BlueprintTab({
   const semanticModels = useMemo(() => arch?.semanticModels ?? [], [arch])
   const sqlSources = useMemo(() => loaded?.sqlSources ?? [], [loaded])
   const fabricSources = semanticModels.length + sqlSources.length
-  // A remembered Fabric connections view falls back when the app no longer connects to any.
-  const active: BlueprintView = view === 'fabric' && !fabricSources ? 'architecture' : view
+  // The sources that are the app's supporting items, marked as such, with the
+  // supporting lakehouse a Direct Lake one reads.
+  const supportingFolders = useMemo(() => {
+    const byItem = new Map<string, { folder: string; lakehouse?: string }>()
+    for (const item of supporting?.items ?? []) {
+      const lakehouse = item.summary?.sources.find((s) => s.item)?.item
+      if (item.itemId) byItem.set(item.itemId.toLowerCase(), { folder: item.folder, lakehouse })
+    }
+    return byItem
+  }, [supporting])
+  const shownArch = useMemo(() => {
+    if (!arch || supportingFolders.size === 0) return arch
+    return {
+      ...arch,
+      sources: arch.sources.map((src) => {
+        const found = src.itemId ? supportingFolders.get(src.itemId.toLowerCase()) : undefined
+        return found ? { ...src, supporting: found } : src
+      })
+    }
+  }, [arch, supportingFolders])
+  const usedItemIds = useMemo(
+    () => new Set((arch?.sources ?? []).flatMap((s) => (s.itemId ? [s.itemId.toLowerCase()] : []))),
+    [arch]
+  )
+  // Once its chat has them on, or it has some: other apps' Blueprint stays as it was.
+  const showSupporting = Boolean(supporting && (supporting.on || supporting.items.length > 0))
+  // A remembered view falls back when the app no longer has what it shows.
+  const active: BlueprintView =
+    (view === 'fabric' && !fabricSources) || (view === 'supporting' && !showSupporting)
+      ? 'architecture'
+      : view
 
   const owner = fabricUser || activeAccount
   const appIdentity = useMemo(
@@ -318,11 +385,35 @@ export default function BlueprintTab({
           }
         ]
       : []),
-    { id: 'local-data', label: t('tab.dataExplorer'), icon: 'table' }
+    { id: 'local-data', label: t('tab.dataExplorer'), icon: 'table' },
+    ...(showSupporting
+      ? [
+          {
+            id: 'supporting' as const,
+            label: t('tab.supportingItems'),
+            icon: 'layers',
+            count: supporting?.items.length || undefined
+          }
+        ]
+      : [])
   ]
 
   let body: JSX.Element
-  if (active === 'local-data') {
+  if (active === 'supporting' && supporting) {
+    // Read from the app's files and Fabric, so it doesn't wait for the rest of Blueprint.
+    body = (
+      <SupportingItemsView
+        project={project}
+        items={supporting}
+        usedItemIds={usedItemIds}
+        onChanged={setSupporting}
+        onOpenFile={onOpenFile}
+        onSendToChat={onSendToChat}
+        onRefreshAuth={onRefreshAuth}
+        onPluginsChanged={onPluginsChanged}
+      />
+    )
+  } else if (active === 'local-data') {
     // Read from the local backend, so it doesn't wait for the project's files.
     body = (
       <DataView
@@ -371,7 +462,7 @@ export default function BlueprintTab({
   } else {
     body = (
       <ArchitectureView
-        arch={loaded.arch}
+        arch={shownArch ?? loaded.arch}
         project={project}
         appIdentity={appIdentity}
         workspaceName={workspaceName}

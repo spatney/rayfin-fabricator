@@ -77,7 +77,8 @@
     "versionCheckFailedTitle": "Error al comprobar la versión",
     "changesCheckFailed": "No se pudo comprobar si hay cambios para publicar.",
     "autoPublishCheckFailed": "{{error}} Selecciona Publicar para publicar tus cambios.",
-    "autoPublishFailedTitle": "No se pudo publicar automáticamente"
+    "autoPublishFailedTitle": "No se pudo publicar automáticamente",
+    "continueSupporting": "Continuar, ahora con Elementos de apoyo activados"
   },
   "rayfin": {
     "updateTo": "Actualizar Rayfin a {{version}}",

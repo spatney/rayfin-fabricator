@@ -2103,9 +2103,14 @@ code {
   margin-top: 16px;
   padding: 13px 15px;
   border: 1px solid var(--border);
-  border-left: 2px solid var(--danger);
   border-radius: var(--radius-sm);
   background: var(--bg-elev);
+}
+
+.setup-problem-ico {
+  flex: none;
+  margin: 2px -6px 0 0;
+  color: var(--danger);
 }
 
 .setup-problem-main {
@@ -2144,7 +2149,6 @@ code {
   padding: 12px 15px;
   margin-top: 16px;
   border: 1px solid var(--border);
-  border-left: 2px solid var(--accent);
   border-radius: var(--radius-sm);
   background: var(--bg-elev);
 }
@@ -13275,9 +13279,9 @@ select.ws-input:disabled {
 /* ── Plan Mode card + review dialog (`.chat-plan-*`) ─────────────────────────
    Scoped namespace for the Plan-mode overhaul: the inline turn card
    (PlanCard), its clarifying-question sub-cards (PlanQuestionCard), and the
-   focused review/edit dialog (PlanReviewDialog). Flat surfaces, a restrained
-   accent border, and solid status colors instead of shadows/gradients match
-   the rest of the app's chat surface. */
+   focused review/edit dialog (PlanReviewDialog). Flat surfaces with neutral
+   borders match the rest of the app's chat surface: the header's icon and
+   phase badge say where the plan stands, not a colored edge. */
 .chat-plan-card {
   margin-top: 10px;
   padding: 13px 15px;
@@ -13285,24 +13289,8 @@ select.ws-input:disabled {
   flex-direction: column;
   gap: 10px;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
   border-radius: var(--radius);
   background: var(--bg-elev-2);
-}
-
-.chat-plan-card--completed {
-  border-left-color: var(--ok);
-}
-
-.chat-plan-card--failed,
-.chat-plan-card--interruptedReview,
-.chat-plan-card--interruptedExecution {
-  border-left-color: var(--danger);
-}
-
-.chat-plan-card--clarifying,
-.chat-plan-card--revising {
-  border-left-color: var(--pending);
 }
 
 .chat-plan-card--busy {

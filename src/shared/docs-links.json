@@ -16,6 +16,7 @@
     "plugins": "/docs/build/fabric-iq-and-work-iq",
     "chatUsage": "/docs/build/chat#see-what-a-chat-has-used",
     "mcpServers": "/docs/build/mcp-servers",
+    "supportingItems": "/docs/build/supporting-items",
     "teamAdmins": "/docs/team/administrators",
     "install": "/docs/start/install"
   }

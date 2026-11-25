@@ -9,7 +9,8 @@
     "cantDraw": "No se pudo dibujar la aplicación",
     "openYml": "Abrir rayfin.yml",
     "metadataTooLarge": "metadata.json es demasiado grande para leerlo.",
-    "firstFiles": "Se leyeron los primeros {{max}} de {{total}} archivos de {{dir}}/."
+    "firstFiles": "Se leyeron los primeros {{max}} de {{total}} archivos de {{dir}}/.",
+    "supportingItems": "Elementos de apoyo"
   },
   "identity": {
     "user": "Identidad del usuario",
@@ -211,7 +212,9 @@
     },
     "connections_one": "{{count}} conexión",
     "connections_other": "{{count}} conexiones",
-    "calledBy": "Se llama desde {{functions}}"
+    "calledBy": "Se llama desde {{functions}}",
+    "supportingTag": "De apoyo",
+    "supportingTitle": "Un elemento de apoyo: Fabricator lo creó para esta aplicación. No forma parte de la aplicación de Rayfin."
   },
   "inspector": {
     "panelAria": "Detalles de {{title}}",
@@ -378,6 +381,12 @@
       "ownAccess": "Se aplica el propio acceso a Fabric de cada persona, y las reglas por persona de sus tablas pueden usar quién es.",
       "details": "Detalles",
       "grantApp": "Conceder a la aplicación"
+    },
+    "supporting": {
+      "title": "Elemento de apoyo",
+      "lead": "Fabricator creó este modelo semántico para la aplicación a partir de {{folder}} cuando lo aprobaste en el chat. No forma parte de la aplicación de Rayfin y Publicar no lo cambia.",
+      "openDefinition": "Abrir la definición",
+      "lakehouse": "Lee sus datos del lakehouse {{name}} con Direct Lake: también es un elemento de apoyo, que Fabricator carga desde archivos de la carpeta de la aplicación."
     }
   }
 }

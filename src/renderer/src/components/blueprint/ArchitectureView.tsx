@@ -1001,7 +1001,14 @@ function SourceRow({
         <Codicon name={src.icon} />
       </span>
       <div className="bp-row-text">
-        <strong>{name}</strong>
+        <strong>
+          {name}
+          {src.supporting && (
+            <span className="bp-supporting-tag" title={t('view.supportingTitle')}>
+              {t('view.supportingTag')}
+            </span>
+          )}
+        </strong>
         <span>{second}</span>
       </div>
       {danger ? (

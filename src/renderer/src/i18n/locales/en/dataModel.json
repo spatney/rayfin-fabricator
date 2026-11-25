@@ -122,7 +122,8 @@
       "description": "Description",
       "copy": "Copy DAX",
       "noDax": "No DAX expression available."
-    }
+    },
+    "reloadFiles": "Read the files again"
   },
   "model": {
     "loading": "Reading your data model…",

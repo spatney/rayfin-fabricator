@@ -59,6 +59,8 @@ interface Props {
   onSendToChat?: (display: string, prompt: string, stage?: boolean) => void
   /** Show one source, asked for from elsewhere: a model's `workspaceId:itemId` (lowercase) or a SQL source's key. */
   selectRequest?: { key: string; nonce: number } | null
+  /** The view's title, when it isn't Blueprint's Fabric connections view. */
+  title?: string
 }
 
 const modelKey = (m: SemanticModelRef): string => `${m.workspaceId}:${m.itemId}`.toLowerCase()
@@ -253,7 +255,8 @@ export default function SemanticModelView({
   onSignedIn,
   onOpenFile,
   onSendToChat,
-  selectRequest
+  selectRequest,
+  title
 }: Props): JSX.Element {
   const { t } = useTranslation('dataModel')
   const sources = useMemo<DataSource[]>(
@@ -378,6 +381,33 @@ export default function SemanticModelView({
     loadTicks.current = { refreshKey, reloadTick }
     if (!semanticRef) return
 
+    // A supporting item's folder is read from the app's files: quick, so never cached.
+    if (semanticRef.folder) {
+      let alive = true
+      setState({ status: 'loading' })
+      window.api.supportingItems
+        .schema(projectId, semanticRef.folder)
+        .then((res) => {
+          if (!alive) return
+          if (res.ok) setState({ status: 'ok', model: buildSemanticModel(res) })
+          else
+            setState({
+              status: 'error',
+              error: res.error || translator('dataModel')('semantic.error.read')
+            })
+        })
+        .catch((err) => {
+          if (alive)
+            setState({
+              status: 'error',
+              error: authErrorMessage(err, translator('dataModel')('semantic.error.read'))
+            })
+        })
+      return () => {
+        alive = false
+      }
+    }
+
     const key = schemaCacheKey(semanticRef.workspaceId, semanticRef.itemId)
     if (!isRefresh) {
       const cached = getCachedSchema(key)
@@ -420,7 +450,7 @@ export default function SemanticModelView({
     return () => {
       alive = false
     }
-  }, [semanticRef, refreshKey, reloadTick])
+  }, [projectId, semanticRef, refreshKey, reloadTick])
 
   const { derived, meta } = useMemo(
     () =>
@@ -1094,7 +1124,7 @@ export default function SemanticModelView({
   return (
     <div className="semantic-view">
       <ViewHead
-        title={t('semantic.title')}
+        title={title ?? t('semantic.title')}
         subtitle={
           <>
             {sources.length === 1 && `${selected.label} · `}
@@ -1230,7 +1260,7 @@ export default function SemanticModelView({
           <button
             className="model-tool-btn"
             onClick={() => setReloadTick((n) => n + 1)}
-            title={t('semantic.refresh')}
+            title={semanticRef?.folder ? t('semantic.reloadFiles') : t('semantic.refresh')}
           >
             <Codicon name="refresh" />
           </button>

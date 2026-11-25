@@ -132,7 +132,9 @@
     "cantSavePlan": "プランを保存できませんでした: {{error}}",
     "pickPathsTitle": "Copilot に読み取らせるファイルまたはフォルダーを選択",
     "unknownPlugin": "Fabricator にはプラグイン {{plugin}} がありません。",
-    "serverGone": "その MCP サーバーはもう Fabricator にありません。"
+    "serverGone": "その MCP サーバーはもう Fabricator にありません。",
+    "supportingItemsTeam": "補助アイテムはチーム アプリでは使用できません。",
+    "noPendingReview": "このカードはもう回答を待っていません。"
   },
   "chatTools": {
     "localCall": {
@@ -543,5 +545,15 @@
   "transient": {
     "cantReach": "モデルに接続できませんでした。",
     "cantSend": "モデルにリクエストを送信できませんでした。"
+  },
+  "supportingItems": {
+    "noFolder": "supporting-items/{{folder}} はこのアプリの補助アイテムではありません。",
+    "notCreated": "このアイテムは Fabricator が作成したものではないため、削除できません。",
+    "noWorkspace": "supporting-items/applied.json に、アイテムがあるワークスペースが記録されていません。",
+    "signIn": "アカウント メニューの [Fabric の認証を更新] で Fabric にもう一度サインインしてから、もう一度お試しください。",
+    "deleteFailed": "Fabric で削除できませんでした: {{error}}",
+    "saveFailed": "Fabric からは削除されましたが、Fabricator が supporting-items/applied.json を更新できませんでした: {{error}}",
+    "trashFailed": "Fabric からは削除されましたが、フォルダーをごみ箱に移動できませんでした: {{error}}",
+    "notAModel": "{{folder}} はセマンティック モデルではなくレイクハウスのため、表示するモデルがありません。"
   }
 }

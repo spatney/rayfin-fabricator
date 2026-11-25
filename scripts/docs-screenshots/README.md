@@ -201,8 +201,8 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `model-picker` | harness | `0,355,720,545` |
 | `model-providers` | harness | `390,200,660,590` |
 | `add-menu` | harness | `0,630,520,270` |
-| `plugins` | harness | `0,430,520,470` |
-| `mcp-plugins` | harness | `0,320,520,580` |
+| `plugins` | harness | `0,265,520,635` |
+| `mcp-plugins` | harness | `0,153,520,747` |
 | `mcp-servers` | harness | `390,114,660,672` |
 | `connect-data` | harness | `300,140,840,620` |
 | `data-chips` | harness | `0,740,720,160` |
@@ -212,6 +212,8 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `advisor-finding` | live | `99,191,857,534` |
 | `settings` | harness | `410,40,620,820` |
 | `settings-experiments` | harness, taller window (picked by the script) | `410,40,620,920` |
+| `supporting-review` | harness | `346,240,748,420` |
+| `supporting-items` | harness | `0,0,1440,935` |
 | `chat-defaults` | harness | `410,74,620,752` |
 | `custom-instructions` | harness | `410,187,620,526` |
 | `migrate-report` | harness | `340,12,760,716` |

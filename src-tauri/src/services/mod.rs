@@ -39,6 +39,7 @@ pub mod report_migration;
 pub mod semantic_model;
 pub mod source_hints;
 pub mod store;
+pub mod supporting_items;
 pub mod team;
 pub mod telemetry;
 pub mod terminal;

@@ -122,7 +122,8 @@
       "description": "Beschreibung",
       "copy": "DAX kopieren",
       "noDax": "Kein DAX-Ausdruck verfügbar."
-    }
+    },
+    "reloadFiles": "Dateien erneut lesen"
   },
   "model": {
     "loading": "Dein Datenmodell wird gelesen…",

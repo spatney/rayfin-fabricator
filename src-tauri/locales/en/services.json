@@ -485,5 +485,21 @@
   "rayfinSdk": {
     "readFailed": "Couldn't read {{path}}: {{error}}",
     "updateFailed": "Couldn't update {{path}}: {{error}}"
+  },
+  "supportingItems": {
+    "signInQuestion": "Fabricator changes supporting items as your Fabric account, the one you publish with, and it needs you to sign in again.",
+    "signIn": "Sign in to Fabric",
+    "purgeQuestion": "Applying this change to {{name}} discards the data it has loaded, so it stays empty until it's refreshed. Apply it anyway?",
+    "purgeApply": "Apply and discard data",
+    "purgeKeep": "Don't apply",
+    "keptData": "Not applied: you kept its data.",
+    "noWorkspace": "No workspace was picked, so nothing changed.",
+    "nameTaken": "The workspace {{workspace}} already has an item named {{name}} that this app didn't create, so nothing changed.",
+    "following": "Checking the refresh of {{name}} that's still running…",
+    "refreshCancelled": "The refresh was cancelled in Fabric.",
+    "turnOn": "Turn on and continue",
+    "turnOnQuestion": "Copilot wants to create Fabric items for this app, such as a semantic model, or a lakehouse for its data. Turn on Supporting items for this app? Copilot then continues, and asks you before each change in Fabric.",
+    "turnOnQuestionFor": "Copilot wants to create Fabric items, such as a semantic model or a lakehouse, for {{reason}}. Turn on Supporting items for this app? Copilot then continues, and asks you before each change in Fabric.",
+    "firstRefreshFailed": "It's in Fabric, but its first refresh, which reads the lakehouse's tables, didn't work: {{error}}"
   }
 }

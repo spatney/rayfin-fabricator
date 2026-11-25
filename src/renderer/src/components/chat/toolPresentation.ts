@@ -35,9 +35,11 @@ export type ToolKind =
  * Tools whose UI lives elsewhere (question cards, the plan card, the status
  * line, the line under an answer). Fabricator's Fabric IQ tool asks on a
  * question card and reports in chat notices; the custom instructions a turn
- * followed show under its answer. Autopilot's `task_complete` ends the run, and
- * its summary is the answer when Copilot said nothing after its last step.
- * (The Rust side keeps the same list as `HIDDEN_STEPS` in commands/chat.rs.)
+ * followed show under its answer; the supporting items tools show their review
+ * cards, and the one that turns them on asks on a question card. Autopilot's
+ * `task_complete` ends the run, and its summary is the answer when Copilot said
+ * nothing after its last step. (The Rust side keeps the same list as
+ * `HIDDEN_STEPS` in commands/chat.rs.)
  */
 const HIDDEN_TOOLS = new Set([
   'ask_user',
@@ -45,7 +47,10 @@ const HIDDEN_TOOLS = new Set([
   'report_intent',
   'task_complete',
   'fabricator_connect_fabric_iq',
-  'fabricator_followed_instruction'
+  'fabricator_followed_instruction',
+  'fabricator_apply_supporting_items',
+  'fabricator_refresh_supporting_item',
+  'fabricator_turn_on_supporting_items'
 ])
 
 export function isHiddenTool(name: string): boolean {

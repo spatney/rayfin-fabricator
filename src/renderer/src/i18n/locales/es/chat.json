@@ -45,7 +45,8 @@
     "writing": "Escribiendo la respuesta",
     "working": "Trabajando",
     "waitingDecision": "Esperando tu decisión",
-    "waitingAnswer": "Esperando tu respuesta"
+    "waitingAnswer": "Esperando tu respuesta",
+    "waitingApproval": "Esperando tu aprobación"
   },
   "assistant": {
     "needsInput": "Fabricator necesita tu respuesta",
@@ -144,7 +145,8 @@
   },
   "plugins": {
     "fabricIq": "Explora los informes de Power BI y los modelos semánticos que puedes abrir.",
-    "workIq": "Busca tus correos, reuniones, archivos, mensajes de Teams y personas de Microsoft 365."
+    "workIq": "Busca tus correos, reuniones, archivos, mensajes de Teams y personas de Microsoft 365.",
+    "supportingItems": "Crea, cambia y actualiza los modelos semánticos de los que depende esta aplicación, y los lakehouses donde se preparan sus datos, en su área de trabajo de Fabric. Fabricator te pregunta antes de cada cambio."
   },
   "markup": {
     "pen": "Lápiz",
@@ -264,7 +266,10 @@
     "manage": "Administrar servidores MCP…",
     "addServer": "Agregar un servidor MCP…",
     "note": "El chat solo los usa cuando una solicitud los necesita.",
-    "learn": "Más información sobre los complementos"
+    "learn": "Más información sobre los complementos",
+    "changesFabric": "Cambia Fabric",
+    "asksFirst": "Te pregunta antes",
+    "supportingItems": "Elementos de apoyo"
   },
   "turnFooter": {
     "changedFiles_one": "Se cambió {{count}} archivo",

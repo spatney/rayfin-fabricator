@@ -7,6 +7,7 @@ import type {
   FabricWorkspacesResult,
   PendingChanges,
   StudioProject,
+  SupportingItemsView,
   UnsupportedWorkspace
 } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
@@ -25,6 +26,7 @@ import DeploymentCreateForm, { checkActiveDeployTarget } from './DeploymentCreat
 import ShareDeploymentModal from './ShareDeploymentModal'
 import type { DeployUiState } from './PreviewPane'
 import { timeAgo, useNow } from './team/runProgress'
+import './supporting/supporting.css'
 
 interface Props {
   project: StudioProject
@@ -173,8 +175,23 @@ export default function DeploymentsControl({
   onOpen
 }: Props): JSX.Element {
   const { t } = useTranslation('publish')
+  const { t: tSupporting } = useTranslation('supporting')
   const [open, setOpen] = useState(false)
   const toast = useToast()
+  /** The app's supporting items, read when the panel opens: publishing leaves them as they are. */
+  const [supportingItems, setSupportingItems] = useState<SupportingItemsView | null>(null)
+  useEffect(() => {
+    if (!open) return
+    let alive = true
+    window.api.supportingItems?.list(project.id).then(
+      (view) => alive && setSupportingItems(view),
+      () => alive && setSupportingItems(null)
+    )
+    return () => {
+      alive = false
+    }
+  }, [open, project.id])
+  const supportingCount = supportingItems?.items.filter((i) => i.itemId).length ?? 0
   const [creating, setCreating] = useState(false)
   const creatingRef = useRef(creating)
   creatingRef.current = creating
@@ -1148,6 +1165,18 @@ export default function DeploymentsControl({
                   </dd>
                 </dl>
               </div>
+
+              {supportingCount > 0 && supportingItems?.workspace && (
+                <div className="dep-sec">
+                  <p className="sup-publish-note">
+                    <Codicon name="database" />
+                    {tSupporting('publishNote', {
+                      count: supportingCount,
+                      workspace: supportingItems.workspace.name
+                    })}
+                  </p>
+                </div>
+              )}
 
               {others.length > 0 && (
                 <div className="dep-sec">

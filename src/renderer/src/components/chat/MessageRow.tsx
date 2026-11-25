@@ -1,4 +1,5 @@
 import { memo, useCallback, useMemo, type JSX } from 'react'
+import type { SupportingReviewItem, SupportingWorkspace } from '@shared/ipc'
 import { useTranslation } from '../../i18n'
 import { SentPicks, pickShotIndexes } from '../../pick/PickTray'
 import { AdvisorFixSummary } from '../advisor/AdvisorFixSummary'
@@ -121,9 +122,12 @@ export const MessageRow = memo(function MessageRow({
   onTryAgain,
   planBusy,
   questionBusy,
+  supportingBusyId = null,
   onChangePlanContent,
   onResolvePlan,
   onAnswerPlanQuestion,
+  onResolveSupporting,
+  onViewSupportingModel,
   onResumePlan,
   onExportPlan,
   onOpenMention
@@ -143,6 +147,8 @@ export const MessageRow = memo(function MessageRow({
   onTryAgain: (id: string) => void
   planBusy: boolean
   questionBusy: boolean
+  /** The supporting items card of this turn whose answer is on its way. */
+  supportingBusyId?: string | null
   onChangePlanContent: (msgId: string, content: string) => void
   onResolvePlan: (msgId: string, action: string, feedback?: string) => void
   onAnswerPlanQuestion: (
@@ -151,6 +157,13 @@ export const MessageRow = memo(function MessageRow({
     answer: string,
     wasFreeform: boolean
   ) => void
+  onResolveSupporting?: (
+    msgId: string,
+    requestId: string,
+    approve: boolean,
+    workspace?: SupportingWorkspace
+  ) => void
+  onViewSupportingModel?: (item: SupportingReviewItem) => void
   onResumePlan: (
     msgId: string,
     kind: 'review' | 'execute' | 'revise',
@@ -165,6 +178,11 @@ export const MessageRow = memo(function MessageRow({
     (requestId: string, answer: string, wasFreeform: boolean) =>
       onAnswerPlanQuestion(m.id, requestId, answer, wasFreeform),
     [onAnswerPlanQuestion, m.id]
+  )
+  const resolveSupporting = useCallback(
+    (requestId: string, approve: boolean, workspace?: SupportingWorkspace) =>
+      onResolveSupporting?.(m.id, requestId, approve, workspace),
+    [onResolveSupporting, m.id]
   )
   const tryAgain = useCallback(() => onTryAgain(m.id), [onTryAgain, m.id])
   // Questions the feed already docks in place (via a `'question'` segment) are
@@ -189,6 +207,9 @@ export const MessageRow = memo(function MessageRow({
           projectPath={projectPath}
           questionBusy={questionBusy}
           onAnswerQuestion={answerQuestion}
+          supportingBusyId={supportingBusyId}
+          onResolveSupporting={onResolveSupporting ? resolveSupporting : undefined}
+          onViewSupportingModel={onViewSupportingModel}
           onOpenFile={onOpenMention}
         />
         {m.plan && (

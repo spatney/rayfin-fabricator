@@ -43,3 +43,15 @@ export function offeredPlugins(experiments?: ExperimentFlags | null): ChatPlugin
 export function mcpPluginId(serverId: string): ChatPluginId {
   return `mcp:${serverId}`
 }
+
+/**
+ * Supporting items' id among a chat's plugins. Not one of {@link CHAT_PLUGINS},
+ * which only read: it lets chat change Fabric, with your approval, so the
+ * Plugins menu shows it on its own, and chat defaults never turn it on.
+ */
+export const SUPPORTING_ITEMS_PLUGIN = 'supporting-items' satisfies ChatPluginId
+
+/** Whether a chat offers Supporting items: every app's does, except a team app's. */
+export function offersSupportingItems(teamApp: boolean): boolean {
+  return !teamApp
+}

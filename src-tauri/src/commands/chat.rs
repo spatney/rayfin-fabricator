@@ -77,11 +77,15 @@ const FALLBACK_AUTO_PUBLISH_NOTE: &str = "[Fabricator: this app's backend runs o
 /// While the user has custom instructions: a reminder on each message, since
 /// instructions alone are easy to miss among Fabricator's and the project's own.
 const CUSTOM_INSTRUCTIONS_NOTE: &str = "[Fabricator: the user's custom instructions are part of this message too. Follow them in what you build and change, and call fabricator_followed_instruction for each one that shapes your work.]";
+/// While the app's chat has supporting items on (see `supporting_items::on_for`).
+const SUPPORTING_ITEMS_NOTE: &str = "[Fabricator: Supporting items are on in this chat. When the app needs a semantic model that isn't part of the Rayfin app, or a lakehouse to stage data files in, define it in supporting-items/ and apply it with fabricator_apply_supporting_items, as the supporting items instructions say. Fabricator asks the user before it changes anything in Fabric.]";
 
 /// The text sent to Copilot for a chat message in `project`, with the note on
 /// how its changes go live, on the Fabric IQ and Work IQ servers (`iq`) and the
-/// user's own MCP servers (`mcp`) it can use, and on the user's custom
-/// instructions when they have some.
+/// user's own MCP servers (`mcp`) it can use, on the user's custom
+/// instructions when they have some, and on supporting items when the app's
+/// chat has them on.
+#[allow(clippy::too_many_arguments)]
 fn turn_text(
   project: &StudioProject,
   text: &str,
@@ -90,9 +94,11 @@ fn turn_text(
   iq: &iq::Prepared,
   mcp: &mcp::Prepared,
   custom_instructions: bool,
+  supporting_items: bool,
 ) -> String {
   let custom = custom_instructions.then(|| CUSTOM_INSTRUCTIONS_NOTE.to_string());
-  let notes: Vec<String> = [iq.note(), mcp.note(), custom].into_iter().flatten().collect();
+  let supporting = supporting_items.then(|| SUPPORTING_ITEMS_NOTE.to_string());
+  let notes: Vec<String> = [iq.note(), mcp.note(), custom, supporting].into_iter().flatten().collect();
   let text = if notes.is_empty() { text.to_string() } else { format!("{}\n\n{text}", notes.join("\n\n")) };
   if project.team.is_some() {
     let note = crate::services::team::chat_note(guidance == Guidance::FabricBacked);
@@ -510,13 +516,16 @@ fn ensure_separator(id: &str, sink: &mut dyn FnMut(ChatEvent), ctx: &mut TurnCtx
 
 /// Steps the work log doesn't show (the renderer's `HIDDEN_TOOLS`): they don't
 /// split the reply, so prose before one of them still reads as the answer.
-const HIDDEN_STEPS: [&str; 6] = [
+const HIDDEN_STEPS: [&str; 9] = [
   "ask_user",
   "exit_plan_mode",
   "report_intent",
   "task_complete",
   crate::services::agent_tools::CONNECT_FABRIC_IQ_TOOL,
   crate::services::agent_tools::FOLLOWED_INSTRUCTION_TOOL,
+  crate::services::supporting_items::tools::APPLY_TOOL,
+  crate::services::supporting_items::tools::REFRESH_TOOL,
+  crate::services::supporting_items::tools::TURN_ON_TOOL,
 ];
 
 /// A step starting: shown as it runs, and, for a step a subagent took, under
@@ -1009,7 +1018,7 @@ pub(crate) async fn run_turn(
     Err(error) => {
       screenshot::cleanup(&attachments);
       emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: error.clone() });
-      return Ok(ChatTurnResult { ok: false, error: Some(error), files_modified: vec![], ran_deploy: false });
+      return Ok(ChatTurnResult { ok: false, error: Some(error), files_modified: vec![], ran_deploy: false, ..Default::default() });
     }
   };
 
@@ -1021,6 +1030,7 @@ pub(crate) async fn run_turn(
       error: Some(t!("commands.shared.projectNotFound")),
       files_modified: vec![],
       ran_deploy: false,
+      ..Default::default()
     });
   };
 
@@ -1032,6 +1042,7 @@ pub(crate) async fn run_turn(
       error: Some(t!("commands.shared.projectNotFound")),
       files_modified: vec![],
       ran_deploy: false,
+      ..Default::default()
     });
   };
 
@@ -1048,6 +1059,7 @@ pub(crate) async fn run_turn(
       error: Some(t!("commands.chat.turnRunning")),
       files_modified: vec![],
       ran_deploy: false,
+      ..Default::default()
     });
   };
 
@@ -1076,11 +1088,17 @@ pub(crate) async fn run_turn(
   // with the tool that shows when one shaped the work.
   let settings = store::get_settings();
   let custom_instructions = settings.custom_instructions.as_deref().and_then(agent_skills::custom_instructions);
+  // Supporting items: the tools that create and change the Fabric items the app
+  // relies on, with their guidance, while its chat has them on; while they're
+  // off, the one that asks the user to turn them on.
+  let supporting = crate::services::supporting_items::in_chat(&project);
+  let supporting_items = supporting.on();
   let fab_tools = crate::services::agent_tools::fabricator_tools(
     app.clone(),
     project_id.clone(),
     guidance,
     custom_instructions.is_some(),
+    supporting,
   );
 
   // Your own API keys: every session gets the provider registry so
@@ -1120,6 +1138,7 @@ pub(crate) async fn run_turn(
       iq,
       mcp_servers.clone(),
       custom_instructions.clone(),
+      supporting,
     );
   let first_open = match (&resolved, &provider_model) {
     (Err(e), _) => Err(e.clone()),
@@ -1153,7 +1172,7 @@ pub(crate) async fn run_turn(
         Some(e.clone()),
         &empty,
       );
-      return Ok(ChatTurnResult { ok: false, error: Some(e), files_modified: vec![], ran_deploy: false });
+      return Ok(ChatTurnResult { ok: false, error: Some(e), files_modified: vec![], ran_deploy: false, ..Default::default() });
     }
   };
   if opened.recreated && project.copilot_session_id.is_some() {
@@ -1287,6 +1306,7 @@ pub(crate) async fn run_turn(
           &iq_ready,
           &mcp_ready,
           custom_instructions.is_some(),
+          supporting_items,
         ));
         if attach.is_empty() { opts } else { opts.with_attachments(attach.clone()) }
       }
@@ -1456,6 +1476,7 @@ pub(crate) async fn run_turn(
   state.plan.clear_route(&session_key);
   state.plan.reject_pending_plan(&session_key);
   state.plan.reject_pending_question(&session_key);
+  state.plan.reject_pending_review(&session_key);
 
   // Keep what the chat has used so far, for when its session isn't open. Saved
   // before the turn's result goes out, so the chat reads the new totals.
@@ -1506,7 +1527,7 @@ pub(crate) async fn run_turn(
       &turn_id,
       ChatEvent::Result { ok: false, files_modified: vec![], ran_deploy: ctx.ran_deploy },
     );
-    return Ok(ChatTurnResult { ok: false, error: Some(e), files_modified: vec![], ran_deploy: ctx.ran_deploy });
+    return Ok(ChatTurnResult { ok: false, error: Some(e), files_modified: vec![], ran_deploy: ctx.ran_deploy, ..Default::default() });
   }
 
   let ok = ctx.saw_result && ctx.errored.is_none() && !cancelled && !timed_out;
@@ -1531,11 +1552,15 @@ pub(crate) async fn run_turn(
     &turn_id,
     ChatEvent::Result { ok, files_modified: ctx.files_modified.clone(), ran_deploy: ctx.ran_deploy },
   );
+  // The user turned supporting items on in this turn: chat continues in a new
+  // message, whose session has their tools.
+  let continues = crate::services::supporting_items::tools::take_continue(&project_id, &turn_id) && ok;
   Ok(ChatTurnResult {
     ok,
     error: if ok || cancelled { None } else { ctx.errored.or_else(|| Some(t!("commands.chat.turnFailed"))) },
     files_modified: ctx.files_modified,
     ran_deploy: ctx.ran_deploy,
+    continue_with: continues.then(|| crate::services::supporting_items::PLUGIN.to_string()),
   })
 }
 
@@ -1796,6 +1821,34 @@ pub fn chat_resolve_question(
   Ok(())
 }
 
+/// Answer a supporting items review card (see `supporting_items::tools`):
+/// approve it, with the workspace picked on it when it asked for one, or turn it
+/// down. The tool waiting on it updates the card from there.
+#[tauri::command]
+pub fn chat_resolve_supporting_review(
+  state: State<'_, AppState>,
+  project_id: String,
+  request_id: String,
+  approve: bool,
+  workspace_id: Option<String>,
+  workspace_name: Option<String>,
+) -> Result<(), String> {
+  let owner = state.plan.review_owner(&request_id).ok_or_else(|| t!("commands.chat.noPendingReview"))?;
+  if owner.project_id != project_id {
+    return Err(t!("commands.chat.planNotThisProject"));
+  }
+  let workspace = workspace_id
+    .map(|id| id.trim().to_string())
+    .filter(|id| crate::services::supporting_items::is_guid(id))
+    .map(|id| (id, workspace_name.unwrap_or_default().trim().to_string()));
+  let decision = crate::state::ReviewDecision { approved: approve, workspace };
+  if state.plan.resolve_review(&request_id, decision) {
+    Ok(())
+  } else {
+    Err(t!("commands.chat.noPendingReview"))
+  }
+}
+
 #[tauri::command]
 pub fn chat_save_history(project_id: String, messages: Vec<ChatMessage>) {
   history::save_history(&project_id, messages);
@@ -1867,17 +1920,22 @@ pub fn chat_set_options(project_id: String, options: ChatOptions) {
 }
 
 /// Turns a plugin on or off in a project's chat, from its next message, and
-/// returns the plugins now on there: Fabric IQ, Work IQ, or an MCP server the
-/// user added (`mcp:<id>`).
+/// returns the plugins now on there: Fabric IQ, Work IQ, an MCP server the
+/// user added (`mcp:<id>`), or supporting items, while the app isn't a team
+/// app.
 #[tauri::command]
 pub fn chat_set_plugin(project_id: String, plugin: String, on: bool) -> Result<Vec<String>, String> {
   let iq = iq::Iq::from_plugin(&plugin);
   let server = mcp::server_of_plugin(&plugin).map(str::to_string);
-  if iq.is_none() && server.is_none() {
+  let supporting = plugin == crate::services::supporting_items::PLUGIN;
+  if iq.is_none() && server.is_none() && !supporting {
     return Err(t!("commands.chat.unknownPlugin", plugin = plugin));
   }
-  if store::find_project(&project_id).is_none() {
+  let Some(project) = store::find_project(&project_id) else {
     return Err(t!("commands.shared.projectNotFound"));
+  };
+  if supporting && on && project.team.is_some() {
+    return Err(t!("commands.chat.supportingItemsTeam"));
   }
   if let Some(id) = &server {
     if on && !store::mcp_servers().iter().any(|s| &s.id == id) {
@@ -2188,15 +2246,15 @@ mod tests {
     }))
     .unwrap();
     // The app runs here, or falls back to its published backend.
-    assert_eq!(turn_text(&project, "Add a list", Guidance::Local, true, &iq::Prepared::default(), &mcp::Prepared::default(), false), format!("{LOCAL_NOTE}\n\nAdd a list"));
-    assert!(turn_text(&project, "x", Guidance::Local, false, &iq::Prepared::default(), &mcp::Prepared::default(), false).starts_with(LOCAL_AUTO_PUBLISH_NOTE));
-    assert!(turn_text(&project, "x", Guidance::FabricBacked, true, &iq::Prepared::default(), &mcp::Prepared::default(), false).starts_with(FALLBACK_NOTE));
-    assert!(turn_text(&project, "x", Guidance::FabricBacked, false, &iq::Prepared::default(), &mcp::Prepared::default(), false).starts_with(FALLBACK_AUTO_PUBLISH_NOTE));
+    assert_eq!(turn_text(&project, "Add a list", Guidance::Local, true, &iq::Prepared::default(), &mcp::Prepared::default(), false, false), format!("{LOCAL_NOTE}\n\nAdd a list"));
+    assert!(turn_text(&project, "x", Guidance::Local, false, &iq::Prepared::default(), &mcp::Prepared::default(), false, false).starts_with(LOCAL_AUTO_PUBLISH_NOTE));
+    assert!(turn_text(&project, "x", Guidance::FabricBacked, true, &iq::Prepared::default(), &mcp::Prepared::default(), false, false).starts_with(FALLBACK_NOTE));
+    assert!(turn_text(&project, "x", Guidance::FabricBacked, false, &iq::Prepared::default(), &mcp::Prepared::default(), false, false).starts_with(FALLBACK_AUTO_PUBLISH_NOTE));
     // Never published: no turn publishes it, even with publishing after each turn on.
     let mut unpublished = project.clone();
     unpublished.last_deploy = None;
-    assert!(turn_text(&unpublished, "x", Guidance::Local, false, &iq::Prepared::default(), &mcp::Prepared::default(), false).starts_with(LOCAL_UNPUBLISHED_NOTE));
-    assert!(turn_text(&unpublished, "x", Guidance::Local, true, &iq::Prepared::default(), &mcp::Prepared::default(), false).starts_with(LOCAL_NOTE));
+    assert!(turn_text(&unpublished, "x", Guidance::Local, false, &iq::Prepared::default(), &mcp::Prepared::default(), false, false).starts_with(LOCAL_UNPUBLISHED_NOTE));
+    assert!(turn_text(&unpublished, "x", Guidance::Local, true, &iq::Prepared::default(), &mcp::Prepared::default(), false, false).starts_with(LOCAL_NOTE));
     assert!(LOCAL_NOTE.contains("runs on this computer") && LOCAL_NOTE.contains("Publish after each chat turn is off"));
     assert!(LOCAL_UNPUBLISHED_NOTE.contains("hasn't been published yet") && !LOCAL_UNPUBLISHED_NOTE.contains("when this turn ends"));
     assert!(FALLBACK_NOTE.contains("published backend") && FALLBACK_NOTE.contains("whether it needs a publish first"));
@@ -2204,9 +2262,9 @@ mod tests {
     let mut team = project.clone();
     team.team = Some(crate::types::TeamBinding::default());
     for manual in [true, false] {
-      let local = turn_text(&team, "x", Guidance::Local, manual, &iq::Prepared::default(), &mcp::Prepared::default(), false);
+      let local = turn_text(&team, "x", Guidance::Local, manual, &iq::Prepared::default(), &mcp::Prepared::default(), false, false);
       assert_eq!(local, format!("{}\n\nx", crate::services::team::CHAT_NOTE));
-      let fallback = turn_text(&team, "x", Guidance::FabricBacked, manual, &iq::Prepared::default(), &mcp::Prepared::default(), false);
+      let fallback = turn_text(&team, "x", Guidance::FabricBacked, manual, &iq::Prepared::default(), &mcp::Prepared::default(), false, false);
       assert_eq!(fallback, format!("{}\n\nx", crate::services::team::FALLBACK_CHAT_NOTE));
     }
     assert!(crate::services::team::CHAT_NOTE.contains("runs on this computer"));
@@ -2227,7 +2285,7 @@ mod tests {
     let work = iq::Prepared { ready: IqConfig { fabric: false, work: true }, unavailable: vec![] };
     let note = work.note().unwrap();
     assert_eq!(
-      turn_text(&project, "Who owns billing?", Guidance::Local, true, &work, &mcp::Prepared::default(), false),
+      turn_text(&project, "Who owns billing?", Guidance::Local, true, &work, &mcp::Prepared::default(), false, false),
       format!("{LOCAL_NOTE}\n\n{note}\n\nWho owns billing?")
     );
     // The user's MCP servers come after them.
@@ -2237,11 +2295,11 @@ mod tests {
     };
     let chart_note = chart.note().unwrap();
     assert_eq!(
-      turn_text(&project, "Chart sales", Guidance::Local, true, &work, &chart, false),
+      turn_text(&project, "Chart sales", Guidance::Local, true, &work, &chart, false, false),
       format!("{LOCAL_NOTE}\n\n{note}\n\n{chart_note}\n\nChart sales")
     );
     assert_eq!(
-      turn_text(&project, "Chart sales", Guidance::Local, true, &iq::Prepared::default(), &chart, false),
+      turn_text(&project, "Chart sales", Guidance::Local, true, &iq::Prepared::default(), &chart, false, false),
       format!("{LOCAL_NOTE}\n\n{chart_note}\n\nChart sales")
     );
   }
@@ -2257,11 +2315,28 @@ mod tests {
     let work = iq::Prepared { ready: IqConfig { fabric: false, work: true }, unavailable: vec![] };
     let note = work.note().unwrap();
     assert_eq!(
-      turn_text(&project, "Add a list", Guidance::Local, true, &work, &mcp::Prepared::default(), true),
+      turn_text(&project, "Add a list", Guidance::Local, true, &work, &mcp::Prepared::default(), true, false),
       format!("{LOCAL_NOTE}\n\n{note}\n\n{CUSTOM_INSTRUCTIONS_NOTE}\n\nAdd a list")
     );
     assert!(CUSTOM_INSTRUCTIONS_NOTE.starts_with("[Fabricator: ") && CUSTOM_INSTRUCTIONS_NOTE.ends_with(']'));
     assert!(CUSTOM_INSTRUCTIONS_NOTE.contains(crate::services::agent_tools::FOLLOWED_INSTRUCTION_TOOL));
+  }
+
+  /// While the app's chat has supporting items on, each message says so, after
+  /// the other notes, and names the tool that applies them.
+  #[test]
+  fn a_message_says_when_supporting_items_are_on() {
+    let project: StudioProject = serde_json::from_value(json!({
+      "id": "p", "name": "App", "path": "C:\\apps\\app", "addedAt": "2026-01-01T00:00:00.000Z"
+    }))
+    .unwrap();
+    let none = (iq::Prepared::default(), mcp::Prepared::default());
+    assert_eq!(
+      turn_text(&project, "Build a sales model", Guidance::Local, true, &none.0, &none.1, true, true),
+      format!("{LOCAL_NOTE}\n\n{CUSTOM_INSTRUCTIONS_NOTE}\n\n{SUPPORTING_ITEMS_NOTE}\n\nBuild a sales model")
+    );
+    assert!(!turn_text(&project, "x", Guidance::Local, true, &none.0, &none.1, false, false).contains("Supporting items"));
+    assert!(SUPPORTING_ITEMS_NOTE.contains(crate::services::supporting_items::tools::APPLY_TOOL));
   }
 
   #[test]

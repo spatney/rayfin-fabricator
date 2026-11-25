@@ -1,0 +1,315 @@
+{
+  "itemType": {
+    "SemanticModel": "Modelo semántico",
+    "Lakehouse": "Lakehouse"
+  },
+  "storage": {
+    "import": "Importación",
+    "directQuery": "DirectQuery",
+    "directLake": "Direct Lake",
+    "dual": "Dual",
+    "mixed": "Almacenamiento mixto"
+  },
+  "counts": {
+    "tables_one": "{{count}} tabla",
+    "tables_other": "{{count}} tablas",
+    "columns_one": "{{count}} columna",
+    "columns_other": "{{count}} columnas",
+    "measures_one": "{{count}} medida",
+    "measures_other": "{{count}} medidas",
+    "relationships_one": "{{count}} relación",
+    "relationships_other": "{{count}} relaciones"
+  },
+  "fromSource": "desde {{source}}",
+  "localSource": "en un equipo",
+  "change": {
+    "added": {
+      "model": "Agrega opciones del modelo",
+      "table": "Agrega la tabla {{name}}",
+      "column": "Agrega la columna {{name}}",
+      "measure": "Agrega la medida {{name}}",
+      "partition": "Agrega la partición {{name}}",
+      "relationship": "Agrega la relación {{name}}",
+      "expression": "Agrega el parámetro o la consulta {{name}}",
+      "role": "Agrega el rol {{name}}"
+    },
+    "removed": {
+      "model": "Quita opciones del modelo",
+      "table": "Quita la tabla {{name}}",
+      "column": "Quita la columna {{name}}",
+      "measure": "Quita la medida {{name}}",
+      "partition": "Quita la partición {{name}}",
+      "relationship": "Quita la relación {{name}}",
+      "expression": "Quita el parámetro o la consulta {{name}}",
+      "role": "Quita el rol {{name}}"
+    },
+    "changed": {
+      "model": "Cambia la configuración del modelo",
+      "table": "Cambia la tabla {{name}}",
+      "column": "Cambia la columna {{name}}",
+      "measure": "Cambia la medida {{name}}",
+      "partition": "Cambia la partición {{name}}",
+      "relationship": "Cambia la relación {{name}}",
+      "expression": "Cambia el parámetro o la consulta {{name}}",
+      "role": "Cambia el rol {{name}}"
+    },
+    "fields": "({{fields}})"
+  },
+  "check": {
+    "one-side-key": "{{table}}[{{column}}] debe tener valores únicos y nunca vacíos; si no, la actualización falla: {{detail}} depende de esta columna.",
+    "one-side-key-direct-lake": "{{table}}[{{column}}] debe tener valores únicos y nunca vacíos; si no, fallan las consultas que la usan: {{detail}} depende de esta columna.",
+    "type-mismatch": "{{table}}[{{column}}] y la columna con la que se relaciona tienen tipos de datos diferentes: {{detail}}.",
+    "no-partition": "{{table}} no tiene ninguna partición, así que no tiene datos.",
+    "local-source": "{{detail}} lee un archivo de un equipo, que Fabric solo puede actualizar a través de una puerta de enlace.",
+    "both-directions": "Una relación filtra en ambas direcciones ({{detail}}), lo que puede hacer que los totales sean ambiguos.",
+    "other": "{{code}}: {{detail}}",
+    "direct-lake-table": "{{table}} lee la tabla {{column}}, que Fabricator no cargó en el lakehouse {{detail}}.",
+    "direct-lake-column": "{{table}}[{{column}}] no es una columna de la tabla {{detail}} del lakehouse."
+  },
+  "problem": {
+    "bad-name": "El nombre de su carpeta no termina en .SemanticModel.",
+    "unsupported-type": "Por ahora, solo los modelos semánticos pueden ser elementos de apoyo, no {{detail}}.",
+    "tmsl": "Está definido en model.bim (TMSL). Los elementos de apoyo se definen en TMDL.",
+    "missing-file": "Falta {{file}}.",
+    "bad-json": "{{file}} no es un JSON válido.",
+    "wrong-type": ".platform dice que es de tipo {{detail}}.",
+    "name-mismatch": "El nombre de .platform no coincide con el de su carpeta.",
+    "no-logical-id": ".platform no tiene un identificador lógico.",
+    "pbism-version": "La versión de definition.pbism es demasiado antigua para TMDL.",
+    "secret": "{{file}}, línea {{line}}, parece contener una credencial, como una contraseña, una clave o un token.",
+    "too-large": "Su definición es demasiado grande.",
+    "data-too-large": "{{table}} carga más de lo que Fabricator sube: {{detail}}.",
+    "link": "{{file}} es un vínculo.",
+    "unreadable": "No se puede leer {{file}}.",
+    "tmdl": "{{file}}, línea {{line}}: {{detail}}",
+    "no-tables": "El modelo no tiene tablas.",
+    "duplicate-table": "La tabla {{table}} está definida más de una vez.",
+    "duplicate-name": "{{table}} tiene más de una columna o medida llamada {{column}}.",
+    "duplicate-measure": "Más de una tabla tiene una medida llamada {{column}}.",
+    "missing-table": "Una relación hace referencia a la tabla {{table}}, que el modelo no tiene.",
+    "missing-column": "Una relación hace referencia a {{table}}[{{column}}], una columna que el modelo no tiene.",
+    "self-relationship": "Una relación va de una columna a sí misma.",
+    "duplicate-relationship": "Dos relaciones unen las mismas columnas.",
+    "other": "{{code}} {{detail}}",
+    "lakehouse-schemas": "lakehouse.metadata.json crea un lakehouse con esquemas, en el que Fabric aún no puede cargar tablas.",
+    "bad-table-name": "tables.json llama a una tabla {{detail}}: usa letras, dígitos y guiones bajos.",
+    "bad-data-path": "{{table}} se carga desde {{detail}}, que no está en la carpeta data del lakehouse.",
+    "missing-data": "{{table}} se carga desde {{detail}}, que no existe.",
+    "empty-data": "{{table}} se carga desde {{detail}}, que no tiene archivos.",
+    "bad-format": "{{table}} se carga desde {{detail}}, que no es CSV ni Parquet.",
+    "bad-delimiter": "El delimitador {{detail}} de {{table}} debe ser un solo carácter.",
+    "direct-lake-level": "Las tablas de Direct Lake necesitan el nivel de compatibilidad 1604 o superior (es {{detail}})."
+  },
+  "card": {
+    "head": {
+      "declined": "No aplicaste esto",
+      "declinedRefresh": "No actualizaste esto",
+      "interrupted": "Sin respuesta",
+      "stopped": "Se detuvo antes de terminar. La vista Elementos de apoyo de Blueprint muestra en qué estado está cada elemento."
+    },
+    "reason": "Propósito: {{reason}}",
+    "workspace": "Área de trabajo",
+    "account": "Cuenta",
+    "unknownAccount": "Tu inicio de sesión de Fabric",
+    "pickWorkspace": "Elige un área de trabajo",
+    "pickHint": "Esta aplicación aún no está publicada, así que elige adónde van sus elementos de apoyo. Fabricator lo recuerda para esta aplicación.",
+    "loadingWorkspaces": "Cargando tus áreas de trabajo…",
+    "workspacesFailed": "No se pudieron enumerar tus áreas de trabajo.",
+    "retry": "Volver a intentarlo",
+    "change": {
+      "create": "Nuevo",
+      "update": "Cambio",
+      "refresh": "Actualización",
+      "load": "Cargar"
+    },
+    "recreate": "Ya no está en Fabric, así que se vuelve a crear.",
+    "drift": "Alguien lo cambió en Fabric desde la última vez que Fabricator lo aplicó. Al aplicarlo, se reemplazan esos cambios.",
+    "unapplied": "Su carpeta tiene cambios que aún no están en Fabric, así que la actualización carga el modelo tal como está en Fabric.",
+    "changesUnknown": "Fabricator no pudo leer el modelo en Fabric, así que no puede mostrar qué cambia.",
+    "noChanges": "Sus tablas, columnas, medidas y relaciones se quedan como están.",
+    "moreChanges_one": "…y {{count}} cambio más",
+    "moreChanges_other": "…y {{count}} cambios más",
+    "viewModel": "Ver el modelo",
+    "openInFabric": "Abrir en Fabric",
+    "openSettings": "Abrir su configuración",
+    "credentials": "Su origen de datos necesita credenciales. Establécelas en la configuración del modelo en Fabric y, después, pide a Copilot que lo vuelva a actualizar.",
+    "footnote": "Los elementos de apoyo no forman parte de la aplicación de Rayfin. Publicar no los cambia.",
+    "approve": {
+      "create": "Crear en Fabric",
+      "update": "Cambiar en Fabric",
+      "apply": "Aplicar en Fabric",
+      "refresh": "Actualizar",
+      "load": "Cargar datos"
+    },
+    "decline": "No aplicar",
+    "declineRefresh": "Ahora no",
+    "state": {
+      "working": {
+        "create": "Creando…",
+        "update": "Cambiando…",
+        "refresh": "Actualizando…",
+        "load": "Cargando datos…"
+      },
+      "done": {
+        "create": "Creado",
+        "update": "Cambiado",
+        "refresh": "Actualizado",
+        "load": "Cargado"
+      },
+      "failed": "No funcionó",
+      "skipped": "Se dejó como estaba"
+    },
+    "resolveFailed": "No se pudo enviar tu respuesta: {{error}}",
+    "recentWorkspaces": "Recientes",
+    "noWorkspaces": "La cuenta de Fabric de la aplicación no puede crear elementos en ningún área de trabajo compartida. Pide a un administrador del área de trabajo el rol Colaborador, o crea un área de trabajo en Fabric.",
+    "allWorkspaces": "Todas las áreas de trabajo",
+    "refreshInFabric": "Fabricator no puede iniciar una actualización con tus inicios de sesión. Abre el modelo en Fabric, selecciona Actualizar ahora y, después, dile a Copilot que ya está.",
+    "title": {
+      "pending": {
+        "create": "¿Crear {{name}} en Fabric?",
+        "update": "¿Actualizar {{name}} en Fabric?",
+        "load": "¿Cargar datos en {{name}}?",
+        "refresh": "¿Actualizar los datos de {{name}} en Fabric?",
+        "apply_one": "¿Aplicar {{count}} elemento de apoyo en Fabric?",
+        "apply_other": "¿Aplicar {{count}} elementos de apoyo en Fabric?"
+      },
+      "working": {
+        "create": "Creando {{name}} en Fabric…",
+        "update": "Actualizando {{name}} en Fabric…",
+        "load": "Cargando datos en {{name}}…",
+        "refresh": "Actualizando los datos de {{name}}…",
+        "apply_one": "Aplicando {{count}} elemento de apoyo…",
+        "apply_other": "Aplicando {{count}} elementos de apoyo…"
+      },
+      "done": {
+        "create": "{{name}} creado en Fabric",
+        "update": "{{name}} actualizado en Fabric",
+        "load": "Datos cargados en {{name}}",
+        "refresh": "Datos de {{name}} actualizados",
+        "apply_one": "{{count}} elemento de apoyo aplicado",
+        "apply_other": "{{count}} elementos de apoyo aplicados"
+      },
+      "failed": {
+        "create": "No se pudo crear {{name}}",
+        "update": "No se pudo actualizar {{name}}",
+        "load": "No se cargaron todos los datos de {{name}}",
+        "refresh": "No se actualizaron los datos de {{name}}",
+        "apply_one": "No se aplicó todo",
+        "apply_other": "No se aplicó todo"
+      }
+    },
+    "table": {
+      "load": "Tabla nueva",
+      "reload": "Se carga de nuevo",
+      "uploading": "Subiendo…",
+      "loading": "Cargando…",
+      "done": "Cargada",
+      "failed": "No se cargó",
+      "columns_one": "{{count}} columna: {{names}}",
+      "columns_other": "{{count}} columnas: {{names}}"
+    },
+    "lakeLoads_one": "{{count}} tabla por cargar · {{size}}",
+    "lakeLoads_other": "{{count}} tablas por cargar · {{size}}",
+    "lakeTables_one": "{{count}} tabla · {{size}}",
+    "lakeTables_other": "{{count}} tablas · {{size}}",
+    "lakeEmpty": "Su tables.json aún no incluye tablas, así que Fabricator lo crea vacío.",
+    "frames": "Direct Lake: cuando se aplique, Fabricator lo actualiza para que lea las tablas del lakehouse.",
+    "uploadsAs": "Sube como",
+    "copilotSees": "Copilot también ve lo que falló y te dice cómo seguir.",
+    "pickFirst": "Elige primero un área de trabajo",
+    "changesLabel": "Qué cambia",
+    "checksLabel": "Antes de aprobar"
+  },
+  "dialog": {
+    "close": "Cerrar",
+    "definedIn": "Tal como se define en"
+  },
+  "view": {
+    "title": "Elementos de apoyo",
+    "subtitle_one": "{{count}} elemento · no forma parte de la aplicación de Rayfin",
+    "subtitle_other": "{{count}} elementos · no forman parte de la aplicación de Rayfin",
+    "intro": "Los elementos de Fabric de los que depende esta aplicación y que no forman parte de la aplicación de Rayfin: los modelos semánticos que leen sus páginas y los lakehouses donde se preparan sus datos. Copilot los define en supporting-items/ y los cambia en Fabric solo después de que los apruebes. Publicar no los toca.",
+    "emptyTitle": "Aún no hay elementos de apoyo",
+    "emptyOn": "Pide a Copilot un modelo semántico que necesite la aplicación, por ejemplo sobre tus datos de Snowflake o SQL, o dale archivos de datos para prepararlos en un lakehouse. Te pregunta antes de crear nada en Fabric.",
+    "emptyOff": "Actívalos para que Copilot pueda crear los modelos semánticos y lakehouses que necesita esta aplicación. Te pregunta antes de cada cambio en Fabric.",
+    "unavailableTeam": "Los elementos de apoyo no están disponibles en las aplicaciones de equipo.",
+    "target": "Los elementos nuevos van a {{name}}",
+    "noTarget": "Los elementos nuevos van al área de trabajo que elijas cuando Copilot aplique el primero.",
+    "status": {
+      "notCreated": "Aún no se ha creado",
+      "applied": "En Fabric",
+      "changed": "Cambios sin aplicar",
+      "removed": "Definición quitada",
+      "unreadable": "No se puede aplicar",
+      "notInFabric": "No está en Fabric",
+      "drift": "Cambiado en Fabric"
+    },
+    "applied": "Aplicado {{when}}",
+    "refresh": {
+      "succeeded": "Actualizado {{when}}",
+      "failed": "La última actualización falló {{when}}",
+      "running": "Actualizando",
+      "cancelled": "Se canceló la última actualización"
+    },
+    "checking": "Comprobando Fabric…",
+    "signIn": "Vuelve a iniciar sesión en Fabric para ver cómo están allí.",
+    "usedByApp": "La aplicación lo usa",
+    "notUsedByApp": "La aplicación aún no lo usa",
+    "actions": {
+      "apply": "Aplicar con Copilot",
+      "refresh": "Actualizar con Copilot",
+      "viewModel": "Ver el modelo",
+      "openDefinition": "Abrir la definición",
+      "openInFabric": "Abrir en Fabric",
+      "delete": "Eliminar en Fabric…",
+      "turnOn": "Activar para esta aplicación",
+      "connect": "Conectar con Copilot",
+      "openWorkspace": "Abrir área de trabajo"
+    },
+    "prompts": {
+      "applyDisplay": "Aplicar {{name}}",
+      "apply": "Aplica el elemento de apoyo {{name}} ({{folder}}) en Fabric con fabricator_apply_supporting_items.",
+      "refreshDisplay": "Actualizar {{name}}",
+      "refresh": "Actualiza los datos del modelo semántico de apoyo {{name}} ({{folder}}) con fabricator_refresh_supporting_item y dime cómo fue.",
+      "connectDisplay": "Conectar {{name}}",
+      "connect": "Conecta la aplicación al modelo semántico de apoyo {{name}} ({{folder}}) con rayfin connector add, comprueba sus cifras mediante el conector y úsalo en las páginas de la aplicación."
+    },
+    "delete": {
+      "title": "¿Eliminar {{name}} en Fabric?",
+      "message": "Esto elimina el modelo semántico {{name}} de {{workspace}}. Los informes y las aplicaciones que lo leen dejan de funcionar, incluida esta aplicación si lo lee.",
+      "removeFolder": "Mover también su carpeta, {{folder}}, a la papelera",
+      "confirm": "Eliminar en Fabric",
+      "deleting": "Eliminando…",
+      "done": "{{name}} se eliminó de Fabric.",
+      "failed": "No se pudo eliminar {{name}}: {{error}}",
+      "messageLakehouse": "Esto elimina el lakehouse {{name}} de {{workspace}}, con todos sus archivos y tablas. Los modelos semánticos que lo leen dejan de funcionar, y también esta aplicación si lee alguno de ellos."
+    },
+    "loadFailed": "No se pudieron leer los elementos de apoyo de la aplicación: {{error}}",
+    "learnMore": "Más información",
+    "workspaceLabel": "Área de trabajo",
+    "refreshAuth": "Actualizar la autenticación de Fabric",
+    "offTitle": "Los elementos de apoyo están desactivados para esta aplicación",
+    "offNote": "Los elementos de apoyo están desactivados en el chat de esta aplicación, así que Copilot no puede aplicarlos ni actualizarlos.",
+    "turnOnFailed": "No se pudieron activar los elementos de apoyo: {{error}}",
+    "tables": "Tablas",
+    "problems": "Qué impide aplicarlo",
+    "noTables": "Su tables.json aún no incluye tablas.",
+    "table": {
+      "loaded": "Cargada {{when}}",
+      "notLoaded": "Aún no se ha cargado",
+      "changed": "Cambió desde que se cargó"
+    },
+    "fabricTables_one": "{{count}} tabla en Fabric",
+    "fabricTables_other": "{{count}} tablas en Fabric"
+  },
+  "publishNote_one": "Los elementos de apoyo no se publican con la aplicación: {{count}} está en {{workspace}}.",
+  "publishNote_other": "Los elementos de apoyo no se publican con la aplicación: {{count}} están en {{workspace}}.",
+  "enteredData": "datos introducidos en el modelo",
+  "lakehouseSource": "el lakehouse {{name}}",
+  "table": {
+    "files_one": "{{name}} ({{count}} archivo)",
+    "files_other": "{{name}} ({{count}} archivos)",
+    "rows_one": "{{rows}} fila",
+    "rows_other": "{{rows}} filas"
+  }
+}

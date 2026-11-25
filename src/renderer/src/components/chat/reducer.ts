@@ -235,6 +235,22 @@ export function reduceChatMessage(msg: UIChatMessage, ev: ChatEvent): UIChatMess
       next = { ...msg, questions: questions ?? msg.questions, notice: undefined }
       break
     }
+    case 'supporting-review': {
+      // A supporting items card arrives whole each time it changes: keep the
+      // latest, docked where it was first raised.
+      const review = ev.review
+      const existing = msg.supportingReviews ?? []
+      const supportingReviews = existing.some((r) => r.id === review.id)
+        ? existing.map((r) => (r.id === review.id ? review : r))
+        : [...existing, review]
+      const segments = (msg.segments ?? []).some(
+        (s) => s.kind === 'supporting' && s.id === review.id
+      )
+        ? msg.segments
+        : [...(closeReasoning(msg.segments) ?? []), { kind: 'supporting' as const, id: review.id }]
+      next = { ...msg, supportingReviews, segments, notice: undefined }
+      break
+    }
     default:
       next = msg
   }

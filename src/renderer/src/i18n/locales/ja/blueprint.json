@@ -9,7 +9,8 @@
     "cantDraw": "アプリを描画できませんでした",
     "openYml": "rayfin.yml を開く",
     "metadataTooLarge": "metadata.json が大きすぎるため読み取れません。",
-    "firstFiles": "{{dir}}/ にある {{total}} 個のファイルのうち、最初の {{max}} 個を読み取りました。"
+    "firstFiles": "{{dir}}/ にある {{total}} 個のファイルのうち、最初の {{max}} 個を読み取りました。",
+    "supportingItems": "補助アイテム"
   },
   "identity": {
     "user": "ユーザー ID",
@@ -196,7 +197,9 @@
       "add": "Fabric データを追加…"
     },
     "connections_other": "{{count}} 個の接続",
-    "calledBy": "{{functions}} から呼び出し"
+    "calledBy": "{{functions}} から呼び出し",
+    "supportingTag": "補助",
+    "supportingTitle": "補助アイテム: Fabricator がこのアプリのために作成しました。Rayfin アプリには含まれません。"
   },
   "inspector": {
     "panelAria": "{{title}} の詳細",
@@ -357,6 +360,12 @@
       "ownAccess": "各ユーザー自身の Fabric アクセス権が適用され、テーブルのユーザーごとのルールでユーザーを識別できます。",
       "details": "詳細",
       "grantApp": "アプリに付与"
+    },
+    "supporting": {
+      "title": "補助アイテム",
+      "lead": "このセマンティック モデルは、チャットで承認されたときに Fabricator が {{folder}} からアプリのために作成しました。Rayfin アプリには含まれず、公開しても変更されません。",
+      "openDefinition": "定義を開く",
+      "lakehouse": "Direct Lake でレイクハウス {{name}} からデータを読み取ります。このレイクハウスも補助アイテムで、Fabricator がアプリのフォルダーにあるファイルから読み込みます。"
     }
   }
 }

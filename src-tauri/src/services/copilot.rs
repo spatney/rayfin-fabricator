@@ -45,6 +45,7 @@ use crate::services::exec;
 use crate::services::iq::{Iq, IqConfig};
 use crate::services::mcp::{self, McpServers};
 use crate::services::store;
+use crate::services::supporting_items::InChat;
 use crate::state::PlanGate;
 use crate::types::{ChatEvent, CopilotAuthStatus};
 
@@ -97,6 +98,9 @@ struct Entry {
   /// The user's custom instructions the session was opened with; changing
   /// them reopens it, so each chat follows them from its next message.
   custom_instructions: Option<String>,
+  /// What the session was opened with of supporting items (their tools and
+  /// guidance, or the tool that asks to turn them on); a change reopens it.
+  supporting_items: InChat,
 }
 
 /// Context window tiers (SDK `ContextTier`).
@@ -482,6 +486,9 @@ pub struct SessionOptions {
   /// chat (with `guidance`) gets them as one more instruction directory (see
   /// `agent_skills::custom_instructions_dir`).
   pub custom_instructions: Option<String>,
+  /// A Build chat (with `guidance`) with supporting items on gets their
+  /// instructions and skill too (see `agent_skills::supporting_items_dir`).
+  pub supporting_items: InChat,
 }
 
 /* ----------------------------- Build chat sandbox ----------------------------- */
@@ -537,17 +544,27 @@ fn request_kind(data: &PermissionRequestData) -> Option<String> {
   Some(kind.to_string())
 }
 
-/// Whether a shell command reaches into a `.rayfin-local` folder, by its text or
-/// by the paths the runtime found in it (a glob, say). Git commands that only
-/// touch the index may name the folder.
-fn shell_reaches_local_state(body: &Value) -> bool {
+/// The commands of a shell line: as the runtime parsed them, else split at
+/// command breaks.
+fn shell_segments(body: &Value) -> Vec<&str> {
   let full = body.get("fullCommandText").and_then(Value::as_str).unwrap_or_default();
   let parsed: Vec<&str> = body
     .get("commandSegments")
     .and_then(Value::as_array)
     .map(|segments| segments.iter().filter_map(|s| s.get("fullCommandText").and_then(Value::as_str)).collect())
     .unwrap_or_default();
-  let segments: Vec<&str> = if parsed.is_empty() { COMMAND_BREAK.split(full).collect() } else { parsed };
+  if parsed.is_empty() {
+    COMMAND_BREAK.split(full).collect()
+  } else {
+    parsed
+  }
+}
+
+/// Whether a shell command reaches into a `.rayfin-local` folder, by its text or
+/// by the paths the runtime found in it (a glob, say). Git commands that only
+/// touch the index may name the folder.
+fn shell_reaches_local_state(body: &Value) -> bool {
+  let segments = shell_segments(body);
   let (index_only, others): (Vec<&str>, Vec<&str>) = segments.into_iter().partition(|s| GIT_INDEX_ONLY.is_match(s));
   if others.iter().any(|s| names_local_state(s)) {
     return true;
@@ -576,6 +593,120 @@ fn reaches_local_state(data: &PermissionRequestData) -> bool {
     Some("shell") => shell_reaches_local_state(body),
     _ => false,
   }
+}
+
+/// The Fabric and Power BI REST APIs: their public hosts, and the regional
+/// clusters long-running operations send callers to; and OneLake, where
+/// lakehouses' files and tables are, on its global host or an organization's.
+static FABRIC_API: Lazy<Regex> = Lazy::new(|| {
+  Regex::new(
+    r"(?i)\b(?:api\.fabric\.microsoft\.com|api\.powerbi\.com|[a-z0-9-]+\.analysis(?:-df)?\.windows\.net|(?:[a-z0-9-]+-)?onelake\.(?:dfs|blob)\.fabric\.microsoft\.com)\b",
+  )
+  .unwrap()
+});
+
+/// Tools that write to storage, which OneLake is: AzCopy, and the Azure CLI's
+/// storage commands that upload, change or delete.
+static STORAGE_WRITE: Lazy<Regex> = Lazy::new(|| {
+  Regex::new(
+    r"(?i)^\s*(?:&\s*)?\S*?azcopy(?:\.exe)?\s+(?:copy|cp|sync|rm|remove|make)\b|\baz(?:\.cmd|\.exe)?\s+storage\s+(?:fs|blob|file|directory)\b.*\b(?:upload|upload-batch|delete|delete-batch|create|move|rename|set|sync)\b",
+  )
+  .unwrap()
+});
+
+/// A command aimed at OneLake.
+static ONELAKE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bonelake\b").unwrap());
+
+/// Calls to those APIs that only read, though they're POSTs: a definition, a DAX query.
+static READ_ONLY_POST: Lazy<Regex> =
+  Lazy::new(|| Regex::new(r"(?i)/(?:getDefinition|executeQueries|executeDaxQueries)\b").unwrap());
+
+/// How shell commands send a request that changes something: the tool, and
+/// what makes its request change something.
+static WRITE_REQUESTS: Lazy<Vec<(Regex, Regex)>> = Lazy::new(|| {
+  let write = "(?:post|put|patch|delete)";
+  [
+    (r"(?i)\baz(?:\.cmd|\.exe)?\s+rest\b", format!(r#"(?i)(?:^|\s)(?:--method|-m)(?:\s+|=)["']?{write}\b"#)),
+    (
+      r"(?i)\bcurl(?:\.exe)?\b",
+      format!(
+        r#"(?i)(?:^|\s)(?:-X|--request)(?:\s*|=)["']?{write}\b|(?:^|\s)-[dFT](?:\s|=|@|'|"|\{{|$)|(?:^|\s)--(?:data(?:-raw|-binary|-urlencode|-ascii)?|json|form|upload-file)(?:\s|=|$)"#
+      ),
+    ),
+    (r"(?i)\bwget(?:\.exe)?\b", format!(r#"(?i)--(?:post|body)-(?:data|file)\b|--method[=\s]+["']?{write}\b"#)),
+    (
+      r"(?i)\b(?:Invoke-RestMethod|Invoke-WebRequest|irm|iwr)\b",
+      format!(r#"(?i)(?:^|\s)-(?:Me|Met|Meth|Metho|Method)(?:\s+|:)["']?{write}\b"#),
+    ),
+    // A script one-liner (`python -c`, `node -e`).
+    (
+      r".",
+      format!(r#"(?i)\b(?:requests|httpx|session|axios|client|http)\.{write}\s*\(|\bmethod\s*[:=]\s*["']{write}["']"#),
+    ),
+  ]
+  .into_iter()
+  .map(|(tool, how)| (Regex::new(tool).unwrap(), Regex::new(&how).unwrap()))
+  .collect()
+});
+
+/// The Fabric CLI's commands that change something.
+static FABRIC_CLI_WRITE: Lazy<Regex> = Lazy::new(|| {
+  Regex::new(
+    r#"(?i)^\s*(?:&\s*)?["']?fab(?:\.exe)?["']?\s+(?:(?:mkdir|create|rm|del|delete|set|import|mv|move|cp|copy|ln|assign|unassign|start|stop)\b|(?:label|acl)\s+set\b|api\b.*(?:-X|--method)\s+["']?(?:post|put|patch|delete)\b)"#,
+  )
+  .unwrap()
+});
+
+/// Whether a shell command creates, changes or deletes something in Fabric or
+/// Power BI itself: a request that writes to their APIs, from `az rest`,
+/// `curl`, `wget`, PowerShell or a script one-liner, or a Fabric CLI command
+/// that changes something. Requests that only read pass, the POSTs that only
+/// read (a definition, a DAX query) among them. Chat creates and changes
+/// supporting items only through their tools, after the user approves.
+fn shell_writes_fabric(body: &Value) -> bool {
+  let segments = shell_segments(body);
+  if segments.iter().any(|s| FABRIC_CLI_WRITE.is_match(s)) {
+    return true;
+  }
+  let full = body.get("fullCommandText").and_then(Value::as_str).unwrap_or_default();
+  if ONELAKE.is_match(full) && segments.iter().any(|s| STORAGE_WRITE.is_match(s)) {
+    return true;
+  }
+  if !FABRIC_API.is_match(full) || READ_ONLY_POST.is_match(full) {
+    return false;
+  }
+  segments.iter().any(|s| WRITE_REQUESTS.iter().any(|(tool, how)| tool.is_match(s) && how.is_match(s)))
+}
+
+/// What the agent is told when it tries to write to Fabric from the shell.
+fn fabric_write_denial(supporting: InChat) -> PermissionResult {
+  let message = match supporting {
+    InChat::On => {
+      "Fabricator doesn't let chat create, change or delete Fabric or Power BI items, or OneLake files, with \
+       commands, scripts or API calls. To create or change a supporting semantic model or lakehouse, or load files \
+       into a lakehouse's tables, define it in supporting-items/ and apply it with fabricator_apply_supporting_items, \
+       which asks the user first. Requests that only read are fine."
+    }
+    InChat::Off => {
+      "Fabricator doesn't let chat create, change or delete Fabric or Power BI items, or OneLake files, with \
+       commands, scripts or API calls, so don't try it another way. To build a semantic model or a lakehouse the app \
+       relies on, call fabricator_turn_on_supporting_items, which asks the user to turn on supporting items; chat \
+       then creates it with their approval. Requests that only read are fine."
+    }
+    InChat::Unavailable => {
+      "Fabricator doesn't let chat create, change or delete Fabric or Power BI items, or OneLake files, with \
+       commands, scripts or API calls, so don't try it another way. Tell the user what the item should be. \
+       Fabricator's Supporting items, which create the semantic models and lakehouses an app relies on with the \
+       user's approval, aren't available in team apps."
+    }
+  };
+  PermissionDecision::DeniedByPermissionRequestHook(PermissionDecisionDeniedByPermissionRequestHook {
+    // Fails only this call: the turn carries on.
+    interrupt: Some(false),
+    message: Some(message.into()),
+    ..Default::default()
+  })
+  .into()
 }
 
 /// What the agent is told when it reaches into `.rayfin-local`.
@@ -635,14 +766,18 @@ fn mcp_denial(team: bool) -> PermissionResult {
 }
 
 /// The Build chat's permission policy. The chat never reads or changes the
-/// local backend's state in `.rayfin-local`, which Fabricator manages, uses
-/// Fabric IQ and Work IQ only to read, and uses only the read-only tools of an
-/// MCP server the user made read-only, and of every MCP server in a team app.
-/// Every other request goes to `inner`: a team project's guardrails, or approval.
+/// local backend's state in `.rayfin-local`, which Fabricator manages, never
+/// writes to Fabric or Power BI from the shell (supporting items have their own
+/// tools), uses Fabric IQ and Work IQ only to read, and uses only the read-only
+/// tools of an MCP server the user made read-only, and of every MCP server in a
+/// team app. Every other request goes to `inner`: a team project's guardrails,
+/// or approval.
 struct BuildChatPolicy {
   inner: Arc<dyn PermissionHandler>,
   /// The session has the local backend tools, for the denial to point at.
   local_tools: bool,
+  /// What the session has of supporting items, for the denial to point at.
+  supporting_items: InChat,
   /// The plugins on in the project's chat now: chat can turn Fabric IQ on as it
   /// works, and its tools are then there in the same session. `None` once the
   /// project is gone.
@@ -681,6 +816,10 @@ impl PermissionHandler for BuildChatPolicy {
       log::info!("Build chat: declined a {} request in .rayfin-local", request_kind(&data).unwrap_or_else(|| "unknown".into()));
       return local_state_denial(self.local_tools);
     }
+    if request_kind(&data).as_deref() == Some("shell") && shell_writes_fabric(request_body(&data)) {
+      log::info!("Build chat: declined a shell command that writes to Fabric");
+      return fabric_write_denial(self.supporting_items);
+    }
     self.inner.handle(session_id, request_id, data).await
   }
 }
@@ -690,11 +829,19 @@ fn build_chat_policy(project_id: &str, tools: &[Tool], iq: IqConfig, mcp: mcp::P
   // Team projects may not deploy, push or merge from chat (see team::guard).
   let inner = crate::services::team::guard::chat_policy(project_id).unwrap_or_else(|| Arc::new(ApproveAllHandler));
   let local_tools = tools.iter().any(|t| t.name == LOCAL_STATUS_TOOL);
+  let has = |name: &str| tools.iter().any(|t| t.name == name);
+  let supporting_items = if has(crate::services::supporting_items::tools::APPLY_TOOL) {
+    InChat::On
+  } else if has(crate::services::supporting_items::tools::TURN_ON_TOOL) {
+    InChat::Off
+  } else {
+    InChat::Unavailable
+  };
   let project_id = project_id.to_string();
   let plugins_now: PluginsNow = Arc::new(move || {
     store::find_project(&project_id).map(|project| IqConfig::for_project(&project, &store::get_settings()))
   });
-  Arc::new(BuildChatPolicy { inner, local_tools, plugins_now, iq, mcp })
+  Arc::new(BuildChatPolicy { inner, local_tools, supporting_items, plugins_now, iq, mcp })
 }
 
 /// The project folders that hold its own skills (`<skill>/SKILL.md`): the
@@ -702,20 +849,27 @@ fn build_chat_policy(project_id: &str, tools: &[Tool], iq: IqConfig, mcp: mcp::P
 const PROJECT_SKILL_DIRS: [&str; 2] = [".agents/skills", ".github/skills"];
 
 /// The skill directories of a Build chat session in `cwd`: Fabricator's set
-/// first, so its guidance comes before a project skill of the same name, then
-/// the project's own that exist. A session that names its skill directories
-/// loads only those, so without them the project's skills (such as the
-/// templates' capability router) aren't found.
-fn skill_directories(guidance: Guidance, cwd: &Path) -> Vec<PathBuf> {
+/// first, so its guidance comes before a project skill of the same name, with
+/// the supporting items set when they're on, then the project's own that exist.
+/// A session that names its skill directories loads only those, so without them
+/// the project's skills (such as the templates' capability router) aren't found.
+fn skill_directories(guidance: Guidance, supporting_items: bool, cwd: &Path) -> Vec<PathBuf> {
   let mut dirs = vec![agent_skills::skills_dir(guidance)];
+  if supporting_items {
+    dirs.push(agent_skills::supporting_items_dir().join("skills"));
+  }
   dirs.extend(PROJECT_SKILL_DIRS.iter().map(|dir| cwd.join(dir)).filter(|dir| dir.is_dir()));
   dirs
 }
 
-/// The instruction directories of a Build chat session: Fabricator's set, and
-/// the user's custom instructions when they have some.
-fn instruction_directories(guidance: Guidance, custom: Option<&str>) -> Vec<PathBuf> {
+/// The instruction directories of a Build chat session: Fabricator's set, the
+/// supporting items set when they're on, and the user's custom instructions
+/// when they have some.
+fn instruction_directories(guidance: Guidance, supporting_items: bool, custom: Option<&str>) -> Vec<PathBuf> {
   let mut dirs = vec![agent_skills::instructions_dir(guidance)];
+  if supporting_items {
+    dirs.push(agent_skills::supporting_items_dir().join("instructions"));
+  }
   dirs.extend(agent_skills::custom_instructions_dir(custom));
   dirs
 }
@@ -783,8 +937,8 @@ async fn open_session(
     if let Some(guidance) = opts.guidance {
       cfg = cfg
         .with_enable_skills(true)
-        .with_skill_directories(skill_directories(guidance, &cwd_pb))
-        .with_instruction_directories(instruction_directories(guidance, opts.custom_instructions.as_deref()));
+        .with_skill_directories(skill_directories(guidance, opts.supporting_items.on(), &cwd_pb))
+        .with_instruction_directories(instruction_directories(guidance, opts.supporting_items.on(), opts.custom_instructions.as_deref()));
     }
     if !opts.tools.is_empty() {
       cfg = cfg.with_tools(opts.tools.clone());
@@ -852,8 +1006,8 @@ async fn open_session(
   if let Some(guidance) = opts.guidance {
     cfg = cfg
       .with_enable_skills(true)
-      .with_skill_directories(skill_directories(guidance, Path::new(cwd)))
-      .with_instruction_directories(instruction_directories(guidance, opts.custom_instructions.as_deref()));
+      .with_skill_directories(skill_directories(guidance, opts.supporting_items.on(), Path::new(cwd)))
+      .with_instruction_directories(instruction_directories(guidance, opts.supporting_items.on(), opts.custom_instructions.as_deref()));
   }
   if !opts.tools.is_empty() {
     cfg = cfg.with_tools(opts.tools.clone());
@@ -1383,8 +1537,9 @@ impl CopilotManager {
   /// ([`always_listed`]). `byok` is the registry of providers on the user's
   /// own keys, `guidance` the set of Fabricator's guidance that fits the app,
   /// `iq` the Fabric IQ and Work IQ servers it gets, `mcp` the user's MCP
-  /// servers that are on, and `custom_instructions` the user's own; a cached
-  /// session opened with a different one of these is reopened, since the
+  /// servers that are on, `custom_instructions` the user's own, and
+  /// `supporting_items` whether the app's chat has supporting items on; a
+  /// cached session opened with a different one of these is reopened, since the
   /// runtime only takes them (with `tools`) when a session is created or
   /// resumed.
   #[allow(clippy::too_many_arguments)]
@@ -1402,6 +1557,7 @@ impl CopilotManager {
     iq: IqConfig,
     mcp: McpServers,
     custom_instructions: Option<String>,
+    supporting_items: InChat,
   ) -> Result<TurnSession, String> {
     let choice = with_own_key_effort(choice, byok.as_ref());
     let key = project_id.to_string();
@@ -1425,7 +1581,8 @@ impl CopilotManager {
           && e.iq == iq
           && e.mcp == mcp_rev
           && e.guidance == guidance
-          && e.custom_instructions == custom_instructions =>
+          && e.custom_instructions == custom_instructions
+          && e.supporting_items == supporting_items =>
       {
         match session_sync(&e.choice, &choice) {
           // The choice changed — apply it on the live session. `set_model`
@@ -1470,6 +1627,7 @@ impl CopilotManager {
       iq,
       mcp,
       custom_instructions: custom_instructions.clone(),
+      supporting_items,
       ..Default::default()
     };
     let opened = match open_session(&client, cwd, session_id, &choice, &opts, true).await {
@@ -1496,6 +1654,7 @@ impl CopilotManager {
         iq,
         mcp: mcp_rev,
         custom_instructions,
+        supporting_items,
       },
     );
     // The session starts the user's MCP servers afresh: try each one again.
@@ -1884,7 +2043,7 @@ pub(crate) mod tests {
     ).await.unwrap();
     let manager = manager_with(client);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None,
+      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None, supporting_items: InChat::Unavailable,
     });
     manager.reload_auth().await;
     let engine = manager.engine.lock().await;
@@ -2137,11 +2296,11 @@ pub(crate) mod tests {
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
       session: Arc::new(cached), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
       iq: IqConfig { fabric: true, work: true },
-      mcp: String::new(), custom_instructions: None,
+      mcp: String::new(), custom_instructions: None, supporting_items: InChat::Unavailable,
     });
     let fabric = IqConfig { fabric: true, work: false };
     manager.turn_session(
-      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), None, None, fabric, McpServers::default(), None,
+      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), None, None, fabric, McpServers::default(), None, InChat::Unavailable,
     ).await.unwrap();
     let requests = server.await.unwrap();
     let servers = requests[3]["params"]["mcpServers"].as_object().unwrap();
@@ -2164,13 +2323,13 @@ pub(crate) mod tests {
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
       session: cached.clone(), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
-      guidance: Some(Guidance::Local), iq: IqConfig { fabric: false, work: true }, mcp: String::new(), custom_instructions: None,
+      guidance: Some(Guidance::Local), iq: IqConfig { fabric: false, work: true }, mcp: String::new(), custom_instructions: None, supporting_items: InChat::Unavailable,
     });
     manager.plugins_started("project", &cached, Iq::Fabric).await;
     let both = IqConfig { fabric: true, work: true };
     assert_eq!(manager.engine.lock().await.sessions["project"].iq, both);
     let opened = manager.turn_session(
-      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::Local), None, both, McpServers::default(), None,
+      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::Local), None, both, McpServers::default(), None, InChat::Unavailable,
     ).await.unwrap();
     assert!(Arc::ptr_eq(&opened.session, &cached), "the same session");
     server.await.unwrap();
@@ -2188,12 +2347,12 @@ pub(crate) mod tests {
     }
     let fabricator = agent_skills::skills_dir(Guidance::Local);
     let expected = vec![fabricator.clone(), project.join(".agents/skills"), project.join(".github/skills")];
-    assert_eq!(skill_directories(Guidance::Local, &project), expected);
+    assert_eq!(skill_directories(Guidance::Local, false, &project), expected);
     std::fs::remove_dir_all(project.join(".github")).unwrap();
-    assert_eq!(skill_directories(Guidance::Local, &project), expected[..2]);
+    assert_eq!(skill_directories(Guidance::Local, false, &project), expected[..2]);
     std::fs::remove_dir_all(project.join(".agents")).unwrap();
     std::fs::write(project.join(".agents"), "not a folder").unwrap();
-    assert_eq!(skill_directories(Guidance::Local, &project), [fabricator.clone()]);
+    assert_eq!(skill_directories(Guidance::Local, false, &project), [fabricator.clone()]);
     std::fs::remove_file(project.join(".agents")).unwrap();
     std::fs::create_dir_all(project.join(".agents/skills")).unwrap();
 
@@ -2240,11 +2399,11 @@ pub(crate) mod tests {
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
       session: Arc::new(cached), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
-      guidance: Some(Guidance::Local), iq: IqConfig::default(), mcp: String::new(), custom_instructions: None,
+      guidance: Some(Guidance::Local), iq: IqConfig::default(), mcp: String::new(), custom_instructions: None, supporting_items: InChat::Unavailable,
     });
     let theirs = "Use the system theme by default.";
     manager.turn_session(
-      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::Local), None, IqConfig::default(), McpServers::default(), Some(theirs.into()),
+      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::Local), None, IqConfig::default(), McpServers::default(), Some(theirs.into()), InChat::Unavailable,
     ).await.unwrap();
     let requests = server.await.unwrap();
     assert_eq!(
@@ -2268,7 +2427,7 @@ pub(crate) mod tests {
     ).await.unwrap();
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None,
+      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None, supporting_items: InChat::Unavailable,
     });
     assert!(manager.list_models().await.is_err());
     let engine = manager.engine.lock().await;
@@ -2295,7 +2454,7 @@ pub(crate) mod tests {
     ).await.unwrap());
     let manager = manager_with(client);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: current.clone(), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None,
+      session: current.clone(), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None, supporting_items: InChat::Unavailable,
     });
     manager.invalidate_transport("project", &stale).await;
     assert!(manager.engine.lock().await.client.is_some());
@@ -2335,10 +2494,10 @@ pub(crate) mod tests {
     ).await.unwrap();
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(old), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None,
+      session: Arc::new(old), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None, supporting_items: InChat::Unavailable,
     });
     let opened = manager.turn_session(
-      "project", ".", "new-session", ModelChoice::default(), None, None, Vec::new(), None, None, IqConfig::default(), McpServers::default(), None,
+      "project", ".", "new-session", ModelChoice::default(), None, None, Vec::new(), None, None, IqConfig::default(), McpServers::default(), None, InChat::Unavailable,
     ).await.unwrap();
     assert_eq!(opened.session.id().as_str(), "new-session");
     assert!(!opened.recreated);
@@ -2366,7 +2525,7 @@ pub(crate) mod tests {
     let choice = ModelChoice::of(m("anthropic/claude-opus-5-5"), None);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
       session: Arc::new(cached), cwd: ".".into(), choice: choice.clone(),
-      registry_rev: Some("before-the-new-key".into()), guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None,
+      registry_rev: Some("before-the-new-key".into()), guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None, supporting_items: InChat::Unavailable,
     });
     let mut settings = crate::types::ByokSettings::default();
     settings.providers.insert("anthropic".into(), crate::types::ByokProviderSettings {
@@ -2380,7 +2539,7 @@ pub(crate) mod tests {
     let keys = HashMap::from([("anthropic".to_string(), "sk-ant-test".to_string())]);
     let registry = crate::services::byok::registry::build(&settings, &keys);
     manager.turn_session(
-      "project", ".", "thread", choice, None, None, Vec::new(), None, Some(registry.clone()), IqConfig::default(), McpServers::default(), None,
+      "project", ".", "thread", choice, None, None, Vec::new(), None, Some(registry.clone()), IqConfig::default(), McpServers::default(), None, InChat::Unavailable,
     ).await.unwrap();
     let requests = server.await.unwrap();
     assert!(requests.iter().all(|r| r["method"] != "auth.getStatus"));
@@ -2415,10 +2574,10 @@ pub(crate) mod tests {
       session: Arc::new(cached), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
       guidance: Some(Guidance::Local),
       iq: IqConfig::default(),
-      mcp: String::new(), custom_instructions: None,
+      mcp: String::new(), custom_instructions: None, supporting_items: InChat::Unavailable,
     });
     manager.turn_session(
-      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::FabricBacked), None, IqConfig::default(), McpServers::default(), None,
+      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::FabricBacked), None, IqConfig::default(), McpServers::default(), None, InChat::Unavailable,
     ).await.unwrap();
     let requests = server.await.unwrap();
     let resume = &requests[3]["params"];
@@ -2445,7 +2604,7 @@ pub(crate) mod tests {
     let manager = manager_with(client.clone());
     let tools = vec![Tool::new("fabricator_local_call"), Tool::new("fabricator_local_status").with_defer(DeferMode::Auto)];
     manager.turn_session(
-      "project", ".", "thread", ModelChoice::default(), None, None, tools, Some(Guidance::Local), None, IqConfig::default(), McpServers::default(), None,
+      "project", ".", "thread", ModelChoice::default(), None, None, tools, Some(Guidance::Local), None, IqConfig::default(), McpServers::default(), None, InChat::Unavailable,
     ).await.unwrap();
     let requests = server.await.unwrap();
     let sent = requests[1]["params"]["tools"].as_array().expect("tools");
@@ -2641,7 +2800,7 @@ pub(crate) mod tests {
     ]);
     let manager = manager_with(client);
     let result = manager.turn_session(
-      "project", ".", "unauthenticated-session", ModelChoice::default(), None, None, Vec::new(), None, None, IqConfig::default(), McpServers::default(), None,
+      "project", ".", "unauthenticated-session", ModelChoice::default(), None, None, Vec::new(), None, None, IqConfig::default(), McpServers::default(), None, InChat::Unavailable,
     ).await;
     assert!(result.err().unwrap().contains("Sign in to Copilot"));
     assert!(manager.engine.lock().await.sessions.is_empty());
@@ -2877,12 +3036,87 @@ pub(crate) mod tests {
       PermissionResult::Decision { decision: PermissionDecision::ApproveOnce(_), .. }
     ));
     // A team project keeps its own guardrails as well.
-    let team = BuildChatPolicy { inner: Arc::new(crate::services::team::guard::TeamChatPolicy), local_tools: false, plugins_now: Arc::new(|| None), iq: IqConfig::default(), mcp: mcp::Permits::default() };
+    let team = BuildChatPolicy { inner: Arc::new(crate::services::team::guard::TeamChatPolicy), local_tools: false, supporting_items: InChat::Unavailable, plugins_now: Arc::new(|| None), iq: IqConfig::default(), mcp: mcp::Permits::default() };
     assert!(matches!(
       decide(&team, json!({ "kind": "shell", "fullCommandText": "npx rayfin up --yes" })).await,
       PermissionResult::Decision { decision: PermissionDecision::UserNotAvailable(_), .. }
     ));
     message(decide(&team, json!({ "kind": "shell", "fullCommandText": "del .rayfin-local\\db.sqlite" })).await);
+  }
+
+  /// Chat never creates, changes or deletes Fabric items from the shell, in any
+  /// of the usual ways; it reads, and a session with supporting items is told
+  /// to use their tools.
+  #[tokio::test]
+  async fn a_build_chat_never_writes_to_fabric_from_the_shell() {
+    let writes = |command: &str| shell_writes_fabric(&json!({ "kind": "shell", "fullCommandText": command }));
+    for command in [
+      "az rest --method post --url https://api.fabric.microsoft.com/v1/workspaces/w/semanticModels --body @model.json",
+      "az rest -m PATCH --uri \"https://api.fabric.microsoft.com/v1/workspaces/w/items/i\"",
+      "az.cmd rest --method=delete --url https://api.fabric.microsoft.com/v1/workspaces/w/items/i",
+      "curl -X POST https://api.powerbi.com/v1.0/myorg/groups/g/datasets/d/refreshes",
+      "curl -s https://api.fabric.microsoft.com/v1/workspaces/w/items -H \"Authorization: Bearer $t\" -d @item.json",
+      "curl.exe --request put https://api.fabric.microsoft.com/v1/x --data '{}'",
+      "Invoke-RestMethod -Method Post -Uri https://api.fabric.microsoft.com/v1/workspaces/w/items -Body $b",
+      "$u = 'https://api.fabric.microsoft.com/v1/workspaces/w/items'; irm $u -Method:Delete",
+      "python -c \"import requests; requests.post('https://api.fabric.microsoft.com/v1/workspaces/w/items', json=b)\"",
+      "node -e \"fetch('https://wabi-west-us3-a-primary-redirect.analysis.windows.net/v1/x', { method: 'PUT' })\"",
+      "curl -X PUT \"https://onelake.dfs.fabric.microsoft.com/w/l/Files/data/a.csv?resource=file\"",
+      "curl -X PATCH https://msit-onelake.dfs.fabric.microsoft.com/w/l/Files/a.csv?action=append --data-binary @a.csv",
+      "azcopy copy ./data/orders.csv \"https://onelake.blob.fabric.microsoft.com/w/l/Files/\" --trusted-microsoft-suffixes=onelake.blob.fabric.microsoft.com",
+      "az storage fs file upload --account-name onelake --file-system w --path l/Files/a.csv --source a.csv --auth-mode login",
+      "wget --post-data='{}' https://api.powerbi.com/v1.0/myorg/datasets",
+      "fab mkdir ws.Workspace/Sales.SemanticModel",
+      "fab rm ws.Workspace/Sales.SemanticModel -f",
+      "fab api -X post workspaces/w/items",
+    ] {
+      assert!(writes(command), "{command}");
+    }
+    for command in [
+      "az rest --url https://api.fabric.microsoft.com/v1/workspaces/w/items",
+      "az rest --method get --url https://api.fabric.microsoft.com/v1/workspaces",
+      "az rest --method post --url https://api.fabric.microsoft.com/v1/workspaces/w/semanticModels/m/getDefinition",
+      "curl https://api.powerbi.com/v1.0/myorg/groups",
+      "curl -X POST https://api.powerbi.com/v1.0/myorg/datasets/d/executeQueries -d @query.json",
+      "curl -X POST http://localhost:4000/api/items -d '{}'",
+      "npx rayfin connector add --type fabric-semanticmodel --workspace-id w --item-id i --name sales",
+      "curl https://onelake.dfs.fabric.microsoft.com/w/l/Files/data/a.csv -o a.csv",
+      "azcopy list \"https://onelake.blob.fabric.microsoft.com/w/l/Files/\"",
+      "azcopy copy ./a.csv ./b.csv",
+      "fab ls ws.Workspace",
+      "git commit -m \"post the sales model\"",
+    ] {
+      assert!(!writes(command), "{command}");
+    }
+
+    let message = |result: PermissionResult| match result {
+      PermissionResult::Decision { decision: PermissionDecision::DeniedByPermissionRequestHook(denied), .. } => {
+        assert_eq!(denied.interrupt, Some(false), "the turn carries on");
+        denied.message.unwrap()
+      }
+      other => panic!("expected a denial, got {other:?}"),
+    };
+    let post = json!({ "kind": "shell", "fullCommandText": "curl -X POST https://api.fabric.microsoft.com/v1/workspaces/w/items" });
+    let decide = |policy: Arc<dyn PermissionHandler>, body: Value| async move {
+      policy.handle(SessionId::from("s"), RequestId::new("1"), permission(body)).await
+    };
+    let tools = [Tool::new(crate::services::supporting_items::tools::APPLY_TOOL)];
+    let with = build_chat_policy("a-personal-project", &tools, IqConfig::default(), mcp::Permits::default());
+    let said = message(decide(with, post.clone()).await);
+    assert!(said.contains("fabricator_apply_supporting_items"), "{said}");
+    // Off in the app's chat: chat can ask the user to turn them on.
+    let tools = [Tool::new(crate::services::supporting_items::tools::TURN_ON_TOOL)];
+    let off = build_chat_policy("a-personal-project", &tools, IqConfig::default(), mcp::Permits::default());
+    let said = message(decide(off, post.clone()).await);
+    assert!(said.contains("fabricator_turn_on_supporting_items") && !said.contains("fabricator_apply"), "{said}");
+    let without = build_chat_policy("a-personal-project", &[], IqConfig::default(), mcp::Permits::default());
+    let said = message(decide(without.clone(), post).await);
+    assert!(said.contains("Supporting items") && !said.contains("fabricator_apply"), "{said}");
+    let read = json!({ "kind": "shell", "fullCommandText": "az rest --url https://api.fabric.microsoft.com/v1/workspaces" });
+    assert!(matches!(
+      decide(without, read).await,
+      PermissionResult::Decision { decision: PermissionDecision::ApproveOnce(_), .. }
+    ));
   }
 
   #[tokio::test]
@@ -2921,6 +3155,7 @@ pub(crate) mod tests {
     let policy = BuildChatPolicy {
       inner: Arc::new(ApproveAllHandler),
       local_tools: false,
+      supporting_items: InChat::Unavailable,
       plugins_now,
       iq: IqConfig::default(),
       mcp: mcp::Permits::default(),
@@ -2978,6 +3213,7 @@ pub(crate) mod tests {
     let team = BuildChatPolicy {
       inner: Arc::new(crate::services::team::guard::TeamChatPolicy),
       local_tools: false,
+      supporting_items: InChat::Unavailable,
       plugins_now: Arc::new(|| None),
       iq: IqConfig::default(),
       mcp: McpServers::for_project(&project, &settings).permits(),

@@ -118,7 +118,8 @@
       "description": "説明",
       "copy": "DAX をコピー",
       "noDax": "DAX 式はありません。"
-    }
+    },
+    "reloadFiles": "ファイルを読み直す"
   },
   "model": {
     "loading": "データ モデルを読み取っています…",

@@ -1188,6 +1188,244 @@ export interface SemanticSchemaResult {
 }
 
 /* ------------------------------------------------------------------ *
+ * Supporting items: the Fabric items an app relies on that aren't part
+ * of the Rayfin app, defined in its supporting-items/ folder
+ * ------------------------------------------------------------------ */
+
+/** A Fabric workspace, by id and the name Fabricator last saw it with. */
+export interface SupportingWorkspace {
+  id: string
+  name: string
+}
+
+/** Where a review card can put an app's supporting items when it has no workspace yet. */
+export interface SupportingWorkspaceChoices {
+  /** The workspaces the user's apps are published to, most recently opened first. */
+  recent: SupportingWorkspace[]
+  /** The rest, by name. */
+  others: SupportingWorkspace[]
+}
+
+/** A data source a supporting model's M reads. */
+export interface SupportingSource {
+  /** 'Snowflake', 'SQL Server', 'Fabric Lakehouse', 'Web'… */
+  kind: string
+  /** The M function, e.g. `Snowflake.Databases`. */
+  function: string
+  /** Its first arguments, as text where they could be read. */
+  args: string[]
+  /** It reads a file or folder on a computer, which Fabric refreshes only through a gateway. */
+  local: boolean
+  /** The app's supporting item it reads, by name: the lakehouse a Direct Lake model is over. */
+  item?: string
+}
+
+/** What a supporting model holds, at a glance. */
+export interface SupportingSummary {
+  tables: number
+  columns: number
+  measures: number
+  relationships: number
+  /** 'import' | 'directQuery' | 'directLake' | 'dual' | 'mixed'. */
+  storage?: string
+  sources: SupportingSource[]
+}
+
+/** One difference between the model in Fabric and its definition. */
+export interface SupportingChange {
+  op: 'added' | 'removed' | 'changed'
+  kind:
+    'model' | 'table' | 'column' | 'measure' | 'partition' | 'relationship' | 'expression' | 'role'
+  /** The table a column, measure or partition belongs to. */
+  table?: string
+  /** Its name; for a relationship, `From[Col] → To[Col]`. */
+  name: string
+  /** For a change: the properties that changed, such as `dataType` or `expression`. */
+  fields: string[]
+}
+
+/**
+ * A finding about a supporting model: advisory ones on a review card, such as
+ * `one-side-key`, `type-mismatch`, `no-partition`, `local-source` and
+ * `both-directions`.
+ */
+export interface SupportingCheck {
+  code: string
+  table?: string
+  column?: string
+  detail?: string
+}
+
+/** Something about a supporting item's folder that stops it from being applied. */
+export interface SupportingProblem {
+  code: string
+  file?: string
+  line?: number
+  table?: string
+  column?: string
+  detail?: string
+}
+
+/** A table a supporting lakehouse loads, on a review card. */
+export interface SupportingTableLoad {
+  name: string
+  /** The file or folder it loads from, from the app's root. */
+  source: string
+  format: 'csv' | 'parquet'
+  files: number
+  bytes: number
+  /** A CSV file's rows, when they were counted. */
+  rows?: number
+  /** A CSV file's columns, from its header. */
+  columns?: string[]
+  /** `load` makes a new table; `reload` replaces what it holds. */
+  change: 'load' | 'reload'
+  state: 'pending' | 'working' | 'done' | 'failed' | 'skipped'
+  /** While it's worked on. */
+  phase?: 'uploading' | 'loading'
+  error?: string
+}
+
+/** One item on a supporting items review card. */
+export interface SupportingReviewItem {
+  /** Its folder's logical id. */
+  key: string
+  name: string
+  type: string
+  /** Its folder from the app's root: `supporting-items/Sales.SemanticModel`. */
+  folder: string
+  change: 'create' | 'update' | 'refresh'
+  summary: SupportingSummary
+  /** For an update: what changes (at most 60). */
+  changes?: SupportingChange[]
+  /** How many more changes there are than `changes` lists. */
+  moreChanges?: number
+  /** For an update: the model in Fabric couldn't be read, so what changes isn't known. */
+  changesUnknown?: boolean
+  /** Someone changed the item in Fabric since Fabricator last applied it. */
+  drift?: boolean
+  /** Fabricator created it before, but it's gone from Fabric: it's created again. */
+  recreate?: boolean
+  checks?: SupportingCheck[]
+  /** For a refresh: the folder has changes that aren't in Fabric yet. */
+  unapplied?: boolean
+  state: 'pending' | 'working' | 'done' | 'failed' | 'skipped'
+  /** While a Direct Lake model reads its tables for the first time. */
+  phase?: 'refreshing'
+  /** A lakehouse's tables to load. */
+  tables?: SupportingTableLoad[]
+  /** A Direct Lake model: Fabricator refreshes it once it's applied, so it reads its tables. */
+  frames?: boolean
+  itemId?: string
+  /** When its work started (epoch ms). */
+  startedAt?: number
+  error?: string
+  /** What a failed refresh said. */
+  errors?: string[]
+  /** The refresh needs the data source's credentials, set in Fabric. */
+  needsCredentials?: boolean
+  /** Fabricator can't start the refresh with your sign-ins: refresh it in Fabric. */
+  refreshInFabric?: boolean
+  /** The item in Fabric. */
+  url?: string
+  /** Its settings in Fabric, where its data source credentials are set. */
+  settingsUrl?: string
+}
+
+/**
+ * A supporting items review card: what Fabricator will change in Fabric once
+ * you approve it, then how it went. Each change to it arrives whole.
+ */
+export interface SupportingReview {
+  /** The card's request id, answered with `chat.resolveSupportingReview`. */
+  id: string
+  /** The app it's for: its picker lists what the app's Fabric account can create items in. */
+  projectId?: string
+  kind: 'apply' | 'refresh'
+  state: 'pending' | 'working' | 'done' | 'failed' | 'declined' | 'interrupted'
+  /** What Copilot says it's for. */
+  reason?: string
+  /** The workspace the items are in or go to; none until one is picked. */
+  workspace?: SupportingWorkspace
+  /** The card asks for a workspace: the app has none yet. */
+  pickWorkspace?: boolean
+  /** The Fabric account Fabricator creates and changes the items as: the app's. */
+  account?: string
+  /** The Azure CLI account that uploads lakehouses' files, when it isn't `account`. */
+  uploadsAs?: string
+  items: SupportingReviewItem[]
+  error?: string
+}
+
+/** Where a supporting item stands, from the app's files. */
+export type SupportingStatus = 'notCreated' | 'applied' | 'changed' | 'removed' | 'unreadable'
+
+/** One supporting item in Blueprint's Supporting items view. */
+export interface SupportingListedItem {
+  key?: string
+  /** Its folder in `supporting-items/`. */
+  folder: string
+  name: string
+  type: string
+  status?: SupportingStatus
+  itemId?: string
+  appliedAt?: string
+  summary?: SupportingSummary
+  /** Why its folder can't be applied as it is. */
+  problems?: SupportingProblem[]
+  /** A lakehouse's tables, as its folder lists them. */
+  tables?: SupportingListedTable[]
+  url?: string
+  settingsUrl?: string
+}
+
+/** A table of a supporting lakehouse, in Blueprint. */
+export interface SupportingListedTable {
+  name: string
+  /** The file or folder it loads from, from the app's root. */
+  source: string
+  bytes: number
+  rows?: number
+  /** When Fabricator last loaded it. */
+  loadedAt?: string
+  /** Its files, or how they're read, changed since it was loaded. */
+  changed: boolean
+}
+
+/** An app's supporting items. */
+export interface SupportingItemsView {
+  /** The experiment is on and the app isn't a team app. */
+  available: boolean
+  /** The app's chat has supporting items on. */
+  on: boolean
+  /** The workspace the items are in. */
+  workspace?: SupportingWorkspace
+  /** The workspace new items go to. */
+  target?: SupportingWorkspace
+  items: SupportingListedItem[]
+  /** `supporting-items/applied.json` can't be read. */
+  error?: string
+}
+
+/** What Fabric says about a supporting item the app created. */
+export interface SupportingFabricState {
+  key: string
+  /** It's in Fabric; absent when Fabric couldn't say. */
+  exists?: boolean
+  /** Someone changed it in Fabric since Fabricator last applied it. */
+  drift?: boolean
+  /** How its latest refresh went: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'notStarted'. */
+  refresh?: string
+  /** When its latest refresh ended, or started while it runs. */
+  refreshedAt?: string
+  /** A lakehouse's tables, as Fabric lists them. */
+  tables?: string[]
+  /** You have to sign in to Fabric again. */
+  needsSignIn: boolean
+  error?: string
+}
+
+/* ------------------------------------------------------------------ *
  * Long-running / streaming processes (logins, installs, deploys)
  * ------------------------------------------------------------------ */
 
@@ -1902,9 +2140,11 @@ export interface ExperimentFlags {
 /**
  * A chat plugin: an MCP server chat can use. Fabric IQ reads the Power BI
  * reports and semantic models you can open; Work IQ (an experiment) reads your
- * Microsoft 365 data; `mcp:<id>` is an MCP server you added.
+ * Microsoft 365 data; `mcp:<id>` is an MCP server you added. Supporting items
+ * (an experiment) aren't a server: they give chat the tools that create and
+ * change the Fabric items the app relies on, with your approval.
  */
-export type ChatPluginId = 'fabric-iq' | 'work-iq' | `mcp:${string}`
+export type ChatPluginId = 'fabric-iq' | 'work-iq' | 'supporting-items' | `mcp:${string}`
 
 /**
  * How Fabricator reaches an MCP server: a command it runs on this computer
@@ -2636,6 +2876,8 @@ export type ChatSegment =
   | { kind: 'text'; text: string }
   | { kind: 'tool'; id: string }
   | { kind: 'question'; id: string }
+  /** A supporting items review card, in `supportingReviews` by id, docked where it was raised. */
+  | { kind: 'supporting'; id: string }
   | { kind: 'interjection'; text: string; thumbs?: string[] }
   | { kind: 'reasoning'; id?: string; text: string; startedAt?: number; elapsedMs?: number }
 
@@ -2716,6 +2958,8 @@ export type ChatEvent =
       choices?: string[]
       allowFreeform: boolean
     }
+  /** A supporting items review card, whole; each change sends it again (keep the latest by `review.id`). */
+  | { type: 'supporting-review'; review: SupportingReview }
 
 /** Envelope so the renderer can route events to the right project's conversation. */
 export interface ChatEventEnvelope {
@@ -2731,6 +2975,12 @@ export interface ChatTurnResult {
   filesModified: string[]
   /** True when the agent ran a full `rayfin up` during the turn. */
   ranDeploy: boolean
+  /**
+   * Chat continues in a new message, which the app sends: `supporting-items`
+   * once the user turned supporting items on during the turn, so the new
+   * message's session has their tools.
+   */
+  continueWith?: 'supporting-items'
 }
 
 /** Result of a `chat.steer` call. */
@@ -3200,6 +3450,8 @@ export interface ChatMessage {
    * this assistant turn and answered via `chat_resolve_question`.
    */
   questions?: ChatPlanQuestion[]
+  /** The supporting items review cards this assistant turn showed, as they ended. */
+  supportingReviews?: SupportingReview[]
   /** The elements a (user) message picked in the preview with Touch Up, shown as chips. */
   picks?: ChatPickRef[]
   /** The Advisor findings a (user) message handed to Copilot, shown as a card in the transcript. */
@@ -4611,6 +4863,16 @@ export interface RayfinStudioApi {
     ) => Promise<void>
     /** Answer a structured clarification raised by the Plan-mode `ask_user` tool. */
     resolveQuestion: (requestId: string, answer: string, wasFreeform: boolean) => Promise<void>
+    /**
+     * Answer a supporting items review card: approve it, with the workspace
+     * picked on it when it asks for one, or turn it down.
+     */
+    resolveSupportingReview: (
+      projectId: string,
+      requestId: string,
+      approve: boolean,
+      workspace?: SupportingWorkspace
+    ) => Promise<void>
     /** Export a plan to a user-selected Markdown file. Null means the dialog was cancelled. */
     exportPlan: (suggestedName: string, content: string) => Promise<string | null>
     /** Load the persisted conversation history for a project. */
@@ -4658,6 +4920,23 @@ export interface RayfinStudioApi {
      * folders. Paths that don't exist are left out.
      */
     inspectPaths: (paths: string[]) => Promise<ChatPathInfo[]>
+  }
+
+  /** An app's supporting items, for Blueprint. */
+  supportingItems: {
+    /** What the app's `supporting-items/` defines, and where each item stands. */
+    list: (projectId: string) => Promise<SupportingItemsView>
+    /**
+     * The shared workspaces the app's Fabric account can create items in, for a
+     * review card's picker: the ones the user's apps are published to first.
+     */
+    workspaces: (projectId: string) => Promise<SupportingWorkspaceChoices>
+    /** The model an item's folder defines, for the semantic model diagram, without Fabric. */
+    schema: (projectId: string, folder: string) => Promise<SemanticSchemaResult>
+    /** What Fabric says about the items the app created. */
+    fabric: (projectId: string) => Promise<SupportingFabricState[]>
+    /** Delete an item the app created from Fabric, and with `removeFolder`, move its folder to the trash. */
+    remove: (projectId: string, key: string, removeFolder: boolean) => Promise<SupportingItemsView>
   }
 
   screenshot: {

@@ -31,6 +31,7 @@ import settings from './locales/en/settings.json'
 import setup from './locales/en/setup.json'
 import skills from './locales/en/skills.json'
 import spotlight from './locales/en/spotlight.json'
+import supporting from './locales/en/supporting.json'
 import team from './locales/en/team.json'
 import teamMap from './locales/en/teamMap.json'
 import tools from './locales/en/tools.json'
@@ -66,6 +67,7 @@ export const en = {
   setup,
   skills,
   spotlight,
+  supporting,
   team,
   teamMap,
   tools,

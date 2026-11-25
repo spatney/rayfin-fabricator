@@ -1,9 +1,15 @@
 import { useMemo, type JSX } from 'react'
-import type { ChatPlanQuestion, ChatSegment } from '@shared/ipc'
+import type {
+  ChatPlanQuestion,
+  ChatSegment,
+  SupportingReviewItem,
+  SupportingWorkspace
+} from '@shared/ipc'
 import { useTranslation } from '../../i18n'
 import Markdown from '../Markdown'
 import PlanQuestionCard from '../PlanQuestionCard'
 import { Codicon } from '../icons'
+import { SupportingReviewCard } from '../supporting/SupportingReviewCard'
 import { ShotStrip, useImageViewer } from './ImageViewer'
 import { ThinkingRow } from './ThinkingRow'
 import { layoutTurn } from './turnLayout'
@@ -78,12 +84,23 @@ export function AssistantBody({
   projectPath,
   questionBusy,
   onAnswerQuestion,
+  supportingBusyId = null,
+  onResolveSupporting,
+  onViewSupportingModel,
   onOpenFile
 }: {
   message: UIChatMessage
   projectPath: string
   questionBusy: boolean
   onAnswerQuestion: (requestId: string, answer: string, wasFreeform: boolean) => void
+  /** The supporting items card whose answer is on its way. */
+  supportingBusyId?: string | null
+  onResolveSupporting?: (
+    requestId: string,
+    approve: boolean,
+    workspace?: SupportingWorkspace
+  ) => void
+  onViewSupportingModel?: (item: SupportingReviewItem) => void
   onOpenFile?: (path: string) => void
 }): JSX.Element {
   const blocks = useMemo(() => layoutTurn(m), [m])
@@ -121,6 +138,22 @@ export function AssistantBody({
                 busy={questionBusy}
                 error={q.state === 'pending' ? m.questionError : undefined}
                 onAnswer={onAnswerQuestion}
+              />
+            )
+          }
+          case 'supporting': {
+            const review = m.supportingReviews?.find((r) => r.id === b.id)
+            if (!review) return null
+            return (
+              <SupportingReviewCard
+                key={b.key}
+                review={review}
+                busy={supportingBusyId === review.id || !onResolveSupporting}
+                error={m.supportingError?.id === review.id ? m.supportingError.text : undefined}
+                onResolve={(approve, workspace) =>
+                  onResolveSupporting?.(review.id, approve, workspace)
+                }
+                onViewModel={onViewSupportingModel}
               />
             )
           }

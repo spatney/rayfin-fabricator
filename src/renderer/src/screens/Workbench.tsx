@@ -27,6 +27,7 @@ import {
   type RayfinNewerRelease,
   type RayfinVersionInfo,
   type StudioProject,
+  type SupportingReview,
   type UnsupportedWorkspace
 } from '@shared/ipc'
 import CreateProjectScreen from '../components/CreateProjectScreen'
@@ -163,11 +164,26 @@ const LOCAL_RELOAD_SETTLE_MS = 500
 /** How often an app that falls back for its Rayfin version has that version read again:
  *  a terminal can update its packages, which nothing else notices. */
 const SDK_RECHECK_MS = 15_000
+/** What Copilot gets once the user turned supporting items on during a turn: the new
+ *  message's session has their tools and guidance, so chat carries on with the request. */
+const SUPPORTING_CONTINUE_PROMPT =
+  '[Fabricator: The user turned on Supporting items. Continue with their request: build the semantic model it needs with the supporting items tools, as their instructions say.]'
+/** How long after a turn settles chat continues it, as "Migrate the rest" waits between pages. */
+const CONTINUE_DELAY_MS = 400
 
 // Monaco is heavy (~7 MB); only load the code viewer when the Code tab is opened.
 const CodeViewer = lazy(() => import('../components/CodeViewer'))
 // xterm.js loads with the terminal the first time it's opened.
 const TerminalPanel = lazy(() => import('../components/terminal/TerminalPanel'))
+
+/** A supporting items card that can't go on once its turn is gone: one left
+ *  waiting or working shows as interrupted. */
+function settleSupporting(reviews: SupportingReview[] | undefined): SupportingReview[] | undefined {
+  if (!reviews?.some((r) => r.state === 'pending' || r.state === 'working')) return reviews
+  return reviews.map((r) =>
+    r.state === 'pending' || r.state === 'working' ? { ...r, state: 'interrupted' as const } : r
+  )
+}
 
 /** Hydrate a persisted message into a live (non-pending) UI message. */
 function toUi(m: ChatMessage): UIChatMessage {
@@ -180,6 +196,7 @@ function toUi(m: ChatMessage): UIChatMessage {
     questions: m.questions?.map((q) =>
       q.state === 'pending' ? { ...q, state: 'interrupted' } : q
     ),
+    supportingReviews: settleSupporting(m.supportingReviews),
     pending: false
   }
 }
@@ -205,6 +222,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
       createdAt,
       plan,
       questions,
+      supportingReviews,
       picks,
       advisor,
       data,
@@ -241,6 +259,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
         questions: cutOff
           ? questions?.map((q) => (q.state === 'pending' ? { ...q, state: 'interrupted' } : q))
           : questions,
+        supportingReviews: cutOff ? settleSupporting(supportingReviews) : supportingReviews,
         interrupted: cutOff ? true : undefined,
         picks,
         advisor,
@@ -1703,6 +1722,8 @@ export default function Workbench({
 
   // A report migration follows every turn: its page turns end here, and the
   // next page waits until the after-turn work (and its deploy) has started.
+  // A turn in which the user turned supporting items on continues the same
+  // way, in a new message, whose session has their tools.
   const handleTurnComplete = useCallback(
     async (projectId: string, result: ChatTurnResult): Promise<void> => {
       migrationRef.current?.onTurnComplete(projectId, result.ok)
@@ -1710,9 +1731,20 @@ export default function Workbench({
         await afterTurn(projectId, result)
       } finally {
         migrationRef.current?.onTurnSettled(projectId)
+        if (result.ok && result.continueWith === 'supporting-items') {
+          window.setTimeout(() => {
+            if (!mountedRef.current) return
+            setChatOutbound({
+              id: `supporting-${Date.now()}`,
+              projectId,
+              display: t('turn.continueSupporting'),
+              prompt: SUPPORTING_CONTINUE_PROMPT
+            })
+          }, CONTINUE_DELAY_MS)
+        }
       }
     },
-    [afterTurn]
+    [afterTurn, t]
   )
 
   // Hydrate persisted chat history for the active project.
@@ -3348,6 +3380,8 @@ export default function Workbench({
                       onSignedIn={onAuthChanged}
                       fabricUser={auth.rayfin.signedIn ? auth.rayfin.user : undefined}
                       teamManifest={activeTeamWorkspace?.manifest}
+                      onRefreshAuth={active.team ? undefined : () => openAuthRefresh(active)}
+                      onPluginsChanged={() => void refreshProjects()}
                     />
                   ) : viewMode === 'build' ? (
                     <div

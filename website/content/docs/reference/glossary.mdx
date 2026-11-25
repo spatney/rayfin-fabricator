@@ -143,6 +143,10 @@ A Fabric or Power BI model that describes tables, columns, measures, and relatio
 
 Reusable instructions or tools that guide the Copilot agent for a specific kind of Rayfin work. See [Skills](/docs/build/skills).
 
+## Supporting item
+
+A Fabric item an app relies on that isn't part of the Rayfin app, such as a Power BI semantic model its pages read, or a lakehouse its data is staged in. Copilot defines it in the app's `supporting-items` folder, and Fabricator creates or changes it in Fabric only after you approve each change. Publishing the app doesn't change it. See [Supporting items](/docs/build/supporting-items).
+
 ## Team workspace
 
 An experimental shared workspace backed by a private GitHub repository, Fabric workspaces, deploy identities, and a pipeline. See [Team workspaces](/docs/team).

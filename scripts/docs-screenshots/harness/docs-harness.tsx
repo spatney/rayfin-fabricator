@@ -43,6 +43,9 @@ import type {
   SecretsState,
   SkillInfo,
   StudioProject,
+  SupportingFabricState,
+  SupportingItemsView,
+  SupportingReview,
   TeamEnvStatus,
   TeamOwnersResult,
   TeamReposResult,
@@ -84,6 +87,7 @@ import ConnectDataModal from './components/ConnectDataModal'
 import MigrateReportScreen from './components/migrate/MigrateReportScreen'
 import MigrationCard from './components/migrate/MigrationCard'
 import AppGalleryView from './components/gallery/AppGalleryView'
+import { SupportingReviewCard } from './components/supporting/SupportingReviewCard'
 import McpServersModal from './components/mcp/McpServersModal'
 import Spotlight from './components/spotlight/Spotlight'
 import { workbenchSearch } from './components/spotlight/workbenchSearch'
@@ -963,8 +967,222 @@ const accessFiles: Record<string, string> = {
     .replace('entity, many, role, text', 'entity, many, text')
 }
 
+/* Supporting items: semantic models Copilot defined for the sample app, in Contoso Apps. */
+
+const TRENDS_MODEL = 'd1111111-1111-4111-8111-111111111111'
+const VENDORS_MODEL = 'd2222222-2222-4222-8222-222222222222'
+const TRENDS_KEY = 'd3333333-3333-4333-8333-333333333333'
+const VENDORS_KEY = 'd4444444-4444-4444-8444-444444444444'
+const FORECAST_KEY = 'd5555555-5555-4555-8555-555555555555'
+const EXPENSES_LAKE = 'd6666666-6666-4666-8666-666666666666'
+const EXPENSES_LAKE_KEY = 'd7777777-7777-4777-8777-777777777777'
+const hoursAgo = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString()
+const datasetUrl = (item: string): string =>
+  `https://app.powerbi.com/groups/${APPS_WS}/datasets/${item}/details`
+
+/** The sample app's supporting items: a lakehouse its expenses are staged in, a Direct Lake
+ *  model over it that the app reads, one with changes not applied yet, and one not created yet. */
+const sampleSupporting: SupportingItemsView = {
+  available: true,
+  on: true,
+  workspace: { id: APPS_WS, name: 'Contoso Apps' },
+  target: { id: APPS_WS, name: 'Contoso Apps' },
+  items: [
+    {
+      key: FORECAST_KEY,
+      folder: 'Budget forecast.SemanticModel',
+      name: 'Budget forecast',
+      type: 'SemanticModel',
+      status: 'notCreated',
+      summary: {
+        tables: 2,
+        columns: 11,
+        measures: 4,
+        relationships: 1,
+        storage: 'import',
+        sources: [
+          {
+            kind: 'SQL Server',
+            function: 'Sql.Database',
+            args: ['sql.contoso.com', 'Budgets'],
+            local: false
+          }
+        ]
+      }
+    },
+    {
+      key: EXPENSES_LAKE_KEY,
+      folder: 'Expenses.Lakehouse',
+      name: 'Expenses',
+      type: 'Lakehouse',
+      status: 'applied',
+      itemId: EXPENSES_LAKE,
+      appliedAt: hoursAgo(4),
+      summary: { tables: 2, columns: 0, measures: 0, relationships: 0, sources: [] },
+      tables: [
+        {
+          name: 'categories',
+          source: 'supporting-items/Expenses.Lakehouse/data/categories.csv',
+          bytes: 3_400,
+          rows: 42,
+          loadedAt: hoursAgo(4),
+          changed: false
+        },
+        {
+          name: 'expenses',
+          source: 'supporting-items/Expenses.Lakehouse/data/expenses.csv',
+          bytes: 1_860_000,
+          rows: 24_318,
+          loadedAt: hoursAgo(4),
+          changed: false
+        }
+      ],
+      url: `https://app.fabric.microsoft.com/groups/${APPS_WS}/lakehouses/${EXPENSES_LAKE}`
+    },
+    {
+      key: TRENDS_KEY,
+      folder: 'Expense trends.SemanticModel',
+      name: 'Expense trends',
+      type: 'SemanticModel',
+      status: 'applied',
+      itemId: TRENDS_MODEL,
+      appliedAt: hoursAgo(3),
+      summary: {
+        tables: 2,
+        columns: 14,
+        measures: 9,
+        relationships: 1,
+        storage: 'directLake',
+        sources: [
+          {
+            kind: 'Fabric Lakehouse',
+            function: 'AzureStorage.DataLake',
+            args: [`https://onelake.dfs.fabric.microsoft.com/${APPS_WS}/${EXPENSES_LAKE}`],
+            local: false,
+            item: 'Expenses'
+          }
+        ]
+      },
+      url: datasetUrl(TRENDS_MODEL)
+    },
+    {
+      key: VENDORS_KEY,
+      folder: 'Vendor spend.SemanticModel',
+      name: 'Vendor spend',
+      type: 'SemanticModel',
+      status: 'changed',
+      itemId: VENDORS_MODEL,
+      appliedAt: hoursAgo(50),
+      summary: {
+        tables: 3,
+        columns: 17,
+        measures: 5,
+        relationships: 2,
+        storage: 'import',
+        sources: [
+          {
+            kind: 'SQL Server',
+            function: 'Sql.Database',
+            args: ['sql.contoso.com', 'Purchasing'],
+            local: false
+          }
+        ]
+      },
+      url: datasetUrl(VENDORS_MODEL)
+    }
+  ]
+}
+
+/** What Fabric says about the three the app created: all there, the models refreshed. */
+const sampleSupportingFabric: SupportingFabricState[] = [
+  {
+    key: EXPENSES_LAKE_KEY,
+    exists: true,
+    tables: ['categories', 'expenses'],
+    needsSignIn: false
+  },
+  {
+    key: TRENDS_KEY,
+    exists: true,
+    drift: false,
+    refresh: 'succeeded',
+    refreshedAt: hoursAgo(2),
+    needsSignIn: false
+  },
+  {
+    key: VENDORS_KEY,
+    exists: true,
+    drift: false,
+    refresh: 'succeeded',
+    refreshedAt: hoursAgo(49),
+    needsSignIn: false
+  }
+]
+
+/** The card Fabricator shows before it creates the semantic model the docs' prompt asks for. */
+const sampleSupportingReview: SupportingReview = {
+  id: 'r1',
+  kind: 'apply',
+  state: 'pending',
+  reason: 'the monthly revenue dashboard',
+  workspace: { id: APPS_WS, name: 'Contoso Apps' },
+  account: 'avery.chen@contoso.com',
+  items: [
+    {
+      key: 'f1111111-1111-4111-8111-111111111111',
+      name: 'Sales',
+      type: 'SemanticModel',
+      folder: 'supporting-items/Sales.SemanticModel',
+      change: 'create',
+      summary: {
+        tables: 3,
+        columns: 21,
+        measures: 3,
+        relationships: 2,
+        storage: 'import',
+        sources: [
+          {
+            kind: 'Snowflake',
+            function: 'Snowflake.Databases',
+            args: ['contoso.snowflakecomputing.com', 'COMPUTE_WH'],
+            local: false
+          }
+        ]
+      },
+      checks: [
+        {
+          code: 'one-side-key',
+          table: 'Customers',
+          column: 'CustomerKey',
+          detail: 'Orders[CustomerKey]'
+        },
+        {
+          code: 'one-side-key',
+          table: 'Products',
+          column: 'ProductKey',
+          detail: 'Orders[ProductKey]'
+        }
+      ],
+      state: 'pending'
+    }
+  ]
+}
+
+/** The sample app with Expense trends, its supporting model, connected in fabric.yaml. */
+const supportingFiles: Record<string, string> = {
+  ...expensesFiles,
+  'fabric.yaml': `${expensesFiles['fabric.yaml']}      expenseTrends:
+        workspaceId: ${APPS_WS}
+        itemId: ${TRENDS_MODEL}
+`
+}
+
 /** The sample app's files a shot reads: the Universal App with related entities for the Data model shots. */
-const SHOT_FILES: Record<string, Record<string, string>> = { 'model-relations': relationsFiles, 'model-access': accessFiles }
+const SHOT_FILES: Record<string, Record<string, string>> = {
+  'model-relations': relationsFiles,
+  'model-access': accessFiles,
+  'supporting-items': supportingFiles
+}
 const projectFiles: Record<string, string> =
   SHOT_FILES[new URLSearchParams(location.search).get('shot') ?? ''] ?? expensesFiles
 
@@ -1420,6 +1638,13 @@ function installApi(): void {
         { alias: 'budgets', workspaceId: FINANCE_WS, itemId: BUDGETS_MODEL }
       ])
     },
+    // Supporting items: the sample app's in their view, none anywhere else.
+    supportingItems: {
+      list: ok(
+        SHOT === 'supporting-items' ? sampleSupporting : { available: false, on: false, items: [] }
+      ),
+      fabric: ok(SHOT === 'supporting-items' ? sampleSupportingFabric : [])
+    },
     deploy: {
       // The sample app's one deployment, deployed a couple of hours ago.
       list: () =>
@@ -1805,6 +2030,8 @@ function ComposerPicker({
                   plugins={offeredPlugins({ workIq })}
                   servers={servers}
                   on={on}
+                  // Every app but a team app offers Supporting items.
+                  supportingItems
                   onToggle={(id, value) =>
                     setOn((ids) => (value ? [...ids, id] : ids.filter((i) => i !== id)))
                   }
@@ -2181,7 +2408,11 @@ function AccountMenuShot(): JSX.Element {
  * app, with `view="data"` its Data model view, or with `view="local-data"` its Data view of the
  * sample app's local data.
  */
-function Blueprint({ view = 'architecture' }: { view?: 'architecture' | 'data' | 'local-data' }): JSX.Element {
+function Blueprint({
+  view = 'architecture'
+}: {
+  view?: 'architecture' | 'data' | 'local-data' | 'supporting'
+}): JSX.Element {
   // Blueprint opens on the view last chosen for the project.
   localStorage.setItem(`rayfin.model.view.${expensesApp.id}`, view)
   return (
@@ -2782,6 +3013,34 @@ function Shot({ id }: { id: string | null }): JSX.Element {
       return <AccountMenuShot />
     case 'blueprint':
       return <Blueprint />
+    case 'supporting-items':
+      return <Blueprint view="supporting" />
+    case 'supporting-review':
+      return (
+        <main
+          className="chat"
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 32
+          }}
+        >
+          <div style={{ width: 720, maxWidth: '100%' }}>
+            <div className="turn turn--assistant">
+              <div className="turn-main">
+                <SupportingReviewCard
+                  review={sampleSupportingReview}
+                  busy={false}
+                  onResolve={noop}
+                  onViewModel={noop}
+                />
+              </div>
+            </div>
+          </div>
+        </main>
+      )
     case 'model-relations':
     case 'model-access':
       return <Blueprint view="data" />

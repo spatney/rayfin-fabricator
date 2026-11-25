@@ -132,7 +132,9 @@
     "cantSavePlan": "Couldn't save the plan: {{error}}",
     "pickPathsTitle": "Choose files or folders for Copilot to read",
     "unknownPlugin": "Fabricator doesn't have the plugin {{plugin}}.",
-    "serverGone": "That MCP server isn't in Fabricator anymore."
+    "serverGone": "That MCP server isn't in Fabricator anymore.",
+    "supportingItemsTeam": "Supporting items aren't available in team apps.",
+    "noPendingReview": "This card isn't waiting for an answer anymore."
   },
   "chatTools": {
     "localCall": {
@@ -544,5 +546,15 @@
   "transient": {
     "cantReach": "Couldn't reach the model.",
     "cantSend": "Couldn't send the request to the model."
+  },
+  "supportingItems": {
+    "noFolder": "supporting-items/{{folder}} isn't one of this app's supporting items.",
+    "notCreated": "Fabricator didn't create this item, so it can't delete it.",
+    "noWorkspace": "supporting-items/applied.json doesn't say which workspace the items are in.",
+    "signIn": "Sign in to Fabric again, with Refresh Fabric authentication in the account menu, then try again.",
+    "deleteFailed": "Fabric couldn't delete it: {{error}}",
+    "saveFailed": "It's deleted from Fabric, but Fabricator couldn't update supporting-items/applied.json: {{error}}",
+    "trashFailed": "It's deleted from Fabric, but its folder couldn't be moved to the trash: {{error}}",
+    "notAModel": "{{folder}} is a lakehouse, not a semantic model, so it has no model to show."
   }
 }

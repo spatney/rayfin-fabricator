@@ -485,5 +485,21 @@
   "rayfinSdk": {
     "readFailed": "{{path}} konnte nicht gelesen werden: {{error}}",
     "updateFailed": "{{path}} konnte nicht aktualisiert werden: {{error}}"
+  },
+  "supportingItems": {
+    "signInQuestion": "Fabricator ändert unterstützende Elemente als dein Fabric-Konto, mit dem du veröffentlichst, und dafür musst du dich erneut anmelden.",
+    "signIn": "Bei Fabric anmelden",
+    "purgeQuestion": "Wenn du diese Änderung auf {{name}} anwendest, werden seine geladenen Daten verworfen. Es bleibt leer, bis es aktualisiert wird. Trotzdem anwenden?",
+    "purgeApply": "Anwenden und Daten verwerfen",
+    "purgeKeep": "Nicht anwenden",
+    "keptData": "Nicht angewendet: Du hast seine Daten behalten.",
+    "noWorkspace": "Es wurde kein Arbeitsbereich ausgewählt, daher wurde nichts geändert.",
+    "nameTaken": "Der Arbeitsbereich {{workspace}} hat bereits ein Element namens {{name}}, das diese App nicht erstellt hat, daher wurde nichts geändert.",
+    "following": "Die noch laufende Aktualisierung von {{name}} wird geprüft…",
+    "refreshCancelled": "Die Aktualisierung wurde in Fabric abgebrochen.",
+    "turnOn": "Einschalten und weitermachen",
+    "turnOnQuestion": "Copilot möchte Fabric-Elemente für diese App erstellen, etwa ein semantisches Modell oder ein Lakehouse für ihre Daten. Unterstützende Elemente für diese App aktivieren? Copilot macht dann weiter und fragt dich vor jeder Änderung in Fabric.",
+    "turnOnQuestionFor": "Copilot möchte Fabric-Elemente wie ein semantisches Modell oder ein Lakehouse erstellen, für {{reason}}. Unterstützende Elemente für diese App aktivieren? Copilot macht dann weiter und fragt dich vor jeder Änderung in Fabric.",
+    "firstRefreshFailed": "Es ist in Fabric, aber die erste Aktualisierung, die die Tabellen des Lakehouse liest, hat nicht funktioniert: {{error}}"
   }
 }

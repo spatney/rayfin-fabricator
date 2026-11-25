@@ -24,7 +24,9 @@ import {
   type CopilotAuthStatus,
   type DirListing,
   type ExperimentFlags,
-  type StudioProject
+  type StudioProject,
+  type SupportingReviewItem,
+  type SupportingWorkspace
 } from '@shared/ipc'
 import { isCopilotAuthError } from '../copilotAuth'
 import { openDocs } from '../docsLinks'
@@ -47,6 +49,7 @@ import { splitMentions } from './MentionText'
 import { ExpandIcon, CollapseIcon, CloseIcon, StopIcon, ImageIcon, Codicon, PenIcon } from './icons'
 import ConnectDataModal from './ConnectDataModal'
 import ConfirmModal from './ConfirmModal'
+import SupportingModelDialog from './supporting/SupportingModelDialog'
 import { MarkdownLinksContext, type MarkdownLinks } from './Markdown'
 import {
   buildRecoveredPlanPrompt,
@@ -59,7 +62,7 @@ import { suggestionsFor, useGeneratedSuggestions } from './chat/suggestions'
 import { SendIcon } from './chat/icons'
 import { AddMenu, PluginsMenu } from './chat/ComposerMenus'
 import { UsageMeter } from './chat/UsageMeter'
-import { offeredPlugins } from './chat/plugins'
+import { offeredPlugins, offersSupportingItems } from './chat/plugins'
 import { useMcpServers } from '../mcpServers'
 import { ModelPicker } from './models/ModelPicker'
 import { selectionArgs, selectionOf, type ModelSelection } from '../modelSelection'
@@ -330,6 +333,10 @@ export default function ChatPanel({
       : undefined
   const imagesBlocked = Boolean(imageNote) && (attachments?.length ?? 0) > 0
   const [planBusyId, setPlanBusyId] = useState<string | null>(null)
+  /** The supporting items card whose answer is on its way. */
+  const [supportingBusyId, setSupportingBusyId] = useState<string | null>(null)
+  /** The supporting item whose model is open for review. */
+  const [supportingModel, setSupportingModel] = useState<SupportingReviewItem | null>(null)
   const [confirmNewChat, setConfirmNewChat] = useState(false)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
@@ -349,6 +356,8 @@ export default function ChatPanel({
   changePlanContentRef.current = changePlanContent
   const answerPlanQuestionRef = useRef(answerPlanQuestion)
   answerPlanQuestionRef.current = answerPlanQuestion
+  const resolveSupportingRef = useRef(resolveSupporting)
+  resolveSupportingRef.current = resolveSupporting
   const resumePlanRef = useRef(resumePlan)
   resumePlanRef.current = resumePlan
   const exportPlanRef = useRef(exportPlan)
@@ -368,6 +377,15 @@ export default function ChatPanel({
   const onAnswerPlanQuestion = useCallback(
     (msgId: string, requestId: string, answer: string, wasFreeform: boolean) =>
       void answerPlanQuestionRef.current(msgId, requestId, answer, wasFreeform),
+    []
+  )
+  const onResolveSupporting = useCallback(
+    (msgId: string, requestId: string, approve: boolean, workspace?: SupportingWorkspace) =>
+      void resolveSupportingRef.current(msgId, requestId, approve, workspace),
+    []
+  )
+  const onViewSupportingModel = useCallback(
+    (item: SupportingReviewItem) => setSupportingModel(item),
     []
   )
   const onResumePlan = useCallback(
@@ -1358,6 +1376,29 @@ export default function ChatPanel({
     }
   }
 
+  /** Answer a supporting items card: the tool waiting on it updates the card from there. */
+  async function resolveSupporting(
+    msgId: string,
+    requestId: string,
+    approve: boolean,
+    workspace?: SupportingWorkspace
+  ): Promise<void> {
+    if (supportingBusyId) return
+    setSupportingBusyId(requestId)
+    const setError = (error?: { id: string; text: string }): void =>
+      onChange((prev) =>
+        prev.map((item) => (item.id === msgId ? { ...item, supportingError: error } : item))
+      )
+    try {
+      await window.api.chat.resolveSupportingReview(project.id, requestId, approve, workspace)
+      setError(undefined)
+    } catch (err) {
+      setError({ id: requestId, text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setSupportingBusyId(null)
+    }
+  }
+
   async function resumePlan(
     msgId: string,
     kind: 'review' | 'execute' | 'revise',
@@ -1740,9 +1781,16 @@ export default function ChatPanel({
             onTryAgain={onTryAgain}
             planBusy={m.plan?.id === planBusyId}
             questionBusy={planBusyId === m.id}
+            supportingBusyId={
+              supportingBusyId && m.supportingReviews?.some((r) => r.id === supportingBusyId)
+                ? supportingBusyId
+                : null
+            }
             onChangePlanContent={onChangePlanContent}
             onResolvePlan={onResolvePlan}
             onAnswerPlanQuestion={onAnswerPlanQuestion}
+            onResolveSupporting={onResolveSupporting}
+            onViewSupportingModel={onViewSupportingModel}
             onResumePlan={onResumePlan}
             onExportPlan={onExportPlan}
             onOpenMention={onOpenMention}
@@ -1755,12 +1803,15 @@ export default function ChatPanel({
       project.name,
       project.path,
       planBusyId,
+      supportingBusyId,
       onRetry,
       onResume,
       onTryAgain,
       onChangePlanContent,
       onResolvePlan,
       onAnswerPlanQuestion,
+      onResolveSupporting,
+      onViewSupportingModel,
       onResumePlan,
       onExportPlan,
       onOpenMention
@@ -2031,6 +2082,7 @@ export default function ChatPanel({
                 plugins={offeredPlugins(experiments)}
                 servers={mcpServers}
                 on={plugins}
+                supportingItems={offersSupportingItems(Boolean(project.team))}
                 disabled={sending}
                 onToggle={togglePlugin}
                 onManageServers={onManageMcpServers}
@@ -2152,6 +2204,15 @@ export default function ChatPanel({
           confirmLabel={t('panel.newChat')}
           onConfirm={() => void newChat()}
           onCancel={() => setConfirmNewChat(false)}
+        />
+      )}
+      {supportingModel && (
+        <SupportingModelDialog
+          projectId={project.id}
+          name={supportingModel.name}
+          folder={supportingModel.folder}
+          summary={supportingModel.summary}
+          onClose={() => setSupportingModel(null)}
         />
       )}
     </div>

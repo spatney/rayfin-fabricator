@@ -52,6 +52,7 @@ import {
   type GithubRepoRequest,
   type RayfinStudioApi,
   type SecurityEventEnvelope,
+  type SupportingWorkspace,
   type TeamCreateRequest,
   type TeamDiagnoseRequest,
   type TeamDiagnosisEnvelope,
@@ -443,6 +444,19 @@ export const api: RayfinStudioApi = {
     ) => invoke('chat_resolve_plan', { projectId, requestId, action, planContent, feedback }),
     resolveQuestion: (requestId: string, answer: string, wasFreeform: boolean) =>
       invoke('chat_resolve_question', { requestId, answer, wasFreeform }),
+    resolveSupportingReview: (
+      projectId: string,
+      requestId: string,
+      approve: boolean,
+      workspace?: SupportingWorkspace
+    ) =>
+      invoke('chat_resolve_supporting_review', {
+        projectId,
+        requestId,
+        approve,
+        workspaceId: workspace?.id,
+        workspaceName: workspace?.name
+      }),
     exportPlan: (suggestedName: string, content: string) =>
       invoke('chat_export_plan', { suggestedName, content }),
     history: (projectId: string) => invoke('chat_history', { projectId }),
@@ -460,6 +474,16 @@ export const api: RayfinStudioApi = {
     cancelSuggest: (projectId: string) => invoke('chat_suggest_cancel', { projectId }),
     pickPaths: () => invoke('chat_pick_paths'),
     inspectPaths: (paths: string[]) => invoke('chat_inspect_paths', { paths })
+  },
+
+  supportingItems: {
+    list: (projectId: string) => invoke('supporting_items_list', { projectId }),
+    workspaces: (projectId: string) => invoke('supporting_items_workspaces', { projectId }),
+    schema: (projectId: string, folder: string) =>
+      invoke('supporting_items_schema', { projectId, folder }),
+    fabric: (projectId: string) => invoke('supporting_items_fabric', { projectId }),
+    remove: (projectId: string, key: string, removeFolder: boolean) =>
+      invoke('supporting_items_delete', { projectId, key, removeFolder })
   },
 
   screenshot: {

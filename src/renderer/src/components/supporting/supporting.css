@@ -1,0 +1,875 @@
+/* Supporting items: the review card in the chat, the model dialog, and
+   Blueprint's Supporting items view. Flat: solid surfaces, neutral 1px borders,
+   status shown as small dots and words. */
+
+.sup-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.sup-dot--ok {
+  background: var(--ok);
+}
+
+.sup-dot--warn {
+  background: var(--pending);
+}
+
+.sup-dot--danger {
+  background: var(--danger);
+}
+
+.sup-dot--accent {
+  background: var(--accent);
+}
+
+/* ---------------------------------- card ---------------------------------- */
+/* One flat surface, like the chat's other cards: where it stands shows in the
+   header's icon and title, not in a colored edge. Facts sit under the title,
+   hairlines split off the items and the actions, and the action comes first. */
+
+.sup-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 13px 15px 14px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.sup-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.sup-card-ico {
+  display: inline-flex;
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+.sup-card--done .sup-card-ico {
+  color: var(--ok);
+}
+
+.sup-card--failed .sup-card-ico {
+  color: var(--danger);
+}
+
+.sup-card-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sup-card-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.sup-card-reason {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.sup-card-timer {
+  flex: none;
+  margin-top: 1px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+/* Where and as whom, under the title. */
+.sup-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: 6px 16px;
+  margin: 0;
+  padding-left: 26px;
+  font-size: 12.5px;
+}
+
+.sup-fact {
+  display: contents;
+}
+
+.sup-fact dt {
+  color: var(--text-faint);
+}
+
+.sup-fact dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.sup-hint {
+  margin: -4px 0 0;
+  padding-left: 26px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+.sup-pick {
+  max-width: 100%;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.sup-pick:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 1px;
+}
+
+.sup-pick:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.sup-pick-note {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
+.sup-pick-note--error {
+  color: var(--danger);
+}
+
+/* Items: sections under a hairline, each with a tile for its type. */
+.sup-items {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.sup-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.sup-item + .sup-item {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.sup-item-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sup-tile {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+}
+
+/* On the card's surface, soft borders vanish: tiles and hairlines use the card's own border. */
+.sup-card .sup-tile {
+  background: var(--bg-elev);
+  border-color: var(--border);
+}
+
+.sup-card .sup-table + .sup-table {
+  border-top-color: var(--border);
+}
+
+.sup-item-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sup-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.sup-item-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+/* The type stays whole; a long folder path gives way. */
+.sup-item-type {
+  flex: none;
+  white-space: nowrap;
+}
+
+.sup-sep {
+  color: var(--text-faint);
+}
+
+.sup-path {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  background: none;
+  border: 0;
+}
+
+/* Aligned with the item's name, past its tile. */
+.sup-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 38px;
+}
+
+.sup-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+/* A dot (or a spinner) and a word. */
+.sup-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.sup-status .codicon {
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.sup-status--ok {
+  color: var(--text);
+}
+
+.sup-status--danger {
+  color: var(--danger);
+}
+
+.sup-badge {
+  flex: none;
+  padding: 2px 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+/* A lakehouse's tables: rows split by hairlines. */
+.sup-tables {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sup-table {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.sup-table + .sup-table {
+  border-top: 1px solid var(--border-soft);
+}
+
+.sup-table-ico {
+  margin-top: 2px;
+  color: var(--text-faint);
+}
+
+.sup-table-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* The file's facts wrap under the table's name in a narrow chat, rather than being cut off. */
+.sup-table-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
+  min-width: 0;
+}
+
+.sup-table-name {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sup-table-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.sup-table-columns {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.sup-table-error {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.sup-table-status {
+  flex: none;
+  padding-top: 1px;
+}
+
+.sup-table-change {
+  font-size: 11.5px;
+  white-space: nowrap;
+  color: var(--text-faint);
+}
+
+.sup-note {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.sup-note .sup-dot {
+  transform: translateY(-1px);
+}
+
+.sup-note-ico {
+  flex: none;
+  align-self: flex-start;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.sup-note--warn {
+  color: var(--text);
+}
+
+.sup-changes,
+.sup-checks,
+.sup-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.sup-change {
+  display: flex;
+  gap: 7px;
+  color: var(--text);
+}
+
+.sup-change-sign {
+  flex: none;
+  width: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+}
+
+.sup-change--added .sup-change-sign {
+  color: var(--stat-add, var(--ok));
+}
+
+.sup-change--removed .sup-change-sign {
+  color: var(--stat-del, var(--danger));
+}
+
+.sup-change--more {
+  padding-left: 17px;
+  color: var(--text-dim);
+}
+
+.sup-check {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  color: var(--text);
+}
+
+.sup-check .sup-dot {
+  transform: translateY(-1px);
+}
+
+/* What went wrong: a softly tinted box, as the chat shows a question's error. */
+.sup-trouble {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border-radius: 8px;
+}
+
+.sup-trouble-ico {
+  flex: none;
+  margin-top: 2px;
+  color: var(--danger);
+}
+
+.sup-trouble-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.sup-trouble-text p {
+  margin: 0;
+}
+
+.sup-errors {
+  gap: 4px;
+}
+
+.sup-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: -6px;
+}
+
+.sup-item-actions:empty {
+  display: none;
+}
+
+.sup-card-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.sup-footnote {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+.sup-footnote-ico {
+  flex: none;
+  margin-top: 2px;
+  font-size: 13px;
+}
+
+.sup-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Declined or never answered: one quiet line. */
+.sup-card--settled {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  background: transparent;
+}
+
+.sup-card-settled-ico {
+  flex: none;
+  color: var(--text-faint);
+}
+
+.sup-card-settled-head {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sup-card-settled-items {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* ---------------------------------- dialog -------------------------------- */
+
+.sup-model-backdrop {
+  z-index: 200;
+}
+
+.sup-model-dialog {
+  max-width: 1100px;
+  height: calc(86vh / var(--ui-scale, 1));
+  max-height: calc(86vh / var(--ui-scale, 1));
+}
+
+.sup-model-dialog .modal-header.sup-model-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sup-model-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.sup-model-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sup-model-body > .semantic-view {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ------------------------------ Blueprint view ----------------------------- */
+
+.sup-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+}
+
+.sup-view-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 18px 24px 28px;
+}
+
+.sup-view-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.sup-view-intro-ico {
+  flex: none;
+  margin-top: 3px;
+  color: var(--text-faint);
+}
+
+.sup-link {
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.sup-link:hover {
+  text-decoration: underline;
+}
+
+.sup-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Fabric needs a sign-in to say how the items stand. */
+.sup-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  background: color-mix(in srgb, var(--pending) 10%, transparent);
+  border-radius: 8px;
+}
+
+.sup-banner-text {
+  flex: 1;
+  min-width: 220px;
+}
+
+.sup-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sup-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-height: 26px;
+}
+
+/* As the Advisor labels its groups. */
+.sup-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.sup-group-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sup-group-note {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.sup-group-open {
+  margin-left: auto;
+}
+
+.sup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sup-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.sup-row .sup-tile {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.sup-row .sup-item-body {
+  padding-left: 42px;
+}
+
+.sup-row .sup-item-name {
+  font-size: 13.5px;
+}
+
+/* Facts from Fabric: like the Advisor's counts, a dot and a few words. */
+.sup-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sup-chips:empty {
+  display: none;
+}
+
+.sup-chip {
+  --sup-chip-dot: var(--text-faint);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+  border-radius: 6px;
+}
+
+.sup-chip::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sup-chip-dot);
+}
+
+.sup-chip:has(.codicon)::before {
+  display: none;
+}
+
+.sup-chip .codicon {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.sup-chip--ok {
+  --sup-chip-dot: var(--ok);
+  color: var(--text);
+}
+
+.sup-chip--warn {
+  --sup-chip-dot: var(--pending);
+  color: var(--text);
+}
+
+.sup-chip--danger {
+  --sup-chip-dot: var(--danger);
+  color: var(--text);
+}
+
+.sup-chip--accent {
+  --sup-chip-dot: var(--accent);
+}
+
+/* The item's actions, with deleting it from Fabric set apart at the end. */
+.sup-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-left: -6px;
+}
+
+.sup-row-actions-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.sup-row-actions .sup-danger-btn {
+  margin-left: auto;
+  color: var(--text-dim);
+}
+
+.sup-danger-btn:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.sup-view-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.sup-delete-text {
+  margin: 0 0 12px;
+}
+
+.sup-delete-folder {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* The publish panel's line about supporting items. */
+.sup-publish-note {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}

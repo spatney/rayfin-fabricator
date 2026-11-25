@@ -2971,6 +2971,9 @@ pub enum ChatSegment {
   Text { text: String },
   Tool { id: String },
   Question { id: String },
+  /// A supporting items review card, in `supportingReviews` by id, docked where
+  /// it was raised.
+  Supporting { id: String },
   /// A message the user injected mid-turn (conversation steering), shown inline
   /// in the assistant feed as a small "you interjected" bubble.
   Interjection {
@@ -3189,6 +3192,12 @@ pub enum ChatEvent {
     #[serde(rename = "allowFreeform")]
     allow_freeform: bool,
   },
+  /// A supporting items review card, whole (`supporting_items::review::Review`):
+  /// what Fabricator will change in Fabric once the user approves, and then how
+  /// it went. Each change sends the card again; the renderer keeps the latest,
+  /// by its `id`, and answers it via `chat_resolve_supporting_review`.
+  #[serde(rename = "supporting-review")]
+  SupportingReview { review: serde_json::Value },
 }
 
 #[derive(Serialize, Clone)]
@@ -3199,7 +3208,7 @@ pub struct ChatEventEnvelope {
   pub event: ChatEvent,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatTurnResult {
   pub ok: bool,
@@ -3207,6 +3216,11 @@ pub struct ChatTurnResult {
   pub error: Option<String>,
   pub files_modified: Vec<String>,
   pub ran_deploy: bool,
+  /// Chat continues in a new message, which the app sends: `supporting-items`
+  /// once the user turned supporting items on during the turn, so the new
+  /// message's session has their tools.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub continue_with: Option<String>,
 }
 
 /// How the signed-in account pays for Copilot's models.
@@ -3482,6 +3496,11 @@ pub struct ChatMessage {
   /// when the renderer persists history.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub questions: Option<Vec<ChatPlanQuestion>>,
+  /// The supporting items review cards an assistant turn showed
+  /// (`SupportingReview[]`), as they ended. Opaque to Rust; must round-trip or
+  /// they're dropped when the renderer persists history.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub supporting_reviews: Option<serde_json::Value>,
   /// Wall-clock duration of an assistant turn, in ms.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub elapsed_ms: Option<f64>,
@@ -4453,6 +4472,7 @@ mod tests {
         live_request_id: Some("req-1".into()),
       }),
       questions: None,
+      supporting_reviews: None,
       elapsed_ms: None,
       created_at: None,
       picks: None,
@@ -4495,6 +4515,7 @@ mod tests {
         answer: Some("Dark".into()),
         was_freeform: Some(false),
       }]),
+      supporting_reviews: None,
       elapsed_ms: None,
       created_at: None,
       picks: None,

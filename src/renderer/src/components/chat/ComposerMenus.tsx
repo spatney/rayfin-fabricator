@@ -8,7 +8,7 @@ import { useSuppressPreview } from '@renderer/overlay'
 import { useTranslation } from '../../i18n'
 import { Codicon, ImageIcon } from '../icons'
 import { serverSummary } from '../mcp/mcpConfig'
-import { mcpPluginId, type ChatPlugin } from './plugins'
+import { mcpPluginId, SUPPORTING_ITEMS_PLUGIN, type ChatPlugin } from './plugins'
 import fabricSvg from '../../assets/brands/fabric.svg'
 import '../models/modelPicker.css'
 
@@ -263,6 +263,7 @@ export function PluginsMenu({
   plugins,
   servers,
   on,
+  supportingItems = false,
   disabled = false,
   onToggle,
   onManageServers,
@@ -274,6 +275,8 @@ export function PluginsMenu({
   servers: readonly McpServer[]
   /** The ids of the plugins on in this chat. */
   on: readonly string[]
+  /** Offer Supporting items: their experiment is on, and it isn't a team app. */
+  supportingItems?: boolean
   /** While the assistant is working: plugins change between messages. */
   disabled?: boolean
   onToggle: (plugin: ChatPluginId, on: boolean) => void
@@ -291,8 +294,10 @@ export function PluginsMenu({
   // Wider than the narrowest chat pane, so it can reach over the preview.
   useSuppressPreview(open)
 
+  const supportingOn = supportingItems && on.includes(SUPPORTING_ITEMS_PLUGIN)
   const onNames = [
     ...plugins.filter((p) => on.includes(p.id)).map((p) => p.name),
+    ...(supportingOn ? [t('pluginsMenu.supportingItems')] : []),
     ...servers.filter((s) => on.includes(mcpPluginId(s.id))).map((s) => s.name)
   ]
   const names = onNames.join(', ')
@@ -436,6 +441,40 @@ export function PluginsMenu({
                   </button>
                 )
               })}
+
+              {supportingItems && (
+                <>
+                  <div className="mp-sep" role="separator" />
+                  <div className="pl-section" aria-hidden="true">
+                    <span className="pl-section-title">{t('pluginsMenu.changesFabric')}</span>
+                    <span className="pl-section-note">
+                      <Codicon name="shield" />
+                      {t('pluginsMenu.asksFirst')}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={supportingOn}
+                    className="mp-item pl-item"
+                    onClick={() => onToggle(SUPPORTING_ITEMS_PLUGIN, !supportingOn)}
+                  >
+                    <span className="pl-logo pl-logo--tile" aria-hidden="true">
+                      <Codicon name="database" />
+                    </span>
+                    <span className="mp-item-text">
+                      <span className="mp-item-label">{t('pluginsMenu.supportingItems')}</span>
+                      <span className="mp-item-desc">{t('plugins.supportingItems')}</span>
+                    </span>
+                    <span
+                      className={`switch switch--sm${supportingOn ? ' switch--on' : ''}`}
+                      aria-hidden="true"
+                    >
+                      <span className="switch-knob" />
+                    </span>
+                  </button>
+                </>
+              )}
 
               {(servers.length > 0 || onManageServers) && (
                 <>

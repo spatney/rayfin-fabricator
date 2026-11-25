@@ -384,9 +384,10 @@ fn started_message(started: &Started) -> String {
 /* ------------------------- a version per chat turn ------------------------- */
 
 /// A saved version never takes the local backend's state (the app's local
-/// database, its signing keys and the local values of its secrets), even when
-/// nothing ignores it.
-const NEVER_SAVED: &str = ":(glob,exclude)**/.rayfin-local/**";
+/// database, its signing keys and the local values of its secrets), or the data
+/// files Fabricator loads into the app's supporting lakehouses, even when
+/// nothing ignores them.
+const NEVER_SAVED: [&str; 2] = [":(glob,exclude)**/.rayfin-local/**", ":(glob,exclude)supporting-items/*.Lakehouse/data/**"];
 
 /// The longest message a turn's version gets: a commit subject's usual limit.
 const SUBJECT_CHARS: usize = 72;
@@ -443,19 +444,19 @@ pub fn turn_message(request: &str, fallback: &str) -> String {
 /// (Fabricator's when git has none). Changes elsewhere in a repository the app
 /// shares stay as they are. `Ok(None)` when nothing changed.
 pub async fn save_version(dir: &Path, message: &str) -> Result<Option<String>, String> {
-  let status = run(dir, &["status", "--porcelain", "--untracked-files=all", "--", ".", NEVER_SAVED], 30_000).await;
+  let status = run(dir, &["status", "--porcelain", "--untracked-files=all", "--", ".", NEVER_SAVED[0], NEVER_SAVED[1]], 30_000).await;
   if !status.ok {
     return Err(failure(&status, |detail| t!("services.versionHistory.readChangesFailed", detail = detail)));
   }
   if status.stdout.trim().is_empty() {
     return Ok(None);
   }
-  let add = run(dir, &["add", "-A", "--", ".", NEVER_SAVED], 300_000).await;
+  let add = run(dir, &["add", "-A", "--", ".", NEVER_SAVED[0], NEVER_SAVED[1]], 300_000).await;
   if !add.ok {
     return Err(failure(&add, |detail| t!("services.versionHistory.addChangesFailed", detail = detail)));
   }
   ensure_identity(dir).await;
-  let commit = run(dir, &["commit", "--quiet", "-m", message, "--", ".", NEVER_SAVED], 120_000).await;
+  let commit = run(dir, &["commit", "--quiet", "-m", message, "--", ".", NEVER_SAVED[0], NEVER_SAVED[1]], 120_000).await;
   if !commit.ok {
     let said = format!("{}\n{}", commit.stdout, commit.stderr).to_lowercase();
     if said.contains("nothing to commit") || said.contains("no changes added") {

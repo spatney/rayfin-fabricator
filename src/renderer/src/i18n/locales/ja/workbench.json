@@ -77,7 +77,8 @@
     "versionCheckFailedTitle": "バージョンの確認に失敗しました",
     "changesCheckFailed": "公開する変更があるかどうかを確認できませんでした。",
     "autoPublishCheckFailed": "{{error}} 変更を公開するには、[公開] を選択してください。",
-    "autoPublishFailedTitle": "自動で公開できませんでした"
+    "autoPublishFailedTitle": "自動で公開できませんでした",
+    "continueSupporting": "続行 ([補助アイテム] がオン)"
   },
   "rayfin": {
     "updateTo": "Rayfin を {{version}} に更新",

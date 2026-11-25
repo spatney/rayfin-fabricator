@@ -24,6 +24,12 @@ export interface SemanticModelRef {
   alias: string
   workspaceId: string
   itemId: string
+  /**
+   * A supporting item's folder in `supporting-items/` (such as
+   * `Sales.SemanticModel`): the diagram draws the model its files define, as
+   * Fabricator would create it, rather than reading one from Fabric.
+   */
+  folder?: string
 }
 
 export interface FabricConfig {

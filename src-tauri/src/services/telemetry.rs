@@ -183,6 +183,16 @@ pub fn track_migration(identity: Option<&TelemetryIdentity>, step: &str, props: 
   track("migration", identity, &all);
 }
 
+/// Record what happened to a supporting items card: `shown`, `approved` or
+/// `declined` (with its kind, `apply` or `refresh`), and how an apply or a
+/// refresh went (`succeeded` or `failed`, with Fabric's error code when it
+/// failed). Counts and codes only: no definitions, names or ids are sent.
+pub fn track_supporting(identity: Option<&TelemetryIdentity>, kind: &str, outcome: &str, props: &[(&str, String)]) {
+  let mut all = vec![("kind", kind.to_string()), ("outcome", outcome.to_string())];
+  all.extend(props.iter().map(|(k, v)| (*k, v.clone())));
+  track("supporting", identity, &all);
+}
+
 /// Record what a project's local backend did: `started`, `failed` (with the
 /// problem's stable code, such as `schema-refused`) or `fallback` (a published
 /// app previewed on its published backend: `sdk-unsupported` or

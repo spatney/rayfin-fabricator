@@ -1082,6 +1082,29 @@ function SourceDetails({
       actions={actions}
     >
       <Issues issues={src.issues} />
+      {src.supporting && (
+        <Section title={t('inspector.supporting.title')}>
+          <p className="bp-insp-note">
+            {t('inspector.supporting.lead', {
+              folder: `supporting-items/${src.supporting.folder}`
+            })}
+          </p>
+          {src.supporting.lakehouse && (
+            <p className="bp-insp-note">
+              {t('inspector.supporting.lakehouse', { name: src.supporting.lakehouse })}
+            </p>
+          )}
+          <button
+            type="button"
+            className="btn btn--sm btn--ghost"
+            onClick={() =>
+              onOpenFile(`supporting-items/${src.supporting!.folder}/definition/model.tmdl`)
+            }
+          >
+            <Codicon name="go-to-file" /> {t('inspector.supporting.openDefinition')}
+          </button>
+        </Section>
+      )}
       {audience && (
         <p className="bp-insp-lead">
           <Trans

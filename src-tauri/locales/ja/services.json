@@ -479,5 +479,21 @@
   "rayfinSdk": {
     "readFailed": "{{path}} を読み取れませんでした: {{error}}",
     "updateFailed": "{{path}} を更新できませんでした: {{error}}"
+  },
+  "supportingItems": {
+    "signInQuestion": "Fabricator は、公開に使う Fabric アカウントとして補助アイテムを変更します。もう一度サインインする必要があります。",
+    "signIn": "Fabric にサインイン",
+    "purgeQuestion": "この変更を {{name}} に適用すると、読み込まれているデータが破棄され、更新されるまで空のままになります。それでも適用しますか?",
+    "purgeApply": "適用してデータを破棄",
+    "purgeKeep": "適用しない",
+    "keptData": "適用されていません: データを保持しました。",
+    "noWorkspace": "ワークスペースが選択されなかったため、何も変更されていません。",
+    "nameTaken": "ワークスペース {{workspace}} には、このアプリが作成していない {{name}} という名前のアイテムが既にあるため、何も変更されませんでした。",
+    "following": "実行中の {{name}} の更新を確認しています…",
+    "refreshCancelled": "更新は Fabric で取り消されました。",
+    "turnOn": "オンにして続行",
+    "turnOnQuestion": "Copilot がこのアプリ用に、セマンティック モデルやデータ用のレイクハウスなどの Fabric アイテムを作成しようとしています。このアプリで補助アイテムをオンにしますか? オンにすると Copilot が続行し、Fabric を変更する前に毎回確認します。",
+    "turnOnQuestionFor": "Copilot が {{reason}} のために、セマンティック モデルやレイクハウスなどの Fabric アイテムを作成しようとしています。このアプリで補助アイテムをオンにしますか? オンにすると Copilot が続行し、Fabric を変更する前に毎回確認します。",
+    "firstRefreshFailed": "Fabric には作成されましたが、レイクハウスのテーブルを読み取る最初の更新が失敗しました: {{error}}"
   }
 }

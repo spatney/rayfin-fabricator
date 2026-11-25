@@ -601,6 +601,11 @@ export interface SourceNode {
   semanticKey?: string
   /** {@link sqlSourceKey} when the Fabric connections view can draw its tables. */
   tablesKey?: string
+  /**
+   * A supporting item this app created in Fabric: its folder in
+   * `supporting-items/` (not part of the Rayfin app, and Publish doesn't change it).
+   */
+  supporting?: { folder: string; lakehouse?: string }
   issues: Issue[]
 }
 

@@ -30,8 +30,9 @@ export function livePhase(m: UIChatMessage): string {
 /**
  * Live status line at the bottom of an assistant turn while it streams: a small
  * orb, what's happening now, and a ticking timer. When the turn is waiting on
- * the user (a plan decision or a question) it switches to a calm "waiting"
- * state with no timer or work motion, so it never looks like it's still working.
+ * the user (a plan decision, a question, or a supporting items card to approve)
+ * it switches to a calm "waiting" state with no timer or work motion, so it
+ * never looks like it's still working.
  */
 export function AgentStatus({
   message,
@@ -62,12 +63,17 @@ export function AgentStatus({
   }, [startedAt])
 
   const awaitingAnswer = message.questions?.some((q) => q.state === 'pending') ?? false
-  if (awaitingDecision || awaitingAnswer) {
+  const awaitingApproval = message.supportingReviews?.some((r) => r.state === 'pending') ?? false
+  if (awaitingDecision || awaitingAnswer || awaitingApproval) {
     return (
       <div className="agent-status agent-status--await" role="status" aria-live="polite">
         <span className="agent-status-await-dot" aria-hidden="true" />
         <span className="agent-status-await-label">
-          {awaitingDecision ? t('agentStatus.waitingDecision') : t('agentStatus.waitingAnswer')}
+          {awaitingDecision
+            ? t('agentStatus.waitingDecision')
+            : awaitingAnswer
+              ? t('agentStatus.waitingAnswer')
+              : t('agentStatus.waitingApproval')}
         </span>
       </div>
     )

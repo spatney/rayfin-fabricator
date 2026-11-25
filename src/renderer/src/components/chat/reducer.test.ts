@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ChatToolCall } from '@shared/ipc'
+import type { ChatToolCall, SupportingReview } from '@shared/ipc'
 import { reduceChatMessage } from './reducer'
 import { ChatEventBuffer } from './eventCoalescer'
 import { REASONING_STORE_MAX, segmentsForStorage, segmentsFromStorage } from './storage'
@@ -187,6 +187,45 @@ describe('ChatEventBuffer', () => {
     ])
     expect(drained.get('u')).toEqual([{ type: 'delta', text: 'other turn' }])
     expect(buf.size).toBe(0)
+  })
+})
+
+describe('reduceChatMessage supporting items cards', () => {
+  const review = (state: SupportingReview['state']): SupportingReview => ({
+    id: 'r1',
+    kind: 'apply',
+    state,
+    workspace: { id: 'w', name: 'Finance' },
+    items: [
+      {
+        key: 'k',
+        name: 'Sales',
+        type: 'SemanticModel',
+        folder: 'supporting-items/Sales.SemanticModel',
+        change: 'create',
+        summary: { tables: 2, columns: 5, measures: 1, relationships: 1, sources: [] },
+        state: state === 'done' ? 'done' : 'pending'
+      }
+    ]
+  })
+
+  it('docks a card where it was raised and keeps the latest of it, without moving it', () => {
+    let m = reduceChatMessage(base(), { type: 'delta', text: 'Defining the model.' })
+    m = reduceChatMessage(m, { type: 'supporting-review', review: review('pending') })
+    m = reduceChatMessage(m, { type: 'tool-start', tool: running })
+    m = reduceChatMessage(m, { type: 'supporting-review', review: review('done') })
+    expect(m.segments).toEqual([
+      { kind: 'text', text: 'Defining the model.' },
+      { kind: 'supporting', id: 'r1' },
+      { kind: 'tool', id: 'x' }
+    ])
+    expect(m.supportingReviews).toHaveLength(1)
+    expect(m.supportingReviews?.[0].state).toBe('done')
+  })
+
+  it('keeps cards when a transcript is stored and loaded', () => {
+    const segments = [{ kind: 'supporting' as const, id: 'r1' }]
+    expect(segmentsFromStorage(segmentsForStorage(segments))).toEqual(segments)
   })
 })
 

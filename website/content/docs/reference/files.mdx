@@ -62,6 +62,10 @@ Apps you install from `.rayfin` files live in a folder that stays on this comput
 
 Each app's folder holds its code, its installed packages and its build, and its data in a `.rayfin-local` folder, as a project's does. Updating the app keeps its data. Removing the app from **Installed apps** on **Your projects** deletes its folder. The logs folder keeps each installed app's output in an `apps` folder. See [Share an app as a file](/docs/ship/app-files).
 
+## Supporting items
+
+An app with supporting items keeps their definitions in a `supporting-items` folder in its project folder: one folder per semantic model or lakehouse, and `applied.json`, where Fabricator records the Fabric item each one became. The folder is part of the project's code: git tracks it, and it goes to GitHub with the app. A lakehouse's data files, in its `data` folder, are the exception: they stay out of git and out of the app's versions, because the lakehouse holds the data once they're loaded. Publishing doesn't send it to Fabric. Don't edit `applied.json`: Fabricator writes it. See [Supporting items](/docs/build/supporting-items).
+
 ## Report migration material
 
 A project you created with **Migrate a Power BI report** keeps what Copilot works from in `.fabricator/migration/` in the project folder: the report's definition, its semantic model's tables and measures, and an image and the text of each page. Fabricator keeps the folder out of git, because the page images and text show real data. The app doesn't use it, so you can delete it once every page is migrated. See [Migrate a Power BI report](/docs/build/migrate-power-bi#where-the-reports-material-lives).

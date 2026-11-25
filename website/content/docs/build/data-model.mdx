@@ -11,7 +11,7 @@ Use **Blueprint** to see how your app is put together. The **Architecture** view
 
 1. Open a project.
 2. Select **Blueprint** in the project tabs.
-3. Choose **Architecture**, **Data model**, **Fabric connections** or **Data explorer**. **Fabric connections** appears when the app connects to a semantic model, SQL database, warehouse or lakehouse.
+3. Choose **Architecture**, **Data model**, **Fabric connections** or **Data explorer**. **Fabric connections** appears when the app connects to a semantic model, SQL database, warehouse or lakehouse. **Supporting items** appears once the app's chat has supporting items on, or when the app has supporting items: the semantic models and lakehouses Fabricator created for it. See [Supporting items](/docs/build/supporting-items).
 
 Fabricator remembers the view you chose for the project.
 
@@ -24,6 +24,8 @@ The **Architecture** view reads the app's `rayfin/rayfin.yml`, `fabric.yaml`, da
 - What the app connects to, grouped by where it lives: each Fabric workspace by name, with its capacity and region when Fabric returns them, then **Microsoft Fabric**, **Azure** and **Web APIs**.
 
 A piece that connects to something outside the app lists how those connections sign in, with a count. Lines run from there to each source. Hover or select a piece, a source or one of those rows to highlight the connections it's part of.
+
+A source that's one of the app's supporting items is marked **Supporting**: Fabricator created it for the app, and it isn't part of the Rayfin app. Its details say which folder in `supporting-items` defines it, with **Open definition**.
 
 Use **Search the app and its connections** to highlight matching pieces and sources. The toolbar also has **Open the app** and **Open in Fabric** once the app is published, plus zoom and fit-to-view.
 

@@ -32,6 +32,7 @@ export type TurnBlock =
   | { kind: 'text'; key: string; text: string }
   | { kind: 'reasoning'; key: string; seg: ReasoningSegment; live: boolean }
   | { kind: 'question'; key: string; id: string }
+  | { kind: 'supporting'; key: string; id: string }
   | { kind: 'interjection'; key: string; seg: InterjectionSegment }
   | { kind: 'answer'; key: string; text: string; streaming: boolean }
 
@@ -40,6 +41,7 @@ type Resolved =
   | { kind: 'tool'; index: number; tool: ChatToolCall; children?: ChatToolCall[] }
   | { kind: 'reasoning'; index: number; seg: ReasoningSegment }
   | { kind: 'question'; index: number; id: string }
+  | { kind: 'supporting'; index: number; id: string }
   | { kind: 'interjection'; index: number; seg: InterjectionSegment }
 
 /** Legacy turns (persisted before segments existed) ran all tools, then wrote text. */
@@ -82,6 +84,9 @@ function resolve(m: UIChatMessage): Resolved[] {
         break
       case 'question':
         out.push({ kind: 'question', index, id: seg.id })
+        break
+      case 'supporting':
+        out.push({ kind: 'supporting', index, id: seg.id })
         break
       case 'interjection':
         out.push({ kind: 'interjection', index, seg })
@@ -140,12 +145,14 @@ export function layoutTurn(m: UIChatMessage): TurnBlock[] {
 
   for (let i = 0; i < answerStart; i++) {
     const it = items[i]
-    if (it.kind === 'question' || it.kind === 'interjection') {
+    if (it.kind === 'question' || it.kind === 'supporting' || it.kind === 'interjection') {
       flush(false)
       blocks.push(
         it.kind === 'question'
           ? { kind: 'question', key: `q${it.index}`, id: it.id }
-          : { kind: 'interjection', key: `i${it.index}`, seg: it.seg }
+          : it.kind === 'supporting'
+            ? { kind: 'supporting', key: `p${it.index}`, id: it.id }
+            : { kind: 'interjection', key: `i${it.index}`, seg: it.seg }
       )
     } else {
       run.push(it)

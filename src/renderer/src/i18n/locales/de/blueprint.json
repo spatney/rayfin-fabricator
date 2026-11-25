@@ -9,7 +9,8 @@
     "cantDraw": "Die App konnte nicht dargestellt werden",
     "openYml": "rayfin.yml öffnen",
     "metadataTooLarge": "metadata.json ist zu groß zum Lesen.",
-    "firstFiles": "Die ersten {{max}} von {{total}} Dateien in {{dir}}/ wurden gelesen."
+    "firstFiles": "Die ersten {{max}} von {{total}} Dateien in {{dir}}/ wurden gelesen.",
+    "supportingItems": "Unterstützende Elemente"
   },
   "identity": {
     "user": "Benutzeridentität",
@@ -211,7 +212,9 @@
     },
     "connections_one": "{{count}} Verbindung",
     "connections_other": "{{count}} Verbindungen",
-    "calledBy": "Aufgerufen von {{functions}}"
+    "calledBy": "Aufgerufen von {{functions}}",
+    "supportingTag": "Unterstützend",
+    "supportingTitle": "Ein unterstützendes Element: Fabricator hat es für diese App erstellt. Es gehört nicht zur Rayfin-App."
   },
   "inspector": {
     "panelAria": "Details zu {{title}}",
@@ -378,6 +381,12 @@
       "ownAccess": "Es gilt der eigene Fabric-Zugriff jeder Person, und Regeln pro Person für die Tabellen können nutzen, wer sie ist.",
       "details": "Details",
       "grantApp": "Der App gewähren"
+    },
+    "supporting": {
+      "title": "Unterstützendes Element",
+      "lead": "Fabricator hat dieses semantische Modell aus {{folder}} für die App erstellt, als du es im Chat genehmigt hast. Es gehört nicht zur Rayfin-App, und beim Veröffentlichen wird es nicht geändert.",
+      "openDefinition": "Definition öffnen",
+      "lakehouse": "Es liest seine Daten mit Direct Lake aus dem Lakehouse {{name}}: ebenfalls ein unterstützendes Element, das Fabricator aus Dateien im Ordner der App lädt."
     }
   }
 }

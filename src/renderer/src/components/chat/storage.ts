@@ -7,6 +7,7 @@ const KNOWN_SEGMENT_KINDS = new Set<string>([
   'text',
   'tool',
   'question',
+  'supporting',
   'interjection',
   'reasoning'
 ])

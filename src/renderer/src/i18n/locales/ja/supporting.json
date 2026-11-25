@@ -1,0 +1,298 @@
+{
+  "itemType": {
+    "SemanticModel": "セマンティック モデル",
+    "Lakehouse": "レイクハウス"
+  },
+  "storage": {
+    "import": "インポート",
+    "directQuery": "DirectQuery",
+    "directLake": "Direct Lake",
+    "dual": "デュアル",
+    "mixed": "混合ストレージ"
+  },
+  "counts": {
+    "tables_other": "{{count}} 個のテーブル",
+    "columns_other": "{{count}} 個の列",
+    "measures_other": "{{count}} 個のメジャー",
+    "relationships_other": "{{count}} 個のリレーションシップ"
+  },
+  "fromSource": "{{source}} から",
+  "localSource": "コンピューター上",
+  "change": {
+    "added": {
+      "model": "モデルの設定を追加します",
+      "table": "テーブル {{name}} を追加します",
+      "column": "列 {{name}} を追加します",
+      "measure": "メジャー {{name}} を追加します",
+      "partition": "パーティション {{name}} を追加します",
+      "relationship": "リレーションシップ {{name}} を追加します",
+      "expression": "パラメーターまたはクエリ {{name}} を追加します",
+      "role": "ロール {{name}} を追加します"
+    },
+    "removed": {
+      "model": "モデルの設定を削除します",
+      "table": "テーブル {{name}} を削除します",
+      "column": "列 {{name}} を削除します",
+      "measure": "メジャー {{name}} を削除します",
+      "partition": "パーティション {{name}} を削除します",
+      "relationship": "リレーションシップ {{name}} を削除します",
+      "expression": "パラメーターまたはクエリ {{name}} を削除します",
+      "role": "ロール {{name}} を削除します"
+    },
+    "changed": {
+      "model": "モデルの設定を変更します",
+      "table": "テーブル {{name}} を変更します",
+      "column": "列 {{name}} を変更します",
+      "measure": "メジャー {{name}} を変更します",
+      "partition": "パーティション {{name}} を変更します",
+      "relationship": "リレーションシップ {{name}} を変更します",
+      "expression": "パラメーターまたはクエリ {{name}} を変更します",
+      "role": "ロール {{name}} を変更します"
+    },
+    "fields": "({{fields}})"
+  },
+  "check": {
+    "one-side-key": "{{table}}[{{column}}] の値は一意で、空白があってはいけません。そうでないと更新が失敗します。{{detail}} がこの列に依存しています。",
+    "one-side-key-direct-lake": "{{table}}[{{column}}] の値は一意で、空白があってはいけません。そうでないと、この列を使うクエリが失敗します。{{detail}} がこの列に依存しています。",
+    "type-mismatch": "{{table}}[{{column}}] と、関連付けられている列のデータ型が異なります: {{detail}}。",
+    "no-partition": "{{table}} にはパーティションがないため、データがありません。",
+    "local-source": "{{detail}} はコンピューター上のファイルを読み取ります。Fabric はゲートウェイ経由でのみこれを更新できます。",
+    "both-directions": "リレーションシップが両方向にフィルター処理するため ({{detail}})、合計があいまいになる可能性があります。",
+    "other": "{{code}}: {{detail}}",
+    "direct-lake-table": "{{table}} はテーブル {{column}} を読み取りますが、Fabricator はそれをレイクハウス {{detail}} に読み込んでいません。",
+    "direct-lake-column": "{{table}}[{{column}}] はレイクハウスのテーブル {{detail}} の列ではありません。"
+  },
+  "problem": {
+    "bad-name": "フォルダー名が .SemanticModel で終わっていません。",
+    "unsupported-type": "現時点で補助アイテムにできるのはセマンティック モデルだけです。{{detail}} にはできません。",
+    "tmsl": "model.bim (TMSL) で定義されています。補助アイテムは TMDL で定義します。",
+    "missing-file": "{{file}} がありません。",
+    "bad-json": "{{file}} は有効な JSON ではありません。",
+    "wrong-type": ".platform では種類が {{detail}} になっています。",
+    "name-mismatch": ".platform の名前がフォルダー名と一致しません。",
+    "no-logical-id": ".platform に論理 ID がありません。",
+    "pbism-version": "definition.pbism のバージョンが TMDL には古すぎます。",
+    "secret": "{{file}} の {{line}} 行目に、パスワード、キー、トークンなどの資格情報が含まれているようです。",
+    "too-large": "定義が大きすぎます。",
+    "data-too-large": "{{table}} の読み込むデータが、Fabricator がアップロードできる量を超えています: {{detail}}。",
+    "link": "{{file}} はリンクです。",
+    "unreadable": "{{file}} を読み取れません。",
+    "tmdl": "{{file}}、{{line}} 行目: {{detail}}",
+    "no-tables": "モデルにテーブルがありません。",
+    "duplicate-table": "テーブル {{table}} が複数回定義されています。",
+    "duplicate-name": "{{table}} に {{column}} という名前の列またはメジャーが複数あります。",
+    "duplicate-measure": "{{column}} という名前のメジャーが複数のテーブルにあります。",
+    "missing-table": "リレーションシップが、モデルにないテーブル {{table}} を参照しています。",
+    "missing-column": "リレーションシップが、モデルにない列 {{table}}[{{column}}] を参照しています。",
+    "self-relationship": "リレーションシップが列からその列自身に向かっています。",
+    "duplicate-relationship": "2 つのリレーションシップが同じ列を結合しています。",
+    "other": "{{code}} {{detail}}",
+    "lakehouse-schemas": "lakehouse.metadata.json はスキーマ付きのレイクハウスを作成しますが、Fabric はまだそこにテーブルを読み込めません。",
+    "bad-table-name": "tables.json でテーブル名が {{detail}} になっています。英字、数字、アンダースコアを使ってください。",
+    "bad-data-path": "{{table}} は {{detail}} から読み込まれますが、これはレイクハウスの data フォルダーにありません。",
+    "missing-data": "{{table}} は {{detail}} から読み込まれますが、それが見つかりません。",
+    "empty-data": "{{table}} は {{detail}} から読み込まれますが、そこにファイルがありません。",
+    "bad-format": "{{table}} は {{detail}} から読み込まれますが、CSV でも Parquet でもありません。",
+    "bad-delimiter": "{{table}} の区切り文字 {{detail}} は 1 文字にする必要があります。",
+    "direct-lake-level": "Direct Lake のテーブルには互換性レベル 1604 以上が必要です (現在は {{detail}})。"
+  },
+  "card": {
+    "head": {
+      "declined": "これは適用しませんでした",
+      "declinedRefresh": "これは更新しませんでした",
+      "interrupted": "回答されませんでした",
+      "stopped": "完了前に停止しました。各アイテムの状態は、Blueprint の [補助アイテム] ビューで確認できます。"
+    },
+    "reason": "目的: {{reason}}",
+    "workspace": "ワークスペース",
+    "account": "アカウント",
+    "unknownAccount": "Fabric のサインイン",
+    "pickWorkspace": "ワークスペースを選択",
+    "pickHint": "このアプリはまだ公開されていないため、補助アイテムの作成先を選択してください。Fabricator はこのアプリ用に選択内容を記憶します。",
+    "loadingWorkspaces": "ワークスペースを読み込んでいます…",
+    "workspacesFailed": "ワークスペースの一覧を取得できませんでした。",
+    "retry": "再試行",
+    "change": {
+      "create": "新規",
+      "update": "変更",
+      "refresh": "更新",
+      "load": "読み込み"
+    },
+    "recreate": "Fabric から削除されているため、もう一度作成します。",
+    "drift": "Fabricator が最後に適用した後、誰かが Fabric でこれを変更しました。適用すると、その変更は置き換えられます。",
+    "unapplied": "フォルダーに Fabric にまだ反映されていない変更があるため、更新では Fabric にあるとおりのモデルが読み込まれます。",
+    "changesUnknown": "Fabricator が Fabric のモデルを読み取れなかったため、変更内容を表示できません。",
+    "noChanges": "テーブル、列、メジャー、リレーションシップは変わりません。",
+    "moreChanges_other": "…ほか {{count}} 件の変更",
+    "viewModel": "モデルを表示",
+    "openInFabric": "Fabric で開く",
+    "openSettings": "設定を開く",
+    "credentials": "データ ソースに資格情報が必要です。Fabric のモデルの設定で資格情報を設定してから、もう一度更新するよう Copilot に依頼してください。",
+    "footnote": "補助アイテムは Rayfin アプリには含まれません。公開しても変更されません。",
+    "approve": {
+      "create": "Fabric で作成",
+      "update": "Fabric で変更",
+      "apply": "Fabric に適用",
+      "refresh": "更新",
+      "load": "データを読み込む"
+    },
+    "decline": "適用しない",
+    "declineRefresh": "今はしない",
+    "state": {
+      "working": {
+        "create": "作成しています…",
+        "update": "変更しています…",
+        "refresh": "更新しています…",
+        "load": "データを読み込んでいます…"
+      },
+      "done": {
+        "create": "作成済み",
+        "update": "変更済み",
+        "refresh": "更新済み",
+        "load": "読み込み済み"
+      },
+      "failed": "失敗しました",
+      "skipped": "そのままにしました"
+    },
+    "resolveFailed": "回答を送信できませんでした: {{error}}",
+    "recentWorkspaces": "最近使用したもの",
+    "noWorkspaces": "アプリの Fabric アカウントは、どの共有ワークスペースにもアイテムを作成できません。ワークスペースの管理者に共同作成者ロールを依頼するか、Fabric でワークスペースを作成してください。",
+    "allWorkspaces": "すべてのワークスペース",
+    "refreshInFabric": "Fabricator はお使いのサインインで更新を開始できません。Fabric でモデルを開いて [今すぐ更新] を選択し、完了したら Copilot に伝えてください。",
+    "title": {
+      "pending": {
+        "create": "{{name}} を Fabric に作成しますか?",
+        "update": "{{name}} を Fabric で更新しますか?",
+        "load": "{{name}} にデータを読み込みますか?",
+        "refresh": "{{name}} を Fabric で最新の情報に更新しますか?",
+        "apply_other": "{{count}} 個の補助アイテムを Fabric に適用しますか?"
+      },
+      "working": {
+        "create": "{{name}} を Fabric に作成しています…",
+        "update": "{{name}} を Fabric で更新しています…",
+        "load": "{{name}} にデータを読み込んでいます…",
+        "refresh": "{{name}} を最新の情報に更新しています…",
+        "apply_other": "{{count}} 個の補助アイテムを適用しています…"
+      },
+      "done": {
+        "create": "{{name}} を Fabric に作成しました",
+        "update": "{{name}} を Fabric で更新しました",
+        "load": "{{name}} にデータを読み込みました",
+        "refresh": "{{name}} を最新の情報に更新しました",
+        "apply_other": "{{count}} 個の補助アイテムを適用しました"
+      },
+      "failed": {
+        "create": "{{name}} を作成できませんでした",
+        "update": "{{name}} を更新できませんでした",
+        "load": "{{name}} のデータの一部を読み込めませんでした",
+        "refresh": "{{name}} を最新の情報に更新できませんでした",
+        "apply_other": "すべてを適用できたわけではありません"
+      }
+    },
+    "table": {
+      "load": "新しいテーブル",
+      "reload": "再読み込み",
+      "uploading": "アップロードしています…",
+      "loading": "読み込んでいます…",
+      "done": "読み込み済み",
+      "failed": "読み込めませんでした",
+      "columns_other": "{{count}} 個の列: {{names}}"
+    },
+    "lakeLoads_other": "読み込むテーブル {{count}} 個 · {{size}}",
+    "lakeTables_other": "テーブル {{count}} 個 · {{size}}",
+    "lakeEmpty": "tables.json にまだテーブルがないため、Fabricator は空のまま作成します。",
+    "frames": "Direct Lake: 適用後、Fabricator が最新の情報に更新して、レイクハウスのテーブルを読み取れるようにします。",
+    "uploadsAs": "アップロードするアカウント",
+    "copilotSees": "Copilot も問題の内容を把握し、次にすることを伝えます。",
+    "pickFirst": "先にワークスペースを選んでください",
+    "changesLabel": "変更点",
+    "checksLabel": "承認する前に"
+  },
+  "dialog": {
+    "close": "閉じる",
+    "definedIn": "定義の場所:"
+  },
+  "view": {
+    "title": "補助アイテム",
+    "subtitle_other": "{{count}} 個のアイテム · Rayfin アプリには含まれません",
+    "intro": "このアプリが依存している、Rayfin アプリには含まれない Fabric アイテムです。ページが読み取るセマンティック モデルと、そのデータを配置するレイクハウスがあります。Copilot が supporting-items/ に定義し、あなたが承認した場合にのみ Fabric で変更します。公開しても変更されません。",
+    "emptyTitle": "補助アイテムはまだありません",
+    "emptyOn": "Snowflake や SQL のデータを使うものなど、アプリに必要なセマンティック モデルを Copilot に頼むか、レイクハウスに配置するデータ ファイルを渡してください。Fabric に何かを作成する前に確認します。",
+    "emptyOff": "オンにすると、このアプリに必要なセマンティック モデルとレイクハウスを Copilot が作成できます。Fabric を変更する前に毎回確認します。",
+    "unavailableTeam": "補助アイテムはチーム アプリでは使用できません。",
+    "target": "新しいアイテムの作成先: {{name}}",
+    "noTarget": "新しいアイテムは、Copilot が最初にアイテムを適用するときに選択したワークスペースに作成されます。",
+    "status": {
+      "notCreated": "未作成",
+      "applied": "Fabric にあります",
+      "changed": "未適用の変更があります",
+      "removed": "定義が削除されました",
+      "unreadable": "適用できません",
+      "notInFabric": "Fabric にありません",
+      "drift": "Fabric で変更されました"
+    },
+    "applied": "{{when}}に適用",
+    "refresh": {
+      "succeeded": "{{when}}に更新",
+      "failed": "最新の更新が失敗しました ({{when}})",
+      "running": "更新中",
+      "cancelled": "最新の更新は取り消されました"
+    },
+    "checking": "Fabric を確認しています…",
+    "signIn": "Fabric での状態を確認するには、Fabric にもう一度サインインしてください。",
+    "usedByApp": "アプリで使用中",
+    "notUsedByApp": "アプリではまだ使用されていません",
+    "actions": {
+      "apply": "Copilot で適用",
+      "refresh": "Copilot で更新",
+      "viewModel": "モデルを表示",
+      "openDefinition": "定義を開く",
+      "openInFabric": "Fabric で開く",
+      "delete": "Fabric で削除…",
+      "turnOn": "このアプリでオンにする",
+      "connect": "Copilot で接続",
+      "openWorkspace": "ワークスペースを開く"
+    },
+    "prompts": {
+      "applyDisplay": "{{name}} を適用",
+      "apply": "fabricator_apply_supporting_items を使って、補助アイテム {{name}} ({{folder}}) を Fabric に適用してください。",
+      "refreshDisplay": "{{name}} を更新",
+      "refresh": "fabricator_refresh_supporting_item を使って、補助セマンティック モデル {{name}} ({{folder}}) のデータを更新し、結果を教えてください。",
+      "connectDisplay": "{{name}} を接続",
+      "connect": "rayfin connector add を使ってアプリを補助セマンティック モデル {{name}} ({{folder}}) に接続し、コネクタ経由で数値を確認してから、アプリのページで使ってください。"
+    },
+    "delete": {
+      "title": "Fabric で {{name}} を削除しますか?",
+      "message": "セマンティック モデル {{name}} を {{workspace}} から削除します。これを読み取るレポートとアプリは動作しなくなります。このアプリが読み取っている場合は、このアプリも同様です。",
+      "removeFolder": "フォルダー {{folder}} もごみ箱に移動する",
+      "confirm": "Fabric で削除",
+      "deleting": "削除しています…",
+      "done": "{{name}} を Fabric から削除しました。",
+      "failed": "{{name}} を削除できませんでした: {{error}}",
+      "messageLakehouse": "レイクハウス {{name}} を、その中のすべてのファイルとテーブルとともに {{workspace}} から削除します。これを読み取るセマンティック モデルは機能しなくなり、そのいずれかを読み取っている場合はこのアプリも機能しなくなります。"
+    },
+    "loadFailed": "アプリの補助アイテムを読み取れませんでした: {{error}}",
+    "learnMore": "詳細",
+    "workspaceLabel": "ワークスペース",
+    "refreshAuth": "Fabric 認証を更新",
+    "offTitle": "このアプリでは補助アイテムがオフになっています",
+    "offNote": "このアプリのチャットでは補助アイテムがオフになっているため、Copilot は適用も更新もできません。",
+    "turnOnFailed": "補助アイテムをオンにできませんでした: {{error}}",
+    "tables": "テーブル",
+    "problems": "適用できない理由",
+    "noTables": "tables.json にはまだテーブルがありません。",
+    "table": {
+      "loaded": "{{when}}に読み込み",
+      "notLoaded": "まだ読み込まれていません",
+      "changed": "読み込み後に変更されました"
+    },
+    "fabricTables_other": "Fabric のテーブル {{count}} 個"
+  },
+  "publishNote_other": "補助アイテムはアプリと一緒に公開されません: {{count}} 個が {{workspace}} にあります。",
+  "enteredData": "モデルに入力されたデータ",
+  "lakehouseSource": "レイクハウス {{name}}",
+  "table": {
+    "files_other": "{{name}} ({{count}} 個のファイル)",
+    "rows_other": "{{rows}} 行"
+  }
+}

@@ -81,6 +81,20 @@ pub struct PlanOwner {
   pub project_id: String,
 }
 
+/// The user's answer on a supporting items review card.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ReviewDecision {
+  pub approved: bool,
+  /// The workspace picked on the card, when it asked for one: its id and name.
+  pub workspace: Option<(String, String)>,
+}
+
+/// One outstanding supporting items review card awaiting the user's decision.
+struct PendingReview {
+  request_id: String,
+  tx: oneshot::Sender<ReviewDecision>,
+}
+
 /// Which project/turn a still-pending question belongs to, plus whether it
 /// accepts a free-form answer, returned by [`PlanGate::question_owner`] so
 /// `chat_resolve_question` can validate ownership and free-form eligibility.
@@ -100,6 +114,7 @@ pub struct PlanGate {
   routes: Mutex<HashMap<String, TurnRoute>>,
   pending_plans: Mutex<HashMap<String, PendingPlan>>,
   pending_questions: Mutex<HashMap<String, PendingQuestion>>,
+  pending_reviews: Mutex<HashMap<String, PendingReview>>,
 }
 
 impl PlanGate {
@@ -267,6 +282,48 @@ impl PlanGate {
     };
     let route = self.routes.lock().unwrap().get(&session_id).cloned()?;
     Some(QuestionOwner { project_id: route.project_id, turn_id: route.turn_id, allow_freeform })
+  }
+
+  /// Register a supporting items review card and return the receiver its tool
+  /// awaits. Any card still outstanding for the session is dropped (its
+  /// receiver then resolves to an error: no answer).
+  pub fn register_pending_review(&self, session_id: &str, request_id: &str) -> oneshot::Receiver<ReviewDecision> {
+    let (tx, rx) = oneshot::channel();
+    self
+      .pending_reviews
+      .lock()
+      .unwrap()
+      .insert(session_id.to_string(), PendingReview { request_id: request_id.to_string(), tx });
+    rx
+  }
+
+  /// Answer a review card by its request id. True when it was still waiting.
+  pub fn resolve_review(&self, request_id: &str, decision: ReviewDecision) -> bool {
+    let mut map = self.pending_reviews.lock().unwrap();
+    let key = map.iter().find(|(_, p)| p.request_id == request_id).map(|(k, _)| k.clone());
+    match key.and_then(|k| map.remove(&k)) {
+      Some(p) => p.tx.send(decision).is_ok(),
+      None => false,
+    }
+  }
+
+  /// Drop a session's outstanding review card (turn end), so its tool stops waiting.
+  pub fn reject_pending_review(&self, session_id: &str) {
+    self.pending_reviews.lock().unwrap().remove(session_id);
+  }
+
+  /// The project a still-pending review card was raised in, for validating
+  /// a `chat_resolve_supporting_review` call.
+  pub fn review_owner(&self, request_id: &str) -> Option<PlanOwner> {
+    let session_id = self
+      .pending_reviews
+      .lock()
+      .unwrap()
+      .iter()
+      .find(|(_, p)| p.request_id == request_id)
+      .map(|(k, _)| k.clone())?;
+    let route = self.routes.lock().unwrap().get(&session_id).cloned()?;
+    Some(PlanOwner { project_id: route.project_id })
   }
 }
 

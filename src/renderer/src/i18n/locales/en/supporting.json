@@ -1,0 +1,315 @@
+{
+  "itemType": {
+    "SemanticModel": "Semantic model",
+    "Lakehouse": "Lakehouse"
+  },
+  "storage": {
+    "import": "Import",
+    "directQuery": "DirectQuery",
+    "directLake": "Direct Lake",
+    "dual": "Dual",
+    "mixed": "Mixed storage"
+  },
+  "counts": {
+    "tables_one": "{{count}} table",
+    "tables_other": "{{count}} tables",
+    "columns_one": "{{count}} column",
+    "columns_other": "{{count}} columns",
+    "measures_one": "{{count}} measure",
+    "measures_other": "{{count}} measures",
+    "relationships_one": "{{count}} relationship",
+    "relationships_other": "{{count}} relationships"
+  },
+  "fromSource": "from {{source}}",
+  "localSource": "on a computer",
+  "change": {
+    "added": {
+      "model": "Adds model settings",
+      "table": "Adds the table {{name}}",
+      "column": "Adds the column {{name}}",
+      "measure": "Adds the measure {{name}}",
+      "partition": "Adds the partition {{name}}",
+      "relationship": "Adds the relationship {{name}}",
+      "expression": "Adds the parameter or query {{name}}",
+      "role": "Adds the role {{name}}"
+    },
+    "removed": {
+      "model": "Removes model settings",
+      "table": "Removes the table {{name}}",
+      "column": "Removes the column {{name}}",
+      "measure": "Removes the measure {{name}}",
+      "partition": "Removes the partition {{name}}",
+      "relationship": "Removes the relationship {{name}}",
+      "expression": "Removes the parameter or query {{name}}",
+      "role": "Removes the role {{name}}"
+    },
+    "changed": {
+      "model": "Changes the model’s settings",
+      "table": "Changes the table {{name}}",
+      "column": "Changes the column {{name}}",
+      "measure": "Changes the measure {{name}}",
+      "partition": "Changes the partition {{name}}",
+      "relationship": "Changes the relationship {{name}}",
+      "expression": "Changes the parameter or query {{name}}",
+      "role": "Changes the role {{name}}"
+    },
+    "fields": "({{fields}})"
+  },
+  "check": {
+    "one-side-key": "{{table}}[{{column}}] has to be unique and never blank, or the refresh fails: {{detail}} relies on it.",
+    "one-side-key-direct-lake": "{{table}}[{{column}}] has to be unique and never blank, or queries that use it fail: {{detail}} relies on it.",
+    "type-mismatch": "{{table}}[{{column}}] and the column it relates to have different data types: {{detail}}.",
+    "no-partition": "{{table}} has no partition, so it has no data.",
+    "local-source": "{{detail}} reads a file on a computer, which Fabric can refresh only through a gateway.",
+    "both-directions": "A relationship filters in both directions ({{detail}}), which can make totals ambiguous.",
+    "other": "{{code}}: {{detail}}",
+    "direct-lake-table": "{{table}} reads the table {{column}}, which isn’t one Fabricator loaded into the {{detail}} lakehouse.",
+    "direct-lake-column": "{{table}}[{{column}}] isn’t a column of the lakehouse table {{detail}}."
+  },
+  "problem": {
+    "bad-name": "Its folder’s name doesn’t end in .SemanticModel.",
+    "unsupported-type": "Only semantic models can be supporting items for now, not {{detail}}.",
+    "tmsl": "It’s defined in model.bim (TMSL). Supporting items are defined in TMDL.",
+    "missing-file": "{{file}} is missing.",
+    "bad-json": "{{file}} isn’t valid JSON.",
+    "wrong-type": ".platform says it’s a {{detail}}.",
+    "name-mismatch": "The name in .platform doesn’t match its folder.",
+    "no-logical-id": ".platform has no logical id.",
+    "pbism-version": "definition.pbism is too old a version for TMDL.",
+    "secret": "{{file}}, line {{line}}, looks like it holds a credential, such as a password, key or token.",
+    "too-large": "Its definition is too large.",
+    "data-too-large": "{{table}} loads more than Fabricator uploads: {{detail}}.",
+    "link": "{{file}} is a link.",
+    "unreadable": "{{file}} can’t be read.",
+    "tmdl": "{{file}}, line {{line}}: {{detail}}",
+    "no-tables": "The model has no tables.",
+    "duplicate-table": "The table {{table}} is defined more than once.",
+    "duplicate-name": "{{table}} has more than one column or measure named {{column}}.",
+    "duplicate-measure": "More than one table has a measure named {{column}}.",
+    "missing-table": "A relationship refers to the table {{table}}, which the model doesn’t have.",
+    "missing-column": "A relationship refers to {{table}}[{{column}}], which the model doesn’t have.",
+    "self-relationship": "A relationship goes from a column to itself.",
+    "duplicate-relationship": "Two relationships join the same columns.",
+    "other": "{{code}} {{detail}}",
+    "lakehouse-schemas": "lakehouse.metadata.json makes a lakehouse with schemas, which Fabric can’t load tables into yet.",
+    "bad-table-name": "tables.json names a table {{detail}}: use letters, digits and underscores.",
+    "bad-data-path": "{{table}} loads from {{detail}}, which isn’t under the lakehouse’s data folder.",
+    "missing-data": "{{table}} loads from {{detail}}, which isn’t there.",
+    "empty-data": "{{table}} loads from {{detail}}, which has no files.",
+    "bad-format": "{{table}} loads from {{detail}}, which isn’t CSV or Parquet.",
+    "bad-delimiter": "{{table}}’s delimiter {{detail}} must be one character.",
+    "direct-lake-level": "Direct Lake tables need compatibility level 1604 or later (it’s {{detail}})."
+  },
+  "card": {
+    "head": {
+      "declined": "You didn’t apply this",
+      "declinedRefresh": "You didn’t refresh this",
+      "interrupted": "Not answered",
+      "stopped": "Stopped before it finished. Blueprint’s Supporting items view shows where each item stands."
+    },
+    "reason": "Purpose: {{reason}}",
+    "workspace": "Workspace",
+    "account": "Account",
+    "unknownAccount": "Your Fabric sign-in",
+    "pickWorkspace": "Choose a workspace",
+    "pickHint": "This app isn’t published yet, so choose where its supporting items go. Fabricator remembers it for this app.",
+    "loadingWorkspaces": "Loading your workspaces…",
+    "workspacesFailed": "Couldn’t list your workspaces.",
+    "retry": "Try again",
+    "change": {
+      "create": "New",
+      "update": "Update",
+      "refresh": "Refresh",
+      "load": "Load"
+    },
+    "recreate": "It’s gone from Fabric, so it’s created again.",
+    "drift": "Someone changed it in Fabric since Fabricator last applied it. Applying replaces their changes.",
+    "unapplied": "Its folder has changes that aren’t in Fabric yet, so the refresh loads the model as Fabric has it.",
+    "changesUnknown": "Fabricator couldn’t read the model in Fabric, so it can’t show what changes.",
+    "noChanges": "Its tables, columns, measures and relationships stay as they are.",
+    "moreChanges_one": "…and {{count}} more change",
+    "moreChanges_other": "…and {{count}} more changes",
+    "viewModel": "View model",
+    "openInFabric": "Open in Fabric",
+    "openSettings": "Open its settings",
+    "credentials": "Its data source needs credentials. Set them in the model’s settings in Fabric, then ask Copilot to refresh it again.",
+    "footnote": "Supporting items aren’t part of the Rayfin app. Publish doesn’t change them.",
+    "approve": {
+      "create": "Create in Fabric",
+      "update": "Update in Fabric",
+      "apply": "Apply in Fabric",
+      "refresh": "Refresh",
+      "load": "Load data"
+    },
+    "decline": "Don’t apply",
+    "declineRefresh": "Not now",
+    "state": {
+      "working": {
+        "create": "Creating…",
+        "update": "Updating…",
+        "refresh": "Refreshing…",
+        "load": "Loading data…"
+      },
+      "done": {
+        "create": "Created",
+        "update": "Updated",
+        "refresh": "Refreshed",
+        "load": "Loaded"
+      },
+      "failed": "Didn’t work",
+      "skipped": "Left as it was"
+    },
+    "resolveFailed": "Couldn’t send your answer: {{error}}",
+    "recentWorkspaces": "Recent",
+    "noWorkspaces": "The app’s Fabric account can’t create items in any shared workspace. Ask a workspace admin for the Contributor role, or create a workspace in Fabric.",
+    "allWorkspaces": "All workspaces",
+    "refreshInFabric": "Fabricator can’t start a refresh with your sign-ins. Open the model in Fabric, select Refresh now, then tell Copilot it’s done.",
+    "title": {
+      "pending": {
+        "create": "Create {{name}} in Fabric?",
+        "update": "Update {{name}} in Fabric?",
+        "load": "Load data into {{name}}?",
+        "refresh": "Refresh {{name}} in Fabric?",
+        "apply_one": "Apply {{count}} supporting item in Fabric?",
+        "apply_other": "Apply {{count}} supporting items in Fabric?"
+      },
+      "working": {
+        "create": "Creating {{name}} in Fabric…",
+        "update": "Updating {{name}} in Fabric…",
+        "load": "Loading data into {{name}}…",
+        "refresh": "Refreshing {{name}}…",
+        "apply_one": "Applying {{count}} supporting item…",
+        "apply_other": "Applying {{count}} supporting items…"
+      },
+      "done": {
+        "create": "Created {{name}} in Fabric",
+        "update": "Updated {{name}} in Fabric",
+        "load": "Loaded data into {{name}}",
+        "refresh": "Refreshed {{name}}",
+        "apply_one": "Applied {{count}} supporting item",
+        "apply_other": "Applied {{count}} supporting items"
+      },
+      "failed": {
+        "create": "Couldn’t create {{name}}",
+        "update": "Couldn’t update {{name}}",
+        "load": "Not all of {{name}}’s data loaded",
+        "refresh": "{{name}} didn’t refresh",
+        "apply_one": "Not everything was applied",
+        "apply_other": "Not everything was applied"
+      }
+    },
+    "table": {
+      "load": "New table",
+      "reload": "Loads again",
+      "uploading": "Uploading…",
+      "loading": "Loading…",
+      "done": "Loaded",
+      "failed": "Didn’t load",
+      "columns_one": "{{count}} column: {{names}}",
+      "columns_other": "{{count}} columns: {{names}}"
+    },
+    "lakeLoads_one": "{{count}} table to load · {{size}}",
+    "lakeLoads_other": "{{count}} tables to load · {{size}}",
+    "lakeEmpty": "Its tables.json lists no tables yet, so Fabricator creates it empty.",
+    "frames": "Direct Lake: once it’s applied, Fabricator refreshes it so it reads the lakehouse’s tables.",
+    "uploadsAs": "Uploads as",
+    "copilotSees": "Copilot sees what went wrong too, and tells you what’s next.",
+    "pickFirst": "Choose a workspace first",
+    "changesLabel": "What changes",
+    "checksLabel": "Before you approve",
+    "lakeTables_one": "{{count}} table · {{size}}",
+    "lakeTables_other": "{{count}} tables · {{size}}"
+  },
+  "dialog": {
+    "close": "Close",
+    "definedIn": "As defined in"
+  },
+  "view": {
+    "title": "Supporting items",
+    "subtitle_one": "{{count}} item · not part of the Rayfin app",
+    "subtitle_other": "{{count}} items · not part of the Rayfin app",
+    "intro": "The Fabric items this app relies on that aren’t part of the Rayfin app: the semantic models its pages read, and the lakehouses their data is staged in. Copilot defines them in supporting-items/ and changes them in Fabric only after you approve. Publish leaves them alone.",
+    "emptyTitle": "No supporting items yet",
+    "emptyOn": "Ask Copilot for a semantic model the app needs, such as one over your Snowflake or SQL data, or give it data files to stage in a lakehouse. It asks you before it creates anything in Fabric.",
+    "emptyOff": "Turn them on to let Copilot create the semantic models and lakehouses this app needs. It asks you before each change in Fabric.",
+    "unavailableTeam": "Supporting items aren’t available in team apps.",
+    "target": "New items go to {{name}}",
+    "noTarget": "New items go to the workspace you choose when Copilot first applies one.",
+    "status": {
+      "notCreated": "Not created yet",
+      "applied": "In Fabric",
+      "changed": "Changes not applied",
+      "removed": "Definition removed",
+      "unreadable": "Can’t be applied",
+      "notInFabric": "Not in Fabric",
+      "drift": "Changed in Fabric"
+    },
+    "applied": "Applied {{when}}",
+    "refresh": {
+      "succeeded": "Refreshed {{when}}",
+      "failed": "Latest refresh failed {{when}}",
+      "running": "Refreshing",
+      "cancelled": "Latest refresh was cancelled"
+    },
+    "checking": "Checking Fabric…",
+    "signIn": "Sign in to Fabric again to see how they stand there.",
+    "usedByApp": "Used by the app",
+    "notUsedByApp": "Not used by the app yet",
+    "actions": {
+      "apply": "Apply with Copilot",
+      "refresh": "Refresh with Copilot",
+      "viewModel": "View model",
+      "openDefinition": "Open definition",
+      "openInFabric": "Open in Fabric",
+      "delete": "Delete in Fabric…",
+      "turnOn": "Turn on for this app",
+      "connect": "Connect with Copilot",
+      "openWorkspace": "Open workspace"
+    },
+    "prompts": {
+      "applyDisplay": "Apply {{name}}",
+      "apply": "Apply the supporting item {{name}} ({{folder}}) in Fabric with fabricator_apply_supporting_items.",
+      "refreshDisplay": "Refresh {{name}}",
+      "refresh": "Refresh the data of the supporting semantic model {{name}} ({{folder}}) with fabricator_refresh_supporting_item, and tell me how it went.",
+      "connectDisplay": "Connect {{name}}",
+      "connect": "Connect the app to the supporting semantic model {{name}} ({{folder}}) with rayfin connector add, check its numbers through the connector, and use it in the app’s pages."
+    },
+    "delete": {
+      "title": "Delete {{name}} in Fabric?",
+      "message": "This deletes the semantic model {{name}} from {{workspace}}. Reports and apps that read it stop working, including this app if it does.",
+      "removeFolder": "Also move its folder, {{folder}}, to the trash",
+      "confirm": "Delete in Fabric",
+      "deleting": "Deleting…",
+      "done": "{{name}} is deleted from Fabric.",
+      "failed": "Couldn’t delete {{name}}: {{error}}",
+      "messageLakehouse": "This deletes the lakehouse {{name}} from {{workspace}}, with every file and table in it. Semantic models that read it stop working, and so does this app if it reads one of them."
+    },
+    "loadFailed": "Couldn’t read the app’s supporting items: {{error}}",
+    "learnMore": "Learn more",
+    "workspaceLabel": "Workspace",
+    "refreshAuth": "Refresh Fabric authentication",
+    "offTitle": "Supporting items are off for this app",
+    "offNote": "Supporting items are off in this app’s chat, so Copilot can’t apply or refresh them.",
+    "turnOnFailed": "Couldn’t turn on supporting items: {{error}}",
+    "tables": "Tables",
+    "problems": "What stops it from being applied",
+    "noTables": "Its tables.json lists no tables yet.",
+    "table": {
+      "loaded": "Loaded {{when}}",
+      "notLoaded": "Not loaded yet",
+      "changed": "Changed since it loaded"
+    },
+    "fabricTables_one": "{{count}} table in Fabric",
+    "fabricTables_other": "{{count}} tables in Fabric"
+  },
+  "publishNote_one": "Supporting items aren’t published with the app: {{count}} is in {{workspace}}.",
+  "publishNote_other": "Supporting items aren’t published with the app: {{count}} are in {{workspace}}.",
+  "enteredData": "data entered in the model",
+  "lakehouseSource": "the {{name}} lakehouse",
+  "table": {
+    "files_one": "{{name}} ({{count}} file)",
+    "files_other": "{{name}} ({{count}} files)",
+    "rows_one": "{{rows}} row",
+    "rows_other": "{{rows}} rows"
+  }
+}
