@@ -28,13 +28,16 @@ const MARGIN = 8
  * A menu at a point (a right-click, or a row for the keyboard's menu key),
  * drawn at the document root. It closes on Escape, a choice, a click
  * elsewhere, scrolling, or the window losing focus; `onClose` gives the focus
- * back to whatever opened it.
+ * back to whatever opened it. A menu a button opens names it as its `anchor`:
+ * pressing that button again is the button's to handle, so it closes the menu
+ * rather than opening it again.
  */
 export function ContextMenu({
   x,
   y,
   label,
   entries,
+  anchor,
   onClose
 }: {
   x: number
@@ -42,6 +45,8 @@ export function ContextMenu({
   /** What the menu is about, for assistive technology. */
   label: string
   entries: readonly ContextMenuEntry[]
+  /** The button that opened it. */
+  anchor?: HTMLElement | null
   onClose: () => void
 }): JSX.Element {
   useSuppressPreview()
@@ -61,7 +66,8 @@ export function ContextMenu({
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>(ITEMS)?.focus()
     const outside = (event: MouseEvent): void => {
-      if (!ref.current?.contains(event.target as Node)) onClose()
+      const target = event.target as Node
+      if (!ref.current?.contains(target) && !anchor?.contains(target)) onClose()
     }
     const close = (): void => onClose()
     window.addEventListener('mousedown', outside, true)
@@ -74,7 +80,7 @@ export function ContextMenu({
       window.removeEventListener('resize', close)
       window.removeEventListener('scroll', close, true)
     }
-  }, [onClose])
+  }, [onClose, anchor])
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     if (event.key === 'Escape' || event.key === 'Tab') {

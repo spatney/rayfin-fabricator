@@ -41,6 +41,7 @@ fn default_flags() -> ExperimentFlags {
     report_migration: Some(false),
     work_iq: Some(false),
     pro_workspaces: Some(false),
+    custom_tools: Some(false),
   }
 }
 
@@ -195,6 +196,7 @@ fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: Experimen
   if let Some(v) = patch.report_migration { current.report_migration = Some(v); }
   if let Some(v) = patch.work_iq { current.work_iq = Some(v); }
   if let Some(v) = patch.pro_workspaces { current.pro_workspaces = Some(v); }
+  if let Some(v) = patch.custom_tools { current.custom_tools = Some(v); }
 
 }
 
@@ -250,6 +252,11 @@ pub fn pro_workspaces_enabled() -> bool {
       .and_then(|e| e.pro_workspaces)
       .unwrap_or(false)
   })
+}
+
+/// True when the Make tools with Copilot experiment is on.
+pub fn custom_tools_enabled() -> bool {
+  with_cache(|c| c.settings.experiments.as_ref().and_then(|e| e.custom_tools).unwrap_or(false))
 }
 
 

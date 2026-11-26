@@ -94,6 +94,10 @@
     "proWorkspaces": {
       "title": "Publicar em workspaces Pro",
       "desc": "Publique aplicativos em workspaces Pro, que não têm capacidade do Fabric nem do Power BI Premium. O seletor de workspaces os mostra junto com os demais, e + Novo workspace pode criar um sem capacidade. Um aplicativo precisa do Rayfin 2.1.0 ou posterior para publicar em um deles. Meu workspace não está entre as opções."
+    },
+    "customTools": {
+      "title": "Criar ferramentas com o Copilot",
+      "desc": "Em Servidores MCP, descreva uma ferramenta, e o Copilot a escreve como um servidor MCP que é executado neste computador, como uma que cria imagens com sua chave da OpenAI. Você pode testá-la, alterá-la, ler o código dela e compartilhá-la como um arquivo."
     }
   },
   "about": {

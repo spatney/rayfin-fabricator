@@ -505,6 +505,12 @@ export default function SettingsModal({
                       checked={Boolean(settings.experiments?.proWorkspaces)}
                       onChange={(v) => onChange({ experiments: { proWorkspaces: v } })}
                     />
+                    <ToggleRow
+                      label={t('experiments.customTools.title')}
+                      hint={t('experiments.customTools.desc')}
+                      checked={Boolean(settings.experiments?.customTools)}
+                      onChange={(v) => onChange({ experiments: { customTools: v } })}
+                    />
                   </div>
                 )}
               </div>

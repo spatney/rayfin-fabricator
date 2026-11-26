@@ -258,7 +258,8 @@
     "learn": "プラグインの詳細",
     "changesFabric": "Fabric を変更",
     "asksFirst": "事前に確認します",
-    "supportingItems": "補助アイテム"
+    "supportingItems": "補助アイテム",
+    "makeTool": "Copilot でツールを作成…"
   },
   "turnFooter": {
     "changedFiles_other": "{{count}} 個のファイルを変更",

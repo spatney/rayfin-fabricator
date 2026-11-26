@@ -1,10 +1,14 @@
 //! MCP servers the user adds: a command Fabricator runs on this computer, or a
 //! remote server's URL, that Build chat can turn on among its plugins, beside
-//! Fabric IQ and Work IQ ([`crate::services::iq`]).
+//! Fabric IQ and Work IQ ([`crate::services::iq`]). A tool the user made with
+//! Copilot is one too (`made`): its code is in Fabricator's app data, and
+//! Fabricator runs it with Node.js ([`crate::services::tool_maker`]).
 //!
 //! Servers are personal: they're kept in Fabricator's settings on this
 //! computer, never in a project, and the values of their environment variables
-//! and headers are kept in the OS credential store ([`secrets`]). A chat's
+//! and headers are kept in the OS credential store ([`secrets`]). An
+//! environment variable can get the API key the user saved for one of their
+//! model providers instead, read when the server starts. A chat's
 //! Copilot session gets the servers that are on in its project, named by their
 //! ids, so their tools are `<id>-<tool>`. Fabricator decides which tools chat
 //! may call ([`Permits`]): any of them, or, for a server the user marks
@@ -28,8 +32,12 @@ pub use auth::SessionAuth;
 pub use connect::{check, prepare, Prepared, Waits, MEMORY};
 pub use secrets::Values;
 
-use crate::services::{keychain, store};
-use crate::types::{AppSettings, McpServerEntry, McpServerInput, McpTransport, McpValueInput, StudioProject};
+use crate::services::byok::catalog::{self as providers, KeyNeed};
+use crate::services::byok::ByokManager;
+use crate::services::{keychain, store, tool_maker};
+use crate::types::{
+  AppSettings, MadeTool, McpServerEntry, McpServerInput, McpTransport, McpValueInput, StudioProject,
+};
 
 /// What starts a server's plugin id among a project's plugins (`mcp:chart`).
 const PLUGIN_PREFIX: &str = "mcp:";
@@ -85,7 +93,7 @@ pub fn new_id(name: &str, taken: &[&str]) -> String {
     .unwrap_or(base)
 }
 
-fn is_env_name(name: &str) -> bool {
+pub(crate) fn is_env_name(name: &str) -> bool {
   name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
     && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
@@ -107,21 +115,40 @@ enum Named {
   Header,
 }
 
+/// The environment variables or headers of a server being saved.
+#[derive(Default)]
+struct Rows {
+  names: Vec<String>,
+  /// The values of those with one of their own.
+  values: BTreeMap<String, String>,
+  /// The model provider whose key each of the others gets, by name.
+  providers: BTreeMap<String, String>,
+}
+
+/// A model provider's name, as people read it.
+pub fn provider_name(id: &str) -> String {
+  providers::find(id).map_or_else(|| id.to_string(), |spec| spec.display_name())
+}
+
 /// The names and values of a server's environment variables or headers being
-/// saved: each with its new value, or the one `saved` under its name.
+/// saved: each with its new value, or the one `saved` under its name. An
+/// environment variable can get a model provider's key instead.
 fn values_for(
   inputs: &[McpValueInput],
   saved: &BTreeMap<String, String>,
   valid: fn(&str) -> bool,
   what: Named,
-) -> Result<(Vec<String>, BTreeMap<String, String>), String> {
-  let mut names: Vec<String> = Vec::new();
-  let mut values = BTreeMap::new();
+) -> Result<Rows, String> {
+  let mut rows = Rows::default();
   for input in inputs {
     let name = input.name.trim();
+    let provider = match what {
+      Named::Env => input.provider.as_deref().map(str::trim).filter(|p| !p.is_empty()),
+      Named::Header => None,
+    };
     if name.is_empty() {
       // An empty row is left out.
-      if input.value.as_deref().unwrap_or_default().is_empty() {
+      if provider.is_none() && input.value.as_deref().unwrap_or_default().is_empty() {
         continue;
       }
       return Err(match what {
@@ -135,8 +162,16 @@ fn values_for(
         Named::Header => t!("services.mcp.badHeaderName", name = name),
       });
     }
-    if names.iter().any(|n| n.eq_ignore_ascii_case(name)) {
+    if rows.names.iter().any(|n| n.eq_ignore_ascii_case(name)) {
       return Err(t!("services.mcp.nameTwice", name = name));
+    }
+    if let Some(provider) = provider {
+      let spec = providers::find(provider)
+        .filter(|spec| spec.key != KeyNeed::Unused)
+        .ok_or_else(|| t!("services.mcp.noSuchProvider", provider = provider))?;
+      rows.names.push(name.to_string());
+      rows.providers.insert(name.to_string(), spec.id.to_string());
+      continue;
     }
     let value = match &input.value {
       Some(value) if value.is_empty() => return Err(t!("services.mcp.enterValue", name = name)),
@@ -146,10 +181,10 @@ fn values_for(
     if has_line_break(&value) {
       return Err(t!("services.mcp.valueLineBreaks", name = name));
     }
-    names.push(name.to_string());
-    values.insert(name.to_string(), value);
+    rows.names.push(name.to_string());
+    rows.values.insert(name.to_string(), value);
   }
-  Ok((names, values))
+  Ok(rows)
 }
 
 /// Whether `host` (as a URL gives it) is this computer.
@@ -186,6 +221,27 @@ pub fn entry_from(
   saved: &Values,
   now: &str,
 ) -> Result<(McpServerEntry, Values), String> {
+  build(input, existing, saved, now, None)
+}
+
+/// [`entry_from`] for a new tool made with Copilot: Fabricator runs its code,
+/// so it has no command of its own, just its environment variables.
+pub fn made_entry_from(
+  input: &McpServerInput,
+  existing: &[McpServerEntry],
+  now: &str,
+  made: MadeTool,
+) -> Result<(McpServerEntry, Values), String> {
+  build(input, existing, &Values::default(), now, Some(made))
+}
+
+fn build(
+  input: &McpServerInput,
+  existing: &[McpServerEntry],
+  saved: &Values,
+  now: &str,
+  made: Option<MadeTool>,
+) -> Result<(McpServerEntry, Values), String> {
   let name = input.name.split_whitespace().collect::<Vec<_>>().join(" ");
   if name.is_empty() {
     return Err(t!("services.mcp.nameServer"));
@@ -204,34 +260,75 @@ pub fn entry_from(
     Some(server) => server.id.clone(),
     None => new_id(&name, &existing.iter().map(|s| s.id.as_str()).collect::<Vec<_>>()),
   };
+  // A tool made with Copilot stays one: its code is what runs.
+  let made = made.or_else(|| previous.and_then(|s| s.made.clone()));
+  let transport = if made.is_some() { McpTransport::Stdio } else { input.transport };
   let mut entry = McpServerEntry {
     id,
     name,
-    transport: input.transport,
+    transport,
     read_only: input.read_only,
     added_at: previous.map_or_else(|| now.to_string(), |s| s.added_at.clone()),
+    made,
     ..Default::default()
   };
   let mut values = Values::default();
-  match input.transport {
+  match transport {
     McpTransport::Stdio => {
-      let command = input.command.trim();
-      if command.is_empty() {
-        return Err(t!("services.mcp.enterCommand"));
+      if entry.made.is_none() {
+        let command = input.command.trim();
+        if command.is_empty() {
+          return Err(t!("services.mcp.enterCommand"));
+        }
+        if has_line_break(command) || input.args.iter().any(|a| has_line_break(a)) {
+          return Err(t!("services.mcp.commandLineBreaks"));
+        }
+        entry.command = command.to_string();
+        entry.args = input.args.clone();
       }
-      if has_line_break(command) || input.args.iter().any(|a| has_line_break(a)) {
-        return Err(t!("services.mcp.commandLineBreaks"));
-      }
-      entry.command = command.to_string();
-      entry.args = input.args.clone();
-      (entry.env, values.env) = values_for(&input.env, &saved.env, is_env_name, Named::Env)?;
+      let rows = values_for(&input.env, &saved.env, is_env_name, Named::Env)?;
+      (entry.env, values.env, entry.provider_keys) = (rows.names, rows.values, rows.providers);
     }
     McpTransport::Http | McpTransport::Sse => {
       entry.url = check_url(&input.url)?;
-      (entry.headers, values.headers) = values_for(&input.headers, &saved.headers, is_header_name, Named::Header)?;
+      let rows = values_for(&input.headers, &saved.headers, is_header_name, Named::Header)?;
+      (entry.headers, values.headers) = (rows.names, rows.values);
     }
   }
   Ok((entry, values))
+}
+
+/// Each model provider whose key one of `entry`'s environment variables gets
+/// has a key saved.
+pub fn check_provider_keys(entry: &McpServerEntry) -> Result<(), String> {
+  check_provider_keys_with(entry, |provider| ByokManager.provider_key(provider))
+}
+
+fn check_provider_keys_with(entry: &McpServerEntry, key: impl Fn(&str) -> Option<String>) -> Result<(), String> {
+  match entry.provider_keys.iter().find(|(_, provider)| key(provider).is_none()) {
+    Some((name, provider)) => Err(t!("services.mcp.noProviderKey", provider = provider_name(provider), name = name)),
+    None => Ok(()),
+  }
+}
+
+/// The values server `entry` gets: the ones saved for it, and the key of each
+/// model provider one of its environment variables uses.
+pub fn load_values(entry: &McpServerEntry) -> Result<Values, String> {
+  load_values_with(entry, secrets::load, |provider| ByokManager.provider_key(provider))
+}
+
+fn load_values_with(
+  entry: &McpServerEntry,
+  load: impl Fn(&str) -> Result<Values, String>,
+  key: impl Fn(&str) -> Option<String>,
+) -> Result<Values, String> {
+  let own = !entry.headers.is_empty() || entry.env.iter().any(|name| !entry.provider_keys.contains_key(name));
+  let mut values = if own { load(&entry.id)? } else { Values::default() };
+  for (name, provider) in &entry.provider_keys {
+    let value = key(provider).ok_or_else(|| t!("services.mcp.providerKeyGone", provider = provider_name(provider)))?;
+    values.env.insert(name.clone(), value);
+  }
+  Ok(values)
 }
 
 /// Saves the server `input` describes, with its values in the credential
@@ -242,10 +339,17 @@ pub fn save(input: &McpServerInput) -> Result<Vec<McpServerEntry>, String> {
   let saved = input.id.as_deref().map(|id| secrets::load(id).unwrap_or_default()).unwrap_or_default();
   let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
   let (entry, values) = entry_from(input, &existing, &saved, &now)?;
+  store_entry(entry, &values)
+}
+
+/// Keeps `entry` among the user's servers, with its `values` in the credential
+/// store, and returns them all. The next message tries it from scratch.
+pub fn store_entry(entry: McpServerEntry, values: &Values) -> Result<Vec<McpServerEntry>, String> {
+  check_provider_keys(&entry)?;
   if !values.is_empty() && !keychain::supported() {
     return Err(t!("services.mcp.valuesUnsupported"));
   }
-  secrets::save(&entry.id, &values)?;
+  secrets::save(&entry.id, values)?;
   let id = entry.id.clone();
   let servers = store::upsert_mcp_server(entry);
   MEMORY.reset_server(&id);
@@ -253,10 +357,14 @@ pub fn save(input: &McpServerInput) -> Result<Vec<McpServerEntry>, String> {
 }
 
 /// Forgets server `id`, its values and its place in every chat, and returns
-/// the servers left.
+/// the servers left. A tool made with Copilot goes with its code.
 pub fn remove(id: &str) -> Result<Vec<McpServerEntry>, String> {
+  let made = store::mcp_servers().iter().any(|s| s.id == id && s.made.is_some());
   secrets::forget(id)?;
   let servers = store::remove_mcp_server(id);
+  if made {
+    tool_maker::forget(id);
+  }
   MEMORY.reset_server(id);
   Ok(servers)
 }
@@ -266,6 +374,15 @@ pub fn remove(id: &str) -> Result<Vec<McpServerEntry>, String> {
 struct OnServer {
   entry: McpServerEntry,
   values: Values,
+  /// A made tool's code, as a fingerprint: a session runs the code it started with.
+  code: String,
+}
+
+impl OnServer {
+  fn new(entry: McpServerEntry, values: Values) -> Self {
+    let code = if entry.made.is_some() { tool_maker::code_revision(&entry.id) } else { String::new() };
+    OnServer { entry, values, code }
+  }
 }
 
 /// The servers the user added that are on in a Build chat, and how chat may use them.
@@ -292,12 +409,19 @@ struct Fingerprint<'a> {
   url: &'a str,
   values: &'a Values,
   read_only: bool,
+  /// A made tool's code.
+  #[serde(skip_serializing_if = "str::is_empty")]
+  code: &'a str,
 }
 
 impl McpServers {
-  /// The servers on in `project`'s chat, with the values saved for them.
+  /// The servers on in `project`'s chat, with the values saved for them and
+  /// the model providers' keys they use.
   pub fn for_project(project: &StudioProject, settings: &AppSettings) -> Self {
-    Self::for_project_with(project, settings, secrets::load)
+    Self::for_project_with(project, settings, |id| match settings.mcp_servers.iter().find(|s| s.id == id) {
+      Some(entry) => load_values(entry),
+      None => Ok(Values::default()),
+    })
   }
 
   fn for_project_with(
@@ -320,7 +444,7 @@ impl McpServers {
       }
       let values = if entry.env.is_empty() && entry.headers.is_empty() { Ok(Values::default()) } else { load(id) };
       match values {
-        Ok(values) => servers.on.push(OnServer { entry: entry.clone(), values }),
+        Ok(values) => servers.on.push(OnServer::new(entry.clone(), values)),
         Err(why) => servers.missing.push((entry.name.clone(), why.trim_end_matches('.').to_string())),
       }
     }
@@ -329,7 +453,7 @@ impl McpServers {
 
   /// Just `entry`, to check it on its own, starting in `cwd`.
   pub fn only(entry: McpServerEntry, values: Values, cwd: Option<String>) -> Self {
-    McpServers { on: vec![OnServer { entry, values }], cwd, ..Default::default() }
+    McpServers { on: vec![OnServer::new(entry, values)], cwd, ..Default::default() }
   }
 
   pub fn is_empty(&self) -> bool {
@@ -377,6 +501,7 @@ impl McpServers {
         url: &s.entry.url,
         values: &s.values,
         read_only: self.read_only(&s.entry),
+        code: &s.code,
       })
       .collect();
     let json = serde_json::to_vec(&(servers, &self.cwd)).unwrap_or_default();
@@ -385,16 +510,23 @@ impl McpServers {
 }
 
 /// A server's configuration for a session: its command and environment, or its
-/// URL and headers, with the values saved for them.
+/// URL and headers, with the values saved for them. A made tool's command is
+/// Node.js, running its code.
 fn config(entry: &McpServerEntry, values: &Values, cwd: Option<&str>) -> McpServerConfig {
   match entry.transport {
-    McpTransport::Stdio => McpServerConfig::Stdio(McpStdioServerConfig {
-      command: entry.command.clone(),
-      args: entry.args.clone(),
-      env: entry.env.iter().filter_map(|n| values.env.get(n).map(|v| (n.clone(), v.clone()))).collect(),
-      working_directory: cwd.map(str::to_string),
-      ..Default::default()
-    }),
+    McpTransport::Stdio => {
+      let (command, args) = match &entry.made {
+        Some(_) => tool_maker::launch(&entry.id),
+        None => (entry.command.clone(), entry.args.clone()),
+      };
+      McpServerConfig::Stdio(McpStdioServerConfig {
+        command,
+        args,
+        env: entry.env.iter().filter_map(|n| values.env.get(n).map(|v| (n.clone(), v.clone()))).collect(),
+        working_directory: cwd.map(str::to_string),
+        ..Default::default()
+      })
+    }
     McpTransport::Http | McpTransport::Sse => {
       let server = McpHttpServerConfig {
         url: entry.url.clone(),

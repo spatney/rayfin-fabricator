@@ -556,5 +556,10 @@
     "saveFailed": "Es wurde aus Fabric gelöscht, aber Fabricator konnte supporting-items/applied.json nicht aktualisieren: {{error}}",
     "trashFailed": "Es wurde aus Fabric gelöscht, aber sein Ordner konnte nicht in den Papierkorb verschoben werden: {{error}}",
     "notAModel": "{{folder}} ist ein Lakehouse und kein semantisches Modell, daher gibt es kein Modell zum Anzeigen."
+  },
+  "toolMaker": {
+    "experimentOff": "Schalte zuerst „Tools mit Copilot erstellen“ unter „Einstellungen“ → „Experimente“ ein.",
+    "filter": "Fabricator-Tool",
+    "cantExport": "Die Datei konnte nicht gespeichert werden ({{error}})."
   }
 }

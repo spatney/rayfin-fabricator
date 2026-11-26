@@ -269,7 +269,8 @@
     "learn": "Learn about plugins",
     "changesFabric": "Changes Fabric",
     "asksFirst": "Asks you first",
-    "supportingItems": "Supporting items"
+    "supportingItems": "Supporting items",
+    "makeTool": "Make a tool with Copilot…"
   },
   "turnFooter": {
     "changedFiles_one": "Changed {{count}} file",

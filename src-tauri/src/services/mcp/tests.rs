@@ -155,6 +155,88 @@ fn what_cant_be_saved_says_why() {
   }
 }
 
+#[test]
+fn an_environment_variable_can_get_a_model_providers_key_which_is_never_saved_with_the_server() {
+  let (saved, kept) = entry_from(
+    &input(json!({
+      "name": "Images", "transport": "stdio", "command": "node", "args": ["images.mjs"],
+      "env": [{ "name": "OPENAI_API_KEY", "provider": "openai" }, { "name": "OTHER", "value": "x" }]
+    })),
+    &[],
+    &Values::default(),
+    "now",
+  )
+  .unwrap();
+  assert_eq!(saved.env, ["OPENAI_API_KEY", "OTHER"]);
+  assert_eq!(saved.provider_keys, [("OPENAI_API_KEY".to_string(), "openai".to_string())].into());
+  assert_eq!(kept, values(&[("OTHER", "x")], &[]));
+  let error = |provider: &str| {
+    entry_from(
+      &input(json!({ "name": "A", "transport": "stdio", "command": "node", "env": [{ "name": "KEY", "provider": provider }] })),
+      &[],
+      &Values::default(),
+      "now",
+    )
+    .unwrap_err()
+  };
+  // Ollama takes no key, and there's no such provider as "acme".
+  assert!(error("ollama").contains("isn't a model provider"));
+  assert!(error("acme").contains("isn't a model provider"));
+  // Headers never get one.
+  let header = entry_from(
+    &input(json!({ "name": "A", "transport": "http", "url": "https://x.dev/mcp", "headers": [{ "name": "X-Key", "provider": "openai" }] })),
+    &[],
+    &Values::default(),
+    "now",
+  );
+  assert_eq!(header.unwrap_err(), "Enter a value for X-Key.");
+
+  let mut images = saved.clone();
+  images.id = "images".into();
+  let key = |provider: &str| (provider == "openai").then(|| "sk-openai".to_string());
+  let loaded = |id: &str| if id == "images" { Ok(values(&[("OTHER", "x")], &[])) } else { Err("no".into()) };
+  assert_eq!(load_values_with(&images, loaded, key).unwrap(), values(&[("OPENAI_API_KEY", "sk-openai"), ("OTHER", "x")], &[]));
+  assert!(check_provider_keys_with(&images, key).is_ok());
+  // A key the user removed from Model providers says where to add it again.
+  let gone = load_values_with(&images, loaded, |_| None).unwrap_err();
+  assert!(gone.contains("Your OpenAI key isn't in Accounts → Model providers anymore"), "{gone}");
+  assert!(check_provider_keys_with(&images, |_| None).unwrap_err().contains("OPENAI_API_KEY gets your OpenAI key"));
+  // A server with only a provider's key never reads the credential store.
+  images.env.retain(|name| name != "OTHER");
+  assert!(load_values_with(&images, |_| Err("no".into()), key).is_ok());
+}
+
+#[test]
+fn a_tool_made_with_copilot_runs_its_code_with_node_and_stays_one_when_it_changes() {
+  let made = MadeTool { summary: "Makes images".into(), requests: vec!["Make images.".into()], updated_at: "now".into(), ..Default::default() };
+  let (tool, _) = made_entry_from(
+    &input(json!({ "name": "Image maker", "transport": "stdio", "env": [{ "name": "OPENAI_API_KEY", "provider": "openai" }] })),
+    &[chart()],
+    "now",
+    made.clone(),
+  )
+  .unwrap();
+  assert_eq!((tool.id.as_str(), tool.command.as_str()), ("image-maker", ""));
+  assert_eq!(tool.made.as_ref(), Some(&made));
+  let config = serde_json::to_value(config(&tool, &values(&[("OPENAI_API_KEY", "sk")], &[]), Some("C:\\apps\\app"))).unwrap();
+  assert_eq!(config["type"], "stdio");
+  assert_eq!(config["command"], "node");
+  let script = config["args"][0].as_str().unwrap();
+  assert!(script.ends_with("image-maker\\server.mjs") || script.ends_with("image-maker/server.mjs"), "{script}");
+  assert_eq!(config["env"], json!({ "OPENAI_API_KEY": "sk" }));
+  // Editing it keeps it a made tool, whatever the form sends as its command.
+  let (edited, _) = entry_from(
+    &input(json!({ "id": "image-maker", "name": "Images", "transport": "http", "command": "", "readOnly": true,
+      "env": [{ "name": "OPENAI_API_KEY", "provider": "openai" }] })),
+    &[tool.clone()],
+    &Values::default(),
+    "later",
+  )
+  .unwrap();
+  assert_eq!((edited.transport, edited.made.as_ref(), edited.read_only), (McpTransport::Stdio, Some(&made), true));
+  assert_eq!(edited.added_at, "now");
+}
+
 fn project(plugins: Value, team: bool) -> StudioProject {
   let mut project = json!({
     "id": "p", "name": "App", "path": "C:\\apps\\app", "addedAt": "2026-01-01T00:00:00.000Z", "plugins": plugins

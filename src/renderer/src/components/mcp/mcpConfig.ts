@@ -63,10 +63,17 @@ export function joinCommandLine(command: string, args: readonly string[] = []): 
     .join(' ')
 }
 
-/** What a server runs, or where it is, in a few words. */
+/** A server's icon: a tool made with Copilot, a command, or a URL. */
+export function serverIcon(server: Pick<McpServer, 'transport' | 'made'>): string {
+  if (server.made) return 'tools'
+  return server.transport === 'stdio' ? 'terminal' : 'globe'
+}
+
+/** What a server runs, or where it is, in a few words: a made tool's summary. */
 export function serverSummary(
-  server: Pick<McpServer, 'transport' | 'command' | 'args' | 'url'>
+  server: Pick<McpServer, 'transport' | 'command' | 'args' | 'url' | 'made'>
 ): string {
+  if (server.made) return server.made.summary
   if (server.transport === 'stdio') return joinCommandLine(server.command ?? '', server.args ?? [])
   try {
     const url = new URL(server.url ?? '')

@@ -44,6 +44,7 @@ pub mod team;
 pub mod telemetry;
 pub mod terminal;
 pub mod thumbnails;
+pub mod tool_maker;
 pub mod updater;
 pub mod usage;
 pub mod version_history;

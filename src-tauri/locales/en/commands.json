@@ -556,5 +556,10 @@
     "saveFailed": "It's deleted from Fabric, but Fabricator couldn't update supporting-items/applied.json: {{error}}",
     "trashFailed": "It's deleted from Fabric, but its folder couldn't be moved to the trash: {{error}}",
     "notAModel": "{{folder}} is a lakehouse, not a semantic model, so it has no model to show."
+  },
+  "toolMaker": {
+    "experimentOff": "Turn on Make tools with Copilot in Settings → Experiments first.",
+    "filter": "Fabricator tool",
+    "cantExport": "Couldn't save the file ({{error}})."
   }
 }

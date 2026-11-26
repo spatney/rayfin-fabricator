@@ -38,6 +38,7 @@ pub mod suggest;
 pub mod supporting_items;
 pub mod team;
 pub mod terminal;
+pub mod tool_maker;
 pub mod transient;
 pub mod updates;
 pub mod util;

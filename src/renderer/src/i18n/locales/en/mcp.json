@@ -31,7 +31,18 @@
     "tools_other": "It connected, and offers {{count}} tools:",
     "toolsLabel": "{{name}} tools",
     "showAll": "Show all {{total}}",
-    "needsSignIn": "It needs you to sign in. The first time a message in a chat uses it, Fabricator opens its sign-in page in your browser."
+    "needsSignIn": "It needs you to sign in. The first time a message in a chat uses it, Fabricator opens its sign-in page in your browser.",
+    "made": "Made with Copilot",
+    "try": "Try",
+    "tryLabel": "Try {{name}}",
+    "change": "Change",
+    "changeLabel": "Change {{name}} with Copilot",
+    "code": "Code",
+    "codeLabel": "Code of {{name}}",
+    "export": "Export",
+    "exportLabel": "Export {{name}} to share it",
+    "exported": "Exported to {{path}}. The file holds no keys.",
+    "undone": "Undid the last change."
   },
   "form": {
     "paste": "Paste a configuration…",
@@ -72,7 +83,11 @@
       "changeLabel": "Change the value of {{name}}",
       "valueOf": "Value of {{name}}",
       "newValue": "New value",
-      "remove": "Remove {{name}}"
+      "remove": "Remove {{name}}",
+      "providerKey": "Your {{provider}} key",
+      "useProvider": "Use a key from Model providers",
+      "useProviderLabel": "Add a variable that gets a key you saved in Model providers",
+      "noProviders": "To use a key you saved for a model provider instead of entering one, add it in Accounts → Model providers."
     },
     "secrets": {
       "windows": "For keys and tokens. Fabricator keeps their values in Windows Credential Manager, not in its settings, and never shows them again.",
@@ -87,5 +102,184 @@
     "unreadable": "That isn’t a configuration Fabricator can read. Paste the JSON from the server’s instructions.",
     "noServer": "That configuration doesn’t have a server with a command or a URL."
   },
-  "defaultName": "MCP server"
+  "defaultName": "MCP server",
+  "tools": {
+    "intro": "Make your own tools: describe one, and Copilot writes it as an MCP server that runs on this computer, such as a tool that makes images with your OpenAI key.",
+    "make": "Make a tool with Copilot",
+    "addShared": "Add a shared tool…",
+    "help": "Tools help",
+    "makeTitle": "Make a tool with Copilot",
+    "changeTitle": "Change {{name}}",
+    "codeTitle": "Code of {{name}}",
+    "tryTitle": "Try {{name}}",
+    "importTitle": "Add a shared tool",
+    "lead": "Describe the tool, and Copilot writes it. Fabricator checks that it starts, then adds it to your MCP servers, so you can turn it on in a chat’s Plugins.",
+    "form": {
+      "namePlaceholder": "Copilot names it",
+      "request": "What should it do?",
+      "requestPlaceholder": "Look up today’s exchange rates, and convert an amount from one currency to another.",
+      "requestHint": "Say what it does, which service it uses and what it gives back. Copilot can read the service’s documentation as it works.",
+      "change": "What should change?",
+      "changePlaceholder": "Let chat choose the image’s size: square, wide or tall.",
+      "keys": "Keys",
+      "keysHint": "Keys it uses, such as an API key, as environment variables. Copilot sees their names, never their values, and you can add a value once it’s made.",
+      "model": "Model",
+      "trust": "Copilot writes the tool, and Fabricator runs it on this computer with your access when chat uses it. Read its code under Code.",
+      "optional": "optional",
+      "keyValue": "Value, or add it later",
+      "history": "What you asked for before ({{count}})"
+    },
+    "run": {
+      "label": "What Copilot did",
+      "reading": "Read {{page}}",
+      "checking": "Checking that it starts…",
+      "works": "It starts, and offers {{tools}}",
+      "failed": "It didn’t start. Copilot is fixing it.",
+      "retrying": "Copilot is starting again from what went wrong…",
+      "made": "Made {{name}}",
+      "changed": "Changed {{name}}",
+      "missingKeys_one": "Its code reads {{keys}}, which it doesn’t get yet.",
+      "missingKeys_other": "Its code reads {{keys}}, which it doesn’t get yet.",
+      "addKeys": "Add keys",
+      "next": "To use it, turn it on in a chat’s Plugins.",
+      "note": "It usually takes a minute or two.",
+      "time": "How long Copilot has worked on it",
+      "details": "Details",
+      "notMade": "Copilot didn’t make the tool",
+      "notChanged": "Copilot didn’t change {{name}}",
+      "log_one": "What Copilot did ({{count}} step)",
+      "log_other": "What Copilot did ({{count}} steps)",
+      "undone": "{{name}} is back to how it was",
+      "onInChat": "It’s on in this chat, which uses it as it is now from the next message.",
+      "closeAsk": "Copilot is still working. Stop it and close?",
+      "didntStart": "It didn’t start.",
+      "starting": "Starting Copilot…",
+      "planning": "Copilot is planning the tool…",
+      "planningChange": "Copilot is planning the change…",
+      "readingDocs": "Copilot is reading the docs…",
+      "writingCode": "Copilot is writing the code…",
+      "fixing": "Copilot is fixing the code…",
+      "finishing": "Copilot is finishing up…",
+      "saying": "What Copilot says"
+    },
+    "actions": {
+      "make": "Make tool",
+      "change": "Change tool",
+      "stop": "Stop",
+      "stopping": "Stopping…",
+      "edit": "Edit request",
+      "tryAgain": "Try again",
+      "tryIt": "Try it",
+      "copy": "Copy",
+      "copied": "Copied",
+      "openFolder": "Open folder",
+      "back": "Back",
+      "run": "Run",
+      "running": "Running…",
+      "add": "Add tool",
+      "adding": "Adding…",
+      "useInChat": "Use in this chat",
+      "turningOn": "Turning it on…",
+      "undo": "Undo change",
+      "undoing": "Undoing…",
+      "keepWorking": "Keep working",
+      "stopAndClose": "Stop and close"
+    },
+    "code": {
+      "loading": "Reading the code…",
+      "asked": "What you asked for",
+      "label": "The tool’s code",
+      "view": "Show",
+      "code": "Code",
+      "change": "Last change",
+      "changeAsked": "The change you asked for",
+      "noDifference": "The code is the same as before the change.",
+      "undoAsk": "Undo the last change? {{name}} goes back to how it was before it, and the change is gone."
+    },
+    "try": {
+      "lead": "Run one of its tools as chat would, with its keys, in a folder of its own that stands in for an app’s. A service it uses may charge you for it.",
+      "loading": "Starting it…",
+      "tool": "Tool",
+      "readOnly": "Only reads",
+      "noArgs": "It takes no arguments.",
+      "json": "Arguments (JSON)",
+      "asJson": "Edit as JSON",
+      "asForm": "Edit as a form",
+      "badJson": "Enter the arguments as a JSON object.",
+      "badValue": "{{name}} isn’t a value it takes.",
+      "required": "required",
+      "unset": "Not set",
+      "result": "What it returned",
+      "worked": "It worked in {{seconds, number}} s.",
+      "reported": "It reported a problem after {{seconds, number}} s.",
+      "noOutput": "It returned nothing.",
+      "picture": "A picture it returned",
+      "saved": "It saved"
+    },
+    "import": {
+      "lead": "Someone shared this tool. Read what it does and its code before you add it: Fabricator runs it on this computer with your access when chat uses it.",
+      "summary": "What it does",
+      "asked": "What it was made to do",
+      "keysHint": "Enter your own keys: a shared tool never holds any.",
+      "code": "Its code"
+    },
+    "errors": {
+      "make": "Copilot couldn’t make the tool.",
+      "code": "Couldn’t read the tool’s code.",
+      "specs": "Couldn’t start the tool.",
+      "try": "Couldn’t try the tool.",
+      "export": "Couldn’t export the tool.",
+      "import": "Couldn’t add the tool.",
+      "use": "Couldn’t turn the tool on in this chat.",
+      "undo": "Couldn’t undo the change."
+    },
+    "ideas": {
+      "label": "Start from an idea:",
+      "images": {
+        "label": "Make images",
+        "request": "Make an image from a description with OpenAI’s latest image model, and save it as a PNG in the app’s public/images folder."
+      },
+      "icons": {
+        "label": "Find icons",
+        "request": "Search Iconify’s free icon sets for icons that match a word, and save the one chat picks as an SVG in the app’s public/icons folder."
+      },
+      "fonts": {
+        "label": "Add fonts",
+        "request": "Download a font family from Google Fonts as WOFF2 files into the app’s public/fonts folder, and give back the @font-face CSS that uses them."
+      },
+      "voice": {
+        "label": "Make voice-overs",
+        "request": "Turn text into speech with OpenAI’s text-to-speech API, and save it as an MP3 in the app’s public/audio folder."
+      }
+    },
+    "stages": {
+      "label": "Progress",
+      "plan": "Plan",
+      "read": "Read docs",
+      "write": "Write code",
+      "check": "Check",
+      "starting": "Starting…",
+      "pages_one": "{{count}} page",
+      "pages_other": "{{count}} pages",
+      "notNeeded": "Not needed",
+      "lines_one": "{{count}} line",
+      "lines_other": "{{count}} lines",
+      "works": "Works",
+      "didntStart": "Didn’t start",
+      "state": {
+        "done": "done",
+        "current": "in progress",
+        "todo": "not started",
+        "skipped": "skipped",
+        "failed": "didn’t pass"
+      }
+    },
+    "live": {
+      "request": "Your request",
+      "change": "The change you asked for",
+      "reading": "Reading the docs",
+      "code_one": "The tool’s code, {{count}} line",
+      "code_other": "The tool’s code, {{count}} lines"
+    }
+  }
 }

@@ -140,11 +140,11 @@ fn path_inside(root: &Path, path: &str) -> bool {
 /// The permission request itself. The runtime nests it under
 /// `permissionRequest` in the `permission.requested` event (so the SDK's
 /// top-level [`PermissionRequestData::kind`] is unset); older runtimes sent it flat.
-fn request_body(data: &PermissionRequestData) -> &Value {
+pub(crate) fn request_body(data: &PermissionRequestData) -> &Value {
   data.extra.get("permissionRequest").filter(|v| v.is_object()).unwrap_or(&data.extra)
 }
 
-fn request_kind(data: &PermissionRequestData) -> Option<String> {
+pub(crate) fn request_kind(data: &PermissionRequestData) -> Option<String> {
   if let Some(kind) = request_body(data).get("kind").and_then(Value::as_str) {
     return Some(kind.to_string());
   }

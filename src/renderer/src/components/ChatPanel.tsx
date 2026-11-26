@@ -229,6 +229,8 @@ interface Props {
   experiments?: ExperimentFlags
   /** Open the MCP servers dialog, adding a server when `add` is set. */
   onManageMcpServers?: (add: boolean) => void
+  /** Open the MCP servers dialog on making a tool with Copilot (its experiment is on). */
+  onMakeTool?: () => void
 }
 
 export default function ChatPanel({
@@ -271,7 +273,8 @@ export default function ChatPanel({
   recentWorkspaces,
   banner,
   experiments,
-  onManageMcpServers
+  onManageMcpServers,
+  onMakeTool
 }: Props): JSX.Element {
   const { t } = useTranslation('chat')
   // The composer draft is seeded from — and mirrored back to — the parent so a
@@ -2086,6 +2089,7 @@ export default function ChatPanel({
                 disabled={sending}
                 onToggle={togglePlugin}
                 onManageServers={onManageMcpServers}
+                onMakeTool={onMakeTool}
                 onLearnMore={() => openDocs('plugins')}
               />
               <ModelPicker

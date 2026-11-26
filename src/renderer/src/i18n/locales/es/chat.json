@@ -269,7 +269,8 @@
     "learn": "Más información sobre los complementos",
     "changesFabric": "Cambia Fabric",
     "asksFirst": "Te pregunta antes",
-    "supportingItems": "Elementos de apoyo"
+    "supportingItems": "Elementos de apoyo",
+    "makeTool": "Crear una herramienta con Copilot…"
   },
   "turnFooter": {
     "changedFiles_one": "Se cambió {{count}} archivo",

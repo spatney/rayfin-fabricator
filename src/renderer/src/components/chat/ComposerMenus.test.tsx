@@ -226,6 +226,25 @@ describe('PluginsMenu', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Plugins' }))
       fireEvent.click(screen.getByRole('menuitem', { name: 'Add an MCP server…' }))
       expect(onManageServers).toHaveBeenLastCalledWith(true)
+      expect(screen.queryByRole('menuitem', { name: 'Make a tool with Copilot…' })).toBeNull()
+    })
+
+    it('offers making a tool with Copilot, with its experiment on', () => {
+      const onMakeTool = vi.fn()
+      render(
+        <PluginsMenu
+          plugins={offeredPlugins()}
+          servers={[]}
+          on={[]}
+          onToggle={vi.fn()}
+          onManageServers={vi.fn()}
+          onMakeTool={onMakeTool}
+        />
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Plugins' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Make a tool with Copilot…' }))
+      expect(onMakeTool).toHaveBeenCalledOnce()
+      expect(screen.queryByRole('menu')).toBeNull()
     })
   })
 })

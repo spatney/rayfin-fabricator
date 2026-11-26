@@ -163,6 +163,12 @@ pub fn store_file() -> PathBuf {
   data_dir().join("studio.json")
 }
 
+/// Where the tools the user makes with Copilot live, one folder each, with
+/// the user's other settings (see `tool_maker`).
+pub fn tools_dir() -> PathBuf {
+  data_dir().join("tools")
+}
+
 /// Where apps installed from `.rayfin` files live, with their packages and
 /// data: on this computer only (`%LOCALAPPDATA%\com.rayfin.fabricator\apps`,
 /// `~/Library/Application Support/com.rayfin.fabricator/apps`), never in the

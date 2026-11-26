@@ -9,7 +9,9 @@ Add a server to Fabricator, turn it on in an app's chat, and chat can use its to
 your app.
 
 Fabric IQ and Work IQ are MCP servers that are built into **Plugins**. See
-[Research with Fabric IQ and Work IQ](/docs/build/fabric-iq-and-work-iq).
+[Research with Fabric IQ and Work IQ](/docs/build/fabric-iq-and-work-iq). To have Copilot write a
+server for you, such as a tool that makes images with your OpenAI key, see
+[Make tools with Copilot](/docs/build/make-tools).
 
 ## What MCP servers are good for
 
@@ -42,7 +44,9 @@ the dashboard the same way. Tell me which articles you used.
      it for you when the URL ends in `/sse`.
 4. If the server needs a key or a token, add it under **Environment variables** for a command, or
    **Headers** for a URL. Select **Add variable** or **Add header**, then enter its name and value,
-   such as a header named `Authorization` with the value `Bearer <your token>`.
+   such as a header named `Authorization` with the value `Bearer <your token>`. To give a command a
+   key you saved in **Accounts → Model providers**, such as your OpenAI key, select it from **Use a
+   key from Model providers** instead.
 5. Select **Save**.
 
 ![MCP servers with three servers, each with Check, Edit and Remove: Microsoft Learn, a URL marked Read-only, and Charts, a command, both connected with the tools they offer, and Issue tracker, marked Signs in when used. Below them are MCP servers help, Add a server and Done.](/screenshots/mcp-servers.webp)
@@ -154,8 +158,10 @@ Chat uses a server only when a request needs what it does. The work log shows ea
 - **Values stay private.** Fabricator keeps the values of a server's environment variables and
   headers in Windows Credential Manager, or in your Keychain on macOS. They're never in Fabricator's
   settings, and Fabricator never shows them again: **Edit** shows **Saved** beside each one. To
-  replace one, select **Change**. The command, its arguments and the URL are saved in Fabricator's
-  settings, so put keys in an environment variable or a header, not in the command or the URL.
+  replace one, select **Change**. A variable that gets a key from Model providers shows which, such
+  as **Your OpenAI key**, and follows that key when you change it there. The command, its arguments
+  and the URL are saved in Fabricator's settings, so put keys in an environment variable or a
+  header, not in the command or the URL.
 - **Commands run on this computer.** A command server runs in the app's folder, with your access to
   this computer and your accounts. Add only servers you trust.
 - **Servers are yours.** The servers you add are on this computer only. They aren't saved with the

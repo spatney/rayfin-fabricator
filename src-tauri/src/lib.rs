@@ -284,6 +284,18 @@ pub fn run() {
       commands::mcp::mcp_save,
       commands::mcp::mcp_remove,
       commands::mcp::mcp_check,
+      // tools made with Copilot (experiment)
+      commands::tool_maker::tool_maker_make,
+      commands::tool_maker::tool_maker_change,
+      commands::tool_maker::tool_maker_cancel,
+      commands::tool_maker::tool_maker_code,
+      commands::tool_maker::tool_maker_undo,
+      commands::tool_maker::tool_maker_reveal,
+      commands::tool_maker::tool_maker_specs,
+      commands::tool_maker::tool_maker_try,
+      commands::tool_maker::tool_maker_export,
+      commands::tool_maker::tool_maker_pick_import,
+      commands::tool_maker::tool_maker_import,
       // doctor
       commands::doctor::doctor_check,
       commands::doctor::doctor_install,

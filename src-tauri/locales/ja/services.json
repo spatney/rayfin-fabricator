@@ -55,7 +55,10 @@
     "enterCommand": "npx など、サーバーを起動するコマンドを入力してください。",
     "commandLineBreaks": "コマンドに改行を含めることはできません。",
     "valuesUnsupported": "Fabricator は、このオペレーティング システムでは環境変数やヘッダーの値をまだ安全に保存できません。",
-    "valuesNotSaved": "サーバーの値を保存できませんでした ({{error}})。"
+    "valuesNotSaved": "サーバーの値を保存できませんでした ({{error}})。",
+    "noSuchProvider": "{{provider}} は、環境変数にキーを渡せるモデル プロバイダーではありません。",
+    "noProviderKey": "{{name}} には {{provider}} のキーを使いますが、キーが保存されていません。先に [アカウント] → [モデル プロバイダー] で追加してください。",
+    "providerKeyGone": "{{provider}} のキーが [アカウント] → [モデル プロバイダー] にもうありません。もう一度追加するか、変数に独自の値を指定してください。"
   },
   "keychain": {
     "keyUnreadable": "保存されたキーを読み取れませんでした。もう一度追加してください。",
@@ -495,5 +498,30 @@
     "turnOnQuestion": "Copilot がこのアプリ用に、セマンティック モデルやデータ用のレイクハウスなどの Fabric アイテムを作成しようとしています。このアプリで補助アイテムをオンにしますか? オンにすると Copilot が続行し、Fabric を変更する前に毎回確認します。",
     "turnOnQuestionFor": "Copilot が {{reason}} のために、セマンティック モデルやレイクハウスなどの Fabric アイテムを作成しようとしています。このアプリで補助アイテムをオンにしますか? オンにすると Copilot が続行し、Fabric を変更する前に毎回確認します。",
     "firstRefreshFailed": "Fabric には作成されましたが、レイクハウスのテーブルを読み取る最初の更新が失敗しました: {{error}}"
+  },
+  "toolMaker": {
+    "noNode": "作成したツールを実行するには Node.js が必要ですが、このコンピューターにありません。インストールしてから、もう一度お試しください。",
+    "cantStart": "Fabricator は Node.js を起動できませんでした ({{error}})。",
+    "stopped": "ツールが理由を示さずに停止しました。",
+    "stoppedWith": "ツールが停止しました: {{output}}",
+    "slow": "ツールの応答に時間がかかりすぎています。",
+    "cancelled": "停止しました。",
+    "answered": "ツールがエラーを返しました: {{error}}",
+    "cantSave": "ツールを保存できませんでした ({{error}})。",
+    "cantRead": "ツールを読み取れませんでした ({{error}})。",
+    "gone": "そのツールは Fabricator にもうありません。",
+    "describe": "ツールで何をするかを説明してください。",
+    "requestTooLong": "{{max}} 文字以内で説明してください。",
+    "didntWork": "Copilot は起動するツールを作成できませんでした。{{error}}",
+    "notSaved": "Copilot はツールを作成せずに終了しました。もう一度試すか、もっと詳しく説明してください。",
+    "didntStart": "ツールが起動しなかったため、追加されませんでした。{{error}}",
+    "pictureLeftOut": "画像を 1 つ省略しました。大きすぎるか、PNG、JPEG、GIF、WebP のいずれでもありません。",
+    "badArguments": "ツールの引数は JSON オブジェクトで指定してください。",
+    "notATool": "そのファイルは、Fabricator から共有されたツールではありません。",
+    "newerTool": "そのツールは新しいバージョンの Fabricator から共有されました。Fabricator を更新してから、もう一度追加してください。",
+    "defaultName": "ツール",
+    "notSavedSaid": "Copilot はツールを作成せずに終了しました。Copilot の回答: {{said}}",
+    "fileChanged": "確認した後にファイルが変更されました。現在の内容を確認するには、共有されたツールをもう一度追加してください。",
+    "nothingToUndo": "元に戻せる変更はありません。"
   }
 }

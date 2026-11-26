@@ -1,0 +1,163 @@
+---
+title: Make tools with Copilot
+description: "Describe a tool, such as one that makes images with your OpenAI key, and Copilot writes it as an MCP server that chat can use. Try it, change it, and share it."
+---
+
+> [!WARNING]
+> Making tools with Copilot is an experiment. Turn it on in **Settings → Experiments** with **Make
+> tools with Copilot**. It may change or be removed in a future update.
+
+When chat needs something no MCP server does, make a tool for it. Describe what the tool should do,
+such as make pictures for your app with OpenAI's image model, and Copilot writes it. Fabricator
+checks that it starts, then adds it to your MCP servers, so you turn it on in an app's chat like any
+other server. See [Connect MCP servers](/docs/build/mcp-servers).
+
+## How a tool you make works
+
+A tool you make is a small MCP server written in JavaScript. Fabricator keeps its code on this
+computer and runs it with Node.js, which Fabricator already needs. Each tool can offer several
+tools of its own, such as `make_image`, that chat calls while it builds your app.
+
+- **It runs in your app's folder.** When chat uses it, the tool runs in the folder of the app you're
+  building, so a file it saves, such as a picture in `public/images`, is part of your app.
+- **It uses your keys.** A tool gets the keys it needs, such as an API key, as environment variables.
+  Fabricator keeps their values in Windows Credential Manager, or in your Keychain on macOS, and
+  Copilot only ever sees their names.
+- **It's yours.** Like the servers you add, the tools you make are on this computer only. They aren't
+  saved with an app.
+
+## Make a tool
+
+1. Open **Settings**, and select **Manage MCP servers**. Or, in an app's chat composer, select
+   **Plugins**, then **Make a tool with Copilot…**, and skip the next step.
+2. Select **Make a tool with Copilot**.
+3. Under **What should it do?**, describe the tool: what it does, which service it uses, and what it
+   gives back. Copilot can read the service's documentation on the web while it works. To start
+   from an idea, select one under **Start from an idea:**, such as **Make images**, which fills in
+   the description and the key it needs.
+4. Under **Name**, enter a name, such as `Image maker`, or leave it empty and Copilot names the
+   tool.
+5. Under **Keys**, add the keys it needs:
+   - To use a key you saved in **Accounts → Model providers**, such as your OpenAI key, select
+     **Use a key from Model providers**, then the key. The tool gets that key, and changing the key
+     in Model providers changes it for the tool too.
+   - For any other key, select **Add variable**, then enter its name, such as `STABILITY_API_KEY`,
+     and its value. You can leave the value empty and add it once the tool is made.
+6. Choose a **Model** for Copilot to write the tool with, or leave it on **Auto**.
+7. Select **Make tool**, or press Ctrl+Enter (⌘Enter on macOS).
+
+```prompt title="An image tool on your OpenAI key"
+Make an image from a description with OpenAI's latest image model, and save it as a PNG in the
+app's public/images folder, at a path chat chooses. Let chat pick the size (square, wide or tall)
+and the quality (low, medium or high, low by default). Return the path it saved.
+```
+
+Copy the text above into **What should it do?**, and add your OpenAI key under **Keys**.
+
+While Copilot works, Fabricator shows how long it has taken and where it is: **Plan**, **Read
+docs**, **Write code** and **Check**, with the model it runs on, the pages it read and the lines it
+wrote. Under the headline, you see what Copilot says as it works. Below, you see your request while
+Copilot starts, the pages as it reads them, then the tool's code as Copilot writes it. When
+Fabricator checks that the tool starts and it doesn't, Copilot reads why and fixes it; select
+**Details** to see what went wrong. Making a tool usually takes a minute or two. If you close the
+dialog while Copilot works, Fabricator asks whether to stop it first.
+
+When it's done, you see what Copilot says about the tool and the tools it offers. Copilot writes
+the tool's name, if you left it to Copilot, and what it says in the language you described the tool
+in. Select **What Copilot did** to see each step again.
+
+If the tool's code reads a key you didn't add, or one you left empty, Fabricator says "Its code
+reads `<KEY>`, which it doesn't get yet." Select **Add keys** and enter its value.
+
+To use the tool in the app you have open, select **Use in this chat**, which turns it on in the
+app's chat and closes the dialog. To use it in another app, turn it on in that app's chat: in the
+chat composer, select **Plugins**, and under **MCP servers**, turn it on. See
+[Turn a server on in a chat](/docs/build/mcp-servers#turn-a-server-on-in-a-chat).
+
+```prompt title="Use the image tool"
+Add a hero picture to the home page: a calm harbor at sunrise, wide, made with Image maker and saved
+in public/images/hero.png.
+```
+
+## Try a tool
+
+Try a tool before chat uses it, to see that it works with your keys.
+
+1. In **MCP servers**, select **Try** on the tool.
+2. If it offers more than one tool, choose one.
+3. Fill in its arguments, or select **Edit as JSON** to enter them as JSON.
+4. Select **Run**.
+
+The tool runs with its keys, in a folder of its own that stands in for an app's folder. You see what
+it returned, and the files it saved, with a picture of each image. Select **Open folder** to see
+everything it saved. A service the tool uses may charge you for each try, as it does when chat uses
+the tool. The next time you try a tool, its form starts with what you last ran it with, until you
+close Fabricator. Press Ctrl+Enter (⌘Enter on macOS) to run it again.
+
+## Change a tool
+
+1. In **MCP servers**, select **Change** on the tool. Select **What you asked for before** to see
+   the requests it was made and changed from.
+2. Under **What should change?**, describe the change, such as "Let chat choose a transparent
+   background."
+3. Select **Change tool**.
+
+Copilot starts from the tool's code and what you asked for before. Fabricator keeps the change only
+once the tool starts, and the next message in each chat that has the tool on uses it. If the change
+isn't what you wanted, select **Undo change** to put the tool back as it was.
+
+To change its name or its keys, select **Edit** instead.
+
+## Read a tool's code
+
+In **MCP servers**, select **Code** on the tool to read its code and what you asked for when it was
+made and changed. Select **Open folder** to open the folder the code is in. You can change the code
+there yourself: select **Check** on the tool afterwards to see that it still starts.
+
+After Copilot changes a tool, select **Last change** to see what changed in its code. To put the
+tool back as it was before the change, select **Undo change**, then **Undo change** again to
+confirm. Only the last change can be undone.
+
+## Share a tool
+
+1. In **MCP servers**, select **Export** on the tool.
+2. Choose where to save the file, which ends in `.fabricator-tool.json`.
+
+The file holds the tool's name, what it does, its code, and the names of its keys. It never holds a
+key's value. To add a tool someone shared with you:
+
+1. In **MCP servers**, select **Add a shared tool…**, and choose its file.
+2. Read what it does and its code.
+3. Enter your own keys, or use one from **Model providers**.
+4. Select **Add tool**.
+
+Fabricator adds it once it starts.
+
+## What a tool can do
+
+- **A tool runs with your access.** Like any command server, a tool runs on this computer with your
+  access to it and your accounts. Read the code of a tool someone shared before you add it.
+- **Copilot works only on the tool.** While it makes a tool, Copilot can read pages on the web and
+  save the tool, nothing else: it can't read your files, run commands or see your keys. Fabricator
+  starts each version on its own, without your keys, and doesn't call its tools.
+- **Chat decides when to call it.** Chat uses a tool only when a request needs it, and a tool that
+  changes something outside your app only when you ask for that. To let chat call only the tools
+  that read, select **Edit** on the tool and select **Only tools that read**. See
+  [What chat does with a server's tools](/docs/build/mcp-servers#what-chat-does-with-a-servers-tools).
+- **Turning the experiment off** hides making, changing, trying and sharing tools. The tools you made
+  stay among your MCP servers, and chats that have them on keep using them.
+
+## A tool doesn't work
+
+- **"Copilot couldn't make a tool that starts."** Copilot tried twice, and the tool still didn't
+  start. Select **Edit request** to describe the tool in more detail, such as the service's API or
+  the model to use, then select **Make tool** again.
+- **"Fabricator needs Node.js to run the tools you make, and it isn't on this computer."** Install
+  Node.js, then try again. See [Setup](/docs/start/setup).
+- **A try says a key isn't set.** The tool's code reads a key it doesn't get. Select **Edit** on the
+  tool, add the key, and select **Save**.
+- **"Your OpenAI key isn't in Accounts → Model providers anymore."** The tool uses a key you removed
+  from Model providers. Add the key there again, or select **Edit** on the tool and give the variable
+  a value of its own.
+
+If it still fails, [Report a problem](/docs/troubleshooting/report-a-problem).

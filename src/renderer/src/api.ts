@@ -62,6 +62,8 @@ import {
   type TerminalEvent,
   type TerminalSpawnRequest,
   type ToolId,
+  type ToolImportInput,
+  type ToolMakerEvent,
   type UpdateProgress,
   type ZipProgressEvent
 } from '@shared/ipc'
@@ -545,6 +547,41 @@ export const api: RayfinStudioApi = {
     save: (server: McpServerInput) => invoke('mcp_save', { server }),
     remove: (id: string) => invoke('mcp_remove', { id }),
     check: (id: string) => invoke('mcp_check', { id })
+  },
+
+  toolMaker: {
+    make: (runId, input, choice, onEvent) => {
+      // A channel of its own: the run's events arrive in order, and only here.
+      const events = new Channel<ToolMakerEvent>()
+      events.onmessage = onEvent
+      return invoke('tool_maker_make', {
+        runId,
+        input,
+        ...modelChoiceArgs(choice),
+        onEvent: events
+      })
+    },
+    change: (runId, id, request, choice, onEvent) => {
+      const events = new Channel<ToolMakerEvent>()
+      events.onmessage = onEvent
+      return invoke('tool_maker_change', {
+        runId,
+        id,
+        request,
+        ...modelChoiceArgs(choice),
+        onEvent: events
+      })
+    },
+    cancel: (runId: string) => invoke('tool_maker_cancel', { runId }),
+    code: (id: string) => invoke('tool_maker_code', { id }),
+    undo: (id: string) => invoke('tool_maker_undo', { id }),
+    reveal: (id: string, what: 'code' | 'try') => invoke('tool_maker_reveal', { id, what }),
+    specs: (id: string) => invoke('tool_maker_specs', { id }),
+    try: (runId: string, id: string, tool: string, args: Record<string, unknown>) =>
+      invoke('tool_maker_try', { runId, id, tool, args }),
+    export: (id: string) => invoke('tool_maker_export', { id }),
+    pickImport: () => invoke('tool_maker_pick_import'),
+    import: (input: ToolImportInput) => invoke('tool_maker_import', { input })
   },
 
   preview: {

@@ -94,6 +94,10 @@
     "proWorkspaces": {
       "title": "In Pro-Arbeitsbereichen veröffentlichen",
       "desc": "Veröffentliche Apps in Pro-Arbeitsbereichen, die keine Fabric- oder Power BI Premium-Kapazität haben. Die Arbeitsbereichsauswahl listet sie mit den anderen auf, und „+ Neuer Arbeitsbereich“ kann einen ohne Kapazität erstellen. Eine App braucht Rayfin 2.1.0 oder höher, um in einem davon zu veröffentlichen. „Mein Arbeitsbereich“ wird nicht angeboten."
+    },
+    "customTools": {
+      "title": "Tools mit Copilot erstellen",
+      "desc": "Beschreibe unter „MCP-Server“ ein Tool, und Copilot schreibt es als MCP-Server, der auf diesem Computer läuft, etwa eines, das mit deinem OpenAI-Schlüssel Bilder erstellt. Du kannst es ausprobieren, ändern, seinen Code lesen und es als Datei teilen."
     }
   },
   "about": {

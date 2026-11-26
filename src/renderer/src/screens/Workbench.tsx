@@ -366,7 +366,7 @@ export default function Workbench({
   const [refreshingAuth, setRefreshingAuth] = useState(false)
   const [showAccounts, setShowAccounts] = useState(false)
   /** The MCP servers dialog, opened on adding a server when `adding`. */
-  const [mcpDialog, setMcpDialog] = useState<{ adding: boolean } | null>(null)
+  const [mcpDialog, setMcpDialog] = useState<{ adding: boolean; making?: boolean } | null>(null)
   /** The attention bar was dismissed for these problems (it returns for new ones). */
   const [dismissedAttention, setDismissedAttention] = useState<string | null>(null)
   const [authRefreshTarget, setAuthRefreshTarget] = useState<{
@@ -979,6 +979,7 @@ export default function Workbench({
   const closeGallery = useCallback((): void => setGallery(null), [])
 
   const openMcpServers = useCallback((adding = false): void => setMcpDialog({ adding }), [])
+  const openToolMaker = useCallback((): void => setMcpDialog({ adding: false, making: true }), [])
 
   // A live preview on a Fabric backend kept while turns don't publish ends when
   // you leave the app, as does one kept on screen through an after-turn
@@ -3425,6 +3426,9 @@ export default function Workbench({
                             onManageKeys={openModelProviders}
                             experiments={settings?.experiments}
                             onManageMcpServers={openMcpServers}
+                            onMakeTool={
+                              settings?.experiments?.customTools ? openToolMaker : undefined
+                            }
                             outbound={chatOutbound?.projectId === active.id ? chatOutbound : null}
                             onOutboundConsumed={() => setChatOutbound(null)}
                             onAdvisorRerun={rerunAdvisorFix}
@@ -3894,6 +3898,9 @@ export default function Workbench({
       {mcpDialog && (
         <McpServersModal
           adding={mcpDialog.adding}
+          making={mcpDialog.making}
+          makeTools={Boolean(settings?.experiments?.customTools)}
+          chat={active ? { projectId: active.id, plugins: active.plugins ?? [] } : undefined}
           onClose={() => setMcpDialog(null)}
           onChanged={() => void refreshProjects()}
         />

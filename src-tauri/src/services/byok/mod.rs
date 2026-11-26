@@ -285,6 +285,14 @@ impl ByokManager {
     key
   }
 
+  /// The key the user saved for `provider`, which an MCP server's environment
+  /// variable can get (see `McpServerEntry::provider_keys`). None for a
+  /// provider Fabricator doesn't know or one that takes no key.
+  pub fn provider_key(&self, provider: &str) -> Option<String> {
+    catalog::find(provider)?;
+    self.key(provider)
+  }
+
   fn provider_status(&self, spec: &ProviderSpec) -> ByokProviderStatus {
     let saved = store::byok_settings().providers.remove(spec.id);
     let has_key = self.key(spec.id).is_some();

@@ -30,7 +30,18 @@
     "tools_other": "接続しました。{{count}} 個のツールがあります:",
     "toolsLabel": "{{name}} のツール",
     "showAll": "{{total}} 個すべて表示",
-    "needsSignIn": "サインインが必要です。チャットのメッセージで初めて使用するときに、Fabricator がブラウザーでサインイン ページを開きます。"
+    "needsSignIn": "サインインが必要です。チャットのメッセージで初めて使用するときに、Fabricator がブラウザーでサインイン ページを開きます。",
+    "made": "Copilot で作成",
+    "try": "試す",
+    "tryLabel": "{{name}} を試す",
+    "change": "変更",
+    "changeLabel": "Copilot で {{name}} を変更",
+    "code": "コード",
+    "codeLabel": "{{name}} のコード",
+    "export": "エクスポート",
+    "exportLabel": "共有するために {{name}} をエクスポート",
+    "exported": "{{path}} にエクスポートしました。このファイルにキーは含まれていません。",
+    "undone": "前回の変更を元に戻しました。"
   },
   "form": {
     "paste": "構成の貼り付け…",
@@ -71,7 +82,11 @@
       "changeLabel": "{{name}} の値の変更",
       "valueOf": "{{name}} の値",
       "newValue": "新しい値",
-      "remove": "{{name}} の削除"
+      "remove": "{{name}} の削除",
+      "providerKey": "{{provider}} のキー",
+      "useProvider": "モデル プロバイダーのキーを使う",
+      "useProviderLabel": "モデル プロバイダーに保存したキーを受け取る変数を追加",
+      "noProviders": "値を入力する代わりにモデル プロバイダー用に保存したキーを使うには、[アカウント] → [モデル プロバイダー] で追加してください。"
     },
     "secrets": {
       "windows": "キーやトークン用です。Fabricator は値を設定ではなく Windows 資格情報マネージャーに保存し、二度と表示しません。",
@@ -86,5 +101,179 @@
     "unreadable": "Fabricator が読み取れる構成ではありません。サーバーの手順に記載されている JSON を貼り付けてください。",
     "noServer": "その構成には、コマンドまたは URL を持つサーバーがありません。"
   },
-  "defaultName": "MCP サーバー"
+  "defaultName": "MCP サーバー",
+  "tools": {
+    "intro": "独自のツールを作成できます。ツールを説明すると、Copilot がこのコンピューターで実行される MCP サーバーとして作成します。たとえば、OpenAI のキーで画像を作成するツールなどです。",
+    "make": "Copilot でツールを作成",
+    "addShared": "共有されたツールを追加…",
+    "help": "ツールのヘルプ",
+    "makeTitle": "Copilot でツールを作成",
+    "changeTitle": "{{name}} を変更",
+    "codeTitle": "{{name}} のコード",
+    "tryTitle": "{{name}} を試す",
+    "importTitle": "共有されたツールを追加",
+    "lead": "ツールを説明すると、Copilot が作成します。Fabricator は起動することを確認してから MCP サーバーに追加するので、チャットの [プラグイン] でオンにできます。",
+    "form": {
+      "namePlaceholder": "Copilot が名前を付けます",
+      "request": "何をしますか?",
+      "requestPlaceholder": "今日の為替レートを調べて、金額をある通貨から別の通貨に換算します。",
+      "requestHint": "何をするか、どのサービスを使うか、何を返すかを書いてください。Copilot は作業中にサービスのドキュメントを読むことができます。",
+      "change": "何を変更しますか?",
+      "changePlaceholder": "画像のサイズ (正方形、横長、縦長) をチャットで選べるようにします。",
+      "keys": "キー",
+      "keysHint": "API キーなど、ツールが使うキーを環境変数として指定します。Copilot には名前だけが伝わり、値は伝わりません。値はツールの作成後に追加することもできます。",
+      "model": "モデル",
+      "trust": "Copilot がツールを作成し、チャットがそのツールを使うときに Fabricator があなたの権限でこのコンピューター上で実行します。コードは [コード] で確認できます。",
+      "optional": "省略可",
+      "keyValue": "値 (後で追加することもできます)",
+      "history": "これまでの依頼 ({{count}})"
+    },
+    "run": {
+      "label": "Copilot が行ったこと",
+      "reading": "{{page}} を読みました",
+      "checking": "起動するか確認しています…",
+      "works": "起動しました。ツール: {{tools}}",
+      "failed": "起動しませんでした。Copilot が修正しています。",
+      "retrying": "Copilot が問題点を踏まえてやり直しています…",
+      "made": "{{name}} を作成しました",
+      "changed": "{{name}} を変更しました",
+      "missingKeys_other": "コードが {{keys}} を読み取りますが、まだ渡されていません。",
+      "addKeys": "キーを追加",
+      "next": "使うには、チャットの [プラグイン] でオンにしてください。",
+      "note": "通常 1、2 分かかります。",
+      "time": "Copilot が作業している時間",
+      "details": "詳細",
+      "notMade": "Copilot はツールを作成しませんでした",
+      "notChanged": "Copilot は {{name}} を変更しませんでした",
+      "log_other": "Copilot が行ったこと ({{count}} ステップ)",
+      "undone": "{{name}} を元に戻しました",
+      "onInChat": "このチャットでオンになっています。次のメッセージから今のツールが使われます。",
+      "closeAsk": "Copilot はまだ作業中です。停止して閉じますか?",
+      "didntStart": "起動しませんでした。",
+      "starting": "Copilot を起動しています…",
+      "planning": "Copilot がツールを計画しています…",
+      "planningChange": "Copilot が変更を計画しています…",
+      "readingDocs": "Copilot がドキュメントを読んでいます…",
+      "writingCode": "Copilot がコードを書いています…",
+      "fixing": "Copilot がコードを修正しています…",
+      "finishing": "Copilot が仕上げています…",
+      "saying": "Copilot のコメント"
+    },
+    "actions": {
+      "make": "ツールを作成",
+      "change": "ツールを変更",
+      "stop": "停止",
+      "stopping": "停止しています…",
+      "edit": "説明を編集",
+      "tryAgain": "もう一度試す",
+      "tryIt": "試す",
+      "copy": "コピー",
+      "copied": "コピーしました",
+      "openFolder": "フォルダーを開く",
+      "back": "戻る",
+      "run": "実行",
+      "running": "実行しています…",
+      "add": "ツールを追加",
+      "adding": "追加しています…",
+      "useInChat": "このチャットで使う",
+      "turningOn": "オンにしています…",
+      "undo": "変更を元に戻す",
+      "undoing": "元に戻しています…",
+      "keepWorking": "作業を続ける",
+      "stopAndClose": "停止して閉じる"
+    },
+    "code": {
+      "loading": "コードを読み込んでいます…",
+      "asked": "依頼した内容",
+      "label": "ツールのコード",
+      "view": "表示",
+      "code": "コード",
+      "change": "前回の変更",
+      "changeAsked": "依頼した変更",
+      "noDifference": "コードは変更前と同じです。",
+      "undoAsk": "前回の変更を元に戻しますか? {{name}} は変更前の状態に戻り、この変更は失われます。"
+    },
+    "try": {
+      "lead": "チャットと同じように、ツールのキーを使って、アプリのフォルダーの代わりとなる専用フォルダーでツールを実行します。使用するサービスによっては料金が発生する場合があります。",
+      "loading": "起動しています…",
+      "tool": "ツール",
+      "readOnly": "読み取り専用",
+      "noArgs": "引数はありません。",
+      "json": "引数 (JSON)",
+      "asJson": "JSON で編集",
+      "asForm": "フォームで編集",
+      "badJson": "引数を JSON オブジェクトで入力してください。",
+      "badValue": "{{name}} の値が正しくありません。",
+      "required": "必須",
+      "unset": "未設定",
+      "result": "返された内容",
+      "worked": "{{seconds, number}} 秒で完了しました。",
+      "reported": "{{seconds, number}} 秒後に問題が報告されました。",
+      "noOutput": "何も返されませんでした。",
+      "picture": "返された画像",
+      "saved": "保存されたファイル"
+    },
+    "import": {
+      "lead": "このツールは共有されたものです。追加する前に、何をするかとコードを確認してください。チャットがこのツールを使うとき、Fabricator はあなたの権限でこのコンピューター上で実行します。",
+      "summary": "機能",
+      "asked": "作成時の依頼内容",
+      "keysHint": "自分のキーを入力してください。共有されたツールにキーが含まれることはありません。",
+      "code": "コード"
+    },
+    "errors": {
+      "make": "Copilot はツールを作成できませんでした。",
+      "code": "ツールのコードを読み取れませんでした。",
+      "specs": "ツールを起動できませんでした。",
+      "try": "ツールを試せませんでした。",
+      "export": "ツールをエクスポートできませんでした。",
+      "import": "ツールを追加できませんでした。",
+      "use": "このチャットでツールをオンにできませんでした。",
+      "undo": "変更を元に戻せませんでした。"
+    },
+    "ideas": {
+      "label": "アイデアから始める:",
+      "images": {
+        "label": "画像を作成",
+        "request": "OpenAI の最新の画像モデルを使って説明から画像を作成し、アプリの public/images フォルダーに PNG として保存します。"
+      },
+      "icons": {
+        "label": "アイコンを探す",
+        "request": "Iconify の無料アイコン セットから単語に合うアイコンを検索し、チャットが選んだものをアプリの public/icons フォルダーに SVG として保存します。"
+      },
+      "fonts": {
+        "label": "フォントを追加",
+        "request": "Google Fonts からフォント ファミリーを WOFF2 ファイルとしてアプリの public/fonts フォルダーにダウンロードし、それらを使う @font-face の CSS を返します。"
+      },
+      "voice": {
+        "label": "ナレーションを作成",
+        "request": "OpenAI のテキスト読み上げ API でテキストを音声に変換し、アプリの public/audio フォルダーに MP3 として保存します。"
+      }
+    },
+    "stages": {
+      "label": "進行状況",
+      "plan": "計画",
+      "read": "ドキュメントを読む",
+      "write": "コードを書く",
+      "check": "確認",
+      "starting": "起動中…",
+      "pages_other": "{{count}} ページ",
+      "notNeeded": "不要",
+      "lines_other": "{{count}} 行",
+      "works": "動作します",
+      "didntStart": "起動しませんでした",
+      "state": {
+        "done": "完了",
+        "current": "進行中",
+        "todo": "未着手",
+        "skipped": "スキップ",
+        "failed": "不合格"
+      }
+    },
+    "live": {
+      "request": "依頼内容",
+      "change": "依頼した変更",
+      "reading": "ドキュメントを読んでいます",
+      "code_other": "ツールのコード ({{count}} 行)"
+    }
+  }
 }

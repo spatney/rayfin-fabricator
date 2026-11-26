@@ -555,5 +555,10 @@
     "saveFailed": "Fabric からは削除されましたが、Fabricator が supporting-items/applied.json を更新できませんでした: {{error}}",
     "trashFailed": "Fabric からは削除されましたが、フォルダーをごみ箱に移動できませんでした: {{error}}",
     "notAModel": "{{folder}} はセマンティック モデルではなくレイクハウスのため、表示するモデルがありません。"
+  },
+  "toolMaker": {
+    "experimentOff": "先に [設定] → [試験的機能] で [Copilot でツールを作成] をオンにしてください。",
+    "filter": "Fabricator ツール",
+    "cantExport": "ファイルを保存できませんでした ({{error}})。"
   }
 }

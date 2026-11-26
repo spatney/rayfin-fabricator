@@ -851,6 +851,13 @@ pub struct ExperimentFlags {
   /// Opt-in (off by default).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub pro_workspaces: Option<bool>,
+  /// Make tools with Copilot: the MCP servers dialog offers to make a tool
+  /// from a description, which Copilot writes as an MCP server that runs on
+  /// this computer (see `services::tool_maker`), to change one, try it, and
+  /// share it as a file. Opt-in (off by default); tools already made stay
+  /// among the user's MCP servers when it's off.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub custom_tools: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -967,6 +974,35 @@ pub struct McpServerEntry {
   /// When it was added (RFC 3339).
   #[serde(default)]
   pub added_at: String,
+  /// Environment variables that get the API key the user saved for one of
+  /// their model providers (Accounts → Model providers), by variable name:
+  /// the provider's id. Each is in `env` too; its value is read from the
+  /// provider's key whenever the server starts.
+  #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+  pub provider_keys: std::collections::BTreeMap<String, String>,
+  /// A tool the user made with Copilot: Fabricator keeps its code in its app
+  /// data and runs it with Node.js, rather than a command the user gave (see
+  /// `services::tool_maker`).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub made: Option<MadeTool>,
+}
+
+/// What Fabricator keeps about a tool the user made with Copilot, beside the
+/// code in its folder.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MadeTool {
+  /// What it does, in one line Copilot wrote: what lists show.
+  pub summary: String,
+  /// What the user asked for when it was made, then each change, oldest first.
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub requests: Vec<String>,
+  /// When its code last changed (RFC 3339).
+  #[serde(default)]
+  pub updated_at: String,
+  /// Its summary before the last change, kept while that change can be undone.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub previous_summary: Option<String>,
 }
 
 /// A server to add from the MCP servers dialog, or the new version of one
@@ -1001,6 +1037,169 @@ pub struct McpValueInput {
   /// Its new value; none keeps the saved one.
   #[serde(default)]
   pub value: Option<String>,
+  /// An environment variable only: it gets the API key saved for this model
+  /// provider (its id), rather than a value of its own.
+  #[serde(default)]
+  pub provider: Option<String>,
+}
+
+/// A tool to make with Copilot: its name, what it should do, and the
+/// environment variables (keys) it gets. A key without a value yet is one the
+/// tool reads, which the user adds once it's made.
+#[derive(Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolMakeInput {
+  /// Its name; empty lets Copilot name it.
+  #[serde(default)]
+  pub name: String,
+  /// What the tool should do, in the user's words.
+  pub request: String,
+  #[serde(default)]
+  pub env: Vec<McpValueInput>,
+  #[serde(default)]
+  pub read_only: bool,
+}
+
+/// What Copilot is doing while it makes or changes a tool.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ToolMakerEvent {
+  /// Copilot started working, on this model when it's known.
+  Started {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model: Option<String>,
+  },
+  /// What Copilot says as it works: the end of what it's writing now.
+  Saying { text: String },
+  /// It's reading a web page, such as an API's documentation.
+  Reading { url: String },
+  /// The tool's code as Copilot writes it, so far; then as it saved it.
+  Writing { code: String },
+  /// It saved the tool, and Fabricator is starting it.
+  Checking,
+  /// The tool started, and offers these tools.
+  Works { tools: Vec<String> },
+  /// The tool didn't start, and why: Copilot fixes it.
+  Failed { error: String },
+  /// Copilot gave up on its first try, and starts again from what went wrong.
+  Retrying,
+}
+
+/// A tool Copilot made or changed.
+#[derive(Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolMadeResult {
+  /// Every MCP server, with the tool.
+  pub servers: Vec<McpServerEntry>,
+  pub id: String,
+  /// The tools it offers.
+  pub tools: Vec<McpToolInfo>,
+  /// What Copilot says about it, in its own words.
+  pub message: String,
+  /// Environment variables its code reads that it doesn't get yet.
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub missing_keys: Vec<String>,
+}
+
+/// One tool of a tool the user made, as a try needs it.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MadeToolSpec {
+  pub name: String,
+  #[serde(default)]
+  pub description: String,
+  /// Its arguments: a JSON Schema of type "object".
+  pub input_schema: serde_json::Value,
+  /// It only reads.
+  pub read_only: bool,
+}
+
+/// Something a tool returned when it was tried.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum ToolTryContent {
+  Text { text: String },
+  /// An image, as a `data:` URL.
+  Image { url: String },
+}
+
+/// A file a try saved or changed in its folder.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolTryFile {
+  /// Its path in the folder, with `/`.
+  pub path: String,
+  pub size: u64,
+  /// A small image's picture, as a `data:` URL.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub image: Option<String>,
+}
+
+/// What trying one of a tool's tools did.
+#[derive(Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolTryResult {
+  /// The tool reported an error.
+  pub is_error: bool,
+  pub content: Vec<ToolTryContent>,
+  pub files: Vec<ToolTryFile>,
+  /// Where it ran: the folder that stands in for an app's.
+  pub folder: String,
+  /// How long it took.
+  pub ms: u64,
+}
+
+/// A tool's code, to read.
+#[derive(Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCode {
+  pub code: String,
+  /// The file it's in.
+  pub path: String,
+  /// Its code before the last change, while that change can be undone.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub previous: Option<String>,
+}
+
+/// An environment variable a shared tool needs: the API key of a model
+/// provider, or a value of its own. A shared tool never holds a value.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedToolKey {
+  pub name: String,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub provider: Option<String>,
+}
+
+/// A tool someone shared, read from its file before it's added.
+#[derive(Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolImportPreview {
+  /// The file, to add it from.
+  pub path: String,
+  /// The file's contents as reviewed (SHA-256), so what's added is what was read.
+  pub digest: String,
+  /// Its name, made unique among the user's servers.
+  pub name: String,
+  pub summary: String,
+  pub requests: Vec<String>,
+  pub keys: Vec<SharedToolKey>,
+  pub read_only: bool,
+  pub code: String,
+}
+
+/// A shared tool to add, as the user reviewed it.
+#[derive(Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolImportInput {
+  pub path: String,
+  /// The digest of the file the user reviewed (see `ToolImportPreview`).
+  pub digest: String,
+  pub name: String,
+  #[serde(default)]
+  pub env: Vec<McpValueInput>,
+  #[serde(default)]
+  pub read_only: bool,
 }
 
 /// What checking an MCP server found.

@@ -31,7 +31,18 @@
     "tools_other": "Se conectó y ofrece {{count}} herramientas:",
     "toolsLabel": "Herramientas de {{name}}",
     "showAll": "Mostrar las {{total}}",
-    "needsSignIn": "Necesita que inicies sesión. La primera vez que un mensaje de un chat lo use, Fabricator abrirá su página de inicio de sesión en tu explorador."
+    "needsSignIn": "Necesita que inicies sesión. La primera vez que un mensaje de un chat lo use, Fabricator abrirá su página de inicio de sesión en tu explorador.",
+    "made": "Creada con Copilot",
+    "try": "Probar",
+    "tryLabel": "Probar {{name}}",
+    "change": "Cambiar",
+    "changeLabel": "Cambiar {{name}} con Copilot",
+    "code": "Código",
+    "codeLabel": "Código de {{name}}",
+    "export": "Exportar",
+    "exportLabel": "Exportar {{name}} para compartirla",
+    "exported": "Se exportó a {{path}}. El archivo no contiene claves.",
+    "undone": "Se deshizo el último cambio."
   },
   "form": {
     "paste": "Pegar una configuración…",
@@ -72,7 +83,11 @@
       "changeLabel": "Cambiar el valor de {{name}}",
       "valueOf": "Valor de {{name}}",
       "newValue": "Nuevo valor",
-      "remove": "Quitar {{name}}"
+      "remove": "Quitar {{name}}",
+      "providerKey": "Tu clave de {{provider}}",
+      "useProvider": "Usar una clave de Proveedores de modelos",
+      "useProviderLabel": "Agregar una variable que reciba una clave guardada en Proveedores de modelos",
+      "noProviders": "Para usar una clave que guardaste para un proveedor de modelos en lugar de escribir una, agrégala en Cuentas → Proveedores de modelos."
     },
     "secrets": {
       "windows": "Para claves y tokens. Fabricator guarda sus valores en el Administrador de credenciales de Windows, no en su configuración, y nunca vuelve a mostrarlos.",
@@ -87,5 +102,184 @@
     "unreadable": "Fabricator no puede leer esa configuración. Pega el JSON de las instrucciones del servidor.",
     "noServer": "Esa configuración no tiene ningún servidor con un comando o una URL."
   },
-  "defaultName": "Servidor MCP"
+  "defaultName": "Servidor MCP",
+  "tools": {
+    "intro": "Crea tus propias herramientas: describe una y Copilot la escribe como un servidor MCP que se ejecuta en este dispositivo, como una herramienta que crea imágenes con tu clave de OpenAI.",
+    "make": "Crear una herramienta con Copilot",
+    "addShared": "Agregar una herramienta compartida…",
+    "help": "Ayuda sobre herramientas",
+    "makeTitle": "Crear una herramienta con Copilot",
+    "changeTitle": "Cambiar {{name}}",
+    "codeTitle": "Código de {{name}}",
+    "tryTitle": "Probar {{name}}",
+    "importTitle": "Agregar una herramienta compartida",
+    "lead": "Describe la herramienta y Copilot la escribe. Fabricator comprueba que se inicia y luego la agrega a tus servidores MCP, para que puedas activarla en los Complementos de un chat.",
+    "form": {
+      "namePlaceholder": "Copilot le pone nombre",
+      "request": "¿Qué debe hacer?",
+      "requestPlaceholder": "Consulta los tipos de cambio de hoy y convierte un importe de una moneda a otra.",
+      "requestHint": "Di qué hace, qué servicio usa y qué devuelve. Copilot puede leer la documentación del servicio mientras trabaja.",
+      "change": "¿Qué debe cambiar?",
+      "changePlaceholder": "Deja que el chat elija el tamaño de la imagen: cuadrada, ancha o alta.",
+      "keys": "Claves",
+      "keysHint": "Las claves que usa, como una clave de API, como variables de entorno. Copilot ve sus nombres, nunca sus valores, y puedes agregar un valor una vez creada.",
+      "model": "Modelo",
+      "trust": "Copilot escribe la herramienta, y Fabricator la ejecuta en este dispositivo con tu acceso cuando el chat la usa. Lee su código en Código.",
+      "optional": "opcional",
+      "keyValue": "Valor, o agrégalo después",
+      "history": "Lo que pediste antes ({{count}})"
+    },
+    "run": {
+      "label": "Lo que hizo Copilot",
+      "reading": "Leyó {{page}}",
+      "checking": "Comprobando que se inicia…",
+      "works": "Se inicia y ofrece {{tools}}",
+      "failed": "No se inició. Copilot lo está corrigiendo.",
+      "retrying": "Copilot está empezando de nuevo a partir de lo que falló…",
+      "made": "Se creó {{name}}",
+      "changed": "Se cambió {{name}}",
+      "missingKeys_one": "Su código lee {{keys}}, que todavía no recibe.",
+      "missingKeys_other": "Su código lee {{keys}}, que todavía no recibe.",
+      "addKeys": "Agregar claves",
+      "next": "Para usarla, actívala en los Complementos de un chat.",
+      "note": "Suele tardar uno o dos minutos.",
+      "time": "Cuánto tiempo lleva Copilot trabajando en ella",
+      "details": "Detalles",
+      "notMade": "Copilot no creó la herramienta",
+      "notChanged": "Copilot no cambió {{name}}",
+      "log_one": "Lo que hizo Copilot ({{count}} paso)",
+      "log_other": "Lo que hizo Copilot ({{count}} pasos)",
+      "undone": "{{name}} volvió a estar como antes",
+      "onInChat": "Está activada en este chat, que la usa tal como está ahora a partir del siguiente mensaje.",
+      "closeAsk": "Copilot sigue trabajando. ¿Detenerlo y cerrar?",
+      "didntStart": "No se inició.",
+      "starting": "Iniciando Copilot…",
+      "planning": "Copilot está planificando la herramienta…",
+      "planningChange": "Copilot está planificando el cambio…",
+      "readingDocs": "Copilot está leyendo la documentación…",
+      "writingCode": "Copilot está escribiendo el código…",
+      "fixing": "Copilot está corrigiendo el código…",
+      "finishing": "Copilot está terminando…",
+      "saying": "Lo que dice Copilot"
+    },
+    "actions": {
+      "make": "Crear herramienta",
+      "change": "Cambiar herramienta",
+      "stop": "Detener",
+      "stopping": "Deteniendo…",
+      "edit": "Editar la descripción",
+      "tryAgain": "Reintentar",
+      "tryIt": "Probarla",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "openFolder": "Abrir carpeta",
+      "back": "Atrás",
+      "run": "Ejecutar",
+      "running": "Ejecutando…",
+      "add": "Agregar herramienta",
+      "adding": "Agregando…",
+      "useInChat": "Usar en este chat",
+      "turningOn": "Activándola…",
+      "undo": "Deshacer el cambio",
+      "undoing": "Deshaciendo…",
+      "keepWorking": "Seguir trabajando",
+      "stopAndClose": "Detener y cerrar"
+    },
+    "code": {
+      "loading": "Leyendo el código…",
+      "asked": "Lo que pediste",
+      "label": "El código de la herramienta",
+      "view": "Mostrar",
+      "code": "Código",
+      "change": "Último cambio",
+      "changeAsked": "El cambio que pediste",
+      "noDifference": "El código es el mismo que antes del cambio.",
+      "undoAsk": "¿Deshacer el último cambio? {{name}} vuelve a estar como antes y el cambio se pierde."
+    },
+    "try": {
+      "lead": "Ejecuta una de sus herramientas como lo haría el chat, con sus claves, en una carpeta propia que hace las veces de la carpeta de una aplicación. Un servicio que use puede cobrarte por ello.",
+      "loading": "Iniciándola…",
+      "tool": "Herramienta",
+      "readOnly": "Solo lectura",
+      "noArgs": "No recibe argumentos.",
+      "json": "Argumentos (JSON)",
+      "asJson": "Editar como JSON",
+      "asForm": "Editar como formulario",
+      "badJson": "Escribe los argumentos como un objeto JSON.",
+      "badValue": "{{name}} no es un valor que acepte.",
+      "required": "obligatorio",
+      "unset": "Sin definir",
+      "result": "Lo que devolvió",
+      "worked": "Funcionó en {{seconds, number}} s.",
+      "reported": "Informó de un problema después de {{seconds, number}} s.",
+      "noOutput": "No devolvió nada.",
+      "picture": "Una imagen que devolvió",
+      "saved": "Guardó"
+    },
+    "import": {
+      "lead": "Alguien compartió esta herramienta. Lee lo que hace y su código antes de agregarla: Fabricator la ejecuta en este dispositivo con tu acceso cuando el chat la usa.",
+      "summary": "Lo que hace",
+      "asked": "Para qué se creó",
+      "keysHint": "Escribe tus propias claves: una herramienta compartida nunca contiene ninguna.",
+      "code": "Su código"
+    },
+    "errors": {
+      "make": "Copilot no pudo crear la herramienta.",
+      "code": "No se pudo leer el código de la herramienta.",
+      "specs": "No se pudo iniciar la herramienta.",
+      "try": "No se pudo probar la herramienta.",
+      "export": "No se pudo exportar la herramienta.",
+      "import": "No se pudo agregar la herramienta.",
+      "use": "No se pudo activar la herramienta en este chat.",
+      "undo": "No se pudo deshacer el cambio."
+    },
+    "ideas": {
+      "label": "Empieza con una idea:",
+      "images": {
+        "label": "Crear imágenes",
+        "request": "Crea una imagen a partir de una descripción con el modelo de imágenes más reciente de OpenAI y guárdala como PNG en la carpeta public/images de la aplicación."
+      },
+      "icons": {
+        "label": "Buscar iconos",
+        "request": "Busca en los conjuntos de iconos gratuitos de Iconify los iconos que coincidan con una palabra y guarda el que elija el chat como SVG en la carpeta public/icons de la aplicación."
+      },
+      "fonts": {
+        "label": "Agregar fuentes",
+        "request": "Descarga una familia de fuentes de Google Fonts como archivos WOFF2 en la carpeta public/fonts de la aplicación y devuelve el CSS @font-face que las usa."
+      },
+      "voice": {
+        "label": "Crear locuciones",
+        "request": "Convierte texto en voz con la API de texto a voz de OpenAI y guárdalo como MP3 en la carpeta public/audio de la aplicación."
+      }
+    },
+    "stages": {
+      "label": "Progreso",
+      "plan": "Planificar",
+      "read": "Documentarse",
+      "write": "Escribir código",
+      "check": "Comprobar",
+      "starting": "Iniciando…",
+      "pages_one": "{{count}} página",
+      "pages_other": "{{count}} páginas",
+      "notNeeded": "No hizo falta",
+      "lines_one": "{{count}} línea",
+      "lines_other": "{{count}} líneas",
+      "works": "Funciona",
+      "didntStart": "No se inició",
+      "state": {
+        "done": "hecho",
+        "current": "en curso",
+        "todo": "pendiente",
+        "skipped": "omitido",
+        "failed": "no superado"
+      }
+    },
+    "live": {
+      "request": "Tu solicitud",
+      "change": "El cambio que pediste",
+      "reading": "Leyendo la documentación",
+      "code_one": "El código de la herramienta, {{count}} línea",
+      "code_other": "El código de la herramienta, {{count}} líneas"
+    }
+  }
 }

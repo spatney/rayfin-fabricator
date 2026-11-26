@@ -33,6 +33,8 @@ pub struct AppState {
   /// The in-flight Help assistant turn. The Help overlay is a single
   /// app-wide surface, so at most one turn runs at a time (no key needed).
   help_cancel: Mutex<Option<CancelToken>>,
+  /// Tools being made, changed or tried with Copilot, keyed by the run's id.
+  tool_runs: Mutex<HashMap<String, CancelToken>>,
   /// Shared Copilot SDK client + per-thread session cache.
   pub copilot: CopilotManager,
   /// Your own API keys: saved keys and their models.
@@ -436,6 +438,34 @@ impl AppState {
   /// Stop an in-flight Help turn. Returns true when one was running.
   pub fn cancel_help(&self) -> bool {
     if let Some(token) = self.help_cancel.lock().unwrap().take() {
+      token.cancel();
+      true
+    } else {
+      false
+    }
+  }
+
+  /// Register a run that makes, changes or tries a tool, under the id the
+  /// renderer gave it, replacing (and cancelling) one with the same id.
+  pub fn begin_tool_run(&self, run_id: &str) -> CancelToken {
+    let token = CancelToken::new();
+    if let Some(previous) = self.tool_runs.lock().unwrap().insert(run_id.to_string(), token.clone()) {
+      previous.cancel();
+    }
+    token
+  }
+
+  /// Remove a finished tool run's token, only when the slot still holds `token`.
+  pub fn end_tool_run(&self, run_id: &str, token: &CancelToken) {
+    let mut map = self.tool_runs.lock().unwrap();
+    if map.get(run_id).is_some_and(|t| t.same(token)) {
+      map.remove(run_id);
+    }
+  }
+
+  /// Stop a tool run. Returns true when it was running.
+  pub fn cancel_tool_run(&self, run_id: &str) -> bool {
+    if let Some(token) = self.tool_runs.lock().unwrap().remove(run_id) {
       token.cancel();
       true
     } else {

@@ -94,12 +94,15 @@ type Highlight = { html: string; label: string } | null
 const HL_CACHE = new Map<string, Highlight>()
 const HL_CACHE_MAX = 500
 
-/** Syntax-highlight `text` for `lang`, returning HTML + resolved label, or null. */
-export function highlightCode(text: string, lang?: string): Highlight {
+/**
+ * Syntax-highlight `text` for `lang`, returning HTML + resolved label, or null.
+ * Text that changes as it streams, such as code being written, skips the cache.
+ */
+export function highlightCode(text: string, lang?: string, cache = true): Highlight {
   const key = (lang ?? '').toLowerCase()
   const resolved = LANG_ALIAS[key] ?? key
   const cacheKey = `${resolved}\u0000${text}`
-  const cached = HL_CACHE.get(cacheKey)
+  const cached = cache ? HL_CACHE.get(cacheKey) : undefined
   if (cached !== undefined) return cached
 
   ensureLanguages()
@@ -112,6 +115,7 @@ export function highlightCode(text: string, lang?: string): Highlight {
       result = null
     }
   }
+  if (!cache) return result
   if (HL_CACHE.size >= HL_CACHE_MAX) {
     const oldest = HL_CACHE.keys().next().value
     if (oldest !== undefined) HL_CACHE.delete(oldest)
@@ -134,9 +138,13 @@ const HTML_TOKEN = /<span[^>]*>|<\/span>|\n|[^<\n]+|</g
  * closing and re-opening any spans that cross a line break. Null when the
  * language isn't registered.
  */
-export function highlightLines(lines: readonly string[], lang?: string): string[] | null {
+export function highlightLines(
+  lines: readonly string[],
+  lang?: string,
+  cache = true
+): string[] | null {
   if (lines.length === 0) return []
-  const hl = highlightCode(lines.join('\n'), lang)
+  const hl = highlightCode(lines.join('\n'), lang, cache)
   if (!hl) return null
   const out: string[] = []
   const open: string[] = []

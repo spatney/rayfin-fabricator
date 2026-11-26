@@ -94,6 +94,10 @@
     "proWorkspaces": {
       "title": "Publish to Pro workspaces",
       "desc": "Publish apps to Pro workspaces, which have no Fabric or Power BI Premium capacity. The workspace picker lists them with the others, and + New workspace can create one with no capacity. An app needs Rayfin 2.1.0 or later to publish to one. My workspace isn't offered."
+    },
+    "customTools": {
+      "title": "Make tools with Copilot",
+      "desc": "In MCP servers, describe a tool and Copilot writes it as an MCP server that runs on this computer, such as one that makes images with your OpenAI key. You can try it, change it, read its code and share it as a file."
     }
   },
   "about": {

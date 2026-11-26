@@ -269,7 +269,8 @@
     "learn": "Mehr über Plug-Ins erfahren",
     "changesFabric": "Ändert Fabric",
     "asksFirst": "Fragt dich vorher",
-    "supportingItems": "Unterstützende Elemente"
+    "supportingItems": "Unterstützende Elemente",
+    "makeTool": "Tool mit Copilot erstellen…"
   },
   "turnFooter": {
     "changedFiles_one": "{{count}} Datei geändert",

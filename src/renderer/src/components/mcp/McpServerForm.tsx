@@ -1,18 +1,29 @@
-import { useId, useState, type FormEvent, type JSX } from 'react'
-import type { McpServer, McpServerInput, McpValueInput } from '@shared/ipc'
+import {
+  useCallback,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type JSX,
+  type RefObject
+} from 'react'
+import type { ByokProviderStatus, McpServer, McpServerInput, McpValueInput } from '@shared/ipc'
 import { useTranslation } from '../../i18n'
 import { isMac } from '../../platform'
+import { ContextMenu } from '../ContextMenu'
 import { Codicon } from '../icons'
 import { joinCommandLine, parseConfig, splitCommandLine, type ParsedServer } from './mcpConfig'
 
 /** An environment variable or header in the form. */
-interface ValueRow {
+export interface ValueRow {
   key: number
   name: string
   /** It's saved: its value stays unless it's changed. */
   saved: boolean
   /** Its new value; null keeps the saved one. */
   value: string | null
+  /** An environment variable that gets the key saved for this model provider. */
+  provider?: string
 }
 
 interface Draft {
@@ -29,16 +40,53 @@ interface Draft {
 }
 
 let nextKey = 0
-const row = (name: string, value: string | null, saved = false): ValueRow => ({
+export const row = (
+  name: string,
+  value: string | null,
+  saved = false,
+  provider?: string
+): ValueRow => ({
   key: nextKey++,
   name,
   saved,
-  value
+  value,
+  provider
 })
+
+/** The environment variable a model provider's key usually goes in. */
+const PROVIDER_VARIABLES: Record<string, string> = {
+  openai: 'OPENAI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  xai: 'XAI_API_KEY',
+  google: 'GEMINI_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY'
+}
+
+export function providerVariable(provider: string): string {
+  return (
+    PROVIDER_VARIABLES[provider] ?? `${provider.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_API_KEY`
+  )
+}
+
+/** The providers whose saved key a variable can get. */
+export function keyProviders(providers?: ByokProviderStatus[]): ByokProviderStatus[] {
+  return (providers ?? []).filter((p) => p.hasKey && p.endpoint === 'fixed')
+}
 
 const usesSse = (url: string): boolean => /\/sse\/?$/i.test(url.trim())
 
-function draftFrom(server?: McpServer): Draft {
+/** A server's saved environment variables, with the ones `missing` asks for. */
+function envRows(server?: McpServer, missing: string[] = []): ValueRow[] {
+  const saved = (server?.env ?? []).map((name) =>
+    row(name, null, true, server?.providerKeys?.[name])
+  )
+  const added = missing
+    .filter((name) => !saved.some((r) => r.name.toLowerCase() === name.toLowerCase()))
+    .map((name) => row(name, ''))
+  return [...saved, ...added]
+}
+
+function draftFrom(server?: McpServer, missing?: string[]): Draft {
   return {
     name: server?.name ?? '',
     kind: server && server.transport !== 'stdio' ? 'url' : 'command',
@@ -47,7 +95,7 @@ function draftFrom(server?: McpServer): Draft {
     url: server?.url ?? '',
     sse: server?.transport === 'sse',
     sseChosen: Boolean(server),
-    env: (server?.env ?? []).map((name) => row(name, null, true)),
+    env: envRows(server, missing),
     headers: (server?.headers ?? []).map((name) => row(name, null, true)),
     readOnly: server?.readOnly ?? false
   }
@@ -67,16 +115,33 @@ function draftFromParsed(parsed: ParsedServer): Draft {
   }
 }
 
-/** What the backend saves for `draft`: a saved value that wasn't changed goes without one. */
-function inputFrom(draft: Draft, id?: string): McpServerInput {
-  const values = (rows: ValueRow[]): McpValueInput[] =>
-    rows
-      .filter((r) => r.name.trim() || r.value)
-      .map((r) =>
-        r.saved && r.value === null
+/**
+ * What the backend saves for `rows`: a saved value that wasn't changed goes
+ * without one, and a variable that gets a provider's key names the provider.
+ */
+export function valueInputs(rows: ValueRow[]): McpValueInput[] {
+  return rows
+    .filter((r) => r.name.trim() || r.value || r.provider)
+    .map((r) =>
+      r.provider
+        ? { name: r.name.trim(), provider: r.provider }
+        : r.saved && r.value === null
           ? { name: r.name }
           : { name: r.name.trim(), value: r.value ?? '' }
-      )
+    )
+}
+
+/** What the backend saves for `draft`. A tool made with Copilot has no command of its own. */
+function inputFrom(draft: Draft, id?: string, made = false): McpServerInput {
+  if (made) {
+    return {
+      id,
+      name: draft.name,
+      transport: 'stdio',
+      env: valueInputs(draft.env),
+      readOnly: draft.readOnly
+    }
+  }
   if (draft.kind === 'command') {
     const words = splitCommandLine(draft.commandLine)
     return {
@@ -85,7 +150,7 @@ function inputFrom(draft: Draft, id?: string): McpServerInput {
       transport: 'stdio',
       command: words[0] ?? '',
       args: words.slice(1),
-      env: values(draft.env),
+      env: valueInputs(draft.env),
       readOnly: draft.readOnly
     }
   }
@@ -94,18 +159,23 @@ function inputFrom(draft: Draft, id?: string): McpServerInput {
     name: draft.name,
     transport: draft.sse ? 'sse' : 'http',
     url: draft.url.trim(),
-    headers: values(draft.headers),
+    headers: valueInputs(draft.headers),
     readOnly: draft.readOnly
   }
 }
 
-/** A server's environment variables or headers: a name and a value each. */
-function ValueRows({
+/**
+ * A server's environment variables or headers: a name and a value each. An
+ * environment variable can get a key saved in Model providers instead.
+ */
+export function ValueRows({
   kind,
   rows,
   namePlaceholder,
   valuePlaceholder,
   disabled,
+  providers,
+  title,
   onChange
 }: {
   kind: 'env' | 'header'
@@ -113,14 +183,28 @@ function ValueRows({
   namePlaceholder: string
   valuePlaceholder: string
   disabled: boolean
+  /** Your model providers, to offer their keys; none while they're read. */
+  providers?: ByokProviderStatus[]
+  /** What the rows are called, when not their kind's name. */
+  title?: string
   onChange: (rows: ValueRow[]) => void
 }): JSX.Element {
   const { t } = useTranslation('mcp')
+  const addRef = useRef<HTMLButtonElement>(null)
   const update = (key: number, patch: Partial<ValueRow>): void =>
     onChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)))
+  const withKeys = kind === 'env' ? keyProviders(providers) : []
+  // A provider's key goes in one variable.
+  const offered = withKeys.filter((p) => !rows.some((r) => r.provider === p.id))
+  const providerName = (id: string): string => providers?.find((p) => p.id === id)?.name ?? id
+  function addProvider(id: string): void {
+    const name = providerVariable(id)
+    const taken = rows.some((r) => r.name.trim().toLowerCase() === name.toLowerCase())
+    onChange([...rows, row(taken ? '' : name, null, false, id)])
+  }
   return (
     <fieldset className="mcp-values" disabled={disabled}>
-      <legend className="field-label">{t(`form.values.${kind}.title` as const)}</legend>
+      <legend className="field-label">{title ?? t(`form.values.${kind}.title` as const)}</legend>
       {rows.map((r) => (
         <div className="mcp-value" key={r.key}>
           {r.saved ? (
@@ -139,7 +223,12 @@ function ValueRows({
               onChange={(event) => update(r.key, { name: event.target.value })}
             />
           )}
-          {r.saved && r.value === null ? (
+          {r.provider ? (
+            <span className="mcp-value-provider">
+              <Codicon name="key" />
+              {t('form.values.providerKey', { provider: providerName(r.provider) })}
+            </span>
+          ) : r.saved && r.value === null ? (
             <span className="mcp-value-saved">
               {t('form.values.saved')}
               <button
@@ -183,15 +272,90 @@ function ValueRows({
           </button>
         </div>
       ))}
-      <button
-        type="button"
-        className="btn btn--xs btn--ghost acct-add-btn mcp-value-add"
-        onClick={() => onChange([...rows, row('', '')])}
-      >
-        <Codicon name="add" />
-        {t(`form.values.${kind}.add` as const)}
-      </button>
+      <div className="mcp-value-adds">
+        <button
+          ref={addRef}
+          type="button"
+          className="btn btn--xs btn--ghost acct-add-btn mcp-value-add"
+          onClick={() => onChange([...rows, row('', '')])}
+        >
+          <Codicon name="add" />
+          {t(`form.values.${kind}.add` as const)}
+        </button>
+        {offered.length > 0 && (
+          <ProviderKeyMenu providers={offered} fallback={addRef} onPick={addProvider} />
+        )}
+      </div>
+      {kind === 'env' && providers && withKeys.length === 0 && (
+        <span className="field-hint">{t('form.values.noProviders')}</span>
+      )}
     </fieldset>
+  )
+}
+
+/**
+ * Adds a variable that gets a key you saved in Model providers: a button that
+ * opens a menu of them. Focus returns to the button once the menu closes, or
+ * to `fallback` when the button went, its last key used.
+ */
+function ProviderKeyMenu({
+  providers,
+  fallback,
+  onPick
+}: {
+  providers: ByokProviderStatus[]
+  fallback: RefObject<HTMLElement | null>
+  onPick: (provider: string) => void
+}): JSX.Element {
+  const { t } = useTranslation('mcp')
+  const ref = useRef<HTMLButtonElement>(null)
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+  const close = useCallback((): void => {
+    setAt(null)
+    // Unless a click outside put it somewhere else.
+    requestAnimationFrame(() => {
+      if (document.activeElement && document.activeElement !== document.body) return
+      ;(ref.current?.isConnected ? ref.current : fallback.current)?.focus()
+    })
+  }, [fallback])
+  function toggle(): void {
+    if (at) {
+      close()
+      return
+    }
+    const box = ref.current?.getBoundingClientRect()
+    if (box) setAt({ x: box.left, y: box.bottom + 4 })
+  }
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        className="btn btn--xs mcp-provider-pick"
+        aria-haspopup="menu"
+        aria-expanded={at !== null}
+        onClick={toggle}
+      >
+        <Codicon name="key" />
+        {t('form.values.useProvider')}
+        <Codicon name="chevron-down" className="mcp-provider-caret" />
+      </button>
+      {at && (
+        <ContextMenu
+          x={at.x}
+          y={at.y}
+          anchor={ref.current}
+          label={t('form.values.useProviderLabel')}
+          entries={providers.map((p) => ({
+            id: p.id,
+            label: t('form.values.providerKey', { provider: p.name }),
+            icon: 'key',
+            run: () => onPick(p.id)
+          }))}
+          onClose={close}
+        />
+      )}
+    </>
   )
 }
 
@@ -199,12 +363,15 @@ function ValueRows({
  * Adds a server, or changes one: its name, the command that starts it or its
  * URL, its environment variables or headers, and whether chat may use only its
  * read-only tools. A new server can be filled in from a configuration pasted
- * from its instructions. Submitted by the dialog's Save, through `id`.
+ * from its instructions. A tool made with Copilot has no command or URL to
+ * change: Fabricator runs its code. Submitted by the dialog's Save, through `id`.
  */
 export function McpServerForm({
   id,
   server,
   initial,
+  missing,
+  providers,
   busy,
   error,
   onSubmit
@@ -215,13 +382,17 @@ export function McpServerForm({
   server?: McpServer
   /** What a new server starts with, such as an example. */
   initial?: ParsedServer
+  /** Environment variables to add, such as the keys a made tool's code reads. */
+  missing?: string[]
+  /** Your model providers, whose keys a variable can get. */
+  providers?: ByokProviderStatus[]
   busy: boolean
   error?: string
   onSubmit: (input: McpServerInput) => void
 }): JSX.Element {
   const { t } = useTranslation('mcp')
   const [draft, setDraft] = useState<Draft>(() =>
-    initial ? draftFromParsed(initial) : draftFrom(server)
+    initial ? draftFromParsed(initial) : draftFrom(server, missing)
   )
   const [pasting, setPasting] = useState(false)
   const [pasted, setPasted] = useState('')
@@ -233,6 +404,7 @@ export function McpServerForm({
   const urlId = useId()
   const pasteId = useId()
   const readOnlyId = useId()
+  const made = Boolean(server?.made)
 
   const set = (patch: Partial<Draft>): void => setDraft((d) => ({ ...d, ...patch }))
 
@@ -254,7 +426,7 @@ export function McpServerForm({
 
   function submit(event: FormEvent): void {
     event.preventDefault()
-    if (!busy) onSubmit(inputFrom(draft, server?.id))
+    if (!busy) onSubmit(inputFrom(draft, server?.id, made))
   }
 
   const command = draft.kind === 'command'
@@ -356,31 +528,33 @@ export function McpServerForm({
         />
       </div>
 
-      <div className="field">
-        <span className="field-label" id={kindId}>
-          {t('form.startsWith')}
-        </span>
-        <div className="seg mcp-kind" role="group" aria-labelledby={kindId}>
-          <button
-            type="button"
-            className={`seg-btn${command ? ' seg-btn--active' : ''}`}
-            aria-pressed={command}
-            onClick={() => set({ kind: 'command' })}
-          >
-            {t('form.kind.command')}
-          </button>
-          <button
-            type="button"
-            className={`seg-btn${command ? '' : ' seg-btn--active'}`}
-            aria-pressed={!command}
-            onClick={() => set({ kind: 'url' })}
-          >
-            {t('form.kind.url')}
-          </button>
+      {!made && (
+        <div className="field">
+          <span className="field-label" id={kindId}>
+            {t('form.startsWith')}
+          </span>
+          <div className="seg mcp-kind" role="group" aria-labelledby={kindId}>
+            <button
+              type="button"
+              className={`seg-btn${command ? ' seg-btn--active' : ''}`}
+              aria-pressed={command}
+              onClick={() => set({ kind: 'command' })}
+            >
+              {t('form.kind.command')}
+            </button>
+            <button
+              type="button"
+              className={`seg-btn${command ? '' : ' seg-btn--active'}`}
+              aria-pressed={!command}
+              onClick={() => set({ kind: 'url' })}
+            >
+              {t('form.kind.url')}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {command ? (
+      {made ? null : command ? (
         <div className="field">
           <label className="field-label" htmlFor={commandId}>
             {t('form.command')}
@@ -435,6 +609,8 @@ export function McpServerForm({
             namePlaceholder="API_KEY"
             valuePlaceholder={t('form.values.value')}
             disabled={busy}
+            providers={providers}
+            title={made ? t('tools.form.keys') : undefined}
             onChange={(env) => set({ env })}
           />
         ) : (

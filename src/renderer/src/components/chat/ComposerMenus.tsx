@@ -7,7 +7,7 @@ import { menuLayout, type MenuLayout } from '@renderer/menuLayout'
 import { useSuppressPreview } from '@renderer/overlay'
 import { useTranslation } from '../../i18n'
 import { Codicon, ImageIcon } from '../icons'
-import { serverSummary } from '../mcp/mcpConfig'
+import { serverIcon, serverSummary } from '../mcp/mcpConfig'
 import { mcpPluginId, SUPPORTING_ITEMS_PLUGIN, type ChatPlugin } from './plugins'
 import fabricSvg from '../../assets/brands/fabric.svg'
 import '../models/modelPicker.css'
@@ -267,6 +267,7 @@ export function PluginsMenu({
   disabled = false,
   onToggle,
   onManageServers,
+  onMakeTool,
   onLearnMore
 }: {
   /** The plugins chat offers. */
@@ -282,6 +283,8 @@ export function PluginsMenu({
   onToggle: (plugin: ChatPluginId, on: boolean) => void
   /** Open the MCP servers dialog, adding a server when `add` is set. */
   onManageServers?: (add: boolean) => void
+  /** Open the MCP servers dialog on making a tool with Copilot. */
+  onMakeTool?: () => void
   onLearnMore?: () => void
 }): JSX.Element {
   const { t } = useTranslation('chat')
@@ -497,7 +500,7 @@ export function PluginsMenu({
                         onClick={() => onToggle(id, !isOn)}
                       >
                         <span className="pl-logo pl-logo--tile" aria-hidden="true">
-                          <Codicon name={s.transport === 'stdio' ? 'terminal' : 'globe'} />
+                          <Codicon name={serverIcon(s)} />
                         </span>
                         <span className="mp-item-text">
                           <span className="mp-item-label">
@@ -540,6 +543,22 @@ export function PluginsMenu({
                       <span className="mp-item-label">
                         {servers.length ? t('pluginsMenu.manage') : t('pluginsMenu.addServer')}
                       </span>
+                    </button>
+                  )}
+                  {onMakeTool && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="mp-item pl-item pl-manage"
+                      onClick={() => {
+                        closeMenu(false)
+                        onMakeTool()
+                      }}
+                    >
+                      <span className="pl-logo pl-logo--tile" aria-hidden="true">
+                        <Codicon name="sparkle" />
+                      </span>
+                      <span className="mp-item-label">{t('pluginsMenu.makeTool')}</span>
                     </button>
                   )}
                 </>

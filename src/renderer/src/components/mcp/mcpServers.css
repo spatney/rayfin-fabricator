@@ -16,7 +16,27 @@
 }
 
 .btn.mcp-help {
+  display: inline-flex;
+  align-self: center;
   margin-right: auto;
+}
+
+/* Small buttons start at the top of a column (.btn--xs), but sit centered
+   in the rows of this dialog, beside the text and fields they act on. */
+:is(
+    .mcp-value,
+    .mcp-value-adds,
+    .mcp-value-saved,
+    .mcp-missing,
+    .mcp-confirm,
+    .mcp-ideas-list,
+    .mcp-undo-actions,
+    .mcp-made-undo,
+    .mcp-made-actions,
+    .mcp-choices
+  )
+  > .btn--xs {
+  align-self: center;
 }
 
 /* No servers yet. */
@@ -207,7 +227,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 0 2px;
+  padding: 0 11px;
   font-family: var(--font-mono);
   font-size: 12.5px;
   color: var(--text);
@@ -217,6 +237,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-left: 11px;
   font-size: 12px;
   color: var(--text-dim);
 }
@@ -225,8 +246,10 @@
   padding: 0 6px;
 }
 
+/* Borderless, so its icon lines up with the fields above it. */
 .btn.mcp-value-add {
-  align-self: flex-start;
+  align-self: center;
+  margin-left: -9px;
 }
 
 .mcp-trust {
@@ -246,4 +269,914 @@
   flex: none;
   margin-top: 1px;
   font-size: 14px;
+}
+
+/* Tools made with Copilot (the Make tools with Copilot experiment). */
+.mcp-maker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.mcp-maker p {
+  margin: 0;
+}
+
+.mcp-maker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.acct-purpose.mcp-summary.mcp-summary--made {
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.mcp-made-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mcp-made-actions .codicon {
+  font-size: 13px;
+}
+
+.mcp-value-adds {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn.mcp-provider-pick .codicon {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.btn.mcp-provider-pick .codicon.mcp-provider-caret {
+  margin-left: -1px;
+  font-size: 12px;
+}
+
+.btn.mcp-provider-pick[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+
+.mcp-value-provider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding-left: 11px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.mcp-value-provider .codicon {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.mcp-form .field-input.mcp-request {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.45;
+}
+
+.mcp-form .field-input.mcp-request.mcp-mono {
+  font-family: var(--font-mono);
+}
+
+.mcp-model {
+  align-items: flex-start;
+}
+
+/* The model pill's name lines up with the label above it. */
+.mcp-model .model-picker .mp-pill {
+  margin-left: -9px;
+}
+
+.mcp-pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* What Copilot does as it makes a tool: a headline with how long it's taken,
+   then a step per line, each with an icon in the headline icon's column. */
+.mcp-run {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mcp-run-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.mcp-run-icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  color: var(--accent);
+}
+
+.mcp-run--done .mcp-run-icon {
+  border-radius: 50%;
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+}
+
+.mcp-run--done .mcp-run-icon svg {
+  width: 10px;
+  height: 10px;
+  stroke-width: 3;
+}
+
+.mcp-run--failed .mcp-run-icon {
+  color: var(--danger);
+}
+
+.mcp-run-title {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mcp-run-time {
+  flex: none;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.mcp-run-note {
+  margin: -4px 0 0 26px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+/* What Copilot says as it works, under the headline: its icon in the
+   headline icon's column, its words under the headline's. */
+.mcp-run-note.mcp-saying {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 10px;
+  margin-left: 0;
+  line-height: 18px;
+}
+
+.mcp-saying .codicon {
+  justify-self: center;
+  margin-top: 2px;
+  font-size: 13px;
+}
+
+.mcp-saying-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* Where Copilot is: Plan, Read docs, Write code and Check in a row, each a
+   mark on a line with its name and what it got to. A ring is to come, a
+   tinted mark is done or didn't pass. */
+.mcp-stages {
+  list-style: none;
+  margin: 4px 0 2px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: 12px;
+}
+
+.mcp-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The line to the next stage's mark. */
+.mcp-stage:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 9px;
+  left: 26px;
+  right: -4px;
+  height: 1px;
+  background: var(--border);
+}
+
+.mcp-stage--done:not(:last-child)::after,
+.mcp-stage--skipped:not(:last-child)::after {
+  background: color-mix(in srgb, var(--ok) 45%, var(--border));
+}
+
+.mcp-stage-mark {
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-faint);
+}
+
+.mcp-stage-mark .codicon {
+  font-size: 12px;
+}
+
+.mcp-stage--done .mcp-stage-mark {
+  border-color: transparent;
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+}
+
+.mcp-stage--done .mcp-stage-mark svg {
+  width: 10px;
+  height: 10px;
+  stroke-width: 3;
+}
+
+.mcp-stage--current .mcp-stage-mark {
+  border-color: var(--accent);
+}
+
+.mcp-stage-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: mcp-pulse 1.4s ease-in-out infinite;
+}
+
+.mcp-stage--failed .mcp-stage-mark {
+  border-color: transparent;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.mcp-stage--skipped .mcp-stage-mark {
+  border-style: dashed;
+  color: var(--text-dim);
+}
+
+.mcp-stage-label,
+.mcp-stage-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-stage-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--text);
+}
+
+.mcp-stage--todo .mcp-stage-label {
+  color: var(--text-dim);
+}
+
+.mcp-stage-meta {
+  font-size: 11.5px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+@keyframes mcp-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* What Copilot works on now, in a window of a fixed size so the dialog
+   doesn't jump as it changes: the request, the pages it reads, then the code
+   it writes, with how its check went below. */
+.mcp-live {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.mcp-live-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.mcp-live-head .codicon {
+  font-size: 14px;
+}
+
+.mcp-live-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.mcp-live-title.mcp-mono {
+  font-size: 12px;
+}
+
+.mcp-live-meta {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.mcp-live-body {
+  box-sizing: border-box;
+  height: 196px;
+  margin: 0;
+  overflow: auto;
+}
+
+.mcp-live-request {
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.mcp-live-pages {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--text);
+}
+
+.mcp-live-pages li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mcp-live-pages .codicon {
+  flex: none;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.mcp-live-pages span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-live-code {
+  margin: 0;
+  padding: 8px 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 18px;
+  color: var(--text);
+}
+
+.mcp-live-code code {
+  display: block;
+  padding: 0;
+  background: none;
+}
+
+.mcp-live-line {
+  display: flex;
+  min-width: max-content;
+}
+
+.mcp-live-no {
+  flex: none;
+  box-sizing: border-box;
+  width: 42px;
+  padding-right: 12px;
+  text-align: right;
+  color: var(--text-faint);
+  user-select: none;
+}
+
+.mcp-live-text {
+  padding-right: 12px;
+  white-space: pre;
+}
+
+/* Where Copilot is writing. */
+.mcp-caret {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-left: 1px;
+  vertical-align: -2px;
+  background: var(--accent);
+  animation: mcp-blink 1.06s steps(1) infinite;
+}
+
+@keyframes mcp-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mcp-stage-dot,
+  .mcp-caret {
+    animation: none;
+  }
+}
+
+.mcp-live-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border-top: 1px solid var(--border);
+}
+
+.mcp-live-foot-icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 18px;
+  font-size: 14px;
+}
+
+.mcp-live-foot--running .mcp-live-foot-icon {
+  color: var(--accent);
+}
+
+.mcp-live-foot--works .mcp-live-foot-icon {
+  color: var(--ok);
+}
+
+.mcp-live-foot--failed .mcp-live-foot-icon {
+  color: var(--danger);
+}
+
+.mcp-live-foot-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mcp-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--text);
+}
+
+.mcp-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mcp-step-icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 18px;
+  font-size: 14px;
+  color: var(--text-faint);
+}
+
+.mcp-step--checking .mcp-step-icon,
+.mcp-step--retrying .mcp-step-icon {
+  color: var(--accent);
+}
+
+.mcp-step--works .mcp-step-icon {
+  color: var(--ok);
+}
+
+.mcp-step--failed .mcp-step-icon {
+  color: var(--danger);
+}
+
+.mcp-step-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mcp-step-more summary,
+.mcp-run-log summary,
+.mcp-history summary {
+  width: fit-content;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.mcp-step-more summary:hover,
+.mcp-run-log summary:hover,
+.mcp-history summary:hover {
+  color: var(--text);
+}
+
+.mcp-step-detail {
+  display: block;
+  max-height: 120px;
+  overflow: auto;
+  margin-top: 4px;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.mcp-run-log .mcp-steps {
+  margin-top: 8px;
+}
+
+.mcp-made {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+}
+
+.mcp-made-undo {
+  display: flex;
+}
+
+.mcp-made-message {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.mcp-made-message p {
+  margin: 0 0 6px;
+}
+
+.mcp-made-message p:last-child {
+  margin-bottom: 0;
+}
+
+.mcp-missing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.mcp-missing .codicon {
+  color: var(--pending);
+}
+
+/* A tool's code. */
+.mcp-code {
+  margin: 0;
+  max-height: 420px;
+  overflow: auto;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  tab-size: 2;
+}
+
+.mcp-code code {
+  background: none;
+  padding: 0;
+}
+
+.mcp-asked {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.mcp-asked ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.mcp-import-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+/* Trying a tool. */
+.mcp-try-about {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.mcp-try-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.btn.mcp-try-mode {
+  align-self: flex-start;
+}
+
+.mcp-required {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-faint);
+}
+
+.mcp-try-running {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mcp-try-running .mcp-run-time {
+  margin-left: 2px;
+}
+
+.mcp-try-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+}
+
+.mcp-try-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.mcp-try-status .mcp-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.mcp-try-result--error .mcp-try-status .mcp-dot {
+  background: var(--danger);
+}
+
+.mcp-try-text {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.mcp-try-image {
+  display: block;
+  align-self: flex-start;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 320px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.mcp-try-files {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mcp-try-files ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mcp-try-files li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mcp-try-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* Ideas to start a tool from, under what it should do while that's empty.
+   Chips that wrap line up under the first one, not under the label. */
+.mcp-ideas {
+  --mcp-chip-height: 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.mcp-ideas-label {
+  flex: none;
+  font-size: 12px;
+  line-height: var(--mcp-chip-height);
+  color: var(--text-dim);
+}
+
+.mcp-ideas-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.btn.mcp-idea {
+  height: var(--mcp-chip-height);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.btn.mcp-idea .codicon {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* What was asked of a tool before, when you change it. */
+.mcp-history ol {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+/* Asking whether to stop Copilot and close, in the footer's place for help. */
+.mcp-closing {
+  align-self: center;
+  margin-right: auto;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+/* A tool's last change, and undoing it. The diff takes chat's colors. */
+.mcp-change {
+  --stat-add: #4ac26b;
+  --stat-del: #ff7b72;
+  --diff-add-bg: rgba(46, 160, 67, 0.17);
+  --diff-del-bg: rgba(248, 81, 73, 0.15);
+  --diff-add-sign: #56d364;
+  --diff-del-sign: #ff7b72;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+[data-theme='light'] .mcp-change {
+  --stat-add: #1a7f37;
+  --stat-del: #cf222e;
+  --diff-add-bg: rgba(46, 160, 67, 0.14);
+  --diff-del-bg: rgba(207, 34, 46, 0.1);
+  --diff-add-sign: #1a7f37;
+  --diff-del-sign: #cf222e;
+}
+
+.mcp-change .diff {
+  margin: 0;
+}
+
+.mcp-undo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.mcp-undo .acct-confirm {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.mcp-undo-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* A tool just made, changed or added, marked for a moment in the list. */
+.acct-card.mcp-card {
+  transition: border-color 0.6s ease;
+}
+
+.acct-card.mcp-card.mcp-card--fresh {
+  border-color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acct-card.mcp-card {
+    transition: none;
+  }
 }

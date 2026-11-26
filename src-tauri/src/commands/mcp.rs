@@ -10,7 +10,7 @@ use tauri::State;
 
 use crate::services::copilot::{ModelChoice, SessionOptions};
 use crate::services::mcp::{self, McpServers};
-use crate::services::{paths, store};
+use crate::services::{paths, store, tool_maker};
 use crate::state::AppState;
 use crate::types::{McpCheckResult, McpServerEntry, McpServerInput, McpTransport};
 
@@ -43,7 +43,10 @@ pub async fn mcp_check(state: State<'_, AppState>, id: String) -> Result<McpChec
     .into_iter()
     .find(|s| s.id == id)
     .ok_or_else(|| t!("commands.mcp.serverGone"))?;
-  let values = if entry.env.is_empty() && entry.headers.is_empty() { Default::default() } else { mcp::secrets::load(&id)? };
+  let values = mcp::load_values(&entry)?;
+  if entry.made.is_some() {
+    tool_maker::refresh_kit(&id)?;
+  }
   let command = entry.transport == McpTransport::Stdio;
   let cwd = check_folder();
   let opts = SessionOptions { mcp: McpServers::only(entry, values, Some(cwd.clone())), ..Default::default() };

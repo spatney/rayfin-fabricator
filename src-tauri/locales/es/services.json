@@ -55,7 +55,10 @@
     "enterCommand": "Escribe el comando que inicia el servidor, como npx.",
     "commandLineBreaks": "El comando no puede contener saltos de línea.",
     "valuesUnsupported": "Fabricator todavía no puede guardar de forma segura los valores de variables de entorno ni de encabezados en este sistema operativo.",
-    "valuesNotSaved": "No se pudieron guardar los valores del servidor ({{error}})."
+    "valuesNotSaved": "No se pudieron guardar los valores del servidor ({{error}}).",
+    "noSuchProvider": "{{provider}} no es un proveedor de modelos cuya clave pueda recibir una variable de entorno.",
+    "noProviderKey": "{{name}} recibe tu clave de {{provider}}, pero no has guardado ninguna. Agrégala primero en Cuentas → Proveedores de modelos.",
+    "providerKeyGone": "Tu clave de {{provider}} ya no está en Cuentas → Proveedores de modelos. Vuelve a agregarla allí, o dale a la variable un valor propio."
   },
   "keychain": {
     "keyUnreadable": "No se pudo leer la clave guardada. Vuelve a agregarla.",
@@ -501,5 +504,30 @@
     "turnOnQuestion": "Copilot quiere crear elementos de Fabric para esta aplicación, como un modelo semántico o un lakehouse para sus datos. ¿Activar los elementos de apoyo para esta aplicación? Copilot continúa después y te pregunta antes de cada cambio en Fabric.",
     "turnOnQuestionFor": "Copilot quiere crear elementos de Fabric, como un modelo semántico o un lakehouse, para {{reason}}. ¿Activar los elementos de apoyo para esta aplicación? Copilot continúa después y te pregunta antes de cada cambio en Fabric.",
     "firstRefreshFailed": "Está en Fabric, pero su primera actualización, que lee las tablas del lakehouse, no funcionó: {{error}}"
+  },
+  "toolMaker": {
+    "noNode": "Fabricator necesita Node.js para ejecutar las herramientas que creas, y no está en este dispositivo. Instálalo y vuelve a intentarlo.",
+    "cantStart": "Fabricator no pudo iniciar Node.js ({{error}}).",
+    "stopped": "La herramienta se detuvo sin decir por qué.",
+    "stoppedWith": "La herramienta se detuvo: {{output}}",
+    "slow": "La herramienta está tardando demasiado en responder.",
+    "cancelled": "Detenido.",
+    "answered": "La herramienta respondió con un error: {{error}}",
+    "cantSave": "No se pudo guardar la herramienta ({{error}}).",
+    "cantRead": "No se pudo leer la herramienta ({{error}}).",
+    "gone": "Esa herramienta ya no está en Fabricator.",
+    "describe": "Describe lo que debe hacer la herramienta.",
+    "requestTooLong": "Descríbela en {{max}} caracteres como máximo.",
+    "didntWork": "Copilot no pudo crear una herramienta que se inicie. {{error}}",
+    "notSaved": "Copilot terminó sin crear la herramienta. Vuelve a intentarlo o descríbela con más detalle.",
+    "didntStart": "La herramienta no se inició, así que no se agregó. {{error}}",
+    "pictureLeftOut": "Se omitió una imagen: es demasiado grande o no es PNG, JPEG, GIF ni WebP.",
+    "badArguments": "Indica los argumentos de la herramienta como un objeto JSON.",
+    "notATool": "Ese archivo no es una herramienta compartida desde Fabricator.",
+    "newerTool": "Esa herramienta se compartió desde una versión más reciente de Fabricator. Actualiza Fabricator y vuelve a agregarla.",
+    "defaultName": "Herramienta",
+    "notSavedSaid": "Copilot terminó sin crear la herramienta. Dijo: {{said}}",
+    "fileChanged": "El archivo cambió después de que lo revisaras. Vuelve a agregar la herramienta compartida para revisarla tal como está ahora.",
+    "nothingToUndo": "No hay ningún cambio que deshacer."
   }
 }

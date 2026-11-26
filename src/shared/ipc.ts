@@ -2157,6 +2157,13 @@ export interface ExperimentFlags {
    * create one, to apps on Rayfin 2.1.0 or later. My workspace stays out.
    */
   proWorkspaces?: boolean
+  /**
+   * Make tools with Copilot: MCP servers offers to make a tool from a
+   * description, which Copilot writes as an MCP server that runs on this
+   * computer, and to change, try, share and add shared ones. Tools already
+   * made stay among your MCP servers when it's off.
+   */
+  customTools?: boolean
 }
 
 /**
@@ -2198,6 +2205,25 @@ export interface McpServer {
   readOnly: boolean
   /** When it was added (ISO 8601). */
   addedAt: string
+  /**
+   * Environment variables that get the API key you saved for one of your
+   * model providers, by name: the provider's id. Each is in `env` too.
+   */
+  providerKeys?: Record<string, string>
+  /** A tool you made with Copilot: Fabricator runs its code with Node.js. */
+  made?: MadeTool
+}
+
+/** What Fabricator keeps about a tool you made with Copilot, beside its code. */
+export interface MadeTool {
+  /** What it does, in one line Copilot wrote. */
+  summary: string
+  /** What you asked for when it was made, then each change, oldest first. */
+  requests?: string[]
+  /** When its code last changed (ISO 8601). */
+  updatedAt: string
+  /** Its summary before the last change, while that change can be undone. */
+  previousSummary?: string
 }
 
 /** An environment variable or header of a server being saved. */
@@ -2205,6 +2231,8 @@ export interface McpValueInput {
   name: string
   /** Its new value; leave it out to keep the saved one. */
   value?: string
+  /** An environment variable only: it gets the key you saved for this model provider. */
+  provider?: string
 }
 
 /**
@@ -2236,6 +2264,127 @@ export interface McpCheckResult {
   error?: string
   /** The tools it offers, once connected. */
   tools?: McpToolInfo[]
+}
+
+/**
+ * A tool to make with Copilot. A key without a value yet is one the tool
+ * reads, which you add once it's made.
+ */
+export interface ToolMakeInput {
+  /** Its name; empty lets Copilot name it. */
+  name: string
+  /** What the tool should do, in your words. */
+  request: string
+  /** The environment variables (keys) it gets. */
+  env?: McpValueInput[]
+  readOnly?: boolean
+}
+
+/** What Copilot is doing while it makes or changes a tool. */
+export type ToolMakerEvent =
+  /** Copilot started working, on this model when it's known. */
+  | { kind: 'started'; model?: string }
+  /** What Copilot says as it works: the end of what it's writing now. */
+  | { kind: 'saying'; text: string }
+  | { kind: 'reading'; url: string }
+  /** The tool's code as Copilot writes it, so far; then as it saved it. */
+  | { kind: 'writing'; code: string }
+  | { kind: 'checking' }
+  | { kind: 'works'; tools: string[] }
+  | { kind: 'failed'; error: string }
+  | { kind: 'retrying' }
+
+/** A tool Copilot made or changed. */
+export interface ToolMadeResult {
+  /** Every MCP server, with the tool. */
+  servers: McpServer[]
+  id: string
+  tools: McpToolInfo[]
+  /** What Copilot says about it. */
+  message: string
+  /** Environment variables its code reads that it doesn't get yet. */
+  missingKeys?: string[]
+}
+
+/** One tool of a tool you made, with what it takes. */
+export interface MadeToolSpec {
+  name: string
+  description: string
+  /** Its arguments: a JSON Schema of type "object". */
+  inputSchema: JsonSchema
+  readOnly: boolean
+}
+
+/** The parts of a JSON Schema a try's form reads. */
+export interface JsonSchema {
+  type?: string | string[]
+  title?: string
+  description?: string
+  properties?: Record<string, JsonSchema>
+  required?: string[]
+  enum?: unknown[]
+  default?: unknown
+  items?: JsonSchema
+}
+
+/** Something a tool returned when you tried it. */
+export type ToolTryContent = { type: 'text'; text: string } | { type: 'image'; url: string }
+
+/** A file a try saved or changed. */
+export interface ToolTryFile {
+  /** Its path in the try's folder, with `/`. */
+  path: string
+  size: number
+  /** A small picture's `data:` URL. */
+  image?: string
+}
+
+/** What trying one of a tool's tools did. */
+export interface ToolTryResult {
+  isError: boolean
+  content: ToolTryContent[]
+  files: ToolTryFile[]
+  /** The folder it ran in, standing in for an app's. */
+  folder: string
+  ms: number
+}
+
+/** A tool's code. */
+export interface ToolCode {
+  code: string
+  path: string
+  /** Its code before the last change, while that change can be undone. */
+  previous?: string
+}
+
+/** An environment variable a shared tool needs: a model provider's key, or a value of its own. */
+export interface SharedToolKey {
+  name: string
+  provider?: string
+}
+
+/** A shared tool, read from its file, to review before it's added. */
+export interface ToolImportPreview {
+  path: string
+  /** The file as reviewed: adding refuses a file that changed since. */
+  digest: string
+  /** Its name, unique among your servers. */
+  name: string
+  summary: string
+  requests: string[]
+  keys: SharedToolKey[]
+  readOnly: boolean
+  code: string
+}
+
+/** A shared tool to add, as you reviewed it. */
+export interface ToolImportInput {
+  path: string
+  /** The preview's digest of the file. */
+  digest: string
+  name: string
+  env?: McpValueInput[]
+  readOnly?: boolean
 }
 
 export interface CreateProjectInput {
@@ -5126,6 +5275,55 @@ export interface RayfinStudioApi {
     remove: (id: string) => Promise<McpServer[]>
     /** Start or connect to a saved server on its own, and list its tools. */
     check: (id: string) => Promise<McpCheckResult>
+  }
+
+  /**
+   * Tools you make with Copilot (the Make tools with Copilot experiment):
+   * Copilot writes each as an MCP server that Fabricator runs with Node.js.
+   * Keys only ever go to the backend; a shared tool's file never holds one.
+   */
+  toolMaker: {
+    /**
+     * Have Copilot make a tool, reporting what it does through `onEvent`, and
+     * add it to your MCP servers once it starts. `runId` cancels it.
+     */
+    make: (
+      runId: string,
+      input: ToolMakeInput,
+      choice: AdvisorModelChoice,
+      onEvent: (event: ToolMakerEvent) => void
+    ) => Promise<ToolMadeResult>
+    /** Have Copilot change a tool it made, as `request` asks. */
+    change: (
+      runId: string,
+      id: string,
+      request: string,
+      choice: AdvisorModelChoice,
+      onEvent: (event: ToolMakerEvent) => void
+    ) => Promise<ToolMadeResult>
+    /** Stop making, changing or trying a tool. */
+    cancel: (runId: string) => Promise<boolean>
+    /** A tool's code, with its code before the last change. */
+    code: (id: string) => Promise<ToolCode>
+    /** Undo the last change Copilot made to a tool; resolves to every MCP server. */
+    undo: (id: string) => Promise<McpServer[]>
+    /** Show a tool's code file, or the folder its tries run in, in the file manager. */
+    reveal: (id: string, what: 'code' | 'try') => Promise<void>
+    /** A tool's tools, with what each takes. */
+    specs: (id: string) => Promise<MadeToolSpec[]>
+    /** Call one of a tool's tools with its keys, in its try folder. */
+    try: (
+      runId: string,
+      id: string,
+      tool: string,
+      args: Record<string, unknown>
+    ) => Promise<ToolTryResult>
+    /** Save a tool as a file to share; null when you close the dialog. */
+    export: (id: string) => Promise<string | null>
+    /** Pick a shared tool's file to review; null when you close the dialog. */
+    pickImport: () => Promise<ToolImportPreview | null>
+    /** Add a shared tool you reviewed, once it starts. */
+    import: (input: ToolImportInput) => Promise<ToolMadeResult>
   }
 
   /**

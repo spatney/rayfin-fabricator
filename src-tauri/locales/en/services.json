@@ -55,7 +55,10 @@
     "enterCommand": "Enter the command that starts the server, such as npx.",
     "commandLineBreaks": "The command can't contain line breaks.",
     "valuesUnsupported": "Fabricator can't keep the values of environment variables or headers safely on this operating system yet.",
-    "valuesNotSaved": "Couldn't save the server's values ({{error}})."
+    "valuesNotSaved": "Couldn't save the server's values ({{error}}).",
+    "noSuchProvider": "{{provider}} isn't a model provider whose key an environment variable can get.",
+    "noProviderKey": "{{name}} gets your {{provider}} key, and you haven't saved one. Add it in Accounts → Model providers first.",
+    "providerKeyGone": "Your {{provider}} key isn't in Accounts → Model providers anymore. Add it there again, or give the variable a value of its own."
   },
   "keychain": {
     "keyUnreadable": "The saved key couldn't be read. Add it again.",
@@ -501,5 +504,30 @@
     "turnOnQuestion": "Copilot wants to create Fabric items for this app, such as a semantic model, or a lakehouse for its data. Turn on Supporting items for this app? Copilot then continues, and asks you before each change in Fabric.",
     "turnOnQuestionFor": "Copilot wants to create Fabric items, such as a semantic model or a lakehouse, for {{reason}}. Turn on Supporting items for this app? Copilot then continues, and asks you before each change in Fabric.",
     "firstRefreshFailed": "It's in Fabric, but its first refresh, which reads the lakehouse's tables, didn't work: {{error}}"
+  },
+  "toolMaker": {
+    "noNode": "Fabricator needs Node.js to run the tools you make, and it isn't on this computer. Install it, then try again.",
+    "cantStart": "Fabricator couldn't start Node.js ({{error}}).",
+    "stopped": "The tool stopped without saying why.",
+    "stoppedWith": "The tool stopped: {{output}}",
+    "slow": "The tool is taking too long to answer.",
+    "cancelled": "Stopped.",
+    "answered": "The tool answered with an error: {{error}}",
+    "cantSave": "Couldn't save the tool ({{error}}).",
+    "cantRead": "Couldn't read the tool ({{error}}).",
+    "gone": "That tool isn't in Fabricator anymore.",
+    "describe": "Describe what the tool should do.",
+    "requestTooLong": "Describe it in up to {{max}} characters.",
+    "didntWork": "Copilot couldn't make a tool that starts. {{error}}",
+    "notSaved": "Copilot finished without making the tool. Try again, or describe it in more detail.",
+    "didntStart": "The tool didn't start, so it wasn't added. {{error}}",
+    "pictureLeftOut": "A picture was left out: it's too large, or it isn't a PNG, JPEG, GIF or WebP.",
+    "badArguments": "Give the tool's arguments as a JSON object.",
+    "notATool": "That file isn't a tool shared from Fabricator.",
+    "newerTool": "That tool was shared from a newer version of Fabricator. Update Fabricator, then add it again.",
+    "defaultName": "Tool",
+    "notSavedSaid": "Copilot finished without making the tool. It said: {{said}}",
+    "fileChanged": "The file changed after you reviewed it. Add the shared tool again to review it as it is now.",
+    "nothingToUndo": "There's no change to undo."
   }
 }
