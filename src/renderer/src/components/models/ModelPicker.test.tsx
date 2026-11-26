@@ -172,16 +172,17 @@ describe('ModelPicker', () => {
     expect(pill().textContent).toContain('Auto · Efficiency')
   })
 
-  it('calls Auto Copilot Fusion where Copilot offers it, with its effort levels beside the menu', async () => {
+  it('keeps Auto’s name where Copilot offers Copilot Fusion, names Fusion under it, and lists its effort levels beside the menu', async () => {
     offerTiers(FUSION)
     const openExternal = vi.fn()
     ;(window as unknown as { api: { openExternal: unknown } }).api.openExternal = openExternal
     const onChange = renderPicker(AUTO_SELECTION)
-    await waitFor(() => expect(pill().textContent).toBe('Copilot Fusion · Standard'))
+    await waitFor(() => expect(pill().textContent).toBe('Auto · Standard'))
     fireEvent.click(pill())
 
-    const fusion = await screen.findByRole('menuitemcheckbox', { name: /Copilot Fusion/ })
-    expect(fusion.getAttribute('aria-checked')).toBe('true')
+    const auto = await screen.findByRole('menuitemcheckbox', { name: /Auto/ })
+    expect(auto.getAttribute('aria-checked')).toBe('true')
+    expect(auto.textContent).toContain('Copilot Fusion picks the models for each request.')
     // One row, like a model's Effort, with the levels in a list beside the menu.
     const row = screen.getByRole('menuitem', { name: /Effort/ })
     expect(row.textContent).toContain('Standard')
@@ -197,7 +198,7 @@ describe('ModelPicker', () => {
 
     fireEvent.click(within(list).getByRole('menuitemradio', { name: /High/ }))
     expect(onChange).toHaveBeenLastCalledWith({ ...AUTO_SELECTION, autoTier: 'hydrafusion' })
-    expect(pill().textContent).toBe('Copilot Fusion · High')
+    expect(pill().textContent).toBe('Auto · High')
 
     fireEvent.click(pill())
     fireEvent.click(await screen.findByRole('menuitem', { name: /Effort/ }))
@@ -210,13 +211,28 @@ describe('ModelPicker', () => {
   it('names a saved Fusion level in the pill without opening the menu', async () => {
     offerTiers(FUSION)
     renderPicker({ ...AUTO_SELECTION, autoTier: 'hydrafusion-max' })
-    await waitFor(() => expect(pill().textContent).toBe('Copilot Fusion · Max'))
+    await waitFor(() => expect(pill().textContent).toBe('Auto · Max'))
   })
 
-  it('names Copilot Fusion from what Copilot offered last time, before it answers', async () => {
+  it('on Copilot Fusion, says how many models you could choose instead, and choosing one turns Auto off', async () => {
+    offerTiers(FUSION)
+    const onChange = renderPicker(AUTO_SELECTION)
+    await waitFor(() => expect(pill().textContent).toBe('Auto · Standard'))
+    fireEvent.click(pill())
+    // Your own models that aren't set up yet (Grok 4.7) don't count.
+    const row = await screen.findByRole('menuitem', { name: 'Choose from 3 models' })
+    fireEvent.click(row)
+    const list = await screen.findByRole('menu', { name: 'Models' })
+    expect(list.textContent).toContain('Choosing a model turns Auto off.')
+    fireEvent.click(within(list).getByRole('menuitemradio', { name: /GPT-6\.1 Sol/ }))
+    expect(onChange).toHaveBeenLastCalledWith({ ...AUTO_SELECTION, model: 'gpt-6.1-sol' })
+    expect(pill().textContent).toBe('GPT-6.1 Sol · Medium')
+  })
+
+  it('names the Fusion level from what Copilot offered last time, before it answers', async () => {
     offerTiers(FUSION)
     renderPicker(AUTO_SELECTION)
-    await waitFor(() => expect(pill().textContent).toBe('Copilot Fusion · Standard'))
+    await waitFor(() => expect(pill().textContent).toBe('Auto · Standard'))
     cleanup()
 
     invalidateCopilotModels()
@@ -224,7 +240,7 @@ describe('ModelPicker', () => {
       () => new Promise(() => {})
     )
     renderPicker(AUTO_SELECTION)
-    expect(pill().textContent).toBe('Copilot Fusion · Standard')
+    expect(pill().textContent).toBe('Auto · Standard')
   })
 
   it('turns Auto off on Copilot’s first model and opens the list, with your keys’ models in their own section', async () => {
@@ -236,6 +252,8 @@ describe('ModelPicker', () => {
 
     expect(onChange).toHaveBeenLastCalledWith({ ...AUTO_SELECTION, model: 'claude-sonnet-5.5' })
     const list = await screen.findByRole('menu', { name: 'Models' })
+    // Auto is off already, so the list doesn't warn about turning it off.
+    expect(list.textContent).not.toContain('turns Auto off')
     const keys = within(list).getByRole('group', { name: 'Your models' })
     expect(within(keys).getByRole('menuitemradio', { name: /Claude Opus 5\.5/ }).textContent).toContain('Anthropic')
     const grok = within(keys).getByRole('menuitemradio', { name: /Grok 4\.7/ }) as HTMLButtonElement

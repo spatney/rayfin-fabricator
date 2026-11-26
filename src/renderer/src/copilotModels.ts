@@ -9,8 +9,8 @@ let modelsPromise: Promise<CopilotModel[]> | null = null
 // What Auto can optimize for: account-bound like the models, so cleared with them.
 let tiersCache: { value: AutoTiers | null } | null = null
 let tiersPromise: Promise<AutoTiers | null> | null = null
-// The options Auto had last time, so a new launch can name Copilot Fusion and
-// its level before Copilot answers. Only a hint: they're read fresh when needed.
+// The options Auto had last time, so a new launch can name Copilot Fusion's
+// level before Copilot answers. Only a hint: they're read fresh when needed.
 const LAST_TIERS_KEY = 'fabricator.autoTiers'
 let generation = 0
 const listeners = new Set<() => void>()

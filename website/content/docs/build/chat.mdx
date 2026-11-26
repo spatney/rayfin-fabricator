@@ -42,16 +42,16 @@ Open the model pill in the composer to choose the model Copilot uses.
 
 ![The model picker with Auto off, the model list open, Copilot's models with their makers' logos, and the models on the user's own Anthropic and OpenAI keys under Your models](/screenshots/model-picker.webp)
 
-**Copilot Fusion** is on to start, unless you chose another model in your [chat defaults](/docs/reference/settings#chat-defaults). With it on, Copilot picks the models for each request and how long they think. [Copilot Fusion](https://docs.github.com/en/copilot/concepts/models/copilot-fusion) is Copilot's Auto on accounts that have it; on others, the switch is named **Auto**. **Effort** under **Copilot Fusion** sets how much work Copilot puts into each request:
+**Auto** is on to start, unless you chose another model in your [chat defaults](/docs/reference/settings#chat-defaults). With it on, Copilot picks the models for each request and how long they think. On accounts that have [Copilot Fusion](https://docs.github.com/en/copilot/concepts/models/copilot-fusion), Copilot's Auto, the line under **Auto** says "Copilot Fusion picks the models for each request.", and **Effort** under it sets how much work Copilot puts into each request:
 
 - **Standard**, the default, uses one model for each request.
 - **High** and **Max** can bring in more capable models, or more than one model, such as one to review another's work, so a request can take longer and cost more.
 
 Copilot decides for each request from what you ask, so a short, simple request can go to one model even on **Max**. Under each answer, a line says what it chose: the level, how it ran the request and the models that worked on it, such as `Fusion Max · Single · GPT-6 Luna`. Hover over the line for Copilot's description of how it ran the request.
 
-The pill shows the level, such as `Copilot Fusion · High`, and **Learn more about Copilot Fusion**, under the levels, opens GitHub's page about it. When Copilot reviews a draft and revises it, chat shows only the final answer. On an account without Copilot Fusion, **Optimized for** under **Auto** lets you steer Copilot's choice, when Copilot offers it.
+The pill shows the level, such as `Auto · High`, and **Learn more about Copilot Fusion**, under the levels, opens GitHub's page about it. When Copilot reviews a draft and revises it, chat shows only the final answer. On an account without Copilot Fusion, **Optimized for** under **Auto** lets you steer Copilot's choice, when Copilot offers it.
 
-To choose for yourself, turn off **Copilot Fusion** (or **Auto**). The picker then shows:
+To choose for yourself, select the row under **Effort** that says how many models you can choose from, such as **Choose from 32 models**, beside the logos of some of their makers. Choosing a model turns off **Auto**, as the list says: "Choosing a model turns Auto off." Turning off the switch works too: the picker starts on Copilot's first model and opens the list. With a model chosen, the picker shows:
 
 - **Model**, which opens the list of models. Type in **Search models** to find one. The list starts with the models Copilot suggests, and **More models** shows the rest. **Fast** marks quick, low-cost models.
 - **Effort**, how long the model thinks before it answers, for models that offer a choice, such as **Low**, **Medium**, **High** or **Max**. The model's own default is marked **Default**. A model that has no default of its own starts at **Medium**, so it always thinks before it answers. Higher effort can think longer, so use it for harder changes.

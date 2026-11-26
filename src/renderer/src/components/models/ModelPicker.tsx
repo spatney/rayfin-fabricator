@@ -26,7 +26,7 @@ import { useSuppressPreview } from '@renderer/overlay'
 import { formatLocale, useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { EFFORT_ORDER } from '../chat/modes'
-import { ModelLogo } from './ModelLogo'
+import { ModelLogo, modelMaker } from './ModelLogo'
 import './modelPicker.css'
 
 export { AUTO_SELECTION, selectionOf, type ModelSelection } from '@renderer/modelSelection'
@@ -65,11 +65,13 @@ function missingName(id: string): string {
 
 /**
  * The model picker, after GitHub Copilot's: a small menu with an Auto switch,
- * named Copilot Fusion on an account that has it, then, on Auto, Copilot
- * Fusion's Effort (or what Auto optimizes for), or else the chosen model's
- * Model, Effort and Context window, each a row opening a list beside the menu.
- * The model list has a search, Copilot's first models, the user's own-key models
- * and the rest of Copilot's under More models. Loads the models when it needs them.
+ * whose line says Copilot Fusion picks the models on an account that has it,
+ * then, on Auto, Copilot Fusion's Effort (or what Auto optimizes for) and, set
+ * apart, a row to choose from the models instead, with a few of their makers'
+ * logos, choosing one turning Auto off; or else the chosen model's Model, Effort
+ * and Context window, each a row opening a list beside the menu. The model list
+ * has a search, Copilot's first models, the user's own-key models and the rest
+ * of Copilot's under More models. Loads the models when it needs them.
  */
 export function ModelPicker({
   value: requested,
@@ -135,7 +137,7 @@ export function ModelPicker({
     : requested
 
   const isAuto = !value.model
-  // The pill names Copilot Fusion and its level, so they're needed before the menu opens.
+  // The pill names Copilot Fusion's level, so it's needed before the menu opens.
   const autoTiers = useAutoTiers(tiers && !ownOnly && (open || isAuto))
   // A flyout reaches past the chat column, over the native preview; a menu
   // opening down from a toolbar covers it too.
@@ -145,6 +147,20 @@ export function ModelPicker({
   const missing = !isAuto && !loading && models.length > 0 && !selected
   const featured = copilot.slice(0, FEATURED)
   const more = copilot.slice(FEATURED)
+  // The models you could choose instead of Auto (all but your own that aren't set
+  // up yet), and one of each of the first three makers among them, for their logos.
+  const { choosable, makers } = useMemo(() => {
+    const ready = models.filter((m) => !m.byok || m.byok.ready)
+    const seen = new Set<string>()
+    const firsts: CopilotModel[] = []
+    for (const m of ready) {
+      const maker = modelMaker(m)
+      if (firsts.length === 3 || maker === 'other' || seen.has(maker)) continue
+      seen.add(maker)
+      firsts.push(m)
+    }
+    return { choosable: ready.length, makers: firsts }
+  }, [models])
 
   const efforts = selected
     ? EFFORT_ORDER.filter((e) => selected.supportedReasoningEfforts.includes(e))
@@ -160,9 +176,10 @@ export function ModelPicker({
   const offered = tiers ? autoTiers : null
   const activeTier = value.autoTier || offered?.defaultTier || ''
   // Where Copilot offers Copilot Fusion, it is Auto: Auto's tiers are Fusion's
-  // effort levels, and Copilot's own apps name the switch after it.
+  // effort levels. Copilot's own apps name the switch after Fusion; here it stays
+  // Auto, so turning it off plainly means choosing a model, and its line names Fusion.
   const fusion = offered?.tiers.some((tier) => tier.fusion) ?? false
-  const autoName = fusion ? 'Copilot Fusion' : t('picker.auto')
+  const autoName = t('picker.auto')
   const tiersLabel = fusion ? t('picker.effort') : t('picker.optimizedFor')
   const chosenTier = value.autoTier
     ? offered?.tiers.find((tier) => tier.id === value.autoTier)
@@ -174,8 +191,8 @@ export function ModelPicker({
       offered?.tiers.find((tier) => tier.id === offered.defaultTier)
     )?.name ?? ''
 
-  // Copilot Fusion always names its level, as a model names its effort. Auto
-  // names its tier only when one was chosen; Copilot's default goes unsaid.
+  // On Copilot Fusion, Auto always names its level, as a model names its effort.
+  // Otherwise Auto names its tier only when one was chosen; Copilot's default goes unsaid.
   const summary = isAuto
     ? fusion
       ? [autoName, activeTierName]
@@ -420,6 +437,9 @@ export function ModelPicker({
           onChange={(event) => setQuery(event.target.value)}
         />
       </div>
+      {isAuto && (
+        <p className="mp-note mp-note--lead">{t('picker.leavesAuto', { auto: autoName })}</p>
+      )}
       <div className="mp-list">
         {q ? (
           results.map(modelRow)
@@ -646,14 +666,7 @@ export function ModelPicker({
         {missing && <Codicon name="warning" className="mp-pill-warn" />}
         {/* In a narrow composer the logo (or warning) stands in for the name; Auto keeps its label. */}
         <span className={`composer-pill-label${selected || missing ? ' composer-pill-label--model' : ''}`}>
-          {isAuto && fusion ? (
-            <>
-              <span className="mp-pill-brand">Copilot </span>
-              {pillText.replace(/^Copilot /, '')}
-            </>
-          ) : (
-            pillText
-          )}
+          {pillText}
         </span>
         {selected?.byok && (
           <Codicon
@@ -704,6 +717,37 @@ export function ModelPicker({
               )}
               {isAuto && tiers && autoTiers && (
                 <div className="mp-group">{subRow('tier', tiersLabel, activeTierName)}</div>
+              )}
+              {/* On Auto, the way to choose a model instead, set apart from Auto's own
+                  settings: how many there are, with a few of their makers' logos.
+                  Choosing one turns Auto off. */}
+              {isAuto && (
+                <>
+                  <div className="mp-sep" role="separator" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    aria-haspopup="menu"
+                    aria-expanded={flyout === 'model'}
+                    data-sub="model"
+                    className={`mp-item mp-choose${flyout === 'model' ? ' is-open' : ''}`}
+                    onClick={() => (flyout === 'model' ? closeFlyout() : openFlyout('model'))}
+                  >
+                    {makers.length > 0 && (
+                      <span className="mp-makers" aria-hidden="true">
+                        {makers.map((m) => (
+                          <ModelLogo key={m.id} model={m} className="mp-logo" />
+                        ))}
+                      </span>
+                    )}
+                    <span className="mp-item-label">
+                      {choosable
+                        ? t('picker.chooseFrom', { count: choosable })
+                        : t('picker.chooseModel')}
+                    </span>
+                    <Codicon name="chevron-right" className="mp-caret" />
+                  </button>
+                </>
               )}
               {!isAuto && (
                 <div className="mp-group">

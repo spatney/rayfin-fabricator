@@ -9,8 +9,7 @@
 }
 
 /* In the composer, the model pill gives way before the send button: it
-   shrinks, ending its name in "…", and in a narrow chat Copilot Fusion goes
-   by Fusion. */
+   shrinks, ending its name in "…". */
 .composer-left .model-picker {
   flex: 0 1 auto;
   min-width: 0;
@@ -19,12 +18,6 @@
 .composer-left .model-picker .mp-pill {
   max-width: min(260px, 100%);
   min-width: 0;
-}
-
-@container (max-width: 380px) {
-  .mp-pill-brand {
-    display: none;
-  }
 }
 
 .mp-pill .brand-logo.mp-pill-logo {
@@ -100,6 +93,12 @@
 .mp-main {
   width: 268px;
   overflow-y: auto;
+}
+
+/* Its lines are mixed from the text color: the app's border color is the
+   menu's own surface color in the dark theme. */
+.mp-main .mp-sep {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
 }
 
 .mp-fly {
@@ -313,6 +312,24 @@
   font-size: 11px;
   line-height: 1.4;
   color: var(--text-faint);
+}
+
+/* Above the model list on Auto: lined up with the search box and the models. */
+.mp-note.mp-note--lead {
+  margin: 0 0 2px;
+  padding: 2px 10px 4px;
+}
+
+/* On Auto: choose a model instead, led by a few of the models' makers' logos. */
+.mp-choose .mp-item-label {
+  flex: 1;
+}
+
+.mp-makers {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
 }
 
 /* A link out at the foot of a list, like Copilot's "Learn more". */
