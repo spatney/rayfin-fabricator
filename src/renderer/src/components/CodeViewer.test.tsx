@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { FileContent } from '@shared/ipc'
 import CodeViewer from './CodeViewer'
 import { makeProject } from '../../test/harness'
@@ -131,5 +131,55 @@ describe('CodeViewer files that no longer exist', () => {
     expect(read).toHaveBeenCalledWith(project.id, gone)
     expect(screen.queryByText('File not found.')).toBeNull()
     expect(localStorage.getItem(`rayfin.code.file.${project.id}`)).toBe(configPath)
+  })
+})
+
+describe('CodeViewer images', () => {
+  function open(file: FileContent): void {
+    ;(window as unknown as { api: unknown }).api = {
+      projects: {
+        files: {
+          tree: vi.fn(() =>
+            Promise.resolve([{ name: 'public', path: 'public', type: 'dir', children: [] }])
+          ),
+          read: vi.fn(() => Promise.resolve(file))
+        }
+      }
+    }
+    render(
+      <CodeViewer
+        project={makeProject('p1')}
+        refreshKey={0}
+        openRequest={{ path: file.path, nonce: 1 }}
+      />
+    )
+  }
+
+  it('shows a picture, however large a text file could be, and says when it can’t', async () => {
+    const png = 'data:image/png;base64,iVBORw0KGgo='
+    open({ path: 'public/hero.png', size: 1_468_006, image: png })
+    const img = await screen.findByRole('img', { name: 'hero.png' })
+    expect(img.getAttribute('src')).toBe(png)
+    expect(screen.getByText('1.4 MB')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Copy' })).toBeNull()
+
+    fireEvent.error(img)
+    expect(screen.getByText('Couldn’t show this image.')).toBeTruthy()
+  })
+
+  it('shows an SVG as a picture, or as its code', async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"/>'
+    open({
+      path: 'public/logo.svg',
+      size: svg.length,
+      content: svg,
+      image: 'data:image/svg+xml;base64,PHN2Zy8+'
+    })
+    expect(await screen.findByRole('img', { name: 'logo.svg' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Code' }))
+    expect(screen.getByTestId('monaco-value').textContent).toBe(svg)
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview' }))
+    expect(screen.getByRole('img', { name: 'logo.svg' })).toBeTruthy()
   })
 })

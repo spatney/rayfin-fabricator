@@ -9,14 +9,16 @@
 }
 
 /* In the composer, the model pill gives way before the send button: it
-   shrinks, ending its name in "…". */
+   shrinks, ending its name in "…", once the hint and the plugins' names have
+   given way (useComposerFit). The cap is on the wrapper, so it sizes to the pill. */
 .composer-left .model-picker {
   flex: 0 1 auto;
   min-width: 0;
+  max-width: 260px;
 }
 
 .composer-left .model-picker .mp-pill {
-  max-width: min(260px, 100%);
+  max-width: 100%;
   min-width: 0;
 }
 

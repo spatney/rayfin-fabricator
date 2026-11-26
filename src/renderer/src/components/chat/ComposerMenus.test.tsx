@@ -160,6 +160,24 @@ describe('PluginsMenu', () => {
     expect(trigger.disabled).toBe(true)
   })
 
+  it('counts the plugins that are on when the composer has no room for their names', () => {
+    render(
+      <PluginsMenu
+        plugins={offeredPlugins({ workIq: true })}
+        servers={[]}
+        on={['fabric-iq', 'work-iq']}
+        onToggle={vi.fn()}
+        compact
+      />
+    )
+    const trigger = screen.getByRole('button', { name: 'Plugins: Fabric IQ, Work IQ' })
+    expect(trigger.textContent).toBe('2')
+    // An unseen copy of the names stays, to measure whether they fit again.
+    const ghost = document.querySelector('.pl-pill-ghost')
+    expect(ghost?.getAttribute('aria-hidden')).toBe('true')
+    expect(ghost?.textContent).toBe('Fabric IQ, Work IQ')
+  })
+
   describe('with your MCP servers', () => {
     const servers: McpServer[] = [
       {

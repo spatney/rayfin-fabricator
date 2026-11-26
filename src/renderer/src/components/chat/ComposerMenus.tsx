@@ -257,7 +257,8 @@ export function AddMenu({
  * The composer's plugins, beside the "+" menu: services chat can look things up
  * with while it builds, such as Fabric IQ, and the MCP servers you added. Each
  * is off until turned on, and changes from the chat's next message; the trigger
- * names the ones that are on.
+ * names the ones that are on, or counts them when the composer has no room for
+ * their names beside the model's (useComposerFit).
  */
 export function PluginsMenu({
   plugins,
@@ -268,7 +269,8 @@ export function PluginsMenu({
   onToggle,
   onManageServers,
   onMakeTool,
-  onLearnMore
+  onLearnMore,
+  compact = false
 }: {
   /** The plugins chat offers. */
   plugins: readonly ChatPlugin[]
@@ -286,6 +288,11 @@ export function PluginsMenu({
   /** Open the MCP servers dialog on making a tool with Copilot. */
   onMakeTool?: () => void
   onLearnMore?: () => void
+  /**
+   * Count the plugins that are on rather than name them: there's no room for their
+   * names beside the model's. An unseen copy of the names stays, to measure.
+   */
+  compact?: boolean
 }): JSX.Element {
   const { t } = useTranslation('chat')
   const [open, setOpen] = useState(false)
@@ -306,6 +313,7 @@ export function PluginsMenu({
   const names = onNames.join(', ')
   const enabled = onNames.length
   const titleId = useId()
+  const counted = compact && Boolean(names)
 
   useEffect(() => {
     if (!open) return
@@ -359,7 +367,7 @@ export function PluginsMenu({
       <button
         ref={triggerRef}
         type="button"
-        className={`${names ? 'composer-pill pl-pill' : 'composer-icon-btn'}${open ? ' is-open' : ''}`}
+        className={`${names ? `composer-pill pl-pill${counted ? ' pl-pill--compact' : ''}` : 'composer-icon-btn'}${open ? ' is-open' : ''}`}
         onClick={() => (open ? closeMenu(false) : openMenu())}
         disabled={disabled}
         aria-haspopup="menu"
@@ -374,13 +382,19 @@ export function PluginsMenu({
         }
       >
         <Codicon name="plug" />
-        {names && <span className="composer-pill-label pl-pill-label">{names}</span>}
+        {names && !counted && <span className="composer-pill-label pl-pill-label">{names}</span>}
         {names && (
           <span className="pl-pill-count" aria-hidden="true">
             {enabled}
           </span>
         )}
       </button>
+      {counted && (
+        <span className="composer-pill pl-pill pl-pill-ghost" aria-hidden="true">
+          <Codicon name="plug" />
+          <span className="composer-pill-label pl-pill-label">{names}</span>
+        </span>
+      )}
       {open &&
         createPortal(
           <div

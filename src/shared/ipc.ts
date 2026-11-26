@@ -2963,12 +2963,14 @@ export interface FileContent {
   content?: string
   /** True when the file is binary and not shown. */
   binary?: boolean
-  /** True when the file exceeds the viewer size cap. */
+  /** True when the file exceeds the viewer size cap (larger for images). */
   tooLarge?: boolean
   /** Populated when the read failed. */
   error?: string
   /** True when the file doesn't exist (any longer), such as one deleted since it was opened. */
   missing?: boolean
+  /** An image, as a `data:` URL, for the viewer to show (an SVG has its text too). */
+  image?: string
 }
 
 /* ------------------------------------------------------------------ *

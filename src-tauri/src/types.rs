@@ -3098,6 +3098,9 @@ pub struct FileContent {
   /// The file doesn't exist (any longer), such as one deleted since it was opened.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub missing: Option<bool>,
+  /// An image, as a `data:` URL, for the viewer to show.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub image: Option<String>,
 }
 
 /* ----------------------------- chat ----------------------------- */

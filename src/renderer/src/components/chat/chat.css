@@ -2640,6 +2640,14 @@ button.thinking-head:hover {
   }
 }
 
+/* Short of room, the hint gives way first (useComposerFit): it stands out of the
+   row, unseen, where it can still be measured. */
+.composer-actions--no-hint .composer-hint {
+  position: absolute;
+  right: 0;
+  visibility: hidden;
+}
+
 /* Popover menus anchored to the composer's bottom row (open upward). */
 .composer-menu {
   position: relative;
@@ -2714,10 +2722,15 @@ button.thinking-head:hover {
 }
 
 @container (max-width: 380px) {
-  .composer-pill-label--model,
   .composer-pill-tag {
     display: none;
   }
+}
+
+/* With no room for even part of the model's name, its logo stands in for it
+   (useComposerFit). */
+.composer-actions--no-model .composer-pill-label--model {
+  display: none;
 }
 
 @keyframes popIn {
@@ -2782,7 +2795,8 @@ button.thinking-head:hover {
   font-size: 14px;
 }
 
-/* With its names hidden in a narrow chat, the trigger counts the plugins that are on. */
+/* Counting the plugins that are on, when their names would crowd the model's
+   name, which matters more (useComposerFit). */
 .pl-pill-count {
   display: none;
   min-width: 16px;
@@ -2797,14 +2811,18 @@ button.thinking-head:hover {
   border-radius: 999px;
 }
 
-@container (max-width: 380px) {
-  .pl-pill-label {
-    display: none;
-  }
+.pl-pill--compact .pl-pill-count {
+  display: inline-block;
+}
 
-  .pl-pill-count {
-    display: inline-block;
-  }
+/* An unseen copy of the trigger showing the names, to measure whether they fit. */
+.pl-pill.pl-pill-ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 /* The Plugins panel: what this chat can use, in sections, each with a switch.

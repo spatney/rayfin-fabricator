@@ -5,6 +5,8 @@
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 
+use base64::Engine;
+
 use crate::commands::util::{looks_binary, safe_resolve};
 use crate::services::exec::{run, RunOptions};
 use crate::services::paths;
@@ -18,6 +20,25 @@ const EXCLUDED_DIRS: [&str; 11] = [
 const MAX_ENTRIES: usize = 8000;
 const MAX_DEPTH: usize = 12;
 const MAX_FILE_BYTES: u64 = 1024 * 1024;
+/// The most an image the viewer shows may weigh: as much as one attached to chat.
+const MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
+
+/// The type of an image the viewer shows, from the file's extension.
+fn image_mime(path: &Path) -> Option<&'static str> {
+  let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+  Some(match extension.as_str() {
+    "png" => "image/png",
+    "apng" => "image/apng",
+    "jpg" | "jpeg" | "jfif" => "image/jpeg",
+    "gif" => "image/gif",
+    "webp" => "image/webp",
+    "avif" => "image/avif",
+    "bmp" => "image/bmp",
+    "ico" | "cur" => "image/x-icon",
+    "svg" => "image/svg+xml",
+    _ => return None,
+  })
+}
 
 /// Set of working-tree paths git considers ignored, so the tree can mark them.
 /// `files` holds exact ignored file paths; `dirs` holds wholly-ignored directory
@@ -143,7 +164,8 @@ pub async fn files_tree(id: String) -> Vec<FileNode> {
   walk(Path::new(&project.path), "", 0, &mut budget, &ignores, false)
 }
 
-/// Read a single project file for the viewer (text only, size-capped).
+/// Read a single project file for the viewer: its text, size-capped, and an image
+/// as a `data:` URL too (an SVG has both).
 pub async fn files_read(id: String, path: String) -> FileContent {
   let err = |size: u64, message: &str| FileContent {
     path: path.clone(),
@@ -168,20 +190,29 @@ pub async fn files_read(id: String, path: String) -> FileContent {
     Err(_) => return err(0, &t!("commands.files.notFound")),
   };
 
-  if size > MAX_FILE_BYTES {
+  let mime = image_mime(&target);
+  if size > if mime.is_some() { MAX_IMAGE_BYTES } else { MAX_FILE_BYTES } {
     return FileContent { path, size, too_large: Some(true), ..Default::default() };
   }
 
-  match std::fs::read(&target) {
-    Ok(buf) if looks_binary(&buf) => FileContent { path, size, binary: Some(true), ..Default::default() },
-    Ok(buf) => FileContent {
-      path,
-      size,
-      content: Some(String::from_utf8_lossy(&buf).to_string()),
-      ..Default::default()
-    },
-    Err(_) => err(size, &t!("commands.files.cantRead")),
-  }
+  let read = tokio::task::spawn_blocking(move || std::fs::read(&target)).await;
+  let Ok(Ok(buf)) = read else {
+    return err(size, &t!("commands.files.cantRead"));
+  };
+  viewed(path, size, mime, &buf)
+}
+
+/// What the viewer shows of a file it read: its text, and an image as a `data:`
+/// URL too, or that it's neither.
+fn viewed(path: String, size: u64, mime: Option<&str>, buf: &[u8]) -> FileContent {
+  let text = size <= MAX_FILE_BYTES && !looks_binary(buf);
+  let content = match mime {
+    // A picture's bytes are text only when it isn't one, such as a Git LFS pointer.
+    Some(mime) if mime != "image/svg+xml" => text.then(|| std::str::from_utf8(buf).ok().map(str::to_string)).flatten(),
+    _ => text.then(|| String::from_utf8_lossy(buf).to_string()),
+  };
+  let image = mime.map(|mime| format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(buf)));
+  FileContent { path, size, binary: (content.is_none() && image.is_none()).then_some(true), content, image, ..Default::default() }
 }
 
 /// The most entries a folder lists for an `@` reference: plenty to pick from
@@ -308,6 +339,33 @@ mod tests {
     // However many `..`, never above the root.
     let root = project.ancestors().last().unwrap().to_path_buf();
     assert_eq!(resolve_reference(&project, &"../".repeat(40)), root);
+  }
+
+  #[test]
+  fn the_viewer_shows_images_and_their_text_only_when_they_have_some() {
+    assert_eq!(image_mime(Path::new("public/Hero.PNG")), Some("image/png"));
+    assert_eq!(image_mime(Path::new("logo.svg")), Some("image/svg+xml"));
+    assert_eq!(image_mime(Path::new("src/main.ts")), None);
+    // Bigger than any text file the viewer opens: a picture is read whole.
+    let size = MAX_FILE_BYTES + 400 * 1024;
+    assert!(size <= MAX_IMAGE_BYTES);
+    let png = [b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".as_slice(), vec![7u8; size as usize - 16].as_slice()].concat();
+    let shown = viewed("hero.png".into(), size, Some("image/png"), &png);
+    assert!(shown.image.unwrap().starts_with("data:image/png;base64,iVBORw0KGgoAAAANSUhEUg"));
+    assert_eq!((shown.content, shown.binary), (None, None));
+
+    // An SVG is text too, and a Git LFS pointer named like a picture is only text.
+    let svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\"/>";
+    let shown = viewed("logo.svg".into(), svg.len() as u64, Some("image/svg+xml"), svg);
+    assert_eq!(shown.image.as_deref(), Some("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4="));
+    assert_eq!(shown.content.as_deref(), Some("<svg xmlns=\"http://www.w3.org/2000/svg\"/>"));
+    let pointer = b"version https://git-lfs.github.com/spec/v1\noid sha256:4d7a\nsize 1468006\n";
+    let shown = viewed("hero.png".into(), pointer.len() as u64, Some("image/png"), pointer);
+    assert!(shown.content.unwrap().starts_with("version https://git-lfs"));
+
+    // Neither text nor a picture.
+    let shown = viewed("data.bin".into(), 4, None, b"a\0bc");
+    assert_eq!((shown.binary, shown.image, shown.content), (Some(true), None, None));
   }
 
   #[test]

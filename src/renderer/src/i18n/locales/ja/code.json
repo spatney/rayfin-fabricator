@@ -23,7 +23,16 @@
     "loadingEditor": "エディターを読み込んでいます…",
     "bytes": "{{size}} B",
     "kilobytes": "{{size}} KB",
-    "megabytes": "{{size}} MB"
+    "megabytes": "{{size}} MB",
+    "imageSize": "{{width}} × {{height}} px",
+    "actualSize": "実際のサイズ",
+    "actualSizeTitle": "画像を実際のサイズで表示します",
+    "fit": "全体を表示",
+    "fitTitle": "画像をペインに合わせて表示します",
+    "showAs": "表示形式",
+    "preview": "プレビュー",
+    "code": "コード",
+    "imageBroken": "この画像を表示できません。"
   },
   "find": {
     "label": "ターミナル内を検索",

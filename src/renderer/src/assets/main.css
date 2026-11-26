@@ -4329,6 +4329,63 @@ code {
   min-height: 0;
 }
 
+/* An image file, on the pane's background: fitted to it, or at its actual size,
+   which scrolls. A checkerboard shows through its transparent parts. Its auto
+   margins center it, and still let a larger image scroll from its corner. */
+.code-image {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  overflow: auto;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.code-image-img {
+  --checker: color-mix(in srgb, var(--text) 8%, transparent);
+  display: block;
+  flex: none;
+  max-width: 100%;
+  max-height: 100%;
+  margin: auto;
+  background:
+    repeating-conic-gradient(var(--checker) 0 25%, transparent 0 50%) 0 0 / 16px 16px,
+    var(--bg-elev);
+  outline: 1px solid var(--border);
+  user-select: none;
+}
+
+.code-image-img--zoom-in {
+  cursor: zoom-in;
+}
+
+.code-image-img--zoom-out {
+  cursor: zoom-out;
+}
+
+/* A small picture enlarged keeps its pixels square and sharp. */
+.code-image-img--pixels {
+  image-rendering: pixelated;
+}
+
+.code-image--full .code-image-img {
+  max-width: none;
+  max-height: none;
+}
+
+.code-image-meta {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* With the path gone, the size is enough. */
+@container codehead (max-width: 340px) {
+  .code-image-meta {
+    display: none;
+  }
+}
+
 /* rayfin.yml "extra treatment": a tight, scannable guide to the config. */
 .cfg-guide {
   flex: 1;

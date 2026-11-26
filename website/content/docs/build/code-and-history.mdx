@@ -1,6 +1,6 @@
 ---
 title: "Code and history"
-description: "Browse project files, open the folder in VS Code, inspect diffs, and restore earlier git snapshots from Fabricator's Code view."
+description: "Browse project files and preview images, open the folder in VS Code, inspect diffs, and restore earlier git snapshots from Fabricator's Code view."
 ---
 
 Use **Code** when you want to inspect the files behind your app or understand what changed over time. The current Code view is a viewer: it opens project files in a read-only Monaco editor and can open the project folder in VS Code for editing.
@@ -23,7 +23,17 @@ The file header can show:
 - The file size.
 - **Copy**, which copies the displayed file contents.
 
-If a file is binary, empty, missing or too large to preview, Fabricator shows that message instead of the editor.
+If a file is binary, empty, missing or too large to preview, Fabricator shows that message instead of the editor. Text files up to 1 MB open in the editor.
+
+### Preview images
+
+Images up to 20 MB, such as PNG, JPEG, GIF, WebP, AVIF, BMP, ICO and SVG files, open as pictures instead of code. Transparent parts show a checkerboard.
+
+- The header shows the image's size in pixels, such as `1600 × 1000 px`, and how large it's shown, such as `42%`.
+- A large image shrinks to fit the pane, and a small one, such as an icon, is enlarged to show its detail. Select **Actual size**, or select the image, to see it at 100%. Select **Fit**, or the image again, to go back.
+- An SVG file shows **Preview** and **Code**: select **Code** to read its source in the editor, with **Copy**.
+
+If Fabricator can't show an image, it says "Couldn’t show this image."
 
 ## Open files from chat or other views
 

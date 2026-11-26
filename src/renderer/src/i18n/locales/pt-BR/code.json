@@ -23,7 +23,16 @@
     "loadingEditor": "Carregando o editor…",
     "bytes": "{{size}} B",
     "kilobytes": "{{size}} KB",
-    "megabytes": "{{size}} MB"
+    "megabytes": "{{size}} MB",
+    "imageSize": "{{width}} × {{height}} px",
+    "actualSize": "Tamanho real",
+    "actualSizeTitle": "Mostrar a imagem no tamanho real",
+    "fit": "Ajustar",
+    "fitTitle": "Ajustar a imagem ao painel",
+    "showAs": "Mostrar como",
+    "preview": "Visualização",
+    "code": "Código",
+    "imageBroken": "Não foi possível mostrar esta imagem."
   },
   "find": {
     "label": "Localizar no terminal",

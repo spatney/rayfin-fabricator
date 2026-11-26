@@ -61,6 +61,7 @@ import type { OutboundPrompt, UIChatMessage } from './chat/types'
 import { suggestionsFor, useGeneratedSuggestions } from './chat/suggestions'
 import { SendIcon } from './chat/icons'
 import { AddMenu, PluginsMenu } from './chat/ComposerMenus'
+import { composerActionsClass, useComposerFit } from './chat/composerFit'
 import { UsageMeter } from './chat/UsageMeter'
 import { offeredPlugins, offersSupportingItems } from './chat/plugins'
 import { useMcpServers } from '../mcpServers'
@@ -434,6 +435,9 @@ export default function ChatPanel({
   const sizerRef = useRef<HTMLDivElement>(null)
   const revealRaf = useRef<number | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  /** The composer's bottom row: what fits in it beside the model's whole name. */
+  const actionsRef = useRef<HTMLDivElement>(null)
+  const actionsFit = useComposerFit(actionsRef)
   const [attaching, setAttaching] = useState(false)
   /** The Add Fabric data picker, open on one kind of data or on every kind. */
   const [connect, setConnect] = useState<{ kind?: DataKind } | null>(null)
@@ -2072,7 +2076,7 @@ export default function ChatPanel({
               onFocus={revealCaretSoon}
             />
           </div>
-          <div className="composer-actions">
+          <div ref={actionsRef} className={composerActionsClass(actionsFit)}>
             <div className="composer-left">
               <AddMenu
                 attaching={attaching}
@@ -2091,6 +2095,7 @@ export default function ChatPanel({
                 onManageServers={onManageMcpServers}
                 onMakeTool={onMakeTool}
                 onLearnMore={() => openDocs('plugins')}
+                compact={!actionsFit.names}
               />
               <ModelPicker
                 value={selection}

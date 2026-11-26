@@ -23,7 +23,16 @@
     "loadingEditor": "Editor wird geladen…",
     "bytes": "{{size}} B",
     "kilobytes": "{{size}} KB",
-    "megabytes": "{{size}} MB"
+    "megabytes": "{{size}} MB",
+    "imageSize": "{{width}} × {{height}} px",
+    "actualSize": "Originalgröße",
+    "actualSizeTitle": "Bild in Originalgröße anzeigen",
+    "fit": "Einpassen",
+    "fitTitle": "Bild in den Bereich einpassen",
+    "showAs": "Anzeigen als",
+    "preview": "Vorschau",
+    "code": "Code",
+    "imageBroken": "Dieses Bild kann nicht angezeigt werden."
   },
   "find": {
     "label": "Im Terminal suchen",

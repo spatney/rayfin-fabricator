@@ -27,7 +27,7 @@ To have Copilot follow the same rules in every app, such as using the system the
 
 ## Turn on plugins
 
-Plugins let chat look things up in your organization's data, or use other services' tools, while it builds. Select **Plugins**, the plug button next to **+**, to turn them on or off. Each app's chat has its own: a new app's chat starts with the plugins in your [chat defaults](/docs/reference/settings#chat-defaults), or with none on. When a plugin is on, the button shows its name, or, in a narrow chat, how many are on.
+Plugins let chat look things up in your organization's data, or use other services' tools, while it builds. Select **Plugins**, the plug button next to **+**, to turn them on or off. Each app's chat has its own: a new app's chat starts with the plugins in your [chat defaults](/docs/reference/settings#chat-defaults), or with none on. When plugins are on, the button shows their names, or, when there isn't room for them beside the model's name, how many are on.
 
 - **Fabric IQ** looks up the Power BI reports and semantic models you can open.
 - **Work IQ** looks up your Microsoft 365 email, meetings, files, Teams messages and people. It's an experiment: it shows in **Plugins** once you turn on **Work IQ** in **Settings → Experiments**.
@@ -57,7 +57,7 @@ To choose for yourself, select the row under **Effort** that says how many model
 - **Effort**, how long the model thinks before it answers, for models that offer a choice, such as **Low**, **Medium**, **High** or **Max**. The model's own default is marked **Default**. A model that has no default of its own starts at **Medium**, so it always thinks before it answers. Higher effort can think longer, so use it for harder changes.
 - **Context window**, for models that offer a long one: **Standard** or **Long**, with their sizes.
 
-The pill shows your choice, such as `Claude Opus 5.5 · High`. When you choose another model, Fabricator keeps the effort and context window if the new model offers them.
+The pill shows your choice, such as `Claude Opus 5.5 · High`. In a narrow chat, the composer keeps it in view: the **Plugins** button shows how many plugins are on instead of their names first. Only then does the model's name end in "…", and with no room at all, the pill shows only its maker's logo. When you choose another model, Fabricator keeps the effort and context window if the new model offers them.
 
 Each app's chat keeps its own choice. To start every new app's chat with your model, choose it in **Settings → Chat defaults**. See [Chat defaults](/docs/reference/settings#chat-defaults).
 

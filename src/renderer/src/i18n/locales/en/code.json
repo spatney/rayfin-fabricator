@@ -23,7 +23,16 @@
     "loadingEditor": "Loading editor…",
     "bytes": "{{size}} B",
     "kilobytes": "{{size}} KB",
-    "megabytes": "{{size}} MB"
+    "megabytes": "{{size}} MB",
+    "imageSize": "{{width}} × {{height}} px",
+    "actualSize": "Actual size",
+    "actualSizeTitle": "Show the image at its actual size",
+    "fit": "Fit",
+    "fitTitle": "Fit the image to the pane",
+    "showAs": "Show as",
+    "preview": "Preview",
+    "code": "Code",
+    "imageBroken": "Couldn’t show this image."
   },
   "find": {
     "label": "Find in terminal",

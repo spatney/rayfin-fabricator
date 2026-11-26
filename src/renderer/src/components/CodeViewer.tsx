@@ -4,6 +4,7 @@ import type { FileContent, FileNode, StudioProject } from '@shared/ipc'
 import { currentLanguage, formatLocale, translator, useTranslation } from '../i18n'
 import { monacoLanguage } from '../monaco'
 import { Codicon, EditorIcon } from './icons'
+import { ImagePreview, scales, type ImageInfo } from './ImagePreview'
 import { readCodeTab, writeCodeTab, type CodeTab } from './codeTab'
 import HistoryView from './HistoryView'
 import SecretsView from './SecretsView'
@@ -174,6 +175,13 @@ function FilesView({
   const [file, setFile] = useState<FileContent | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+  /** An SVG's code rather than its picture. */
+  const [svgCode, setSvgCode] = useState(false)
+  /** The image at its actual size rather than fitted to the pane. */
+  const [fullSize, setFullSize] = useState(false)
+  const [imageInfo, setImageInfo] = useState<ImageInfo | null>(null)
+  /** An image that couldn't be shown, as read: the same file changed may show. */
+  const [brokenImage, setBrokenImage] = useState<string | null>(null)
   // Guards the one-time default pick so we never override a manual selection.
   const didDefaultRef = useRef(false)
   /** Latest read wins so a slower default-config read cannot overwrite an external request. */
@@ -267,11 +275,18 @@ function FilesView({
     if (selected) void readPath(selected)
   }, [refreshKey, selected, readPath])
 
+  useEffect(() => {
+    setFullSize(false)
+    setImageInfo(null)
+  }, [selected])
+
   // Honour an external request before passive effects can choose the default config file.
   useLayoutEffect(() => {
     if (!openRequest?.path) return
     didDefaultRef.current = true
     pendingLineRef.current = openRequest.line ? { path: openRequest.path, line: openRequest.line } : null
+    // A line in an SVG is in its code.
+    if (openRequest.line && /\.svg$/i.test(openRequest.path)) setSvgCode(true)
     setSelectedState({ projectId: project.id, path: openRequest.path })
   }, [openRequest?.nonce, openRequest?.path, project.id])
 
@@ -294,6 +309,15 @@ function FilesView({
     setCopied(true)
     setTimeout(() => setCopied(false), 1200)
   }
+
+  const svg = Boolean(file?.image?.startsWith('data:image/svg+xml'))
+  const svgHasCode = svg && file?.content != null
+  /** The file's picture shows, rather than its code or a note. */
+  const picture = file?.image != null && brokenImage !== file.image && !(svgHasCode && svgCode)
+  /** Fitting the picture to the pane scales it, so it can show at its actual size too. */
+  const zoomable = picture && imageInfo !== null && scales(imageInfo.fit)
+  /** Switching shows the picture larger. */
+  const larger = imageInfo !== null && (fullSize ? imageInfo.fit > 1 : imageInfo.fit < 1)
 
   return (
     <div className="code-viewer">
@@ -334,10 +358,51 @@ function FilesView({
               {selected}
             </span>
             <span className="code-head-spacer" />
+            {svgHasCode && (
+              <div className="hist-seg" role="tablist" aria-label={t('files.showAs')}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={!svgCode}
+                  className={`hist-seg-btn${svgCode ? '' : ' hist-seg-btn--on'}`}
+                  onClick={() => setSvgCode(false)}
+                >
+                  {t('files.preview')}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={svgCode}
+                  className={`hist-seg-btn${svgCode ? ' hist-seg-btn--on' : ''}`}
+                  onClick={() => setSvgCode(true)}
+                >
+                  {t('files.code')}
+                </button>
+              </div>
+            )}
+            {picture && imageInfo && (
+              <span className="code-size code-image-meta">
+                {t('files.imageSize', { width: imageInfo.width, height: imageInfo.height })}
+                {zoomable &&
+                  !fullSize &&
+                  ` · ${new Intl.NumberFormat(formatLocale(), { style: 'percent' }).format(imageInfo.fit)}`}
+              </span>
+            )}
             {file && !file.error && file.size > 0 && (
               <span className="code-size">{formatBytes(file.size)}</span>
             )}
-            {file?.content != null && (
+            {zoomable && (
+              <button
+                type="button"
+                className="btn btn--xs btn--ghost"
+                onClick={() => setFullSize((full) => !full)}
+                title={fullSize ? t('files.fitTitle') : t('files.actualSizeTitle')}
+              >
+                <Codicon name={larger ? 'zoom-in' : 'zoom-out'} />
+                {fullSize ? t('files.fit') : t('files.actualSize')}
+              </button>
+            )}
+            {file?.content != null && !picture && (
               <button className="btn btn--xs btn--ghost" onClick={copy}>
                 {copied ? t('actions.copied') : t('actions.copy')}
               </button>
@@ -352,6 +417,19 @@ function FilesView({
             <div className="code-empty">{t('status.loading')}</div>
           ) : file?.error ? (
             <div className="code-empty code-empty--err">{file.error}</div>
+          ) : picture && file?.image ? (
+            <ImagePreview
+              key={file.path}
+              src={file.image}
+              alt={file.path.split('/').pop() ?? file.path}
+              vector={svg}
+              full={fullSize}
+              onFull={setFullSize}
+              onInfo={setImageInfo}
+              onError={() => setBrokenImage(file.image ?? null)}
+            />
+          ) : file?.image != null && file.content == null ? (
+            <div className="code-empty">{t('files.imageBroken')}</div>
           ) : file?.binary ? (
             <div className="code-empty">{t('files.binary')}</div>
           ) : file?.tooLarge ? (
