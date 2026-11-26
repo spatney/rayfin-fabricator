@@ -139,6 +139,13 @@
     "proNoteNoCli": "Pro-Arbeitsbereiche erfordern Rayfin {{needs}} oder höher, und die Rayfin-Pakete dieser App sind nicht installiert.",
     "personalNoCapacity": "„Mein Arbeitsbereich“ benötigt eine Fabric- oder Premium-Kapazität; er wird nicht als Pro-Arbeitsbereich angeboten",
     "proCapacity": "Keine Kapazität (Pro-Arbeitsbereich)",
+    "proUnsupported": "Pro-Arbeitsbereiche unterstützen nicht, was diese App verwendet, daher schlägt die Veröffentlichung in einem davon wahrscheinlich fehl:",
+    "proPostgres": "Pro-Arbeitsbereiche erfordern PostgreSQL",
+    "proFeature": {
+      "storage": "Dateispeicher",
+      "functions": "Funktionen",
+      "mssql": "MSSQL-Daten"
+    },
     "refusal": {
       "workspace": "Fabric-Apps waren in {{workspace}} nicht verfügbar, als du zuvor dort veröffentlicht hast. Eine Veröffentlichung hier schlägt daher wahrscheinlich fehl.",
       "capacity": "Fabric-Apps waren auf der Kapazität dieses Arbeitsbereichs nicht verfügbar, als du zuvor veröffentlicht hast. Eine Veröffentlichung hier schlägt daher wahrscheinlich fehl.",
@@ -190,7 +197,7 @@
     "newAppNamed": "Eine neue App namens „{{name}}“",
     "newApp": "Eine neue App",
     "replaces": "Beim Veröffentlichen wird die App „{{app}}“ in {{workspace}} durch diese ersetzt.",
-    "publishAnyway": "Trotzdem hier veröffentlichen",
+    "publishAnyway": "Trotzdem veröffentlichen",
     "notEligible": "Nicht geeignet",
     "ineligibleHint": "Diese benötigen eine Kapazität vom Typ Fabric (<strong>F-SKU</strong>) oder Power BI Premium (<strong>P-SKU</strong>).",
     "noMatch": "Keine Arbeitsbereiche entsprechen „{{query}}“.",

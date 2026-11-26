@@ -28,6 +28,7 @@
 
   --ok: #3ddc84;
   --pending: #f5c451;
+  --on-pending: #2b2000;
   --danger: #ff6058;
 
   --radius-sm: 7px;
@@ -89,6 +90,7 @@
 
   --ok: #1a8a54;
   --pending: #a9750a;
+  --on-pending: #ffffff;
   --danger: #d93a30;
 
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.08);
@@ -1914,6 +1916,24 @@ code {
   background: color-mix(in srgb, var(--danger) 86%, #000);
 }
 
+/* Going ahead where it will likely fail, such as "Publish anyway": amber, a caution
+   rather than an error. */
+.btn--caution {
+  background: var(--pending);
+  border-color: transparent;
+  color: var(--on-pending);
+  font-weight: 600;
+}
+
+.btn--caution:hover:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--pending) 90%, #fff);
+}
+
+.btn--caution:active:not(:disabled) {
+  background: color-mix(in srgb, var(--pending) 86%, #000);
+}
+
 .btn--link {
   background: transparent;
   border-color: transparent;
@@ -3598,8 +3618,9 @@ code {
 .ws-app {
   margin-top: 4px;
 }
-/* Fabric turned down an app in this workspace, on its capacity or in its region:
-   a caution, not an error, so amber rather than red. */
+/* Fabric turned down an app in this workspace, on its capacity or in its region, or
+   it's a Pro workspace, which doesn't support some of what the app uses: a caution,
+   not an error, so amber rather than red. */
 .ws-target-conflict--refused .codicon {
   color: var(--pending);
 }
@@ -3624,6 +3645,41 @@ code {
 }
 .ws-refused-note .link-btn {
   font-size: inherit;
+}
+/* In the new workspace form, whose gap already spaces it. */
+.ws-create .ws-refused-note {
+  margin: 0 2px;
+}
+/* What the app uses that Pro workspaces don't support: one per line, its name in
+   bold after a small amber dot. */
+.ws-pro-limits {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ws-pro-limits li {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.ws-pro-limits li::before {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--pending);
+  transform: translateY(-2px);
+}
+.ws-pro-limits strong {
+  font-weight: 600;
+  color: var(--text);
+}
+.ws-pro-limit-hint {
+  color: var(--text-dim);
 }
 /* A workspace row Fabric turned apps down for: a small amber dot and words. */
 .ws-item-flag {

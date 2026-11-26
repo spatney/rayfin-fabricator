@@ -8,6 +8,7 @@ import type {
   FabricCapacity,
   FabricWorkspace,
   FabricWorkspacesResult,
+  ProUnsupported,
   ProWorkspaces,
   UnsupportedWorkspace
 } from '@shared/ipc'
@@ -102,6 +103,31 @@ function refusedNote(refused: readonly UnsupportedWorkspace[]): string {
   return t('create.refusedNote.capacity')
 }
 
+/**
+ * Why publishing the app to a Pro workspace will likely fail: what it uses that
+ * they don't support, one per line.
+ */
+function ProLimits({ unsupported }: { unsupported: readonly ProUnsupported[] }): JSX.Element {
+  const { t } = useTranslation('publish')
+  return (
+    <>
+      {t('create.proUnsupported')}
+      <ul className="ws-pro-limits">
+        {unsupported.map((u) => (
+          <li key={u}>
+            <span>
+              <strong>{t(`create.proFeature.${u}`)}</strong>
+              {u === 'mssql' && (
+                <span className="ws-pro-limit-hint"> · {t('create.proPostgres')}</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
+  )
+}
+
 interface Props {
   /** The signed-in user's Fabric workspaces (with capacity / eligibility info). */
   wsResult: FabricWorkspacesResult | null
@@ -178,8 +204,6 @@ export default function DeploymentCreateForm({
   const [replaceIn, setReplaceIn] = useState<string | null>(null)
   /** An existing app picked to publish into, in the workspace it's in. */
   const [appIn, setAppIn] = useState<{ workspaceId: string; name: string } | null>(null)
-  /** A workspace Fabric turned down before that the user chose to publish to anyway. */
-  const [tryIn, setTryIn] = useState<string | null>(null)
   const [showIneligible, setShowIneligible] = useState(false)
   // Inline "create a new workspace" sub-flow: pick a capacity + name.
   const [creatingWs, setCreatingWs] = useState(false)
@@ -197,6 +221,8 @@ export default function DeploymentCreateForm({
   /** Pro workspaces, while their experiment is on, and whether this app can publish to one. */
   const pro = wsResult?.ok ? wsResult.proWorkspaces : undefined
   const proReady = Boolean(pro?.ready)
+  /** What this app uses that Pro workspaces don't support. */
+  const proUnsupported = pro?.unsupported ?? []
 
   /** Fabric turned down an app on this capacity, or in its region. */
   function capacityRefusal(c: FabricCapacity): Refusal | undefined {
@@ -368,7 +394,10 @@ export default function DeploymentCreateForm({
   // Choosing the app to publish into settles which one is replaced.
   const blockedByConflict = Boolean(replaces) && replaceIn !== selectedWs && !chosenApp
   const selectedRefusal = selectedWorkspace ? refusal(selectedWorkspace) : undefined
-  const blockedByRefusal = Boolean(selectedRefusal) && tryIn !== selectedWs
+  /** The selected workspace is a Pro one, which doesn't support some of what the app uses. */
+  const proRisk = Boolean(selectedWorkspace && isPro(selectedWorkspace) && proUnsupported.length)
+  // Publishing will likely fail there, so the button says "Publish anyway".
+  const anyway = (Boolean(selectedRefusal) || proRisk) && !running
   const canSubmit =
     Boolean(selectedWorkspace) &&
     !running &&
@@ -376,8 +405,7 @@ export default function DeploymentCreateForm({
     !reauthing &&
     !signingIn &&
     !checkingTarget &&
-    !blockedByConflict &&
-    !blockedByRefusal
+    !blockedByConflict
 
   function submit(): void {
     if (!canSubmit || !selectedWorkspace) return
@@ -424,7 +452,8 @@ export default function DeploymentCreateForm({
           spellCheck={false}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && selectedWs) submit()
+            // Where publishing will likely fail, only "Publish anyway" publishes.
+            if (e.key === 'Enter' && selectedWs && !anyway) submit()
           }}
         />
       </label>
@@ -523,6 +552,14 @@ export default function DeploymentCreateForm({
               </select>
             ) : (
               <p className="ws-empty-sub">{t('create.noCapacities')}</p>
+            )}
+            {!loadingCaps && proReady && selectedCap === PRO && proUnsupported.length > 0 && (
+              <div className="ws-refused-note" role="note">
+                <Codicon name="warning" />
+                <div className="ws-refused-note-text">
+                  <ProLimits unsupported={proUnsupported} />
+                </div>
+              </div>
             )}
             {createErr && <p className="ws-create-err" role="alert">{createErr}</p>}
             <div className="dep-create-actions">
@@ -691,15 +728,14 @@ export default function DeploymentCreateForm({
                 <span className="ws-target-conflict-text">
                   {refusalText(selectedWorkspace, selectedRefusal)}
                 </span>
-                {tryIn !== selectedWorkspace.id && (
-                  <button
-                    type="button"
-                    className="link-btn"
-                    onClick={() => setTryIn(selectedWorkspace.id)}
-                  >
-                    {t('create.publishAnyway')}
-                  </button>
-                )}
+              </div>
+            )}
+            {selectedWorkspace && proRisk && (
+              <div className="ws-target-conflict ws-target-conflict--refused" role="alert">
+                <span className="codicon codicon-warning" aria-hidden="true" />
+                <div className="ws-target-conflict-text">
+                  <ProLimits unsupported={proUnsupported} />
+                </div>
               </div>
             )}
             {shownIneligible.length > 0 && (
@@ -836,8 +872,16 @@ export default function DeploymentCreateForm({
             {cancelLabel ?? t('actions.cancel')}
           </button>
         )}
-        <button className="btn btn--xs btn--primary" disabled={!canSubmit} onClick={submit}>
-          {running ? (busyLabel ?? t('button.publishing')) : (submitLabel ?? t('button.publish'))}
+        <button
+          className={`btn btn--xs ${anyway ? 'btn--caution' : 'btn--primary'}`}
+          disabled={!canSubmit}
+          onClick={submit}
+        >
+          {running
+            ? (busyLabel ?? t('button.publishing'))
+            : anyway
+              ? t('create.publishAnyway')
+              : (submitLabel ?? t('button.publish'))}
         </button>
       </div>
     </div>

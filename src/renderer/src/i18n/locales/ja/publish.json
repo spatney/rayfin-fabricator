@@ -139,6 +139,13 @@
     "proNoteNoCli": "Pro ワークスペースには Rayfin {{needs}} 以降が必要ですが、このアプリの Rayfin パッケージがインストールされていません。",
     "personalNoCapacity": "マイ ワークスペースには Fabric/Premium 容量が必要です。Pro ワークスペースとしては提供されません",
     "proCapacity": "容量なし (Pro ワークスペース)",
+    "proUnsupported": "このアプリは Pro ワークスペースでサポートされていない次の機能を使用しているため、Pro ワークスペースへの公開は失敗する可能性があります。",
+    "proPostgres": "Pro ワークスペースには PostgreSQL が必要です",
+    "proFeature": {
+      "storage": "ファイル ストレージ",
+      "functions": "関数",
+      "mssql": "MSSQL のデータ"
+    },
     "refusal": {
       "workspace": "以前に {{workspace}} に公開したときは Fabric アプリを利用できなかったため、ここへの公開は失敗する可能性があります。",
       "capacity": "以前に公開したときは、このワークスペースの容量で Fabric アプリを利用できなかったため、ここへの公開は失敗する可能性があります。",
@@ -189,7 +196,7 @@
     "newAppNamed": "新しいアプリ「{{name}}」",
     "newApp": "新しいアプリ",
     "replaces": "公開すると、{{workspace}} のアプリ「{{app}}」がこのアプリに置き換えられます。",
-    "publishAnyway": "ここへの公開を続行",
+    "publishAnyway": "このまま公開",
     "notEligible": "対象外",
     "ineligibleHint": "これらには Fabric (<strong>F-SKU</strong>) または Power BI Premium (<strong>P-SKU</strong>) の容量が必要です。",
     "noMatch": "「{{query}}」に一致するワークスペースはありません。",

@@ -254,6 +254,22 @@ pub struct ProWorkspaces {
   /// The app's Rayfin CLI version, when it's installed.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub rayfin: Option<String>,
+  /// What the app uses that Pro workspaces don't support, so publishing it to
+  /// one will likely fail.
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub unsupported: Vec<ProUnsupported>,
+}
+
+/// Something an app's `rayfin.yml` turns on that Pro workspaces don't support.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ProUnsupported {
+  /// `services.storage`.
+  Storage,
+  /// `services.functions`, or dynamic claims, which run on them.
+  Functions,
+  /// `services.data` on MSSQL: Pro workspaces need `dialect: postgresql`.
+  Mssql,
 }
 
 /// A dedicated capacity the signed-in user can create a workspace on.

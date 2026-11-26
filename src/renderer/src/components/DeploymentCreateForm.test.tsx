@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import type { FabricWorkspace, FabricWorkspacesResult, ProcResult } from '@shared/ipc'
+import type {
+  FabricWorkspace,
+  FabricWorkspacesResult,
+  ProcResult,
+  ProUnsupported
+} from '@shared/ipc'
 import { deferred } from '../../test/deferred'
 import DeploymentCreateForm from './DeploymentCreateForm'
 
@@ -498,7 +503,7 @@ describe('DeploymentCreateForm workspaces Fabric turned apps down in', () => {
     )
   })
 
-  it('asks before publishing to one, and publishes elsewhere straight away', () => {
+  it('offers Publish anyway for one, and Publish elsewhere', () => {
     const onSubmit = vi.fn()
     render(
       <DeploymentCreateForm
@@ -511,17 +516,22 @@ describe('DeploymentCreateForm workspaces Fabric turned apps down in', () => {
     )
     const publish = screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement
     fireEvent.click(screen.getByText('Analytics'))
-    expect(screen.getByRole('alert').textContent).toContain(
+    expect(screen.getByRole('alert').textContent).toBe(
       'Fabric apps weren’t available in UK South when you published earlier, so publishing here will likely fail.'
     )
-    expect(publish.disabled).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Publish here anyway' }))
-    expect(publish.disabled).toBe(false)
+    expect(publish.textContent).toBe('Publish anyway')
+    expect(publish.className).toContain('btn--caution')
+    fireEvent.keyDown(screen.getByPlaceholderText('e.g. Production'), { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+    fireEvent.click(publish)
+    expect(onSubmit).toHaveBeenCalledWith('Analytics', 'w1', undefined)
 
     fireEvent.click(screen.getByText('Finance'))
     expect(screen.queryByRole('alert')).toBeNull()
+    expect(publish.textContent).toBe('Publish')
+    expect(publish.className).toContain('btn--primary')
     fireEvent.click(publish)
-    expect(onSubmit).toHaveBeenCalledWith('Finance', 'w2', undefined)
+    expect(onSubmit).toHaveBeenLastCalledWith('Finance', 'w2', undefined)
   })
 
   it('suggests the Fabric admin once more than one region turned apps down', () => {
@@ -694,5 +704,77 @@ describe('DeploymentCreateForm Pro workspaces', () => {
     fireEvent.click(screen.getByRole('button', { name: '+ New workspace' }))
     expect(await screen.findByText('No eligible capacities available.')).toBeTruthy()
     expect(screen.queryByRole('option', { name: 'No capacity (Pro workspace)' })).toBeNull()
+  })
+
+  /** The workspaces listed for an app on Rayfin 2.1.0 that uses what Pro workspaces don't support. */
+  const using = (...unsupported: ProUnsupported[]): FabricWorkspacesResult => ({
+    ...workspaces,
+    proWorkspaces: { ready: true, needs: '2.1.0', rayfin: '2.1.0', unsupported }
+  })
+
+  it('warns that publishing to a Pro workspace will likely fail for what the app uses, and offers Publish anyway', () => {
+    const onSubmit = vi.fn()
+    render(
+      <DeploymentCreateForm
+        wsResult={using('storage', 'functions', 'mssql')}
+        loadingWs={false}
+        onReload={vi.fn()}
+        onSubmit={onSubmit}
+      />
+    )
+    const publish = screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement
+    fireEvent.click(screen.getByText('Finance'))
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(publish.textContent).toBe('Publish')
+
+    fireEvent.click(screen.getByText('Team space'))
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain(
+      'Pro workspaces don’t support what this app uses, so publishing to one will likely fail:'
+    )
+    expect(
+      within(alert)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent)
+    ).toEqual(['File storage', 'Functions', 'MSSQL data · Pro workspaces need PostgreSQL'])
+    expect([...alert.querySelectorAll('strong')].map((b) => b.textContent)).toEqual([
+      'File storage',
+      'Functions',
+      'MSSQL data'
+    ])
+    expect(publish.textContent).toBe('Publish anyway')
+    expect(publish.className).toContain('btn--caution')
+    fireEvent.click(publish)
+    expect(onSubmit).toHaveBeenCalledWith('Team space', 'w2', undefined)
+  })
+
+  it('warns when you choose no capacity for a new workspace', async () => {
+    vi.mocked(window.api.fabric.listCapacities).mockResolvedValueOnce({
+      ok: true,
+      capacities: [
+        { id: 'cap1', displayName: 'Capacity One', sku: 'F2', kind: 'fabric', eligible: true }
+      ]
+    })
+    render(
+      <DeploymentCreateForm
+        wsResult={using('storage')}
+        loadingWs={false}
+        onReload={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: '+ New workspace' }))
+    const capacity = (await screen.findByRole('combobox')) as HTMLSelectElement
+    expect(screen.queryByRole('note')).toBeNull()
+    fireEvent.change(capacity, { target: { value: 'pro' } })
+    const note = screen.getByRole('note')
+    expect(note.textContent).toContain('so publishing to one will likely fail:')
+    expect(
+      within(note)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent)
+    ).toEqual(['File storage'])
+    fireEvent.change(capacity, { target: { value: 'cap1' } })
+    expect(screen.queryByRole('note')).toBeNull()
   })
 })

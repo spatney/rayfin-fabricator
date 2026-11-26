@@ -960,7 +960,19 @@ export interface ProWorkspaces {
   needs: string
   /** The app's Rayfin CLI version, when it's installed. */
   rayfin?: string
+  /**
+   * What the app uses that Pro workspaces don't support, so publishing it to one
+   * will likely fail. Omitted when there's nothing.
+   */
+  unsupported?: ProUnsupported[]
 }
+
+/**
+ * Something an app's `rayfin.yml` turns on that Pro workspaces don't support:
+ * storage, functions (or dynamic claims, which run on them), or data on MSSQL,
+ * since Pro workspaces need `dialect: postgresql`.
+ */
+export type ProUnsupported = 'storage' | 'functions' | 'mssql'
 
 /** A dedicated capacity the user can create a workspace on. */
 export interface FabricCapacity {

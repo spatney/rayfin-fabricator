@@ -139,6 +139,13 @@
     "proNoteNoCli": "Pro workspaces need Rayfin {{needs}} or later, and this app’s Rayfin packages aren’t installed.",
     "personalNoCapacity": "My workspace needs a Fabric/Premium capacity; it isn’t offered as a Pro workspace",
     "proCapacity": "No capacity (Pro workspace)",
+    "proUnsupported": "Pro workspaces don’t support what this app uses, so publishing to one will likely fail:",
+    "proPostgres": "Pro workspaces need PostgreSQL",
+    "proFeature": {
+      "storage": "File storage",
+      "functions": "Functions",
+      "mssql": "MSSQL data"
+    },
     "refusal": {
       "workspace": "Fabric apps weren’t available in {{workspace}} when you published to it earlier, so publishing here will likely fail.",
       "capacity": "Fabric apps weren’t available on this workspace’s capacity when you published earlier, so publishing here will likely fail.",
@@ -190,7 +197,7 @@
     "newAppNamed": "A new app named “{{name}}”",
     "newApp": "A new app",
     "replaces": "Publishing replaces the app “{{app}}” in {{workspace}} with this one.",
-    "publishAnyway": "Publish here anyway",
+    "publishAnyway": "Publish anyway",
     "notEligible": "Not eligible",
     "ineligibleHint": "These need a Fabric (<strong>F-SKU</strong>) or Power BI Premium (<strong>P-SKU</strong>) capacity.",
     "noMatch": "No workspaces match “{{query}}”.",

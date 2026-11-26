@@ -139,6 +139,13 @@
     "proNoteNoCli": "Las áreas de trabajo Pro requieren Rayfin {{needs}} o posterior, y los paquetes de Rayfin de esta aplicación no están instalados.",
     "personalNoCapacity": "“Mi área de trabajo” necesita una capacidad de Fabric o Premium; no se ofrece como área de trabajo Pro",
     "proCapacity": "Sin capacidad (área de trabajo Pro)",
+    "proUnsupported": "Las áreas de trabajo Pro no admiten lo que usa esta aplicación, así que es probable que publicarla en una falle:",
+    "proPostgres": "Las áreas de trabajo Pro requieren PostgreSQL",
+    "proFeature": {
+      "storage": "Almacenamiento de archivos",
+      "functions": "Funciones",
+      "mssql": "Datos en MSSQL"
+    },
     "refusal": {
       "workspace": "Las aplicaciones de Fabric no estaban disponibles en {{workspace}} cuando publicaste allí antes, por lo que es probable que publicar aquí falle.",
       "capacity": "Las aplicaciones de Fabric no estaban disponibles en la capacidad de esta área de trabajo cuando publicaste antes, por lo que es probable que publicar aquí falle.",
@@ -190,7 +197,7 @@
     "newAppNamed": "Una aplicación nueva llamada “{{name}}”",
     "newApp": "Una aplicación nueva",
     "replaces": "Al publicar, la aplicación “{{app}}” de {{workspace}} se reemplaza por esta.",
-    "publishAnyway": "Publicar aquí de todos modos",
+    "publishAnyway": "Publicar de todos modos",
     "notEligible": "No aptas",
     "ineligibleHint": "Estas necesitan una capacidad de Fabric (<strong>F-SKU</strong>) o Power BI Premium (<strong>P-SKU</strong>).",
     "noMatch": "Ninguna área de trabajo coincide con “{{query}}”.",

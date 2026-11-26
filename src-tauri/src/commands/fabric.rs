@@ -21,7 +21,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::services::{exec, fabric_auth, paths, store};
 use crate::services::exec::RunOptions;
-use crate::types::{DeployTargetCheck, FabricDeleteResult, FabricDeployment, FabricWorkspace, FabricWorkspacesResult, ProWorkspaces};
+use crate::types::{DeployTargetCheck, FabricDeleteResult, FabricDeployment, FabricWorkspace, FabricWorkspacesResult};
+use crate::types::{ProUnsupported, ProWorkspaces};
 use crate::types::{FabricCapacitiesResult, FabricCreateWorkspaceResult};
 use crate::types::{FabricShareResult, SemanticModelRef};
 use crate::types::FabricDirectoryResult;
@@ -579,6 +580,7 @@ fn mark_pro_workspaces(workspaces: &mut [FabricWorkspace], ready: bool) {
 /// Whether the project in `dir` can publish to a Pro workspace: its Rayfin CLI
 /// is [`PRO_WORKSPACE_SINCE`](crate::commands::deploy::PRO_WORKSPACE_SINCE) or later.
 /// That release's alphas count, such as `2.1.0-alpha.2324`: they publish to one too.
+/// Also what it uses that Pro workspaces don't support ([`pro_unsupported`]).
 fn pro_readiness(dir: Option<&Path>) -> ProWorkspaces {
   let since = crate::commands::deploy::PRO_WORKSPACE_SINCE;
   let rayfin = dir.and_then(crate::commands::deploy::installed_cli_version);
@@ -586,7 +588,36 @@ fn pro_readiness(dir: Option<&Path>) -> ProWorkspaces {
     ready: rayfin.as_ref().is_some_and(|v| (v.major, v.minor, v.patch) >= (since.major, since.minor, since.patch)),
     needs: since.to_string(),
     rayfin: rayfin.map(|version| version.to_string()),
+    unsupported: dir.map(pro_unsupported).unwrap_or_default(),
   }
+}
+
+/// What the project in `dir` turns on in `rayfin/rayfin.yml` that Pro workspaces
+/// don't support, as `rayfin up` checks before publishing to one: storage,
+/// functions (dynamic claims run on them), and data on any dialect but an
+/// explicit `postgresql`, since Rayfin's default is MSSQL.
+fn pro_unsupported(dir: &Path) -> Vec<ProUnsupported> {
+  let rayfin = dir.join("rayfin");
+  let Ok(text) = std::fs::read_to_string(rayfin.join("rayfin.yml"))
+    .or_else(|_| std::fs::read_to_string(rayfin.join("rayfin.yaml")))
+  else {
+    return Vec::new();
+  };
+  let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+  let Ok(root) = serde_yaml::from_str::<serde_yaml::Value>(text) else { return Vec::new() };
+  let services = &root["services"];
+  let on = |service: &serde_yaml::Value| service["enabled"].as_bool() == Some(true);
+  let mut unsupported = Vec::new();
+  if on(&services["storage"]) {
+    unsupported.push(ProUnsupported::Storage);
+  }
+  if on(&services["functions"]) || on(&services["auth"]["dynamicClaims"]) {
+    unsupported.push(ProUnsupported::Functions);
+  }
+  if on(&services["data"]) && services["data"]["dialect"].as_str() != Some("postgresql") {
+    unsupported.push(ProUnsupported::Mssql);
+  }
+  unsupported
 }
 
 /// List dedicated capacities the signed-in user can create a workspace on
@@ -1406,8 +1437,51 @@ mod tests {
       assert_eq!(pro.needs, "2.1.0");
     }
     std::fs::remove_dir_all(&dir).unwrap();
-    assert_eq!(pro_readiness(Some(&dir)), ProWorkspaces { ready: false, needs: "2.1.0".into(), rayfin: None });
+    assert_eq!(
+      pro_readiness(Some(&dir)),
+      ProWorkspaces { ready: false, needs: "2.1.0".into(), rayfin: None, unsupported: Vec::new() }
+    );
     assert!(!pro_readiness(None).ready, "no active project");
+  }
+
+  /// Pro workspaces don't support storage, functions or MSSQL data, which
+  /// `rayfin up` refuses there, so the picker warns about what the app turns on.
+  #[test]
+  fn lists_what_pro_workspaces_dont_support() {
+    use ProUnsupported::{Functions, Mssql, Storage};
+    let dir = std::env::temp_dir().join(format!("fab-pro-unsupported-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("rayfin")).unwrap();
+    for (yml, expected) in [
+      ("services:\n  data:\n    enabled: true\n    dialect: postgresql\n  storage:\n    enabled: false\n  functions:\n    enabled: false\n", vec![]),
+      ("services:\n  data:\n    enabled: true\n    dialect: \"mssql\"\n", vec![Mssql]),
+      ("services:\n  data:\n    enabled: true\n", vec![Mssql]),
+      ("services:\n  data:\n    enabled: false\n    dialect: mssql\n", vec![]),
+      ("\u{feff}services:\n  storage:\n    enabled: true\n    path: packages/storage\n", vec![Storage]),
+      ("services:\n  functions:\n    enabled: true\n", vec![Functions]),
+      ("services:\n  auth:\n    enabled: true\n    dynamicClaims:\n      enabled: true\n", vec![Functions]),
+      (
+        "services:\n  data:\n    enabled: true\n  storage:\n    enabled: true\n  functions:\n    enabled: true\n",
+        vec![Storage, Functions, Mssql],
+      ),
+      ("id: static-only\n", vec![]),
+      ("services: [", vec![]),
+    ] {
+      std::fs::write(dir.join("rayfin").join("rayfin.yml"), yml).unwrap();
+      assert_eq!(pro_unsupported(&dir), expected, "{yml:?}");
+    }
+    std::fs::remove_file(dir.join("rayfin").join("rayfin.yml")).unwrap();
+    std::fs::write(dir.join("rayfin").join("rayfin.yaml"), "services:\n  storage:\n    enabled: true\n").unwrap();
+    assert_eq!(pro_readiness(Some(&dir)).unsupported, [Storage], "rayfin.yaml");
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(pro_unsupported(&dir).is_empty(), "no rayfin.yml");
+    let json = serde_json::to_value(ProWorkspaces {
+      ready: true,
+      needs: "2.1.0".into(),
+      rayfin: None,
+      unsupported: vec![Storage, Functions, Mssql],
+    })
+    .unwrap();
+    assert_eq!(json["unsupported"], serde_json::json!(["storage", "functions", "mssql"]));
   }
 
   #[test]
