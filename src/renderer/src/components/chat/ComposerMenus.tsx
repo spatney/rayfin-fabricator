@@ -525,17 +525,21 @@ export function PluginsMenu({
                     <button
                       type="button"
                       role="menuitem"
-                      className="mp-item pl-manage"
+                      className="mp-item pl-item pl-manage"
                       onClick={() => {
                         closeMenu(false)
                         onManageServers(servers.length === 0)
                       }}
                     >
-                      <Codicon name={servers.length ? 'settings-gear' : 'add'} />
+                      <span
+                        className={`pl-logo pl-logo--tile${servers.length ? '' : ' pl-logo--add'}`}
+                        aria-hidden="true"
+                      >
+                        <Codicon name={servers.length ? 'settings-gear' : 'add'} />
+                      </span>
                       <span className="mp-item-label">
                         {servers.length ? t('pluginsMenu.manage') : t('pluginsMenu.addServer')}
                       </span>
-                      <Codicon name="chevron-right" className="pl-manage-caret" />
                     </button>
                   )}
                 </>
@@ -544,22 +548,26 @@ export function PluginsMenu({
               <div className="mp-sep" role="separator" />
               <p className="pl-note">
                 <Codicon name="info" />
-                {t('pluginsMenu.note')}
+                <span>
+                  {t('pluginsMenu.note')}
+                  {onLearnMore && (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="pl-learn"
+                        onClick={() => {
+                          closeMenu(false)
+                          onLearnMore()
+                        }}
+                      >
+                        {t('pluginsMenu.learn')}
+                      </button>
+                    </>
+                  )}
+                </span>
               </p>
-              {onLearnMore && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="mp-item pl-learn"
-                  onClick={() => {
-                    closeMenu(false)
-                    onLearnMore()
-                  }}
-                >
-                  <Codicon name="book" />
-                  <span className="mp-item-label">{t('pluginsMenu.learn')}</span>
-                </button>
-              )}
             </div>
           </div>,
           document.body

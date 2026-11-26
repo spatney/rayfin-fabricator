@@ -146,7 +146,7 @@
   "plugins": {
     "fabricIq": "Explore os relatórios do Power BI e os modelos semânticos que você pode abrir.",
     "workIq": "Encontre seus emails, reuniões, arquivos, mensagens do Teams e pessoas do Microsoft 365.",
-    "supportingItems": "Crie, altere e atualize os modelos semânticos dos quais este app depende, e os lakehouses onde os dados deles são preparados, no workspace do Fabric do app. O Fabricator pergunta a você antes de cada alteração."
+    "supportingItems": "Crie, altere e atualize os modelos semânticos e os lakehouses dos quais este app depende."
   },
   "markup": {
     "pen": "Caneta",
