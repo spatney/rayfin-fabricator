@@ -1,10 +1,18 @@
-import { useEffect, useId, useRef, useState, type JSX, type KeyboardEvent } from 'react'
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type JSX,
+  type KeyboardEvent
+} from 'react'
 import { createPortal } from 'react-dom'
 import type { ChatPluginId, McpServer } from '@shared/ipc'
 import { DATA_KINDS, type DataKind } from '@renderer/fabricData'
 import { moveMenuFocus } from '@renderer/menuFocus'
 import { menuLayout, type MenuLayout } from '@renderer/menuLayout'
-import { useSuppressPreview } from '@renderer/overlay'
+import { reachesPreview, useSuppressPreview } from '@renderer/overlay'
 import { useTranslation } from '../../i18n'
 import { Codicon, ImageIcon } from '../icons'
 import { serverIcon, serverSummary } from '../mcp/mcpConfig'
@@ -58,8 +66,14 @@ export function AddMenu({
   const triggerRef = useRef<HTMLButtonElement>(null)
   const mainRef = useRef<HTMLDivElement>(null)
   const flyRef = useRef<HTMLDivElement>(null)
-  // The list beside the menu can reach over the native preview.
-  useSuppressPreview(open && fly)
+  // The menu reaches over the native preview, which paints over it, with the list
+  // beside it, or from a chat column narrower than it. Measured, since the live
+  // preview is only stilled while it's covered.
+  const [overPreview, setOverPreview] = useState(false)
+  useLayoutEffect(() => {
+    setOverPreview(open && reachesPreview(popRef.current?.getBoundingClientRect()))
+  }, [open, fly, layout])
+  useSuppressPreview(overPreview)
 
   useEffect(() => {
     if (!open) return

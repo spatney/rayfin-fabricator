@@ -96,6 +96,30 @@ export function SuppressPreview(): null {
   return null
 }
 
+/** What the native preview is drawn over (see PreviewPane). */
+const PREVIEW_HOST = '.preview-webview-host'
+
+/**
+ * Whether something drawn at `rect` (a bounding client rect) reaches over the
+ * native preview, which would paint over it. For menus that only sometimes do,
+ * such as the composer's, opened beside their buttons: they suppress the
+ * preview only then, and leave it live otherwise.
+ */
+export function reachesPreview(rect: DOMRect | undefined): boolean {
+  if (!rect) return false
+  return Array.from(document.querySelectorAll(PREVIEW_HOST)).some((host) => {
+    const box = host.getBoundingClientRect()
+    return (
+      box.width > 0 &&
+      box.height > 0 &&
+      rect.left < box.right &&
+      rect.right > box.left &&
+      rect.top < box.bottom &&
+      rect.bottom > box.top
+    )
+  })
+}
+
 /**
  * Layers that own Escape while they're open: dialogs and Search. A view beneath
  * them that closes on Escape checks this first, so one key press never closes

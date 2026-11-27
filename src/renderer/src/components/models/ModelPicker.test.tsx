@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import type { AutoTiers, CopilotModel } from '@shared/ipc'
 import { invalidateCopilotModels } from '@renderer/copilotModels'
 import { AUTO_SELECTION, type ModelSelection } from '@renderer/modelSelection'
+import { OverlayProvider, usePreviewSuppressed } from '@renderer/overlay'
 import { setLanguage } from '../../i18n'
 import { formatTokens, ModelPicker } from './ModelPicker'
 
@@ -212,6 +213,58 @@ describe('ModelPicker', () => {
     offerTiers(FUSION)
     renderPicker({ ...AUTO_SELECTION, autoTier: 'hydrafusion-max' })
     await waitFor(() => expect(pill().textContent).toBe('Auto · Max'))
+  })
+
+  it('stills the native preview while the menu reaches over it, as from a narrow chat column', async () => {
+    // The preview starts at 400 px, where the chat column ends.
+    const host = document.createElement('div')
+    host.className = 'preview-webview-host'
+    document.body.append(host)
+    let menuRight = 380
+    const box = (left: number, right: number): DOMRect =>
+      ({
+        left,
+        right,
+        top: 0,
+        bottom: 600,
+        width: right - left,
+        height: 600,
+        x: left,
+        y: 0
+      }) as DOMRect
+    const measured = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        if (this === host) return box(400, 1000)
+        return this.classList.contains('mp-pop') ? box(100, menuRight) : box(0, 0)
+      })
+    function Preview() {
+      return <output aria-label="preview">{usePreviewSuppressed() ? 'still' : 'live'}</output>
+    }
+    try {
+      render(
+        <OverlayProvider>
+          <Picker initial={AUTO_SELECTION} onChange={() => {}} />
+          <Preview />
+        </OverlayProvider>
+      )
+      const preview = screen.getByLabelText('preview')
+      fireEvent.click(pill())
+      await screen.findByRole('menu', { name: 'Model' })
+      expect(preview.textContent, 'the menu stays over the chat column').toBe('live')
+      fireEvent.click(pill())
+
+      menuRight = 460
+      fireEvent.click(pill())
+      await screen.findByRole('menu', { name: 'Model' })
+      expect(preview.textContent).toBe('still')
+      fireEvent.click(pill())
+      expect(screen.queryByRole('menu', { name: 'Model' })).toBeNull()
+      expect(preview.textContent).toBe('live')
+    } finally {
+      measured.mockRestore()
+      host.remove()
+    }
   })
 
   it('on Copilot Fusion, says how many models you could choose instead, and choosing one turns Auto off', async () => {

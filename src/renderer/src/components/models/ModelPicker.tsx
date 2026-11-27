@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -22,7 +23,7 @@ import {
 import { moveMenuFocus } from '@renderer/menuFocus'
 import { menuLayout, type MenuLayout } from '@renderer/menuLayout'
 import { AUTO_SELECTION, type ModelSelection } from '@renderer/modelSelection'
-import { useSuppressPreview } from '@renderer/overlay'
+import { reachesPreview, useSuppressPreview } from '@renderer/overlay'
 import { formatLocale, useTranslation } from '../../i18n'
 import { Codicon } from '../icons'
 import { EFFORT_ORDER } from '../chat/modes'
@@ -139,9 +140,14 @@ export function ModelPicker({
   const isAuto = !value.model
   // The pill names Copilot Fusion's level, so it's needed before the menu opens.
   const autoTiers = useAutoTiers(tiers && !ownOnly && (open || isAuto))
-  // A flyout reaches past the chat column, over the native preview; a menu
-  // opening down from a toolbar covers it too.
-  useSuppressPreview(open && (flyout !== null || placement === 'down'))
+  // The menu reaches over the native preview, which paints over it, with a list
+  // beside it, opening down from a toolbar, or from a chat column narrower than
+  // it. Measured, since the live preview is only stilled while it's covered.
+  const [overPreview, setOverPreview] = useState(false)
+  useLayoutEffect(() => {
+    setOverPreview(open && reachesPreview(popRef.current?.getBoundingClientRect()))
+  }, [open, flyout, layout])
+  useSuppressPreview(overPreview)
 
   const selected = useMemo(() => models.find((m) => m.id === value.model), [models, value.model])
   const missing = !isAuto && !loading && models.length > 0 && !selected
