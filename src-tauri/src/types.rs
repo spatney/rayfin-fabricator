@@ -5139,6 +5139,9 @@ pub struct LocalFunctions {
   pub names: Vec<String>,
   pub errors: Vec<String>,
   pub message: Option<String>,
+  /// Why the functions' generated types (`src/types.ts` with `AppFunctionsSchema`, and
+  /// `src/secrets.generated.ts`) couldn't be regenerated; `None` while they're current.
+  pub types_error: Option<String>,
   pub time: Option<String>,
 }
 

@@ -121,7 +121,7 @@ export function isLocalBackendActive(status: LocalStatus | null | undefined): bo
  * waits for a decision ({@link refusedSchemaLosses}).
  */
 export interface LocalRunningProblem {
-  kind: 'analysis' | 'schema' | 'functions' | 'vite'
+  kind: 'analysis' | 'schema' | 'functions' | 'types' | 'vite'
   /** What it means for the app, in a sentence. */
   summary: string
   /** rayfin-local's own words: the compiler's errors, or why Vite stopped. */
@@ -134,8 +134,9 @@ function problemDetail(...texts: (string | null | undefined)[]): string | null {
 
 /**
  * What's wrong while the backend runs, as it last reported: its latest data
- * model change couldn't be read or applied, the functions don't build, or the
- * app's Vite stopped for good. Empty unless it runs.
+ * model change couldn't be read or applied, the functions don't build or their
+ * generated types couldn't be regenerated, or the app's Vite stopped for good.
+ * Empty unless it runs.
  */
 export function runningProblems(status: LocalStatus | null | undefined): LocalRunningProblem[] {
   if (status?.state !== 'running') return []
@@ -160,6 +161,13 @@ export function runningProblems(status: LocalStatus | null | undefined): LocalRu
       kind: 'functions',
       summary: t('runningProblem.functions'),
       detail: problemDetail(status.functions.errors.join('\n'), status.functions.message)
+    })
+  }
+  if (status.functions?.typesError) {
+    problems.push({
+      kind: 'types',
+      summary: t('runningProblem.types'),
+      detail: problemDetail(status.functions.typesError)
     })
   }
   if (status.vite?.state === 'failed') {

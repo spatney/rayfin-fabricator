@@ -105,6 +105,12 @@ app runs, the previous data model stays in use until then.\n\
 - `functions-build-failed`: the app's functions didn't build, so calling them fails until a build \
 succeeds; the status lists the compiler errors. Fix: ask Copilot in the chat to fix them; the \
 functions build again by themselves.\n\
+- `functions-types-failed`: the local backend couldn't regenerate the functions' generated types \
+(`types.ts`, whose `AppFunctionsSchema` types the app's calls to its functions), so they may still \
+describe the functions as they were, and the app's type check or build can report them as stale; \
+`functions.typesError` says why, usually that the project's packages aren't installed or don't \
+match. Fix: ask Copilot in the chat to fix what it says; the types are generated again the next \
+time the functions change.\n\
 - `azure-sign-in`: the local backend couldn't get an Azure token, which functions that ask for \
 tokens, connectors and signing the app in as the user themselves need. Everything else works \
 without it. Fix: sign in to Azure (offer `open-accounts`).\n\

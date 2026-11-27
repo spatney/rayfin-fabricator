@@ -1232,6 +1232,15 @@ fn advice(status: &LocalStatus, output: &[LocalLogEvent]) -> Vec<String> {
         .into(),
     );
   }
+  if status.functions.as_ref().is_some_and(|f| f.types_error.is_some()) {
+    out.push(
+      "The functions' generated types (`types.ts` with `AppFunctionsSchema`, and `secrets.generated.ts`) couldn't \
+       be regenerated (`functions.typesError`), so they may still describe the functions as they were, and checks \
+       that compare them with the functions fail. Fix what it says; they're generated again after your next \
+       change to the functions. Never edit them by hand."
+        .into(),
+    );
+  }
   if status.vite.as_ref().is_some_and(|v| matches!(v.state.as_str(), "exited" | "failed")) {
     out.push("The app's Vite stopped (`vite.message`, `recentOutput`), so the preview can't show the app.".into());
   }
@@ -1880,6 +1889,21 @@ mod tests {
     // Credentials never reach the model.
     for secret in ["c2lnbmF0dXJl", "abcdef123456", "pk-local-abcdefghijklmnopqrstuvwx"] {
       assert!(!text.contains(secret), "{secret} leaked: {text}");
+    }
+  }
+
+  #[test]
+  fn stale_function_types_say_why_until_they_are_generated_again() {
+    let mut status = eventful();
+    let report_of = |status: &LocalStatus| -> Value { serde_json::from_str(&status_report(status, &[], &[])).unwrap() };
+    assert!(!report_of(&status)["advice"].to_string().contains("functions.typesError"));
+    let why = "could not regenerate the functions' generated types (src/types.ts): run `npm install`";
+    status.functions.as_mut().unwrap().types_error = Some(why.into());
+    let report = report_of(&status);
+    assert_eq!(report["functions"]["typesError"], why);
+    let advice = report["advice"].to_string();
+    for marker in ["`functions.typesError`", "`AppFunctionsSchema`", "Never edit them by hand"] {
+      assert!(advice.contains(marker), "advice should mention {marker}: {advice}");
     }
   }
 

@@ -11,6 +11,7 @@
     "analysis": "Die letzte Änderung am Datenmodell deiner App konnte nicht gelesen werden, daher verwendet sie weiterhin das vorherige Datenmodell.",
     "schema": "Die letzte Änderung am Datenmodell deiner App konnte nicht auf ihre lokale Datenbank angewendet werden, daher verwendet sie weiterhin die vorherige.",
     "functions": "Die Funktionen deiner App konnten nicht erstellt werden, daher schlagen Aufrufe fehl oder führen den vorherigen Build aus.",
+    "types": "Die Typen, mit denen die Seiten deiner App ihre Funktionen aufrufen, konnten nicht neu generiert werden, daher beschreiben sie die Funktionen möglicherweise noch so, wie sie vorher waren.",
     "vite": "Der Vite-Entwicklungsserver deiner App wurde beendet und konnte nicht neu starten, daher kann die Vorschau sie nicht anzeigen."
   },
   "fallback": {

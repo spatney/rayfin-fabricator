@@ -287,7 +287,14 @@ describe('the app on this computer', () => {
         message: 'Not built',
         time: null
       },
-      functions: { state: 'failed', errors: ['boom'], message: null, names: [], time: null }
+      functions: {
+        state: 'failed',
+        errors: ['boom'],
+        message: null,
+        names: [],
+        typesError: null,
+        time: null
+      }
     })
     expect(workbenchFacts(project, { local: stuck })).toContain(
       '"Expenses" is running on this computer, but its latest change didn\'t apply: Output, in the preview toolbar, says "2 problems" and lists what\'s wrong.'

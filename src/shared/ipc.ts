@@ -5673,6 +5673,11 @@ export interface LocalFunctions {
   /** With `failed`: one compiler message each. */
   errors: string[]
   message: string | null
+  /**
+   * Why the functions' generated types (`src/types.ts` with `AppFunctionsSchema`, and
+   * `src/secrets.generated.ts`) couldn't be regenerated; `null` while they're current.
+   */
+  typesError: string | null
   time: string | null
 }
 
@@ -5710,6 +5715,8 @@ export type LocalProblemCode =
   | 'already-serving'
   | 'vite-failed'
   | 'functions-build-failed'
+  /** The functions' generated types couldn't be regenerated (`functions.typesError` says why). */
+  | 'functions-types-failed'
   | 'secret-missing'
   | 'anonymous-role'
   | 'connector-unsupported'

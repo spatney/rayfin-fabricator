@@ -19,7 +19,7 @@ When you open an app, Fabricator starts its local backend, rayfin-local, which c
 - The app's own Vite dev server, which the preview shows. Copilot's edits show up as it saves them.
 - The app's data API, with the access rules of its entities, over a local database that starts empty, or with the project's [seed data](/docs/build/local-development#start-with-seed-data).
 - Sign-in, with a local Fabric sign-in page. Apps created from Rayfin's Universal App template sign you in by themselves.
-- The app's functions. They build again when their code changes.
+- The app's functions. They build again when their code changes, and so do their generated types, which the app's pages use to call them.
 - Connectors to Fabric data: semantic models, SQL databases, warehouses and lakehouses.
 - File storage.
 

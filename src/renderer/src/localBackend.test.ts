@@ -291,6 +291,7 @@ describe('local backend helpers', () => {
         names: [],
         errors: ['src/index.ts(3,1): error TS2304'],
         message: null,
+        typesError: null,
         time: at
       },
       vite: { state: 'failed', url: null, version: null, message: 'Vite kept exiting.', time: at }
@@ -320,6 +321,32 @@ describe('local backend helpers', () => {
     expect(runningProblems(waiting)).toEqual([])
     // A stopped backend says why elsewhere.
     expect(runningProblems(status({ state: 'error', analysis: unread }))).toEqual([])
+  })
+
+  it('says when the functions’ generated types are stale, though they run', () => {
+    const why =
+      'could not regenerate the functions’ generated types (src/types.ts): run `npm install`.'
+    const functions = (typesError: string | null): LocalStatus['functions'] => ({
+      state: 'ready',
+      names: ['greet'],
+      errors: [],
+      message: null,
+      typesError,
+      time: '2026-10-30T17:18:08.000Z'
+    })
+    expect(
+      runningProblems(status({ state: 'running', ready, functions: functions(null) }))
+    ).toEqual([])
+    const stale = status({ state: 'running', ready, functions: functions(why) })
+    expect(runningProblems(stale)).toEqual([
+      {
+        kind: 'types',
+        summary:
+          'The types your app’s pages call its functions with couldn’t be generated again, so they may still describe the functions as they were.',
+        detail: why
+      }
+    ])
+    expect(localStateLabel(stale)).toBe('Running · problem')
   })
 
   it('finds a live refused schema change, and nothing otherwise', () => {

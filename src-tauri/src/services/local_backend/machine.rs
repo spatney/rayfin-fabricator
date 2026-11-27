@@ -238,6 +238,10 @@ impl Machine {
         phase(s, "schema");
       }
       Event::Functions(x) => {
+        // Its warning holds while the generated types stay stale.
+        if x.types_error.is_none() {
+          s.warnings.retain(|w| w.code != "functions-types-failed");
+        }
         s.functions = Some(x.clone());
         phase(s, "functions");
       }
@@ -440,6 +444,25 @@ mod tests {
     assert_eq!(status.state, State::Running);
     assert_eq!(status.error.as_ref().unwrap().code, "vite-failed");
     assert_eq!(status.warnings.len(), 1, "a repeated warning is kept once");
+  }
+
+  #[test]
+  fn a_types_warning_lasts_until_the_functions_types_are_generated_again() {
+    let mut machine = started();
+    machine.apply(&event(READY));
+    let functions = |types_error: &str| {
+      format!(r#"{{"v":1,"type":"functions","state":"ready","names":["greet"],"errors":[],"message":null,"typesError":{types_error}}}"#)
+    };
+    let types_warnings =
+      |machine: &Machine| machine.status().warnings.iter().filter(|w| w.code == "functions-types-failed").count();
+    machine.apply(&event(r#"{"v":1,"type":"warning","code":"secret-missing","message":"KEY has no value.","details":{"name":"KEY"}}"#));
+    machine.apply(&event(r#"{"v":1,"type":"warning","code":"functions-types-failed","message":"Could not regenerate them.","details":{}}"#));
+    machine.apply(&event(&functions(r#""Could not regenerate them.""#)));
+    assert_eq!(types_warnings(&machine), 1);
+    assert_eq!(machine.status().functions.as_ref().unwrap().types_error.as_deref(), Some("Could not regenerate them."));
+    machine.apply(&event(&functions("null")));
+    assert_eq!(types_warnings(&machine), 0);
+    assert_eq!(machine.status().warnings.len(), 1, "other warnings stay");
   }
 
   #[test]

@@ -1965,7 +1965,7 @@ describe('Workbench local backend', () => {
         live: true,
         time
       },
-      functions: { state: functions, names: [], errors: [], message: null, time }
+      functions: { state: functions, names: [], errors: [], message: null, typesError: null, time }
     })
 
     setTurnRunning(true)

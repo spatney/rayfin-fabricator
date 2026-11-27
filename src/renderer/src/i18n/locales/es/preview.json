@@ -11,6 +11,7 @@
     "analysis": "No se pudo leer el último cambio del modelo de datos de tu aplicación, así que sigue usando el modelo de datos anterior.",
     "schema": "No se pudo aplicar el último cambio del modelo de datos de tu aplicación a su base de datos local, así que sigue usando la anterior.",
     "functions": "Las funciones de tu aplicación no se compilaron, así que llamarlas falla o ejecuta su compilación anterior.",
+    "types": "No se pudieron volver a generar los tipos con los que las páginas de tu aplicación llaman a sus funciones, así que puede que aún describan las funciones como eran antes.",
     "vite": "El servidor de desarrollo de Vite de tu aplicación se detuvo y no pudo volver a iniciarse, así que la vista previa no puede mostrarla."
   },
   "fallback": {

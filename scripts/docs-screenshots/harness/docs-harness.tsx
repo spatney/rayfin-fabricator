@@ -520,7 +520,14 @@ function localStatus(projectId: string): LocalStatus {
       time: started
     },
     schema: { result: 'unchanged', changes: [], losses: [], message: null, live: false, time: started },
-    functions: { state: 'ready', names: LOCAL_FUNCTIONS, errors: [], message: null, time: started },
+    functions: {
+      state: 'ready',
+      names: LOCAL_FUNCTIONS,
+      errors: [],
+      message: null,
+      typesError: null,
+      time: started
+    },
     vite: { state: 'ready', url: LOCAL_APP_URL, version: '7.1.3', message: null, time: started },
     config: null,
     warnings: [],

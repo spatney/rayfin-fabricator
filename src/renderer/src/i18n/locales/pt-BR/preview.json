@@ -11,6 +11,7 @@
     "analysis": "Não foi possível ler a última alteração do modelo de dados do seu aplicativo, então ele continua usando o modelo de dados anterior.",
     "schema": "Não foi possível aplicar a última alteração do modelo de dados do seu aplicativo ao banco de dados local, então ele continua usando o modelo de dados anterior.",
     "functions": "As funções do seu aplicativo não foram compiladas, então chamá-las falha ou executa a versão compilada anterior.",
+    "types": "Não foi possível gerar novamente os tipos com que as páginas do seu aplicativo chamam as funções dele, então eles ainda podem descrever as funções como eram antes.",
     "vite": "O servidor de desenvolvimento Vite do seu aplicativo parou e não pôde ser reiniciado, então a visualização não consegue mostrar o aplicativo."
   },
   "fallback": {

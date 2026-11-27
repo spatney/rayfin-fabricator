@@ -145,6 +145,12 @@ backend on this computer, and shows it live in its preview while you work:
   connectors and storage. When you change the entities, Fabricator updates the local database to
   match. Functions rebuild when you save them, and changes to `rayfin/rayfin.yml` apply as you
   save them.
+- Saving a function also regenerates its generated types, as `rayfin dev` would: the functions
+  package's `src/types.ts` (the `AppFunctionsSchema` that types the frontend's calls) and
+  `src/secrets.generated.ts`. Never edit them by hand. A project skill or validator that asks for
+  the type-generation flow or `rayfin dev` for them means this: call `fabricator_local_status`,
+  which waits for the rebuilt functions and reports `functions.typesError` when the types
+  couldn't be regenerated, then run the project's checks.
 - Rayfin Storage runs here like the rest: uploads, downloads, listing and deleting work in the
   preview, on files kept in `.rayfin-local/storage`, under each folder's `@blob` rules. Rayfin's
   docs and skills say Storage is remote-only, with no local service or emulator, and that uploads
@@ -1773,6 +1779,10 @@ mod tests {
       "Don't run `rayfin secret set`",
       "**Secrets** view",
       "`secret-missing`",
+      // The functions' generated types are regenerated here, as `rayfin dev` would.
+      "`src/types.ts`",
+      "`AppFunctionsSchema`",
+      "`functions.typesError`",
       // Storage runs here, whatever Rayfin's docs say about `rayfin dev`.
       "Rayfin Storage runs here",
       "`.rayfin-local/storage`",

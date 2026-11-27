@@ -248,6 +248,12 @@ present: it outranks anything older in the journal. Read its output with `help_l
       "off" => format!("Functions: off ({}).", f.message.as_deref().map(quote).unwrap_or_default()),
       _ => "Functions: built and ready.".into(),
     });
+    if let Some(why) = &f.types_error {
+      line(format!(
+        "Functions' generated types (types.ts): couldn't be regenerated, so they may describe the functions as they were: {}",
+        quote(why)
+      ));
+    }
   }
   if let Some(v) = &status.vite {
     let message = v.message.as_deref().map(|m| format!(": {}", quote(m))).unwrap_or_default();
@@ -528,6 +534,11 @@ mod tests {
     assert!(text.contains("the build failed") && text.contains("error TS2304"));
     assert!(text.contains("couldn't start: vite.config.ts: Unexpected token"));
     assert!(text.contains("`azure-sign-in`: No Azure token could be had."));
+    assert!(!text.contains("generated types"));
+
+    status.functions.as_mut().unwrap().types_error = Some("@microsoft/rayfin-cli is not installed.".into());
+    let text = describe(&status, false);
+    assert!(text.contains("generated types (types.ts): couldn't be regenerated") && text.contains("rayfin-cli is not installed"), "{text}");
   }
 
   #[test]

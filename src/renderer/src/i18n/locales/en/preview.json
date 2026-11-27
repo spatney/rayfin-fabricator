@@ -11,6 +11,7 @@
     "analysis": "Your app’s latest data model change couldn’t be read, so it still uses the previous data model.",
     "schema": "Your app’s latest data model change couldn’t be applied to its local database, so it still uses the previous one.",
     "functions": "Your app’s functions didn’t build, so calling them fails or runs their previous build.",
+    "types": "The types your app’s pages call its functions with couldn’t be generated again, so they may still describe the functions as they were.",
     "vite": "Your app’s Vite dev server stopped and couldn’t start again, so the preview can’t show it."
   },
   "fallback": {
